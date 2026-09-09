@@ -484,7 +484,7 @@ export function ExplosiveChessGame() {
           // Stay on setup while lobby; only game_start flips to playing.
           if (payload.phase === "lobby") {
             setScreen("setup");
-            setTip("大厅：双方准备后开始。红方永远先手。");
+            setTip("等待对手加入，两人到齐后自动开局。红方永远先手。");
           }
         },
         onGameStart: (payload) => {
@@ -799,6 +799,9 @@ export function ExplosiveChessGame() {
             <p className="hint" style={{ marginTop: 0 }}>
               {onlineStatus ||
                 "点「创建房间」后分享链接给对方；对方打开链接后点「加入此房间」。两人到齐后自动开局。"}
+              {onlinePhase === "lobby" && onlineSeat
+                ? ` 你是${onlineSeat === "red" ? "红方" : onlineSeat === "blue" ? "蓝方" : "旁观"}。`
+                : ""}
             </p>
             <div className="row">
               {onlinePhase === "idle" || onlinePhase === "connecting" ? (
