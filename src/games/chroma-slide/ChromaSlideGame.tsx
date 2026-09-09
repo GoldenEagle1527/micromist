@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { useLocale } from "../../i18n";
+import { useLocalGamePersist } from "../local-persist";
 import {
   EMPTY,
   PRESETS,
@@ -15,6 +16,12 @@ import {
 type Screen = "setup" | "playing";
 type ConfirmKind = "reshuffle" | "setup" | null;
 
+type ChromaPersist = {
+  screen: "playing";
+  preset: PresetId;
+  puzzle: PuzzleState;
+};
+
 export function ChromaSlideGame() {
   const { t } = useLocale();
   const ch = t.chroma;
@@ -26,6 +33,23 @@ export function ChromaSlideGame() {
   const [confirm, setConfirm] = useState<ConfirmKind>(null);
   const confirmTitleId = useId();
   const confirmCancelRef = useRef<HTMLButtonElement | null>(null);
+
+  const persistState: ChromaPersist | null =
+    screen === "playing" && puzzle
+      ? { screen: "playing", preset, puzzle }
+      : null;
+
+  useLocalGamePersist<ChromaPersist>("chroma-slide", persistState, {
+    shouldSave: (s) => s.screen === "playing" && s.puzzle != null,
+    onHydrate: (data) => {
+      if (data.screen !== "playing" || !data.puzzle) return;
+      setPreset(data.preset);
+      setPuzzle(data.puzzle);
+      setHoverIndex(null);
+      setConfirm(null);
+      setScreen("playing");
+    },
+  });
 
   const won = useMemo(() => (puzzle ? isWon(puzzle) : false), [puzzle]);
 
