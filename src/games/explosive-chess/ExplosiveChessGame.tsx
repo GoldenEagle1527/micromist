@@ -119,7 +119,6 @@ export function ExplosiveChessGame() {
   const [localSession, setLocalSession] = useState(0);
 
   const [roomCode, setRoomCode] = useState(roomFromQuery);
-  const [joinInput, setJoinInput] = useState(roomFromQuery);
   const [onlinePhase, setOnlinePhase] = useState<Phase | "idle" | "connecting">("idle");
   const [onlineSeat, setOnlineSeat] = useState<Seat>("spectator");
   const [onlineRole, setOnlineRole] = useState<Role>("spectator");
@@ -431,14 +430,13 @@ export function ExplosiveChessGame() {
     (code: string) => {
       const trimmed = code.trim().toLowerCase();
       if (!trimmed) {
-        setOnlineStatus("请输入房间码");
+        setOnlineStatus("缺少房间码，请通过分享链接加入");
         return;
       }
 
       clientRef.current?.close();
       destroyBoard();
       setRoomCode(trimmed);
-      setJoinInput(trimmed);
       setShareLink(shareUrl(trimmed));
       setOnlinePhase("connecting");
       setOnlineStatus("连接中…");
@@ -542,13 +540,12 @@ export function ExplosiveChessGame() {
     [applyServerState, destroyBoard, setSearchParams],
   );
 
-  // Prefill join from ?room= but stay on setup until user/ready flow.
+  // Landing with ?room= selects online mode; user still confirms join (code not editable).
   useEffect(() => {
     if (!roomFromQuery) return;
-    setJoinInput(roomFromQuery);
     setRoomCode(roomFromQuery);
     setSettings((s) => ({ ...s, opponent: "online" }));
-    setOnlineStatus(`已填入房间码 ${roomFromQuery}，点「进入房间」连接`);
+    setOnlineStatus("已打开分享链接，点「加入此房间」即可进入");
   }, [roomFromQuery]);
 
   useEffect(() => {
@@ -617,8 +614,13 @@ export function ExplosiveChessGame() {
   };
 
   const joinRoom = () => {
+    const code = roomFromQuery || roomCode;
+    if (!code) {
+      setOnlineStatus("请通过房主分享的链接加入房间");
+      return;
+    }
     setSettings((s) => ({ ...s, opponent: "online" }));
-    connectToRoom(joinInput);
+    connectToRoom(code);
   };
 
   const pushHostConfig = (patch: Partial<RoomConfig>) => {
@@ -798,39 +800,30 @@ export function ExplosiveChessGame() {
             <h2>联机房间</h2>
             <p className="hint" style={{ marginTop: 0 }}>
               {onlineStatus ||
-                "创建房间并分享链接，或输入房间码加入。双方准备后进入棋盘。密码暂未启用。"}
+                "点「创建房间」后分享链接给对方；对方打开链接后点「加入此房间」。双方准备后进入棋盘。"}
             </p>
-            <div className="explosive-controls">
-              <label>
-                房间码
-                <input
-                  type="text"
-                  value={joinInput}
-                  onChange={(e) => setJoinInput(e.target.value.toLowerCase())}
-                  placeholder="例如 abc123"
-                  disabled={onlinePhase === "lobby" || onlinePhase === "connecting"}
-                />
-              </label>
-            </div>
             <div className="row">
               {onlinePhase === "idle" || onlinePhase === "connecting" ? (
                 <>
-                  <button
-                    type="button"
-                    className="primary"
-                    onClick={createRoom}
-                    disabled={onlinePhase === "connecting"}
-                  >
-                    创建房间
-                  </button>
-                  <button
-                    type="button"
-                    className="ghost"
-                    onClick={joinRoom}
-                    disabled={onlinePhase === "connecting"}
-                  >
-                    进入房间
-                  </button>
+                  {!roomFromQuery ? (
+                    <button
+                      type="button"
+                      className="primary"
+                      onClick={createRoom}
+                      disabled={onlinePhase === "connecting"}
+                    >
+                      创建房间
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      className="primary"
+                      onClick={joinRoom}
+                      disabled={onlinePhase === "connecting"}
+                    >
+                      加入此房间
+                    </button>
+                  )}
                 </>
               ) : null}
               {connectedLobby ? (
@@ -841,6 +834,7 @@ export function ExplosiveChessGame() {
                     disconnectOnline();
                     setSearchParams({}, { replace: true });
                     setRoomCode("");
+                    setShareLink("");
                     setOnlineStatus("已离开房间");
                   }}
                 >
@@ -849,25 +843,25 @@ export function ExplosiveChessGame() {
               ) : null}
             </div>
 
-            {roomCode && connectedLobby ? (
-              <p className="hint explosive-share">
-                房间 <code>{roomCode}</code>
+            {onlineRole === "host" && roomCode && (onlinePhase === "lobby" || onlinePhase === "connecting") ? (
+              <div className="explosive-controls explosive-room-code">
+                <label>
+                  房间码
+                  <input type="text" value={roomCode} readOnly aria-readonly="true" />
+                </label>
                 {shareLink ? (
-                  <>
-                    {" · "}
-                    <button
-                      type="button"
-                      className="linkish"
-                      onClick={() => {
-                        void navigator.clipboard?.writeText(shareLink);
-                        setOnlineStatus("分享链接已复制");
-                      }}
-                    >
-                      复制分享链接
-                    </button>
-                  </>
+                  <button
+                    type="button"
+                    className="ghost"
+                    onClick={() => {
+                      void navigator.clipboard?.writeText(shareLink);
+                      setOnlineStatus("分享链接已复制");
+                    }}
+                  >
+                    复制分享链接
+                  </button>
                 ) : null}
-              </p>
+              </div>
             ) : null}
 
             {onlineConfig && onlineRole !== "host" && connectedLobby ? (

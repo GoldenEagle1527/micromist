@@ -781,6 +781,17 @@ html[data-theme="dark"] .explosive-status .explosive-count.blue {
   min-height: 2.5rem;
 }
 
+
+.explosive-room-code {
+  margin-top: 0.75rem;
+}
+
+.explosive-room-code input[type="text"] {
+  cursor: default;
+  user-select: all;
+  opacity: 0.95;
+}
+
 .explosive-setup {
   width: min(26rem, 100%);
   margin: 0.5rem auto 1.5rem;
@@ -839,7 +850,18 @@ html[data-theme="dark"] .explosive-status .explosive-count.blue {
 }
 
 @media (min-width: 720px) {
-  .explosive-setup {
+  
+.explosive-room-code {
+  margin-top: 0.75rem;
+}
+
+.explosive-room-code input[type="text"] {
+  cursor: default;
+  user-select: all;
+  opacity: 0.95;
+}
+
+.explosive-setup {
     width: min(28rem, 100%);
     margin-top: 1.25rem;
   }
