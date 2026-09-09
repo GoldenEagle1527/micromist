@@ -25,20 +25,28 @@ function ThemeIcon({ mode }: { mode: "light" | "dark" | "system" }) {
   );
 }
 
-
+function GamesIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M21 6H3c-1.1 0-2 .9-2 2v8c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm-10 7H8v3H6v-3H3v-2h3V8h2v3h3v2zm4.5 2a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3zm3-3a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3z" />
+    </svg>
+  );
+}
 
 export function Shell() {
   const { mode, cycleMode } = useTheme();
   const [menuOpen, setMenuOpen] = useState(false);
   const playMatch = useMatch("/play/:slug");
+  const homeMatch = useMatch({ path: "/", end: true });
   const playGame = playMatch?.params.slug
     ? getGame(playMatch.params.slug)
     : undefined;
+  const showBottomNav = Boolean(homeMatch);
   const themeLabel =
     mode === "system" ? "跟随系统" : mode === "light" ? "浅色" : "深色";
 
   return (
-    <div className="shell">
+    <div className={`shell${showBottomNav ? " shell-home" : ""}`}>
       <header className="topbar">
         <NavLink to="/" className="brand" onClick={() => setMenuOpen(false)}>
           <span className="brand-zh">微渺</span>
@@ -99,6 +107,14 @@ export function Shell() {
         <Outlet />
       </main>
 
+      {showBottomNav ? (
+        <nav className="bottom-nav" aria-label="底部导航">
+          <NavLink to="/" end>
+            <GamesIcon />
+            游戏
+          </NavLink>
+        </nav>
+      ) : null}
 
       <footer className="footer">
         <span>开源 MIT · Workers Static Assets · 不持久化账号</span>

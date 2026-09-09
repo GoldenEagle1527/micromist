@@ -556,6 +556,51 @@ button:disabled {
   font-weight: 600;
 }
 
+.shell-home .main {
+  padding-bottom: calc(5.5rem + var(--safe-bottom));
+}
+
+.bottom-nav {
+  display: flex;
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 20;
+  gap: 0.25rem;
+  padding: 0.45rem 0.75rem calc(0.45rem + var(--safe-bottom));
+  background: var(--glass-bg-strong);
+  border-top: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow);
+  backdrop-filter: var(--backdrop);
+  -webkit-backdrop-filter: var(--backdrop);
+}
+
+.bottom-nav a {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.15rem;
+  padding: 0.35rem 0.5rem;
+  border-radius: var(--md-sys-shape-corner-md);
+  color: var(--md-sys-color-on-surface-variant);
+  font-size: 0.72rem;
+  font-weight: 500;
+}
+
+.bottom-nav a svg {
+  width: 1.35rem;
+  height: 1.35rem;
+  fill: currentColor;
+}
+
+.bottom-nav a[aria-current="page"] {
+  color: var(--md-sys-color-primary);
+  background: var(--md-sys-color-primary-container);
+}
+
 
 @media (min-width: 720px) {
   .topbar {
@@ -575,6 +620,13 @@ button:disabled {
     display: none;
   }
 
+  .bottom-nav {
+    display: none;
+  }
+
+  .shell-home .main {
+    padding-bottom: 1.5rem;
+  }
 
   .main {
     width: min(1080px, calc(100% - 2.4rem));
