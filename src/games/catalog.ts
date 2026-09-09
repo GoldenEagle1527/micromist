@@ -18,6 +18,15 @@ export const games: GameMeta[] = [
     blurbZh: "在雾中托住坠落的微光。单人小游戏，最高分仅存在本机。",
     mode: "single",
   },
+  {
+    slug: "explosive-chess",
+    title: "Explosive Chess",
+    titleZh: "爆炸棋",
+    blurb:
+      "Place dots until cells burst and recolor neighbors. Local vs AI or hotseat — no online rooms in this build.",
+    blurbZh: "落子叠满即爆，连锁改色占盘。支持本地对战 AI 或双人热座，本版不含联机。",
+    mode: "single",
+  },
 ];
 
 export function getGame(slug: string): GameMeta | undefined {
