@@ -660,3 +660,73 @@ button:disabled {
     animation: none !important;
   }
 }
+
+/* explosive-chess */
+.explosive-chess {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.explosive-controls label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-size: 0.82rem;
+  color: var(--md-sys-color-on-surface-variant);
+  min-width: 7.5rem;
+  flex: 1 1 7.5rem;
+}
+
+.explosive-controls select,
+.explosive-controls input[type="number"] {
+  background: var(--md-sys-color-surface-container-highest);
+  color: var(--md-sys-color-on-surface);
+  border: 1px solid var(--md-sys-color-outline-variant);
+  border-radius: var(--md-sys-shape-corner-sm);
+  padding: 0.55rem 0.7rem;
+  min-height: 2.5rem;
+}
+
+.explosive-controls select:focus,
+.explosive-controls input[type="number"]:focus {
+  outline: 2px solid color-mix(in srgb, var(--md-sys-color-primary) 55%, transparent);
+  outline-offset: 1px;
+  border-color: var(--md-sys-color-primary);
+}
+
+.explosive-status .explosive-count.red {
+  color: #e53935;
+  font-weight: 600;
+}
+
+.explosive-status .explosive-count.blue {
+  color: #1e88e5;
+  font-weight: 600;
+}
+
+html[data-theme="dark"] .explosive-status .explosive-count.red {
+  color: #ef5350;
+}
+
+html[data-theme="dark"] .explosive-status .explosive-count.blue {
+  color: #42a5f5;
+}
+
+.explosive-board {
+  width: min(100%, 560px);
+  aspect-ratio: 1;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--md-sys-shape-corner-md);
+  overflow: hidden;
+  touch-action: none;
+}
+
+.explosive-board canvas {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+}
