@@ -49,7 +49,14 @@ export type Dict = {
     playHint: string;
     winMessage: (steps: number) => string;
     reshuffle: string;
+    adjustSettings: string;
     playAgain: string;
+    confirmReshuffleTitle: string;
+    confirmReshuffleBody: string;
+    confirmSetupTitle: string;
+    confirmSetupBody: string;
+    confirmCancel: string;
+    confirmOk: string;
     boardAria: string;
     emptyAria: string;
     tileAria: (color: number, row: number, col: number) => string;

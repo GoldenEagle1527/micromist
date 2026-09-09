@@ -1069,11 +1069,49 @@ html[data-theme="dark"] .explosive-status .explosive-count.blue {
   }
 }
 
-.chroma-playing .chroma-status .row {
-  flex-wrap: wrap;
-  gap: 0.5rem 0.75rem;
+
+.chroma-hud {
+  display: flex;
+  flex-direction: column;
   align-items: center;
+  gap: 0.35rem;
+  margin-bottom: 0.85rem;
 }
+
+.chroma-steps {
+  margin: 0;
+  font-size: 1.05rem;
+  color: var(--md-sys-color-on-surface-variant);
+  letter-spacing: 0.04em;
+}
+
+.chroma-steps strong {
+  margin-left: 0.4rem;
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: var(--md-sys-color-on-surface);
+  font-variant-numeric: tabular-nums;
+}
+
+.chroma-win {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--md-sys-color-primary);
+}
+
+.chroma-actions {
+  display: flex;
+  justify-content: center;
+  gap: 0.75rem;
+  margin-top: 1rem;
+  flex-wrap: wrap;
+}
+
+.chroma-actions button {
+  min-width: 5.5rem;
+}
+
 
 .chroma-board {
   --chroma-gap: 3px;

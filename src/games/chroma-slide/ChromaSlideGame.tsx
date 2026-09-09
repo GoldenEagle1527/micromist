@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { useLocale } from "../../i18n";
 import {
   EMPTY,
@@ -13,6 +13,7 @@ import {
 } from "./engine";
 
 type Screen = "setup" | "playing";
+type ConfirmKind = "reshuffle" | "setup" | null;
 
 export function ChromaSlideGame() {
   const { t } = useLocale();
@@ -22,38 +23,59 @@ export function ChromaSlideGame() {
   const [preset, setPreset] = useState<PresetId>("small");
   const [puzzle, setPuzzle] = useState<PuzzleState | null>(null);
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
+  const [confirm, setConfirm] = useState<ConfirmKind>(null);
+  const confirmTitleId = useId();
+  const confirmCancelRef = useRef<HTMLButtonElement | null>(null);
 
   const won = useMemo(() => (puzzle ? isWon(puzzle) : false), [puzzle]);
 
   const startGame = useCallback(() => {
     setPuzzle(newPuzzle(preset));
     setHoverIndex(null);
+    setConfirm(null);
     setScreen("playing");
   }, [preset]);
 
-  const reshuffle = useCallback(() => {
+  const doReshuffle = useCallback(() => {
     if (!puzzle) return;
     setPuzzle(newPuzzle(puzzle.preset));
     setHoverIndex(null);
+    setConfirm(null);
   }, [puzzle]);
 
-  const backToSetup = useCallback(() => {
+  const doBackToSetup = useCallback(() => {
     setScreen("setup");
     setPuzzle(null);
     setHoverIndex(null);
+    setConfirm(null);
   }, []);
 
   const onCellClick = useCallback(
     (index: number) => {
-      if (!puzzle || won) return;
+      if (!puzzle || won || confirm) return;
       const next = clickMove(puzzle, index);
       if (next !== puzzle) {
         setPuzzle(next);
         setHoverIndex(null);
       }
     },
-    [puzzle, won],
+    [puzzle, won, confirm],
   );
+
+  useEffect(() => {
+    if (!confirm) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setConfirm(null);
+    };
+    document.addEventListener("keydown", onKey);
+    confirmCancelRef.current?.focus();
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prev;
+    };
+  }, [confirm]);
 
   if (screen === "setup") {
     const p = PRESETS[preset];
@@ -103,35 +125,16 @@ export function ChromaSlideGame() {
 
   const { size, board, emptyIndex, steps } = puzzle;
   const legalHover =
-    hoverIndex != null && !won && isLegalClick(puzzle, hoverIndex);
+    hoverIndex != null && !won && !confirm && isLegalClick(puzzle, hoverIndex);
 
   return (
     <div className="chroma-slide chroma-playing">
-      <div className="panel chroma-status">
-        <div className="row" style={{ marginTop: 0 }}>
-          <button type="button" className="ghost" onClick={backToSetup}>
-            {ch.backSetup}
-          </button>
-          <span>
-            {ch.stepsHud}：<strong>{steps}</strong>
-          </span>
-          <span className="hint" style={{ margin: 0 }}>
-            {PRESETS[puzzle.preset].size}×{PRESETS[puzzle.preset].size}
-          </span>
-        </div>
-        <p className="hint" style={{ marginTop: "0.5rem" }}>
-          {won ? ch.winMessage(steps) : ch.playHint}
+      <div className="chroma-hud">
+        <p className="chroma-steps">
+          {ch.stepsHud}
+          <strong>{steps}</strong>
         </p>
-        <div className="row">
-          <button type="button" className="ghost" onClick={reshuffle}>
-            {ch.reshuffle}
-          </button>
-          {won ? (
-            <button type="button" className="primary" onClick={reshuffle}>
-              {ch.playAgain}
-            </button>
-          ) : null}
-        </div>
+        {won ? <p className="chroma-win">{ch.winMessage(steps)}</p> : null}
       </div>
 
       <div
@@ -155,7 +158,6 @@ export function ChromaSlideGame() {
               const r = Math.floor(index / size);
               const c = index % size;
               if (er === hr) {
-                // same row: highlight between empty and hover (inclusive of tiles that move)
                 const lo = Math.min(ec, hc);
                 const hi = Math.max(ec, hc);
                 return r === er && c >= lo && c <= hi;
@@ -184,11 +186,15 @@ export function ChromaSlideGame() {
                   ? undefined
                   : { backgroundColor: TILE_COLORS[cell] ?? "#888" }
               }
-              disabled={won || isEmpty}
+              disabled={won || isEmpty || Boolean(confirm)}
               aria-label={
                 isEmpty
                   ? ch.emptyAria
-                  : ch.tileAria(cell + 1, Math.floor(index / size) + 1, (index % size) + 1)
+                  : ch.tileAria(
+                      cell + 1,
+                      Math.floor(index / size) + 1,
+                      (index % size) + 1,
+                    )
               }
               onClick={() => onCellClick(index)}
               onMouseEnter={() => setHoverIndex(index)}
@@ -197,6 +203,81 @@ export function ChromaSlideGame() {
           );
         })}
       </div>
+
+      <div className="chroma-actions">
+        <button
+          type="button"
+          className="ghost"
+          onClick={() => setConfirm("reshuffle")}
+        >
+          {ch.reshuffle}
+        </button>
+        <button
+          type="button"
+          className="ghost"
+          onClick={() => setConfirm("setup")}
+        >
+          {ch.adjustSettings}
+        </button>
+      </div>
+
+      {confirm ? (
+        <div
+          className="modal-backdrop"
+          role="presentation"
+          onClick={() => setConfirm(null)}
+        >
+          <div
+            className="modal-panel"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={confirmTitleId}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="modal-header">
+              <h2 id={confirmTitleId}>
+                {confirm === "reshuffle"
+                  ? ch.confirmReshuffleTitle
+                  : ch.confirmSetupTitle}
+              </h2>
+              <button
+                type="button"
+                className="icon-btn"
+                onClick={() => setConfirm(null)}
+                aria-label={ch.confirmCancel}
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M18.3 5.71 12 12.01 5.7 5.7 4.29 7.11 10.59 13.4 4.29 19.7 5.7 21.11 12 14.82l6.3 6.29 1.41-1.41-6.29-6.3 6.29-6.29z" />
+                </svg>
+              </button>
+            </div>
+            <p className="lede modal-body">
+              {confirm === "reshuffle"
+                ? ch.confirmReshuffleBody
+                : ch.confirmSetupBody}
+            </p>
+            <div className="modal-actions">
+              <button
+                ref={confirmCancelRef}
+                type="button"
+                className="ghost"
+                onClick={() => setConfirm(null)}
+              >
+                {ch.confirmCancel}
+              </button>
+              <button
+                type="button"
+                className="primary"
+                onClick={
+                  confirm === "reshuffle" ? doReshuffle : doBackToSetup
+                }
+              >
+                {ch.confirmOk}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
