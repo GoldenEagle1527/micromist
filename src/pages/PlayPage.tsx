@@ -20,7 +20,7 @@ export function PlayPage() {
 
   const hint =
     game.slug === "explosive-chess"
-      ? "点击棋盘落子；叠满容量会爆炸并连锁改色。红方先手。本地改完设置点「新游戏」；联机用创建/加入房间（?room=码）。"
+      ? "先在设置页选模式与规则，再点「开始游戏」进入棋盘。联机：创建/进入房间 → 双方准备后进入棋盘（?room=码可预填）。"
       : "方向键或 A/D 移动；也可按住指针拖动。最高分写入 localStorage，不会上传。";
 
   return (

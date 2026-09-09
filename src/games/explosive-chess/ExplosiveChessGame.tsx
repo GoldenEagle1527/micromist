@@ -31,6 +31,8 @@ import {
 
 type OpponentMode = "ai" | "local" | "online";
 type RedOwner = "player" | "ai";
+/** App-level screen: setup has no board; playing shows only the board HUD. */
+type Screen = "setup" | "playing";
 
 type Settings = {
   opponent: OpponentMode;
@@ -64,6 +66,14 @@ function loadSettings(): Settings {
   }
 }
 
+function saveSettings(settings: Settings) {
+  try {
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+  } catch {
+    /* ignore */
+  }
+}
+
 function colorLabel(color: PlayerColor): string {
   return color === COLOR_RED ? "红方" : "蓝方";
 }
@@ -89,18 +99,15 @@ function seatToPlayerColor(seat: HostColor | Seat): PlayerColor | null {
 
 export function ExplosiveChessGame() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const roomFromQuery = searchParams.get("room")?.trim() || "";
+  const roomFromQuery = searchParams.get("room")?.trim().toLowerCase() || "";
 
-  const [settingsDraft, setSettingsDraft] = useState<Settings>(() => {
+  const [screen, setScreen] = useState<Screen>("setup");
+  const [settings, setSettings] = useState<Settings>(() => {
     const base = loadSettings();
     if (roomFromQuery) return { ...base, opponent: "online" };
     return base;
   });
-  const [activeSettings, setActiveSettings] = useState<Settings>(() => {
-    const base = loadSettings();
-    if (roomFromQuery) return { ...base, opponent: "online" };
-    return base;
-  });
+
   const [turn, setTurn] = useState<PlayerColor>(COLOR_RED);
   const [stepCount, setStepCount] = useState(0);
   const [counts, setCounts] = useState({ red: 0, blue: 0 });
@@ -109,9 +116,8 @@ export function ExplosiveChessGame() {
   const [winner, setWinner] = useState<MoveResult["winner"]>(null);
   const [busy, setBusy] = useState(false);
   const [tip, setTip] = useState("点击格子落子");
-  const [session, setSession] = useState(0);
+  const [localSession, setLocalSession] = useState(0);
 
-  // Online lobby / connection
   const [roomCode, setRoomCode] = useState(roomFromQuery);
   const [joinInput, setJoinInput] = useState(roomFromQuery);
   const [onlinePhase, setOnlinePhase] = useState<Phase | "idle" | "connecting">("idle");
@@ -130,14 +136,23 @@ export function ExplosiveChessGame() {
   const animatingRef = useRef(false);
   const playerColorRef = useRef<PlayerColor>(COLOR_RED);
   const aiColorRef = useRef<PlayerColor>(COLOR_BLUE);
-  const settingsRef = useRef(activeSettings);
+  const settingsRef = useRef(settings);
   const runAiMoveRef = useRef<() => Promise<void>>(async () => undefined);
   const clientRef = useRef<ExplosiveOnlineClient | null>(null);
-  const onlineSeatRef = useRef<Seat>("spectator");
   const myColorRef = useRef<PlayerColor | null>(null);
-  settingsRef.current = activeSettings;
-  onlineSeatRef.current = onlineSeat;
+  const screenRef = useRef<Screen>(screen);
+  const pendingOnlineStartRef = useRef<{
+    config: RoomConfig;
+    yourColor: HostColor;
+  } | null>(null);
+  const pendingOnlineStateRef = useRef<{
+    fullState: FullState;
+    lastMove?: { row: number; col: number };
+    animationFrames?: AnimationFrame[];
+  } | null>(null);
+  settingsRef.current = settings;
   myColorRef.current = myColor;
+  screenRef.current = screen;
 
   const syncHud = useCallback((game: GameInstance) => {
     setTurn(game.currentTurn);
@@ -148,22 +163,22 @@ export function ExplosiveChessGame() {
     setWinReason(game.winReason);
   }, []);
 
-  const updateTip = useCallback((game: GameInstance, settings: Settings) => {
+  const updateTip = useCallback((game: GameInstance, mode: OpponentMode) => {
     if (game.gameOver) {
       setTip(`${winnerLabel(game.winner)}${game.winReason ? ` · ${game.winReason}` : ""}`);
       return;
     }
-    if (settings.opponent === "ai") {
-      setTip(
-        game.currentTurn === playerColorRef.current ? "轮到你了，点击落子" : "AI 思考中…",
-      );
-    } else if (settings.opponent === "online") {
+    if (mode === "ai") {
+      setTip(game.currentTurn === playerColorRef.current ? "轮到你了，点击落子" : "AI 思考中…");
+    } else if (mode === "online") {
       const mine = myColorRef.current;
-      if (mine == null) {
-        setTip("联机对局中");
-      } else {
-        setTip(game.currentTurn === mine ? "轮到你了，点击落子" : "等待对手…");
-      }
+      setTip(
+        mine == null
+          ? "联机对局中"
+          : game.currentTurn === mine
+            ? "轮到你了，点击落子"
+            : "等待对手…",
+      );
     } else {
       setTip(`${colorLabel(game.currentTurn)}落子`);
     }
@@ -194,31 +209,14 @@ export function ExplosiveChessGame() {
     gameRef.current = null;
   }, []);
 
-  const mountBoard = useCallback(
-    (game: GameInstance) => {
-      const canvas = canvasRef.current;
-      if (!canvas) return;
-      rendererRef.current?.destroy();
-      const renderer = createBoardRenderer(canvas, game);
-      rendererRef.current = renderer;
-      renderer.resize();
-      gameRef.current = game;
-      syncHud(game);
-    },
-    [syncHud],
-  );
-
   const afterMove = useCallback(
     async (result: MoveResult) => {
       const game = gameRef.current;
       const renderer = rendererRef.current;
-      const settings = settingsRef.current;
+      const mode = settingsRef.current.opponent;
       if (!game || !renderer) return;
 
-      const shouldAnimate =
-        settings.opponent === "local" ||
-        settings.opponent === "online" ||
-        settings.difficulty === "easy";
+      const shouldAnimate = mode === "local" || mode === "online" || settingsRef.current.difficulty === "easy";
 
       if (shouldAnimate && result.animationFrames.length > 0) {
         setBusy(true);
@@ -229,14 +227,14 @@ export function ExplosiveChessGame() {
       }
 
       syncHud(game);
-      updateTip(game, settings);
+      updateTip(game, mode);
 
       if (result.gameOver) {
         setBusy(false);
         return;
       }
 
-      if (settings.opponent === "ai" && game.currentTurn === aiColorRef.current) {
+      if (mode === "ai" && game.currentTurn === aiColorRef.current) {
         await runAiMoveRef.current();
       } else {
         setBusy(false);
@@ -253,7 +251,6 @@ export function ExplosiveChessGame() {
       setBusy(false);
       return;
     }
-
     setBusy(true);
     setTip("AI 思考中…");
     const move = await ai.getMove();
@@ -261,37 +258,27 @@ export function ExplosiveChessGame() {
       setBusy(false);
       return;
     }
-
     const result = game.makeMove(move.row, move.col, aiColorRef.current);
     if (!result) {
       setBusy(false);
       return;
     }
-
     renderer.setLastMove(move.row, move.col);
     await afterMove(result);
   };
 
-  // Local / AI game bootstrap
+  // Mount local/AI board only on the playing screen.
   useEffect(() => {
-    if (activeSettings.opponent === "online") {
-      return;
-    }
+    if (screen !== "playing") return;
+    if (settings.opponent === "online") return;
 
     const canvas = canvasRef.current;
     if (!canvas) return;
 
     destroyBoard();
+    saveSettings(settings);
 
-    const settings = activeSettings;
-    try {
-      localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
-    } catch {
-      /* ignore quota */
-    }
-
-    const winParam =
-      settings.winMode === WIN_MODE_ANNIHILATION ? undefined : settings.winParam;
+    const winParam = settings.winMode === WIN_MODE_ANNIHILATION ? undefined : settings.winParam;
     const game = createGame({
       boardSize: settings.boardSize,
       winMode: settings.winMode,
@@ -300,8 +287,7 @@ export function ExplosiveChessGame() {
     gameRef.current = game;
 
     if (settings.opponent === "ai") {
-      const playerColor: PlayerColor =
-        settings.redOwner === "player" ? COLOR_RED : COLOR_BLUE;
+      const playerColor: PlayerColor = settings.redOwner === "player" ? COLOR_RED : COLOR_BLUE;
       const aiColor: PlayerColor = playerColor === COLOR_RED ? COLOR_BLUE : COLOR_RED;
       playerColorRef.current = playerColor;
       aiColorRef.current = aiColor;
@@ -315,16 +301,16 @@ export function ExplosiveChessGame() {
     rendererRef.current = renderer;
     renderer.resize();
     syncHud(game);
-    updateTip(game, settings);
+    updateTip(game, settings.opponent);
     setBusy(false);
     animatingRef.current = false;
+    setGameOver(false);
+    setWinner(null);
+    setWinReason("");
 
     const onResize = () => renderer.resize();
     window.addEventListener("resize", onResize);
-
-    const themeObserver = new MutationObserver(() => {
-      renderer.resize();
-    });
+    const themeObserver = new MutationObserver(() => renderer.resize());
     themeObserver.observe(document.documentElement, {
       attributes: true,
       attributeFilter: ["data-theme"],
@@ -347,7 +333,7 @@ export function ExplosiveChessGame() {
       rendererRef.current = null;
       gameRef.current = null;
     };
-  }, [activeSettings, session, syncHud, updateTip, destroyBoard]);
+  }, [screen, settings, localSession, syncHud, updateTip, destroyBoard]);
 
   const applyServerState = useCallback(
     async (
@@ -369,19 +355,76 @@ export function ExplosiveChessGame() {
       }
 
       syncHud(game);
-      updateTip(game, settingsRef.current);
+      updateTip(game, "online");
       setBusy(false);
     },
     [playFrames, syncHud, updateTip],
   );
 
+  const mountOnlineBoard = useCallback(
+    (config: RoomConfig, yourColor: HostColor) => {
+      const canvas = canvasRef.current;
+      const color = seatToPlayerColor(yourColor);
+      setMyColor(color);
+      myColorRef.current = color;
+      if (color != null) playerColorRef.current = color;
+
+      const winParam = config.winMode === WIN_MODE_ANNIHILATION ? undefined : config.winParam;
+      const game = createGame({
+        boardSize: config.boardSize,
+        winMode: config.winMode,
+        winParam,
+      });
+
+      aiRef.current?.destroy();
+      aiRef.current = null;
+      rendererRef.current?.destroy();
+
+      gameRef.current = game;
+      if (canvas) {
+        const renderer = createBoardRenderer(canvas, game);
+        rendererRef.current = renderer;
+        renderer.resize();
+      }
+      syncHud(game);
+      updateTip(game, "online");
+      setBusy(false);
+      setGameOver(false);
+      setWinner(null);
+      setWinReason("");
+    },
+    [syncHud, updateTip],
+  );
+
+  // Mount online board after navigating to playing (canvas must exist).
+  useEffect(() => {
+    if (screen !== "playing") return;
+    if (settings.opponent !== "online") return;
+    const pending = pendingOnlineStartRef.current;
+    if (!pending) {
+      queueMicrotask(() => rendererRef.current?.resize());
+      return;
+    }
+    pendingOnlineStartRef.current = null;
+    mountOnlineBoard(pending.config, pending.yourColor);
+    const buffered = pendingOnlineStateRef.current;
+    pendingOnlineStateRef.current = null;
+    if (buffered) {
+      void applyServerState(buffered.fullState, buffered.lastMove, buffered.animationFrames);
+    }
+    queueMicrotask(() => rendererRef.current?.resize());
+  }, [screen, settings.opponent, mountOnlineBoard, applyServerState]);
+
   const disconnectOnline = useCallback(() => {
     clientRef.current?.close();
     clientRef.current = null;
     setOnlinePhase("idle");
-    setOnlineStatus("已断开");
+    setOnlineStatus("");
+    setOnlinePlayers([]);
+    setOnlineConfig(null);
     setMyColor(null);
     myColorRef.current = null;
+    setShareLink("");
   }, []);
 
   const connectToRoom = useCallback(
@@ -403,21 +446,22 @@ export function ExplosiveChessGame() {
       setGameOver(false);
       setWinner(null);
       setWinReason("");
+      setScreen("setup");
       setSearchParams({ room: trimmed }, { replace: true });
+      saveSettings({ ...settingsRef.current, opponent: "online" });
+      setSettings((s) => ({ ...s, opponent: "online" }));
 
       const client = new ExplosiveOnlineClient();
       clientRef.current = client;
 
       client.connect(trimmed, {
         onOpen: () => {
-          const playerId = getOrCreatePlayerId();
-          client.join({ playerId, name: "Player" });
+          client.join({ playerId: getOrCreatePlayerId(), name: "Player" });
           setOnlineStatus("已连接，加入房间…");
         },
         onWelcome: (payload) => {
           setOnlineSeat(payload.seat);
           setOnlineRole(payload.role);
-          onlineSeatRef.current = payload.seat;
           const color = seatToPlayerColor(payload.seat);
           if (color != null) {
             setMyColor(color);
@@ -439,42 +483,35 @@ export function ExplosiveChessGame() {
           setOnlinePlayers(payload.players);
           setOnlineConfig(payload.config);
           setOnlinePhase(payload.phase);
+          // Stay on setup while lobby; only game_start flips to playing.
           if (payload.phase === "lobby") {
+            setScreen("setup");
             setTip("大厅：双方准备后开始。红方永远先手。");
           }
         },
         onGameStart: (payload) => {
-          const color = seatToPlayerColor(payload.yourColor);
-          setMyColor(color);
-          myColorRef.current = color;
-          if (color != null) playerColorRef.current = color;
           setOnlinePhase("playing");
           setOnlineStatus("对局开始");
-          setGameOver(false);
-          setWinner(null);
-          setWinReason("");
-
-          const winParam =
-            payload.config.winMode === WIN_MODE_ANNIHILATION
-              ? undefined
-              : payload.config.winParam;
-          const game = createGame({
-            boardSize: payload.config.boardSize,
-            winMode: payload.config.winMode,
-            winParam,
-          });
-          mountBoard(game);
-          updateTip(game, settingsRef.current);
+          pendingOnlineStartRef.current = {
+            config: payload.config,
+            yourColor: payload.yourColor,
+          };
+          setScreen("playing");
         },
         onState: (payload) => {
-          void applyServerState(
-            payload.fullState,
-            payload.lastMove,
-            payload.animationFrames,
-          );
-          if (payload.fullState.gameOver) {
-            setOnlinePhase("over");
+          if (screenRef.current !== "playing") {
+            setScreen("playing");
           }
+          if (!gameRef.current) {
+            pendingOnlineStateRef.current = {
+              fullState: payload.fullState,
+              lastMove: payload.lastMove,
+              animationFrames: payload.animationFrames,
+            };
+          } else {
+            void applyServerState(payload.fullState, payload.lastMove, payload.animationFrames);
+          }
+          if (payload.fullState.gameOver) setOnlinePhase("over");
         },
         onGameOver: (payload) => {
           setOnlinePhase("over");
@@ -488,9 +525,7 @@ export function ExplosiveChessGame() {
           );
           setBusy(false);
         },
-        onError: (payload) => {
-          setOnlineStatus(`错误：${payload.message}`);
-        },
+        onError: (payload) => setOnlineStatus(`错误：${payload.message}`),
         onPeerLeft: () => {
           setOnlineStatus("对手已断开（可等待重连）");
           setTip("对手已离开房间");
@@ -498,28 +533,24 @@ export function ExplosiveChessGame() {
         onClose: () => {
           setOnlinePhase("idle");
           setOnlineStatus("连接关闭");
+          if (screenRef.current === "playing" && settingsRef.current.opponent === "online") {
+            setScreen("setup");
+          }
         },
       });
     },
-    [applyServerState, destroyBoard, mountBoard, setSearchParams, updateTip],
+    [applyServerState, destroyBoard, setSearchParams],
   );
 
+  // Prefill join from ?room= but stay on setup until user/ready flow.
   useEffect(() => {
-    if (onlinePhase === "playing" || onlinePhase === "over") {
-      queueMicrotask(() => rendererRef.current?.resize());
-    }
-  }, [onlinePhase]);
-
-  // Auto-join from ?room=
-  useEffect(() => {
-    if (activeSettings.opponent !== "online") return;
     if (!roomFromQuery) return;
-    if (clientRef.current) return;
-    connectToRoom(roomFromQuery);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- join once on mount / mode switch
-  }, [activeSettings.opponent, roomFromQuery]);
+    setJoinInput(roomFromQuery);
+    setRoomCode(roomFromQuery);
+    setSettings((s) => ({ ...s, opponent: "online" }));
+    setOnlineStatus(`已填入房间码 ${roomFromQuery}，点「进入房间」连接`);
+  }, [roomFromQuery]);
 
-  // Cleanup online client on unmount / leave online mode
   useEffect(() => {
     return () => {
       clientRef.current?.close();
@@ -527,25 +558,15 @@ export function ExplosiveChessGame() {
     };
   }, []);
 
-  useEffect(() => {
-    if (activeSettings.opponent !== "online") {
-      disconnectOnline();
-      setSearchParams({}, { replace: true });
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeSettings.opponent]);
-
   const handlePointer = (clientX: number, clientY: number) => {
     const game = gameRef.current;
     const renderer = rendererRef.current;
-    const settings = settingsRef.current;
+    const mode = settingsRef.current.opponent;
     if (!game || !renderer || game.gameOver || busy || animatingRef.current) return;
 
-    if (settings.opponent === "ai" && game.currentTurn === aiColorRef.current) {
-      return;
-    }
+    if (mode === "ai" && game.currentTurn === aiColorRef.current) return;
 
-    if (settings.opponent === "online") {
+    if (mode === "online") {
       const mine = myColorRef.current;
       if (mine == null || game.currentTurn !== mine) return;
       const cell = renderer.pixelToCell(clientX, clientY);
@@ -559,396 +580,391 @@ export function ExplosiveChessGame() {
     const cell = renderer.pixelToCell(clientX, clientY);
     if (!cell) return;
     if (!game.isValidMove(cell.row, cell.col, game.currentTurn)) return;
-
     const result = game.makeMove(cell.row, cell.col, game.currentTurn);
     if (!result) return;
-
     renderer.setLastMove(cell.row, cell.col);
     void afterMove(result);
   };
 
-  const applyNewGame = () => {
-    const next = { ...settingsDraft };
-    setActiveSettings(next);
-    setSession((n) => n + 1);
-    if (next.opponent === "online" && !clientRef.current && !roomFromQuery) {
-      setOnlinePhase("idle");
-      setOnlineStatus("创建或加入房间开始联机");
+  const startLocalGame = () => {
+    saveSettings(settings);
+    disconnectOnline();
+    setSearchParams({}, { replace: true });
+    setScreen("playing");
+    setLocalSession((n) => n + 1);
+  };
+
+  const backToSetup = () => {
+    destroyBoard();
+    if (settings.opponent === "online") {
+      // Keep socket if still in lobby waiting; leave board only.
+      if (onlinePhase === "playing" || onlinePhase === "over") {
+        disconnectOnline();
+        setSearchParams({}, { replace: true });
+        setRoomCode("");
+      }
     }
+    setScreen("setup");
+    setBusy(false);
+    setGameOver(false);
+    setTip("点击格子落子");
   };
 
   const createRoom = () => {
     const code = generateRoomCode();
-    setSettingsDraft((s) => ({ ...s, opponent: "online" }));
-    setActiveSettings((s) => ({ ...s, opponent: "online" }));
+    setSettings((s) => ({ ...s, opponent: "online" }));
     connectToRoom(code);
   };
 
   const joinRoom = () => {
-    setSettingsDraft((s) => ({ ...s, opponent: "online" }));
-    setActiveSettings((s) => ({ ...s, opponent: "online" }));
+    setSettings((s) => ({ ...s, opponent: "online" }));
     connectToRoom(joinInput);
   };
 
   const pushHostConfig = (patch: Partial<RoomConfig>) => {
     if (onlineRole !== "host" || onlinePhase !== "lobby") return;
-    clientRef.current?.setConfig(patch);
+    // Keep local settings in sync for remounts.
+    setSettings((s) => ({
+      ...s,
+      boardSize: (patch.boardSize as Settings["boardSize"]) ?? s.boardSize,
+      winMode: patch.winMode ?? s.winMode,
+      winParam: patch.winParam ?? s.winParam,
+    }));
+    if (patch.boardSize != null || patch.winMode != null || patch.winParam != null || patch.hostColor != null) {
+      clientRef.current?.setConfig(patch);
+    }
   };
 
-  const showWinParam =
-    settingsDraft.winMode === WIN_MODE_STEPS || settingsDraft.winMode === WIN_MODE_AREA;
+  const showWinParam = settings.winMode === WIN_MODE_STEPS || settings.winMode === WIN_MODE_AREA;
+  const connectedLobby = onlinePhase === "lobby" || onlinePhase === "connecting";
+  const canReady =
+    onlinePhase === "lobby" && (onlineSeat === "red" || onlineSeat === "blue");
 
-  const isOnline = activeSettings.opponent === "online";
-  const inOnlineLobby = isOnline && (onlinePhase === "lobby" || onlinePhase === "connecting");
-  const showBoard = !isOnline || onlinePhase === "playing" || onlinePhase === "over";
-
-  return (
-    <div className="explosive-chess">
-      <div className="panel">
-        <h2>对局设置</h2>
-        <div className="row explosive-controls">
-          <label>
-            模式
-            <select
-              value={settingsDraft.opponent}
-              onChange={(e) =>
-                setSettingsDraft((s) => ({
-                  ...s,
-                  opponent: e.target.value as OpponentMode,
-                }))
-              }
-            >
-              <option value="ai">本地 vs AI</option>
-              <option value="local">本地 vs 本地（热座）</option>
-              <option value="online">联机（房间）</option>
-            </select>
-          </label>
-          {settingsDraft.opponent !== "online" ? (
-            <>
-              <label>
-                棋盘
-                <select
-                  value={settingsDraft.boardSize}
-                  onChange={(e) =>
-                    setSettingsDraft((s) => ({
-                      ...s,
-                      boardSize: Number(e.target.value) as 9 | 11 | 13,
-                    }))
-                  }
-                >
-                  <option value={9}>9×9</option>
-                  <option value={11}>11×11</option>
-                  <option value={13}>13×13</option>
-                </select>
-              </label>
-              <label>
-                胜利
-                <select
-                  value={settingsDraft.winMode}
-                  onChange={(e) =>
-                    setSettingsDraft((s) => ({
-                      ...s,
-                      winMode: e.target.value as WinMode,
-                    }))
-                  }
-                >
-                  <option value={WIN_MODE_ANNIHILATION}>鏖战（歼灭）</option>
-                  <option value={WIN_MODE_STEPS}>步数制</option>
-                  <option value={WIN_MODE_AREA}>面积制</option>
-                </select>
-              </label>
-              {showWinParam ? (
-                <label>
-                  {settingsDraft.winMode === WIN_MODE_STEPS ? "步数" : "目标格数"}
-                  <input
-                    type="number"
-                    min={1}
-                    value={settingsDraft.winParam}
-                    onChange={(e) =>
-                      setSettingsDraft((s) => ({
-                        ...s,
-                        winParam: Math.max(1, Number(e.target.value) || 1),
-                      }))
-                    }
-                  />
-                </label>
-              ) : null}
-              {settingsDraft.opponent === "ai" ? (
-                <>
-                  <label>
-                    AI 难度
-                    <select
-                      value={settingsDraft.difficulty}
-                      onChange={(e) =>
-                        setSettingsDraft((s) => ({
-                          ...s,
-                          difficulty: e.target.value as AiDifficulty,
-                        }))
-                      }
-                    >
-                      <option value="easy">简单</option>
-                      <option value="medium">中等</option>
-                      <option value="hard">困难</option>
-                      <option value="hell">炼狱</option>
-                    </select>
-                  </label>
-                  <label>
-                    红方（先手）
-                    <select
-                      value={settingsDraft.redOwner}
-                      onChange={(e) =>
-                        setSettingsDraft((s) => ({
-                          ...s,
-                          redOwner: e.target.value as RedOwner,
-                        }))
-                      }
-                    >
-                      <option value="player">我方</option>
-                      <option value="ai">AI</option>
-                    </select>
-                  </label>
-                </>
-              ) : null}
-            </>
-          ) : null}
-        </div>
-        {settingsDraft.opponent !== "online" ? (
-          <div className="row">
-            <button type="button" className="primary" onClick={applyNewGame}>
-              新游戏
-            </button>
-            <button
-              type="button"
-              className="ghost"
-              onClick={() => {
-                setSettingsDraft({ ...activeSettings });
-                setSession((n) => n + 1);
-              }}
-            >
-              重开当前设置
-            </button>
-          </div>
-        ) : (
-          <div className="row">
-            <button
-              type="button"
-              className="primary"
-              onClick={() => {
-                setActiveSettings({ ...settingsDraft });
-              }}
-            >
-              进入联机
-            </button>
-          </div>
-        )}
-      </div>
-
-      {isOnline ? (
-        <div className="panel explosive-online-lobby">
-          <h2>联机大厅</h2>
+  // ——— SETUP LOBBY (no board) ———
+  if (screen === "setup") {
+    return (
+      <div className="explosive-chess explosive-setup">
+        <div className="panel">
+          <h2>对局设置</h2>
           <p className="hint" style={{ marginTop: 0 }}>
-            {onlineStatus || "创建房间后分享链接；或输入房间码加入。密码暂未启用。"}
+            先选好模式与规则，再进入棋盘。联机需双方准备后才会开始。
           </p>
           <div className="row explosive-controls">
             <label>
-              房间码
-              <input
-                type="text"
-                value={joinInput}
-                onChange={(e) => setJoinInput(e.target.value.toLowerCase())}
-                placeholder="例如 abc123"
-                disabled={onlinePhase === "playing"}
-              />
+              模式
+              <select
+                value={settings.opponent}
+                onChange={(e) => {
+                  const opponent = e.target.value as OpponentMode;
+                  if (opponent !== "online") {
+                    disconnectOnline();
+                    setSearchParams({}, { replace: true });
+                  }
+                  setSettings((s) => ({ ...s, opponent }));
+                }}
+              >
+                <option value="ai">本地 vs AI</option>
+                <option value="local">本地 vs 本地（热座）</option>
+                <option value="online">联机（房间）</option>
+              </select>
             </label>
-          </div>
-          <div className="row">
-            <button
-              type="button"
-              className="primary"
-              onClick={createRoom}
-              disabled={onlinePhase === "playing"}
-            >
-              创建房间
-            </button>
-            <button
-              type="button"
-              className="ghost"
-              onClick={joinRoom}
-              disabled={onlinePhase === "playing"}
-            >
-              加入房间
-            </button>
-            <button
-              type="button"
-              className="ghost"
-              onClick={() => {
-                disconnectOnline();
-                destroyBoard();
-                setSearchParams({}, { replace: true });
-              }}
-            >
-              断开
-            </button>
-          </div>
-          {roomCode ? (
-            <p className="hint explosive-share">
-              房间 <code>{roomCode}</code>
-              {shareLink ? (
-                <>
-                  {" · "}
-                  <button
-                    type="button"
-                    className="linkish"
-                    onClick={() => {
-                      void navigator.clipboard?.writeText(shareLink);
-                      setOnlineStatus("分享链接已复制");
+
+            {settings.opponent !== "online" || onlineRole === "host" || onlinePhase === "idle" ? (
+              <>
+                <label>
+                  棋盘
+                  <select
+                    value={
+                      settings.opponent === "online" && onlineConfig
+                        ? onlineConfig.boardSize
+                        : settings.boardSize
+                    }
+                    disabled={settings.opponent === "online" && onlineRole !== "host" && connectedLobby}
+                    onChange={(e) => {
+                      const boardSize = Number(e.target.value) as 9 | 11 | 13;
+                      setSettings((s) => ({ ...s, boardSize }));
+                      if (settings.opponent === "online") pushHostConfig({ boardSize });
                     }}
                   >
-                    复制分享链接
-                  </button>
-                </>
-              ) : null}
-            </p>
-          ) : null}
-
-          {onlineConfig && inOnlineLobby && onlineRole === "host" ? (
-            <div className="row explosive-controls" style={{ marginTop: "0.75rem" }}>
-              <label>
-                棋盘
-                <select
-                  value={onlineConfig.boardSize}
-                  onChange={(e) =>
-                    pushHostConfig({ boardSize: Number(e.target.value) })
-                  }
-                >
-                  <option value={9}>9×9</option>
-                  <option value={11}>11×11</option>
-                  <option value={13}>13×13</option>
-                </select>
-              </label>
-              <label>
-                胜利
-                <select
-                  value={onlineConfig.winMode}
-                  onChange={(e) =>
-                    pushHostConfig({ winMode: e.target.value as WinMode })
-                  }
-                >
-                  <option value={WIN_MODE_ANNIHILATION}>鏖战（歼灭）</option>
-                  <option value={WIN_MODE_STEPS}>步数制</option>
-                  <option value={WIN_MODE_AREA}>面积制</option>
-                </select>
-              </label>
-              {onlineConfig.winMode !== WIN_MODE_ANNIHILATION ? (
-                <label>
-                  {onlineConfig.winMode === WIN_MODE_STEPS ? "步数" : "目标格数"}
-                  <input
-                    type="number"
-                    min={1}
-                    value={onlineConfig.winParam}
-                    onChange={(e) =>
-                      pushHostConfig({
-                        winParam: Math.max(1, Number(e.target.value) || 1),
-                      })
-                    }
-                  />
+                    <option value={9}>9×9</option>
+                    <option value={11}>11×11</option>
+                    <option value={13}>13×13</option>
+                  </select>
                 </label>
-              ) : null}
+                <label>
+                  胜利
+                  <select
+                    value={
+                      settings.opponent === "online" && onlineConfig
+                        ? onlineConfig.winMode
+                        : settings.winMode
+                    }
+                    disabled={settings.opponent === "online" && onlineRole !== "host" && connectedLobby}
+                    onChange={(e) => {
+                      const winMode = e.target.value as WinMode;
+                      setSettings((s) => ({ ...s, winMode }));
+                      if (settings.opponent === "online") pushHostConfig({ winMode });
+                    }}
+                  >
+                    <option value={WIN_MODE_ANNIHILATION}>鏖战（歼灭）</option>
+                    <option value={WIN_MODE_STEPS}>步数制</option>
+                    <option value={WIN_MODE_AREA}>面积制</option>
+                  </select>
+                </label>
+                {showWinParam ||
+                (onlineConfig && onlineConfig.winMode !== WIN_MODE_ANNIHILATION) ? (
+                  <label>
+                    {(onlineConfig?.winMode ?? settings.winMode) === WIN_MODE_STEPS
+                      ? "步数"
+                      : "目标格数"}
+                    <input
+                      type="number"
+                      min={1}
+                      value={onlineConfig?.winParam ?? settings.winParam}
+                      disabled={settings.opponent === "online" && onlineRole !== "host" && connectedLobby}
+                      onChange={(e) => {
+                        const winParam = Math.max(1, Number(e.target.value) || 1);
+                        setSettings((s) => ({ ...s, winParam }));
+                        if (settings.opponent === "online") pushHostConfig({ winParam });
+                      }}
+                    />
+                  </label>
+                ) : null}
+              </>
+            ) : null}
+
+            {settings.opponent === "ai" ? (
+              <>
+                <label>
+                  AI 难度
+                  <select
+                    value={settings.difficulty}
+                    onChange={(e) =>
+                      setSettings((s) => ({
+                        ...s,
+                        difficulty: e.target.value as AiDifficulty,
+                      }))
+                    }
+                  >
+                    <option value="easy">简单</option>
+                    <option value="medium">中等</option>
+                    <option value="hard">困难</option>
+                    <option value="hell">炼狱</option>
+                  </select>
+                </label>
+                <label>
+                  红方（先手）
+                  <select
+                    value={settings.redOwner}
+                    onChange={(e) =>
+                      setSettings((s) => ({
+                        ...s,
+                        redOwner: e.target.value as RedOwner,
+                      }))
+                    }
+                  >
+                    <option value="player">我方</option>
+                    <option value="ai">AI</option>
+                  </select>
+                </label>
+              </>
+            ) : null}
+
+            {settings.opponent === "online" && onlineRole === "host" && onlinePhase === "lobby" ? (
               <label>
                 我的颜色
                 <select
-                  value={onlineConfig.hostColor}
-                  onChange={(e) =>
-                    pushHostConfig({ hostColor: e.target.value as HostColor })
-                  }
+                  value={onlineConfig?.hostColor ?? "red"}
+                  onChange={(e) => pushHostConfig({ hostColor: e.target.value as HostColor })}
                 >
                   <option value="red">红（先手）</option>
                   <option value="blue">蓝（后手）</option>
                 </select>
               </label>
-            </div>
-          ) : null}
-
-          {onlineConfig && inOnlineLobby && onlineRole !== "host" ? (
-            <p className="hint">
-              配置：{onlineConfig.boardSize}×{onlineConfig.boardSize} · {onlineConfig.winMode}
-              {onlineConfig.winMode !== WIN_MODE_ANNIHILATION
-                ? ` (${onlineConfig.winParam})`
-                : ""}{" "}
-              · 房主颜色 {onlineConfig.hostColor === "red" ? "红" : "蓝"}
-            </p>
-          ) : null}
-
-          {onlinePlayers.length > 0 ? (
-            <ul className="explosive-player-list">
-              {onlinePlayers.map((p) => (
-                <li key={p.playerId}>
-                  {p.name} · {seatLabel(p.seat)} · {p.role}
-                  {p.ready ? " · 已准备" : ""}
-                  {p.rematch ? " · 再来一局" : ""}
-                  {!p.connected ? " · 离线" : ""}
-                </li>
-              ))}
-            </ul>
-          ) : null}
-
-          <div className="row">
-            {onlinePhase === "lobby" && (onlineSeat === "red" || onlineSeat === "blue") ? (
-              <button
-                type="button"
-                className="primary"
-                onClick={() => clientRef.current?.ready()}
-              >
-                准备
-              </button>
-            ) : null}
-            {onlinePhase === "playing" && (onlineSeat === "red" || onlineSeat === "blue") ? (
-              <button
-                type="button"
-                className="ghost"
-                onClick={() => clientRef.current?.surrender()}
-              >
-                投降
-              </button>
-            ) : null}
-            {onlinePhase === "over" && (onlineSeat === "red" || onlineSeat === "blue") ? (
-              <button
-                type="button"
-                className="primary"
-                onClick={() => clientRef.current?.rematch()}
-              >
-                再来一局
-              </button>
             ) : null}
           </div>
-        </div>
-      ) : null}
 
+          {settings.opponent !== "online" ? (
+            <div className="row">
+              <button type="button" className="primary" onClick={startLocalGame}>
+                开始游戏
+              </button>
+            </div>
+          ) : null}
+        </div>
+
+        {settings.opponent === "online" ? (
+          <div className="panel explosive-online-lobby">
+            <h2>联机房间</h2>
+            <p className="hint" style={{ marginTop: 0 }}>
+              {onlineStatus ||
+                "创建房间并分享链接，或输入房间码加入。双方准备后进入棋盘。密码暂未启用。"}
+            </p>
+            <div className="row explosive-controls">
+              <label>
+                房间码
+                <input
+                  type="text"
+                  value={joinInput}
+                  onChange={(e) => setJoinInput(e.target.value.toLowerCase())}
+                  placeholder="例如 abc123"
+                  disabled={onlinePhase === "lobby" || onlinePhase === "connecting"}
+                />
+              </label>
+            </div>
+            <div className="row">
+              {onlinePhase === "idle" || onlinePhase === "connecting" ? (
+                <>
+                  <button
+                    type="button"
+                    className="primary"
+                    onClick={createRoom}
+                    disabled={onlinePhase === "connecting"}
+                  >
+                    创建房间
+                  </button>
+                  <button
+                    type="button"
+                    className="ghost"
+                    onClick={joinRoom}
+                    disabled={onlinePhase === "connecting"}
+                  >
+                    进入房间
+                  </button>
+                </>
+              ) : null}
+              {connectedLobby ? (
+                <button
+                  type="button"
+                  className="ghost"
+                  onClick={() => {
+                    disconnectOnline();
+                    setSearchParams({}, { replace: true });
+                    setRoomCode("");
+                    setOnlineStatus("已离开房间");
+                  }}
+                >
+                  离开房间
+                </button>
+              ) : null}
+            </div>
+
+            {roomCode && connectedLobby ? (
+              <p className="hint explosive-share">
+                房间 <code>{roomCode}</code>
+                {shareLink ? (
+                  <>
+                    {" · "}
+                    <button
+                      type="button"
+                      className="linkish"
+                      onClick={() => {
+                        void navigator.clipboard?.writeText(shareLink);
+                        setOnlineStatus("分享链接已复制");
+                      }}
+                    >
+                      复制分享链接
+                    </button>
+                  </>
+                ) : null}
+              </p>
+            ) : null}
+
+            {onlineConfig && onlineRole !== "host" && connectedLobby ? (
+              <p className="hint">
+                配置：{onlineConfig.boardSize}×{onlineConfig.boardSize} · {onlineConfig.winMode}
+                {onlineConfig.winMode !== WIN_MODE_ANNIHILATION
+                  ? ` (${onlineConfig.winParam})`
+                  : ""}{" "}
+                · 房主 {onlineConfig.hostColor === "red" ? "红" : "蓝"}
+              </p>
+            ) : null}
+
+            {onlinePlayers.length > 0 ? (
+              <ul className="explosive-player-list">
+                {onlinePlayers.map((p) => (
+                  <li key={p.playerId}>
+                    {p.name} · {seatLabel(p.seat)} · {p.role}
+                    {p.ready ? " · 已准备" : ""}
+                    {p.rematch ? " · 再来一局" : ""}
+                    {!p.connected ? " · 离线" : ""}
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+
+            {canReady ? (
+              <div className="row">
+                <button
+                  type="button"
+                  className="primary"
+                  onClick={() => clientRef.current?.ready()}
+                >
+                  准备（双方准备后进入棋盘）
+                </button>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
+    );
+  }
+
+  // ——— PLAYING (board only + thin HUD) ———
+  return (
+    <div className="explosive-chess explosive-playing">
       <div className="panel explosive-status">
         <div className="row" style={{ marginTop: 0 }}>
+          <button type="button" className="ghost" onClick={backToSetup}>
+            ← 返回设置
+          </button>
           <span>
             回合：<strong>{colorLabel(turn)}</strong>
           </span>
           <span>步数：{stepCount}</span>
           <span className="explosive-count red">红 {counts.red}</span>
           <span className="explosive-count blue">蓝 {counts.blue}</span>
-          {isOnline && myColor != null ? (
+          {settings.opponent === "online" && myColor != null ? (
             <span>你：{colorLabel(myColor)}</span>
           ) : null}
         </div>
         <p className="hint" style={{ marginTop: "0.5rem" }}>
           {gameOver ? `${winnerLabel(winner)}${winReason ? ` · ${winReason}` : ""}` : tip}
         </p>
+        <div className="row">
+          {settings.opponent !== "online" ? (
+            <button
+              type="button"
+              className="ghost"
+              onClick={() => {
+                setLocalSession((n) => n + 1);
+              }}
+            >
+              重开
+            </button>
+          ) : null}
+          {settings.opponent === "online" && onlinePhase === "playing" ? (
+            <button type="button" className="ghost" onClick={() => clientRef.current?.surrender()}>
+              投降
+            </button>
+          ) : null}
+          {settings.opponent === "online" && onlinePhase === "over" ? (
+            <button
+              type="button"
+              className="primary"
+              onClick={() => {
+                clientRef.current?.rematch();
+                setScreen("setup");
+                destroyBoard();
+              }}
+            >
+              再来一局
+            </button>
+          ) : null}
+        </div>
       </div>
 
-      {!showBoard ? (
-        <div className="panel hint">等待双方准备后显示棋盘…</div>
-      ) : null}
-      <div
-        className="explosive-board glass"
-        style={showBoard ? undefined : { position: "absolute", left: -9999, width: 1, height: 1, overflow: "hidden" }}
-        aria-hidden={!showBoard}
-      >
+      <div className="explosive-board glass">
         <canvas
           ref={canvasRef}
           onClick={(e) => handlePointer(e.clientX, e.clientY)}
