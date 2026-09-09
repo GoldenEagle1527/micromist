@@ -5,6 +5,7 @@ export type Dict = {
   brandSub: string;
   navGames: string;
   navGamesMobile: string;
+  menuAria: string;
   themeSystem: string;
   themeLight: string;
   themeDark: string;

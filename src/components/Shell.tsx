@@ -26,14 +26,6 @@ function ThemeIcon({ mode }: { mode: "light" | "dark" | "system" }) {
   );
 }
 
-function GamesIcon() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M21 6H3c-1.1 0-2 .9-2 2v8c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm-10 7H8v3H6v-3H3v-2h3V8h2v3h3v2zm4.5 2a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3zm3-3a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3z" />
-    </svg>
-  );
-}
-
 function AboutIcon() {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -50,32 +42,42 @@ export function Shell() {
   const aboutTitleId = useId();
   const closeBtnRef = useRef<HTMLButtonElement | null>(null);
   const playMatch = useMatch("/play/:slug");
-  const homeMatch = useMatch({ path: "/", end: true });
   const playGame = playMatch?.params.slug
     ? getGame(playMatch.params.slug)
     : undefined;
-  const showBottomNav = Boolean(homeMatch);
   const themeLabel =
     mode === "system" ? t.themeSystem : mode === "light" ? t.themeLight : t.themeDark;
   const langButtonLabel = locale === "zh" ? "EN" : "中";
+  const langRowLabel = locale === "zh" ? "中文 / EN" : "English / 中";
+
+  useEffect(() => {
+    if (!aboutOpen && !menuOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      if (aboutOpen) setAboutOpen(false);
+      else if (menuOpen) setMenuOpen(false);
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [aboutOpen, menuOpen]);
 
   useEffect(() => {
     if (!aboutOpen) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setAboutOpen(false);
-    };
-    document.addEventListener("keydown", onKey);
     closeBtnRef.current?.focus();
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     return () => {
-      document.removeEventListener("keydown", onKey);
       document.body.style.overflow = prev;
     };
   }, [aboutOpen]);
 
+  const openAbout = () => {
+    setMenuOpen(false);
+    setAboutOpen(true);
+  };
+
   return (
-    <div className={`shell${showBottomNav ? " shell-home" : ""}`}>
+    <div className="shell">
       <header className="topbar">
         <NavLink to="/" className="brand" onClick={() => setMenuOpen(false)}>
           <span className="brand-zh">{t.brand}</span>
@@ -91,7 +93,7 @@ export function Shell() {
         <div className="topbar-actions">
           <button
             type="button"
-            className="icon-btn lang-btn"
+            className="icon-btn lang-btn desktop-only"
             onClick={toggleLocale}
             aria-label={t.langAria}
             title={t.langTitle}
@@ -100,7 +102,7 @@ export function Shell() {
           </button>
           <button
             type="button"
-            className="icon-btn"
+            className="icon-btn desktop-only"
             onClick={cycleMode}
             aria-label={t.themeAria(themeLabel)}
             title={themeLabel}
@@ -112,7 +114,7 @@ export function Shell() {
             className="icon-btn menu-btn"
             aria-expanded={menuOpen}
             aria-controls="mobile-nav"
-            aria-label="Menu"
+            aria-label={t.menuAria}
             onClick={() => setMenuOpen((open) => !open)}
           >
             <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -125,7 +127,7 @@ export function Shell() {
           </button>
           <button
             type="button"
-            className="icon-btn"
+            className="icon-btn desktop-only"
             onClick={() => setAboutOpen(true)}
             aria-label={t.aboutAria}
             title={t.aboutAria}
@@ -138,25 +140,34 @@ export function Shell() {
       <nav
         id="mobile-nav"
         className={`mobile-nav${menuOpen ? " open" : ""}`}
-        aria-label="mobile"
+        aria-label={t.menuAria}
       >
-        <NavLink to="/" end onClick={() => setMenuOpen(false)}>
-          {t.navGamesMobile}
-        </NavLink>
+        <button type="button" className="mobile-nav-item" onClick={toggleLocale}>
+          <span className="mobile-nav-item-label">{t.langAria}</span>
+          <span className="mobile-nav-item-value">{langRowLabel}</span>
+        </button>
+        <button
+          type="button"
+          className="mobile-nav-item"
+          onClick={cycleMode}
+          aria-label={t.themeAria(themeLabel)}
+        >
+          <span className="mobile-nav-item-label">{themeLabel}</span>
+          <span className="mobile-nav-item-icon" aria-hidden="true">
+            <ThemeIcon mode={mode} />
+          </span>
+        </button>
+        <button type="button" className="mobile-nav-item" onClick={openAbout}>
+          <span className="mobile-nav-item-label">{t.aboutAria}</span>
+          <span className="mobile-nav-item-icon" aria-hidden="true">
+            <AboutIcon />
+          </span>
+        </button>
       </nav>
 
       <main className="main">
         <Outlet />
       </main>
-
-      {showBottomNav ? (
-        <nav className="bottom-nav" aria-label="bottom">
-          <NavLink to="/" end>
-            <GamesIcon />
-            {t.navGames}
-          </NavLink>
-        </nav>
-      ) : null}
 
       <footer className="footer">
         <span>{t.footer}</span>
