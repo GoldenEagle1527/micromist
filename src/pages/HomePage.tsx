@@ -15,7 +15,7 @@ export function HomePage() {
       <section className="grid">
         {games.map((game) => (
           <Link key={game.slug} to={`/play/${game.slug}`} className="card">
-            <span className="badge">单人 · local</span>
+            <span className="badge">{game.badgeZh}</span>
             <h2>
               {game.titleZh} / {game.title}
             </h2>

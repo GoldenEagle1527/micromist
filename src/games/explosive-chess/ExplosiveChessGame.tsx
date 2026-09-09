@@ -829,21 +829,40 @@ export function ExplosiveChessGame() {
             <label>
               模式
               <select
-                value={settings.opponent}
+                value={settings.opponent === "online" ? "online" : "solo"}
                 onChange={(e) => {
-                  const opponent = e.target.value as OpponentMode;
-                  if (opponent !== "online") {
-                    disconnectOnline();
-                    setSearchParams({}, { replace: true });
+                  const next = e.target.value;
+                  if (next === "online") {
+                    setSettings((s) => ({ ...s, opponent: "online" }));
+                    return;
                   }
-                  setSettings((s) => ({ ...s, opponent }));
+                  disconnectOnline();
+                  setSearchParams({}, { replace: true });
+                  setSettings((s) => ({
+                    ...s,
+                    opponent: s.opponent === "local" ? "local" : "ai",
+                  }));
                 }}
               >
-                <option value="ai">本地 vs AI</option>
-                <option value="local">本地 vs 本地（热座）</option>
-                <option value="online">联机（房间）</option>
+                <option value="solo">单人</option>
+                <option value="online">联机</option>
               </select>
             </label>
+            {settings.opponent !== "online" ? (
+              <label>
+                单人对战
+                <select
+                  value={settings.opponent}
+                  onChange={(e) => {
+                    const opponent = e.target.value as "ai" | "local";
+                    setSettings((s) => ({ ...s, opponent }));
+                  }}
+                >
+                  <option value="ai">对战 AI</option>
+                  <option value="local">热座双人</option>
+                </select>
+              </label>
+            ) : null}
 
             {settings.opponent !== "online" || onlineRole === "host" || onlinePhase === "idle" ? (
               <>

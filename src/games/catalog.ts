@@ -1,4 +1,4 @@
-export type GameMode = "single" | "multiplayer-soon";
+export type GameMode = "single" | "single-online";
 
 export type GameMeta = {
   slug: string;
@@ -7,6 +7,8 @@ export type GameMeta = {
   blurb: string;
   blurbZh: string;
   mode: GameMode;
+  /** Home card badge, e.g. 单人 · local / 单人/联机 */
+  badgeZh: string;
 };
 
 export const games: GameMeta[] = [
@@ -17,15 +19,17 @@ export const games: GameMeta[] = [
     blurb: "Steer a bowl through the mist and catch falling motes. Single-player, local high score.",
     blurbZh: "在雾中托住坠落的微光。单人小游戏，最高分仅存在本机。",
     mode: "single",
+    badgeZh: "单人 · local",
   },
   {
     slug: "explosive-chess",
     title: "Explosive Chess",
     titleZh: "爆炸棋",
     blurb:
-      "Place dots until cells burst and recolor neighbors. Local vs AI, hotseat, or online rooms via Durable Objects.",
-    blurbZh: "落子叠满即爆，连锁改色占盘。支持本地对战 AI、双人热座，或联机房间。",
-    mode: "single",
+      "Place dots until cells burst and recolor neighbors. Solo vs AI / hotseat, or online via share link.",
+    blurbZh: "落子叠满即爆，连锁改色占盘。单人可对战 AI 或热座；联机靠分享链接开房。",
+    mode: "single-online",
+    badgeZh: "单人/联机",
   },
 ];
 
