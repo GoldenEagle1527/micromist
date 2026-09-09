@@ -44,6 +44,17 @@ export const games: GameMeta[] = [
     },
     badge: { zh: "单机", en: "Offline" },
   },
+  {
+    slug: "blade-break",
+    mode: "single",
+    listed: true,
+    title: { zh: "破阵之刃", en: "Blade Break" },
+    blurb: {
+      zh: "五场对决的破势肉鸽：读意图、削架势、打断致命蓄力。单机本地，进度仅存本标签页。",
+      en: "Five-fight poise duels: read telegraphs, shatter stance, interrupt lethal windups. Solo local; progress stays in this tab.",
+    },
+    badge: { zh: "单机", en: "Offline" },
+  },
 ];
 
 export function listedGames(): GameMeta[] {
