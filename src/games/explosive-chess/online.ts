@@ -1,13 +1,19 @@
 /**
- * WebSocket client for Explosive Chess online rooms (Durable Object GameRoom).
- * Protocol: JSON `{ type, payload }` — see worker/game-room.ts.
+ * Explosive Chess online — thin wrapper over shared OnlineRoomClient.
  */
-
+import { generateRoomCode as sharedGenerateRoomCode } from "../../../shared/multiplayer";
+import {
+  OnlineRoomClient,
+  getOrCreatePlayerId as sharedGetPlayerId,
+  type CommonHandlers,
+  type Phase,
+  type Role,
+  type RoomPlayer,
+  type Seat,
+} from "../../multiplayer/OnlineRoomClient";
 import type { AnimationFrame, FullState, WinMode } from "./engine";
 
-export type Seat = "red" | "blue" | "spectator";
-export type Role = "host" | "guest" | "spectator";
-export type Phase = "lobby" | "playing" | "over";
+export type { Phase, Role, RoomPlayer, Seat };
 export type HostColor = "red" | "blue";
 
 export type RoomConfig = {
@@ -17,18 +23,8 @@ export type RoomConfig = {
   hostColor: HostColor;
 };
 
-export type RoomPlayer = {
-  playerId: string;
-  name: string;
-  seat: Seat;
-  role: Role;
-  ready: boolean;
-  rematch: boolean;
-  connected: boolean;
-};
-
 export type ServerHandlers = {
-  onWelcome?: (payload: { playerId: string; seat: Seat; role: Role }) => void;
+  onWelcome?: CommonHandlers["onWelcome"];
   onRoom?: (payload: { players: RoomPlayer[]; config: RoomConfig; phase: Phase }) => void;
   onGameStart?: (payload: { config: RoomConfig; yourColor: HostColor }) => void;
   onState?: (payload: {
@@ -37,210 +33,100 @@ export type ServerHandlers = {
     animationFrames?: AnimationFrame[];
   }) => void;
   onGameOver?: (payload: { winner: number | "draw" | null; winReason: string }) => void;
-  onError?: (payload: { message: string }) => void;
-  onPeerLeft?: (payload: { playerId: string; seat?: Seat }) => void;
-  onRoomClosed?: (payload: { reason?: string }) => void;
-  onOpen?: () => void;
-  onClose?: (ev: CloseEvent) => void;
+  onError?: CommonHandlers["onError"];
+  onPeerLeft?: CommonHandlers["onPeerLeft"];
+  onRoomClosed?: CommonHandlers["onRoomClosed"];
+  onOpen?: CommonHandlers["onOpen"];
+  onClose?: CommonHandlers["onClose"];
 };
 
 const PLAYER_ID_KEY = "micromist.explosive-chess.playerId";
+const GAME_SLUG = "explosive-chess";
 
 export function getOrCreatePlayerId(): string {
-  try {
-    const existing = localStorage.getItem(PLAYER_ID_KEY);
-    if (existing) return existing;
-    const id = crypto.randomUUID();
-    localStorage.setItem(PLAYER_ID_KEY, id);
-    return id;
-  } catch {
-    return crypto.randomUUID();
-  }
+  return sharedGetPlayerId(PLAYER_ID_KEY);
 }
 
 export function generateRoomCode(): string {
-  const alphabet = "abcdefghijklmnopqrstuvwxyz0123456789";
-  const bytes = crypto.getRandomValues(new Uint8Array(6));
-  let code = "";
-  for (const b of bytes) {
-    code += alphabet[b % alphabet.length]!;
-  }
-  return code;
+  return sharedGenerateRoomCode(6);
 }
 
-export function roomSocketUrl(roomId: string): string {
-  const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-  return `${protocol}//${window.location.host}/ws/${encodeURIComponent(roomId)}`;
-}
-
-export function shareUrl(roomId: string): string {
+export function shareUrl(roomCode: string): string {
   const url = new URL(window.location.href);
   url.pathname = "/play/explosive-chess";
-  url.search = `?room=${encodeURIComponent(roomId)}`;
+  // Short code in the link; client namespaces when connecting.
+  url.search = `?room=${encodeURIComponent(roomCode.trim().toLowerCase())}`;
   url.hash = "";
   return url.toString();
 }
 
 export class ExplosiveOnlineClient {
-  private ws: WebSocket | null = null;
-  private handlers: ServerHandlers = {};
-  private intentionalClose = false;
-  private roomId: string | null = null;
-  private generation = 0;
+  private inner = new OnlineRoomClient(GAME_SLUG);
 
   get readyState(): number {
-    return this.ws?.readyState ?? WebSocket.CLOSED;
+    return this.inner.readyState;
   }
 
   get currentRoomId(): string | null {
-    return this.roomId;
+    return this.inner.currentRoomId;
   }
 
   get isOpen(): boolean {
-    return this.ws?.readyState === WebSocket.OPEN;
+    return this.inner.isOpen;
   }
 
-  connect(roomId: string, handlers: ServerHandlers): void {
-    this.close();
-    this.roomId = roomId;
-    this.handlers = handlers;
-    this.openSocket();
+  connect(roomCode: string, handlers: ServerHandlers): void {
+    this.inner.connect(roomCode, {
+      onWelcome: handlers.onWelcome,
+      onRoom: (payload) => {
+        handlers.onRoom?.({
+          players: payload.players,
+          config: payload.config as RoomConfig,
+          phase: payload.phase,
+        });
+      },
+      onError: handlers.onError,
+      onPeerLeft: handlers.onPeerLeft,
+      onRoomClosed: handlers.onRoomClosed,
+      onOpen: handlers.onOpen,
+      onClose: handlers.onClose,
+      onMessage: (type, payload) => {
+        if (type === "game_start") handlers.onGameStart?.(payload as never);
+        else if (type === "state") handlers.onState?.(payload as never);
+        else if (type === "game_over") handlers.onGameOver?.(payload as never);
+      },
+    });
   }
 
-  /** Re-open the same room with the same handlers (unexpected drops). */
   reconnect(): boolean {
-    if (!this.roomId) return false;
-    // Suppress onClose from the socket we are replacing.
-    this.intentionalClose = true;
-    this.generation += 1;
-    const old = this.ws;
-    this.ws = null;
-    if (old) {
-      try {
-        old.close(4000, "reconnect");
-      } catch {
-        /* ignore */
-      }
-    }
-    this.openSocket();
-    return true;
-  }
-
-  private openSocket(): void {
-    if (!this.roomId) return;
-    this.intentionalClose = false;
-    const gen = ++this.generation;
-    const roomId = this.roomId;
-    const ws = new WebSocket(roomSocketUrl(roomId));
-    this.ws = ws;
-
-    ws.addEventListener("open", () => {
-      if (this.generation !== gen || this.ws !== ws) return;
-      this.handlers.onOpen?.();
-    });
-
-    ws.addEventListener("message", (event) => {
-      if (this.generation !== gen || this.ws !== ws) return;
-      if (typeof event.data !== "string") return;
-      if (event.data === "pong" || event.data === "ping") return;
-      let msg: { type?: string; payload?: unknown };
-      try {
-        msg = JSON.parse(event.data) as { type?: string; payload?: unknown };
-      } catch {
-        return;
-      }
-      if (!msg.type) return;
-      const payload = (msg.payload ?? {}) as never;
-      switch (msg.type) {
-        case "welcome":
-          this.handlers.onWelcome?.(payload);
-          break;
-        case "room":
-          this.handlers.onRoom?.(payload);
-          break;
-        case "game_start":
-          this.handlers.onGameStart?.(payload);
-          break;
-        case "state":
-          this.handlers.onState?.(payload);
-          break;
-        case "game_over":
-          this.handlers.onGameOver?.(payload);
-          break;
-        case "error":
-          this.handlers.onError?.(payload);
-          break;
-        case "peer_left":
-          this.handlers.onPeerLeft?.(payload);
-          break;
-        case "room_closed":
-          this.handlers.onRoomClosed?.(payload);
-          break;
-        default:
-          break;
-      }
-    });
-
-    ws.addEventListener("close", (ev) => {
-      if (this.ws === ws) this.ws = null;
-      if (this.generation !== gen) return;
-      if (!this.intentionalClose) this.handlers.onClose?.(ev);
-    });
-
-    ws.addEventListener("error", () => {
-      /* close handler follows */
-    });
-  }
-
-  send(type: string, payload: Record<string, unknown> = {}): boolean {
-    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return false;
-    try {
-      this.ws.send(JSON.stringify({ type, payload }));
-      return true;
-    } catch {
-      return false;
-    }
+    return this.inner.reconnect();
   }
 
   join(opts: { playerId: string; name?: string; password?: string }): boolean {
-    return this.send("join", {
-      playerId: opts.playerId,
-      name: opts.name ?? "",
-      password: opts.password ?? "",
-    });
+    return this.inner.join(opts);
   }
 
   setConfig(config: Partial<RoomConfig>): boolean {
-    return this.send("set_config", { ...config });
+    return this.inner.send("set_config", { ...config });
   }
 
   ready(): boolean {
-    return this.send("ready");
+    return this.inner.send("ready");
   }
 
   move(row: number, col: number): boolean {
-    return this.send("move", { row, col });
+    return this.inner.send("move", { row, col });
   }
 
   surrender(): boolean {
-    return this.send("surrender");
+    return this.inner.send("surrender");
   }
 
   rematch(): boolean {
-    return this.send("rematch");
+    return this.inner.send("rematch");
   }
 
   close(): void {
-    this.intentionalClose = true;
-    this.generation += 1;
-    const ws = this.ws;
-    this.ws = null;
-    if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
-      try {
-        ws.close(1000, "client close");
-      } catch {
-        /* ignore */
-      }
-    }
+    this.inner.close();
   }
 }
