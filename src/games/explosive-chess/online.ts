@@ -84,25 +84,63 @@ export class ExplosiveOnlineClient {
   private ws: WebSocket | null = null;
   private handlers: ServerHandlers = {};
   private intentionalClose = false;
+  private roomId: string | null = null;
+  private generation = 0;
 
   get readyState(): number {
     return this.ws?.readyState ?? WebSocket.CLOSED;
   }
 
+  get currentRoomId(): string | null {
+    return this.roomId;
+  }
+
+  get isOpen(): boolean {
+    return this.ws?.readyState === WebSocket.OPEN;
+  }
+
   connect(roomId: string, handlers: ServerHandlers): void {
     this.close();
-    this.intentionalClose = false;
+    this.roomId = roomId;
     this.handlers = handlers;
+    this.openSocket();
+  }
+
+  /** Re-open the same room with the same handlers (unexpected drops). */
+  reconnect(): boolean {
+    if (!this.roomId) return false;
+    // Suppress onClose from the socket we are replacing.
+    this.intentionalClose = true;
+    this.generation += 1;
+    const old = this.ws;
+    this.ws = null;
+    if (old) {
+      try {
+        old.close(4000, "reconnect");
+      } catch {
+        /* ignore */
+      }
+    }
+    this.openSocket();
+    return true;
+  }
+
+  private openSocket(): void {
+    if (!this.roomId) return;
+    this.intentionalClose = false;
+    const gen = ++this.generation;
+    const roomId = this.roomId;
     const ws = new WebSocket(roomSocketUrl(roomId));
     this.ws = ws;
 
     ws.addEventListener("open", () => {
+      if (this.generation !== gen || this.ws !== ws) return;
       this.handlers.onOpen?.();
     });
 
     ws.addEventListener("message", (event) => {
+      if (this.generation !== gen || this.ws !== ws) return;
       if (typeof event.data !== "string") return;
-      // Auto-response ping/pong may be plain text; ignore non-JSON.
       if (event.data === "pong" || event.data === "ping") return;
       let msg: { type?: string; payload?: unknown };
       try {
@@ -141,6 +179,7 @@ export class ExplosiveOnlineClient {
 
     ws.addEventListener("close", (ev) => {
       if (this.ws === ws) this.ws = null;
+      if (this.generation !== gen) return;
       if (!this.intentionalClose) this.handlers.onClose?.(ev);
     });
 
@@ -149,41 +188,47 @@ export class ExplosiveOnlineClient {
     });
   }
 
-  send(type: string, payload: Record<string, unknown> = {}): void {
-    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
-    this.ws.send(JSON.stringify({ type, payload }));
+  send(type: string, payload: Record<string, unknown> = {}): boolean {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return false;
+    try {
+      this.ws.send(JSON.stringify({ type, payload }));
+      return true;
+    } catch {
+      return false;
+    }
   }
 
-  join(opts: { playerId: string; name?: string; password?: string }): void {
-    this.send("join", {
+  join(opts: { playerId: string; name?: string; password?: string }): boolean {
+    return this.send("join", {
       playerId: opts.playerId,
       name: opts.name ?? "",
       password: opts.password ?? "",
     });
   }
 
-  setConfig(config: Partial<RoomConfig>): void {
-    this.send("set_config", { ...config });
+  setConfig(config: Partial<RoomConfig>): boolean {
+    return this.send("set_config", { ...config });
   }
 
-  ready(): void {
-    this.send("ready");
+  ready(): boolean {
+    return this.send("ready");
   }
 
-  move(row: number, col: number): void {
-    this.send("move", { row, col });
+  move(row: number, col: number): boolean {
+    return this.send("move", { row, col });
   }
 
-  surrender(): void {
-    this.send("surrender");
+  surrender(): boolean {
+    return this.send("surrender");
   }
 
-  rematch(): void {
-    this.send("rematch");
+  rematch(): boolean {
+    return this.send("rematch");
   }
 
   close(): void {
     this.intentionalClose = true;
+    this.generation += 1;
     const ws = this.ws;
     this.ws = null;
     if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
