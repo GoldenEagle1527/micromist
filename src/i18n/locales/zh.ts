@@ -60,6 +60,7 @@ export const zh: Dict = {
     blueSecond: "蓝（后手）",
     start: "开始游戏",
     onlineLobby: "联机房间",
+    onlineConfigLocked: "先在下方选好棋盘、规则和你的颜色，再创建房间；建房后配置只读，改规则请新建房间。",
     onlineHint:
       "点「创建房间」后分享链接给对方；对方打开链接后点「加入此房间」。两人到齐后自动开局。",
     youAreRed: "你是红方。",

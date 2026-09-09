@@ -26,6 +26,7 @@ type RoomConfig = {
 type Serialized = {
   config: RoomConfig;
   fullState: FullState | null;
+  configFrozen?: boolean;
 };
 
 const DEFAULT_CONFIG: RoomConfig = {
@@ -52,6 +53,7 @@ function isWinMode(value: unknown): value is WinMode {
 export function createExplosiveChessAdapter(host: RoomHost): GameRoomAdapter {
   let config: RoomConfig = { ...DEFAULT_CONFIG };
   let game: GameInstance | null = null;
+  let configFrozen = false;
 
   const api: GameRoomAdapter = {
     slug: "explosive-chess",
@@ -68,6 +70,7 @@ export function createExplosiveChessAdapter(host: RoomHost): GameRoomAdapter {
     onRecycle: () => {
       game = null;
       config = { ...DEFAULT_CONFIG };
+      configFrozen = false;
     },
 
     onReclaimSync: (ws, player) => {
@@ -86,7 +89,11 @@ export function createExplosiveChessAdapter(host: RoomHost): GameRoomAdapter {
       }
     },
 
-    onSetConfig: (_ws, _session, payload) => {
+    onSetConfig: (ws, _session, payload) => {
+      if (configFrozen) {
+        host.send(ws, "error", { message: "Config locked after room create" });
+        return true;
+      }
       const next = { ...config };
       if (typeof payload.boardSize === "number" && [9, 11, 13].includes(payload.boardSize)) {
         next.boardSize = payload.boardSize;
@@ -110,6 +117,7 @@ export function createExplosiveChessAdapter(host: RoomHost): GameRoomAdapter {
         guest.seat = next.hostColor === "red" ? "blue" : "red";
         host.refreshAttachmentSeat(guest.playerId, guest.seat);
       }
+      configFrozen = true;
       host.broadcastRoom();
       void host.persist();
       return true;
@@ -170,6 +178,7 @@ export function createExplosiveChessAdapter(host: RoomHost): GameRoomAdapter {
     serialize: (): Serialized => ({
       config,
       fullState: game ? game.getFullState() : null,
+      configFrozen,
     }),
 
     hydrate: (blob: unknown) => {
@@ -182,6 +191,7 @@ export function createExplosiveChessAdapter(host: RoomHost): GameRoomAdapter {
       if (data.config && typeof data.config === "object") {
         config = { ...DEFAULT_CONFIG, ...data.config };
       }
+      configFrozen = Boolean(data.configFrozen);
       if (data.fullState && typeof data.fullState === "object") {
         const winParam =
           config.winMode === WIN_MODE_ANNIHILATION ? undefined : config.winParam;

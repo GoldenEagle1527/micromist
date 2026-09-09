@@ -60,6 +60,7 @@ export const en: Dict = {
     blueSecond: "Blue (second)",
     start: "Start",
     onlineLobby: "Online room",
+    onlineConfigLocked: "Set board, rules, and your color below, then create the room. Config is read-only afterward — make a new room to change it.",
     onlineHint:
       "Create a room, share the link; the other player opens it and joins. Game starts when both are seated.",
     youAreRed: "You are Red.",
