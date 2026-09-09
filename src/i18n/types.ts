@@ -33,6 +33,26 @@ export type Dict = {
     hint: string;
   };
   explosive: Record<string, string>;
+  chroma: {
+    setupTitle: string;
+    setupHint: string;
+    difficulty: string;
+    small: string;
+    medium: string;
+    large: string;
+    colors: string;
+    presetBlurb: (size: number, colors: number, each: number) => string;
+    start: string;
+    backSetup: string;
+    stepsHud: string;
+    playHint: string;
+    winMessage: (steps: number) => string;
+    reshuffle: string;
+    playAgain: string;
+    boardAria: string;
+    emptyAria: string;
+    tileAria: (color: number, row: number, col: number) => string;
+  };
 };
 
 export type GameLocaleFields = {

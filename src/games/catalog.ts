@@ -30,6 +30,16 @@ export const games: GameMeta[] = [
       en: "Place until cells burst and recolor neighbors. Solo vs AI / hotseat, or online via share link.",
     },
     badge: { zh: "单人/联机", en: "Solo / Online" },
+  },
+  {
+    slug: "chroma-slide",
+    mode: "single",
+    title: { zh: "滑动色块", en: "Chroma Slide" },
+    blurb: {
+      zh: "滑动色块，把每种颜色收成一块实心矩形。单人本地，步数只记本局。",
+      en: "Slide colored tiles until each hue forms one solid rectangle. Solo local; steps are per run.",
+    },
+    badge: { zh: "单人 · local", en: "Solo · local" },
   }
 ];
 
