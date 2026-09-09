@@ -57,6 +57,11 @@ npm run deploy
 
 This runs `vite build` then `wrangler deploy`. You need a Cloudflare account and `wrangler` login. The generated `dist` wrangler config points `assets` at the Vite client output and keeps `not_found_handling: "single-page-application"` so React Router paths work on refresh.
 
+Production:
+
+- Custom domain: https://micromist.572003.xyz (Workers Custom Domain; DNS managed by Cloudflare)
+- Fallback: https://micromist.wistermanswatskito921.workers.dev
+
 SPA pages: `/`, `/play/mist-catch`, `/rooms`.
 
 WebSocket stub: `GET /ws/:roomId` with `Upgrade: websocket` → `GameRoom`.

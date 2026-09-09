@@ -4,6 +4,8 @@
   // Workers Free: Static Assets + a thin Worker + SQLite-backed Durable Objects.
   // Do not add D1, KV, or R2 bindings to this project.
   "compatibility_date": "2026-09-09",
+  "workers_dev": true,
+  "preview_urls": true,
   "main": "./worker/index.ts",
   "assets": {
     // Vite plugin rewrites this in the generated dist wrangler.json to the
@@ -25,6 +27,12 @@
     {
       "tag": "v1",
       "new_sqlite_classes": ["GameRoom"]
+    }
+  ],
+  "routes": [
+    {
+      "pattern": "micromist.572003.xyz",
+      "custom_domain": true
     }
   ]
 }
