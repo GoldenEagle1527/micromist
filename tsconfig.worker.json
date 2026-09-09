@@ -5,5 +5,5 @@
     "types": ["@cloudflare/workers-types", "vite/client"],
     "lib": ["ES2022"]
   },
-  "include": ["worker", "worker-configuration.d.ts"]
+  "include": ["worker", "worker-configuration.d.ts", "shared"]
 }

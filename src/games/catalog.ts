@@ -23,8 +23,8 @@ export const games: GameMeta[] = [
     title: "Explosive Chess",
     titleZh: "爆炸棋",
     blurb:
-      "Place dots until cells burst and recolor neighbors. Local vs AI or hotseat — no online rooms in this build.",
-    blurbZh: "落子叠满即爆，连锁改色占盘。支持本地对战 AI 或双人热座，本版不含联机。",
+      "Place dots until cells burst and recolor neighbors. Local vs AI, hotseat, or online rooms via Durable Objects.",
+    blurbZh: "落子叠满即爆，连锁改色占盘。支持本地对战 AI、双人热座，或联机房间。",
     mode: "single",
   },
 ];

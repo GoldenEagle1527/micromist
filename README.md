@@ -64,7 +64,7 @@ Production:
 
 SPA pages: `/`, `/play/mist-catch`, `/rooms`.
 
-WebSocket stub: `GET /ws/:roomId` with `Upgrade: websocket` → `GameRoom`.
+WebSocket: `GET /ws/:roomId` with `Upgrade: websocket` → `GameRoom` (爆炸棋联机协议).
 
 ## Project layout
 
@@ -72,7 +72,8 @@ WebSocket stub: `GET /ws/:roomId` with `Upgrade: websocket` → `GameRoom`.
 src/                 React SPA (home, per-game routes, rooms placeholder)
 src/games/           Phaser games (Mist Catch / 拾雾 is the demo)
 worker/index.ts      Upgrade /ws/:roomId to a room DO
-worker/game-room.ts  Hibernation WebSocket skeleton
+worker/game-room.ts  Explosive Chess room DO (Hibernation WebSocket)
+shared/explosive-chess/ Shared game engine (SPA + Worker)
 wrangler.jsonc       Static Assets + GAME_ROOM binding + sqlite migration
 ```
 
