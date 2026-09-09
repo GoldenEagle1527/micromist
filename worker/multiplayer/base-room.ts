@@ -296,7 +296,7 @@ export class GameRoom extends DurableObject<Env> {
   private async recycleRoom() {
     const leftover = [...this.sessions.keys()];
     for (const sock of leftover) {
-      this.send(sock, "room_closed", { reason: "双方玩家均已离开，房间已回收" });
+      this.send(sock, "room_closed", { reason: "room_recycled" });
       try {
         sock.close(4001, "room recycled");
       } catch {

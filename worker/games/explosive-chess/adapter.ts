@@ -255,10 +255,10 @@ export function createExplosiveChessAdapter(host: RoomHost): GameRoomAdapter {
       return;
     }
     const winner: PlayerColor = color === COLOR_RED ? COLOR_BLUE : COLOR_RED;
-    game.forceGameOver(winner, "对手投降");
+    game.forceGameOver(winner, "surrender");
     host.setPhase("over");
     host.broadcast("state", { fullState: game.getFullState() });
-    host.broadcast("game_over", { winner, winReason: "对手投降" });
+    host.broadcast("game_over", { winner, winReason: "surrender" });
     host.broadcastRoom();
     void host.persist();
   }

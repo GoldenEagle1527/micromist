@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { NavLink, Outlet, useMatch } from "react-router";
 import { getGame } from "../games/catalog";
+import { useLocale } from "../i18n";
 import { useTheme } from "../hooks/useTheme";
 
 function ThemeIcon({ mode }: { mode: "light" | "dark" | "system" }) {
@@ -35,6 +36,7 @@ function GamesIcon() {
 
 export function Shell() {
   const { mode, cycleMode } = useTheme();
+  const { locale, t, toggleLocale } = useLocale();
   const [menuOpen, setMenuOpen] = useState(false);
   const playMatch = useMatch("/play/:slug");
   const homeMatch = useMatch({ path: "/", end: true });
@@ -43,34 +45,44 @@ export function Shell() {
     : undefined;
   const showBottomNav = Boolean(homeMatch);
   const themeLabel =
-    mode === "system" ? "跟随系统" : mode === "light" ? "浅色" : "深色";
+    mode === "system" ? t.themeSystem : mode === "light" ? t.themeLight : t.themeDark;
+  const langButtonLabel = locale === "zh" ? "EN" : "中";
 
   return (
     <div className={`shell${showBottomNav ? " shell-home" : ""}`}>
       <header className="topbar">
         <NavLink to="/" className="brand" onClick={() => setMenuOpen(false)}>
-          <span className="brand-zh">微渺</span>
-          <span className="brand-en">micromist</span>
+          <span className="brand-zh">{t.brand}</span>
+          {locale === "zh" ? <span className="brand-en">{t.brandSub}</span> : null}
         </NavLink>
         {playGame ? (
           <div className="topbar-game" aria-current="page">
-            {playGame.titleZh}
+            {playGame.title[locale]}
           </div>
         ) : (
           <div className="topbar-game topbar-game-empty" aria-hidden="true" />
         )}
         <div className="topbar-actions">
-          <nav className="nav" aria-label="主导航">
+          <nav className="nav" aria-label="main">
             <NavLink to="/" end>
-              游戏
+              {t.navGames}
             </NavLink>
           </nav>
           <button
             type="button"
+            className="icon-btn lang-btn"
+            onClick={toggleLocale}
+            aria-label={t.langAria}
+            title={t.langTitle}
+          >
+            <span className="lang-btn-label">{langButtonLabel}</span>
+          </button>
+          <button
+            type="button"
             className="icon-btn"
             onClick={cycleMode}
-            aria-label={`主题：${themeLabel}，点击切换`}
-            title={`主题：${themeLabel}`}
+            aria-label={t.themeAria(themeLabel)}
+            title={themeLabel}
           >
             <ThemeIcon mode={mode} />
           </button>
@@ -79,7 +91,7 @@ export function Shell() {
             className="icon-btn menu-btn"
             aria-expanded={menuOpen}
             aria-controls="mobile-nav"
-            aria-label="打开菜单"
+            aria-label="Menu"
             onClick={() => setMenuOpen((open) => !open)}
           >
             <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -96,10 +108,10 @@ export function Shell() {
       <nav
         id="mobile-nav"
         className={`mobile-nav${menuOpen ? " open" : ""}`}
-        aria-label="移动菜单"
+        aria-label="mobile"
       >
         <NavLink to="/" end onClick={() => setMenuOpen(false)}>
-          游戏 Games
+          {t.navGamesMobile}
         </NavLink>
       </nav>
 
@@ -108,16 +120,16 @@ export function Shell() {
       </main>
 
       {showBottomNav ? (
-        <nav className="bottom-nav" aria-label="底部导航">
+        <nav className="bottom-nav" aria-label="bottom">
           <NavLink to="/" end>
             <GamesIcon />
-            游戏
+            {t.navGames}
           </NavLink>
         </nav>
       ) : null}
 
       <footer className="footer">
-        <span>开源 MIT · Workers Static Assets · 不持久化账号</span>
+        <span>{t.footer}</span>
         <a href="https://github.com/GoldenEagle1527/micromist">GitHub</a>
       </footer>
     </div>

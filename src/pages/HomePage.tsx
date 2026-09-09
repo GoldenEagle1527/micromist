@@ -1,30 +1,23 @@
 import { Link } from "react-router";
 import { games } from "../games/catalog";
+import { useLocale } from "../i18n";
 
 export function HomePage() {
+  const { locale, t } = useLocale();
+
   return (
     <>
       <section className="hero">
-        <h1>微渺</h1>
-        <p className="lede">
-          micromist 是一个开源浏览器游戏平台：前端跑在 Cloudflare Workers Static Assets
-          上，单人进度只存在本机。联机靠分享链接进入房间（Durable Objects +
-          WebSocket），不设公开房间列表；人走了房间也就回收。
-        </p>
+        <h1>{t.homeTitle}</h1>
+        <p className="lede">{t.homeLede}</p>
       </section>
       <section className="grid">
         {games.map((game) => (
           <Link key={game.slug} to={`/play/${game.slug}`} className="card">
-            <span className="badge">{game.badgeZh}</span>
-            <h2>
-              {game.titleZh} / {game.title}
-            </h2>
-            <p>
-              {game.blurbZh}
-              <br />
-              {game.blurb}
-            </p>
-            <span className="card-cta">开始玩</span>
+            <span className="badge">{game.badge[locale]}</span>
+            <h2>{game.title[locale]}</h2>
+            <p>{game.blurb[locale]}</p>
+            <span className="card-cta">{t.playCta}</span>
           </Link>
         ))}
       </section>
