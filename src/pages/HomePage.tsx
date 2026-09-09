@@ -1,5 +1,5 @@
 import { Link } from "react-router";
-import { games } from "../games/catalog";
+import { listedGames } from "../games/catalog";
 import { useLocale } from "../i18n";
 
 export function HomePage() {
@@ -7,7 +7,7 @@ export function HomePage() {
 
   return (
     <section className="grid">
-      {games.map((game) => (
+      {listedGames().map((game) => (
         <Link key={game.slug} to={`/play/${game.slug}`} className="card">
           <span className="badge">{game.badge[locale]}</span>
           <h2>{game.title[locale]}</h2>
