@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { NavLink, Outlet } from "react-router";
+import { NavLink, Outlet, useMatch } from "react-router";
+import { getGame } from "../games/catalog";
 import { useTheme } from "../hooks/useTheme";
 
 function ThemeIcon({ mode }: { mode: "light" | "dark" | "system" }) {
@@ -43,6 +44,10 @@ function RoomsIcon() {
 export function Shell() {
   const { mode, cycleMode } = useTheme();
   const [menuOpen, setMenuOpen] = useState(false);
+  const playMatch = useMatch("/play/:slug");
+  const playGame = playMatch?.params.slug
+    ? getGame(playMatch.params.slug)
+    : undefined;
   const themeLabel =
     mode === "system" ? "跟随系统" : mode === "light" ? "浅色" : "深色";
 
@@ -53,6 +58,13 @@ export function Shell() {
           <span className="brand-zh">微渺</span>
           <span className="brand-en">micromist</span>
         </NavLink>
+        {playGame ? (
+          <div className="topbar-game" aria-current="page">
+            {playGame.titleZh}
+          </div>
+        ) : (
+          <div className="topbar-game topbar-game-empty" aria-hidden="true" />
+        )}
         <div className="topbar-actions">
           <nav className="nav" aria-label="主导航">
             <NavLink to="/" end>
