@@ -42,6 +42,8 @@ type Settings = {
   winParam: number;
   difficulty: AiDifficulty;
   redOwner: RedOwner;
+  /** Online: host seat color chosen before creating the room. */
+  hostColor: HostColor;
 };
 
 const SETTINGS_KEY = "micromist.explosive-chess.settings";
@@ -54,6 +56,7 @@ const DEFAULT_SETTINGS: Settings = {
   winParam: 50,
   difficulty: "medium",
   redOwner: "player",
+  hostColor: "red",
 };
 
 function loadSettings(): Settings {
@@ -61,7 +64,9 @@ function loadSettings(): Settings {
     const raw = localStorage.getItem(SETTINGS_KEY);
     if (!raw) return { ...DEFAULT_SETTINGS };
     const parsed = JSON.parse(raw) as Partial<Settings>;
-    return { ...DEFAULT_SETTINGS, ...parsed };
+    const merged = { ...DEFAULT_SETTINGS, ...parsed };
+    if (merged.hostColor !== "red" && merged.hostColor !== "blue") merged.hostColor = "red";
+    return merged;
   } catch {
     return { ...DEFAULT_SETTINGS };
   }
@@ -608,7 +613,7 @@ export function ExplosiveChessGame() {
                 boardSize: s.boardSize,
                 winMode: s.winMode,
                 winParam: s.winParam,
-                hostColor: "red",
+                hostColor: s.hostColor,
               });
             }
           },
@@ -834,8 +839,10 @@ export function ExplosiveChessGame() {
   };
 
   const createRoom = () => {
+    const next = { ...settingsRef.current, opponent: "online" as const };
+    saveSettings(next);
+    setSettings(next);
     const code = generateRoomCode();
-    setSettings((s) => ({ ...s, opponent: "online" }));
     connectToRoom(code);
   };
 
@@ -849,22 +856,12 @@ export function ExplosiveChessGame() {
     connectToRoom(code);
   };
 
-  const pushHostConfig = (patch: Partial<RoomConfig>) => {
-    if (onlineRole !== "host" || onlinePhase !== "lobby") return;
-    // Keep local settings in sync for remounts.
-    setSettings((s) => ({
-      ...s,
-      boardSize: (patch.boardSize as Settings["boardSize"]) ?? s.boardSize,
-      winMode: patch.winMode ?? s.winMode,
-      winParam: patch.winParam ?? s.winParam,
-    }));
-    if (patch.boardSize != null || patch.winMode != null || patch.winParam != null || patch.hostColor != null) {
-      clientRef.current?.setConfig(patch);
-    }
-  };
 
   const showWinParam = settings.winMode === WIN_MODE_STEPS || settings.winMode === WIN_MODE_AREA;
   const connectedLobby = onlinePhase === "lobby" || onlinePhase === "connecting";
+  /** Online room exists → config is frozen (change requires a new room). */
+  const onlineConfigLocked =
+    settings.opponent === "online" && onlinePhase !== "idle";
 
   // ——— SETUP LOBBY (no board) ———
   if (screen === "setup") {
@@ -914,7 +911,8 @@ export function ExplosiveChessGame() {
               </label>
             ) : null}
 
-            {settings.opponent !== "online" || onlineRole === "host" || onlinePhase === "idle" ? (
+            {/* Solo: always editable. Online: editable only before create; after create read-only. */}
+            {settings.opponent !== "online" || onlinePhase === "idle" || onlineConfig ? (
               <>
                 <label>
                   {ex.board}
@@ -924,11 +922,10 @@ export function ExplosiveChessGame() {
                         ? onlineConfig.boardSize
                         : settings.boardSize
                     }
-                    disabled={settings.opponent === "online" && onlineRole !== "host" && connectedLobby}
+                    disabled={onlineConfigLocked}
                     onChange={(e) => {
                       const boardSize = Number(e.target.value) as 9 | 11 | 13;
                       setSettings((s) => ({ ...s, boardSize }));
-                      if (settings.opponent === "online") pushHostConfig({ boardSize });
                     }}
                   >
                     <option value={9}>9×9</option>
@@ -944,11 +941,10 @@ export function ExplosiveChessGame() {
                         ? onlineConfig.winMode
                         : settings.winMode
                     }
-                    disabled={settings.opponent === "online" && onlineRole !== "host" && connectedLobby}
+                    disabled={onlineConfigLocked}
                     onChange={(e) => {
                       const winMode = e.target.value as WinMode;
                       setSettings((s) => ({ ...s, winMode }));
-                      if (settings.opponent === "online") pushHostConfig({ winMode });
                     }}
                   >
                     <option value={WIN_MODE_ANNIHILATION}>{ex.annihilation}</option>
@@ -966,11 +962,10 @@ export function ExplosiveChessGame() {
                       type="number"
                       min={1}
                       value={onlineConfig?.winParam ?? settings.winParam}
-                      disabled={settings.opponent === "online" && onlineRole !== "host" && connectedLobby}
+                      disabled={onlineConfigLocked}
                       onChange={(e) => {
                         const winParam = Math.max(1, Number(e.target.value) || 1);
                         setSettings((s) => ({ ...s, winParam }));
-                        if (settings.opponent === "online") pushHostConfig({ winParam });
                       }}
                     />
                   </label>
@@ -1015,17 +1010,26 @@ export function ExplosiveChessGame() {
               </>
             ) : null}
 
-            {settings.opponent === "online" && onlineRole === "host" && onlinePhase === "lobby" ? (
+            {settings.opponent === "online" && (onlinePhase === "idle" || onlineConfig) && !roomFromQuery ? (
               <label>
                 {ex.myColor}
                 <select
-                  value={onlineConfig?.hostColor ?? "red"}
-                  onChange={(e) => pushHostConfig({ hostColor: e.target.value as HostColor })}
+                  value={onlineConfig?.hostColor ?? settings.hostColor}
+                  disabled={onlineConfigLocked}
+                  onChange={(e) => {
+                    const hostColor = e.target.value as HostColor;
+                    setSettings((s) => ({ ...s, hostColor }));
+                  }}
                 >
                   <option value="red">{ex.redFirstSeat}</option>
                   <option value="blue">{ex.blueSecond}</option>
                 </select>
               </label>
+            ) : null}
+            {settings.opponent === "online" && onlineConfigLocked ? (
+              <p className="hint" style={{ margin: 0 }}>
+                {ex.onlineConfigLocked}
+              </p>
             ) : null}
           </div>
 
