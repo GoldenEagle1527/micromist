@@ -83,6 +83,7 @@ export type Dict = {
     playCard: string;
     endTurn: string;
     handHint: string;
+    pressPlay: string;
     tapAgain: string;
     enemyAria: string;
     playerAria: string;
@@ -150,6 +151,38 @@ export type Dict = {
     passives: Record<string, { name: string; desc: string }>;
     enemies: Record<string, string>;
     enemyBlurb: Record<string, string>;
+    /** Run rule of the blade */
+    rules: Record<string, { name: string; desc: string }>;
+    ruleBanner: (name: string) => string;
+    variants: Record<string, string>;
+    eliteTag: string;
+    nemesisTag: string;
+    rarity: Record<string, string>;
+    pathTitle: string;
+    pathHint: string;
+    pathOptions: Record<string, { title: string; desc: string }>;
+    eventTitle: Record<string, string>;
+    eventBody: Record<string, string>;
+    eventChoices: Record<string, string[]>;
+    eventToasts: Record<string, string>;
+    restVariants: Record<string, string>;
+    restForgeNoHeal: string;
+    restMedicHint: string;
+    breakChain: (n: number) => string;
+    breakChainDraw: string;
+    breakChainAp: string;
+    breakEchoFlash: string;
+    flurryLawFlash: string;
+    highlightsTitle: string;
+    highlightMaxHit: (n: number) => string;
+    highlightBreaks: (n: number) => string;
+    highlightMinHp: (n: number) => string;
+    highlightPoisonKills: (n: number) => string;
+    highlightMaxAttacks: (n: number) => string;
+    secretRevealed: (name: string) => string;
+    secretClue: string;
+    secretRecipesTitle: string;
+    rewardHintBlood: string;
   };
 };
 

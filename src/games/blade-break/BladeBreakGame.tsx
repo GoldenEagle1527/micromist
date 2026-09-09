@@ -5,23 +5,33 @@ import {
   saveLocalProgress,
   useLocalGamePersist,
 } from "../local-persist";
-import { CARDS, FUSION_RECIPES } from "./cards";
+import { CARDS, FUSION_RECIPES, SECRET_FUSION_RECIPES, getSecretRecipe } from "./cards";
 import { FIGHT_COUNT, ENEMIES } from "./enemies";
 import {
   advanceAfterCombatLoss,
   advanceAfterCombatWin,
   canPlayCard,
+  choosePath,
   createRun,
+  currentPathOptions,
   endTurn,
   intentLabelKey,
   pickReward,
   playCard,
+  resolveEvent,
   restFuse,
   restHeal,
+  restHealAmount,
   restRemoveCard,
   skipRest,
 } from "./engine";
-import type { CardId, CardInstance, Intent, PassiveId, RunState } from "./types";
+import type {
+  CardId,
+  CardInstance,
+  Intent,
+  PassiveId,
+  RunState,
+} from "./types";
 
 type Screen = "setup" | "run";
 type RestMode = "menu" | "remove" | "fuse";
@@ -31,16 +41,62 @@ const SLUG = "blade-break";
 const FIGHT_TOTAL = FIGHT_COUNT;
 
 function normalizeRun(parsed: RunState): RunState {
-  // Migrate older saves missing attacksPlayedThisTurn
-  if (parsed.combat && parsed.combat.attacksPlayedThisTurn == null) {
-    parsed.combat.attacksPlayedThisTurn = 0;
+  if (parsed.combat) {
+    if (parsed.combat.attacksPlayedThisTurn == null) {
+      parsed.combat.attacksPlayedThisTurn = 0;
+    }
+    if (parsed.combat.breakChain == null) parsed.combat.breakChain = 0;
+    if (parsed.combat.brokeThisTurn == null) parsed.combat.brokeThisTurn = false;
+    if (parsed.combat.breakEchoGranted == null) {
+      parsed.combat.breakEchoGranted = false;
+    }
+    if (parsed.combat.ruleId == null) {
+      parsed.combat.ruleId = parsed.ruleId ?? "breakSurge";
+    }
+    if (parsed.combat.enemy && parsed.combat.enemy.variant == null) {
+      parsed.combat.enemy.variant = "normal";
+    }
+    if (parsed.combat.enemy && parsed.combat.enemy.elite == null) {
+      parsed.combat.enemy.elite = false;
+    }
+    if (!parsed.combat.highlightLog) parsed.combat.highlightLog = [];
+    if (
+      parsed.combat.enemy &&
+      (parsed.combat.enemy.id == null || !(parsed.combat.enemy.id in ENEMIES))
+    ) {
+      parsed.combat = null;
+      parsed.phase = "runLost";
+    }
+  }
+  if (parsed.ruleId == null) parsed.ruleId = "breakSurge";
+  {
+    const h = parsed.highlights ?? ({} as RunState["highlights"]);
+    parsed.highlights = {
+      maxHit: h.maxHit ?? 0,
+      breakInterrupts: h.breakInterrupts ?? 0,
+      minHpSeen: h.minHpSeen ?? parsed.maxHp ?? 40,
+      poisonKills: h.poisonKills ?? 0,
+      maxAttacksInTurn: h.maxAttacksInTurn ?? 0,
+    };
+  }
+  if (parsed.secretRecipeId == null) {
+    parsed.secretRecipeId = "secret_overbreak";
+  }
+  if (parsed.secretRevealed == null) parsed.secretRevealed = false;
+  if (!parsed.discoveredRecipes) parsed.discoveredRecipes = [];
+  // Soft-recover corrupt mid-run phases so hydrate can clear to setup
+  if (parsed.phase === "event" && !parsed.eventId) {
+    parsed.phase = "runLost";
+    parsed.combat = null;
+  }
+  if (parsed.phase === "combat" && !parsed.combat) {
+    parsed.phase = "runLost";
   }
   return parsed;
 }
 
 let bladeBreakMigrated = false;
 
-/** One-shot: sessionStorage → shared localStorage layer. */
 function migrateBladeBreakSessionOnce(): void {
   if (bladeBreakMigrated) return;
   bladeBreakMigrated = true;
@@ -112,7 +168,6 @@ function intentText(
   }
   return String(tpl ?? t.intentNone);
 }
-
 
 type IntentVisual = {
   tone: string;
@@ -305,6 +360,53 @@ function enemyName(
   return t.enemies[id as keyof typeof t.enemies] ?? id;
 }
 
+function RuleBanner({
+  ruleId,
+  bl,
+}: {
+  ruleId: RunState["ruleId"];
+  bl: ReturnType<typeof useLocale>["t"]["blade"];
+}) {
+  const rule = bl.rules[ruleId];
+  if (!rule) return null;
+  return (
+    <div className="blade-rule-banner" title={rule.desc}>
+      <strong>{bl.ruleBanner(rule.name)}</strong>
+      <span className="hint">{rule.desc}</span>
+    </div>
+  );
+}
+
+function HighlightsPanel({
+  run,
+  bl,
+}: {
+  run: RunState;
+  bl: ReturnType<typeof useLocale>["t"]["blade"];
+}) {
+  const h = run.highlights;
+  return (
+    <div className="blade-highlights">
+      <h3>{bl.highlightsTitle}</h3>
+      <ul>
+        <li>{bl.highlightMaxHit(h.maxHit)}</li>
+        <li>{bl.highlightBreaks(h.breakInterrupts)}</li>
+        <li>{bl.highlightMinHp(h.minHpSeen)}</li>
+        {h.poisonKills > 0 ? (
+          <li>{bl.highlightPoisonKills(h.poisonKills)}</li>
+        ) : null}
+        <li>{bl.highlightMaxAttacks(h.maxAttacksInTurn)}</li>
+      </ul>
+      {run.discoveredRecipes.length > 0 ? (
+        <p className="hint">
+          {bl.secretRecipesTitle}:{" "}
+          {run.discoveredRecipes.map((id) => cardTitle(id, bl)).join(", ")}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
 export function BladeBreakGame() {
   const { t } = useLocale();
   const bl = t.blade;
@@ -315,9 +417,8 @@ export function BladeBreakGame() {
   const [restMode, setRestMode] = useState<RestMode>("menu");
   const [fusePick, setFusePick] = useState<string[]>([]);
   const [flash, setFlash] = useState<string | null>(null);
-  const [juice, setJuice] = useState<"hit" | "break" | null>(null);
+  const [juice, setJuice] = useState<"hit" | "break" | "chain" | null>(null);
 
-  // Move legacy sessionStorage save into shared localStorage before hydrate.
   migrateBladeBreakSessionOnce();
 
   const persistState = screen === "run" ? run : null;
@@ -337,7 +438,7 @@ export function BladeBreakGame() {
 
   useEffect(() => {
     if (!juice) return;
-    const id = window.setTimeout(() => setJuice(null), 420);
+    const id = window.setTimeout(() => setJuice(null), juice === "chain" ? 560 : 420);
     return () => window.clearTimeout(id);
   }, [juice]);
 
@@ -367,22 +468,50 @@ export function BladeBreakGame() {
 
   const applyCombatResult = useCallback(
     (nextCombat: NonNullable<RunState["combat"]>, base: RunState) => {
-      let nextRun: RunState = { ...base, combat: nextCombat };
       const log = nextCombat.log;
-      if (log.includes("poise_break")) {
+      if (log.includes("break_chain_ap") || log.includes("break_chain_draw")) {
+        setJuice("chain");
+        if (log.includes("break_chain_ap")) setFlash(bl.breakChainAp);
+        else setFlash(bl.breakChainDraw);
+      } else if (log.includes("poise_break")) {
         setJuice("break");
-        setFlash(bl.staggerFlash);
-      } else if (log.includes("hit")) {
+        setFlash(
+          log.includes("break_echo") ? bl.breakEchoFlash : bl.staggerFlash,
+        );
+      } else if (log.includes("flurry_law")) {
+        setFlash(bl.flurryLawFlash);
+        setJuice("hit");
+      } else if (log.includes("hit") || log.some((l) => l.startsWith("hit:"))) {
         setJuice("hit");
       }
+
+      let nextRun: RunState;
       if (nextCombat.phase === "won") {
-        nextRun = advanceAfterCombatWin(nextRun);
+        // advanceAfterCombatWin merges highlights once
+        nextRun = advanceAfterCombatWin({ ...base, combat: nextCombat });
         setFlash(bl.fightWon);
       } else if (nextCombat.phase === "lost") {
-        nextRun = advanceAfterCombatLoss(nextRun);
+        nextRun = advanceAfterCombatLoss({ ...base, combat: nextCombat });
         setFlash(bl.fightLost);
-      } else if (log.includes("enemy_stunned")) {
-        setFlash(bl.staggerFlash);
+      } else {
+        // Keep highlight *events* in combat.log across actions; only refresh live stats here.
+        // Full log merge happens once in advanceAfterCombatWin/Loss.
+        const h = base.highlights;
+        nextRun = {
+          ...base,
+          combat: nextCombat,
+          highlights: {
+            ...h,
+            minHpSeen: Math.min(h.minHpSeen, nextCombat.player.hp),
+            maxAttacksInTurn: Math.max(
+              h.maxAttacksInTurn,
+              nextCombat.attacksPlayedThisTurn,
+            ),
+          },
+        };
+        if (log.includes("enemy_stunned")) {
+          setFlash(bl.staggerFlash);
+        }
       }
       setRunAndClearSel(nextRun);
     },
@@ -393,20 +522,12 @@ export function BladeBreakGame() {
 
   const onSelectCard = useCallback(
     (uid: string) => {
-      if (!combat || combat.phase !== "player" || !run) return;
-      if (selectedUid === uid) {
-        const result = playCard(combat, uid, Math.random, run.passives);
-        if (!result.ok) {
-          setFlash(bl.playFail[result.reason] ?? bl.playFail.wrong_phase);
-          return;
-        }
-        applyCombatResult(result.state, run);
-        return;
-      }
-      setSelectedUid(uid);
+      if (!combat || combat.phase !== "player") return;
+      // Cards only toggle selection; play happens via the Play button.
+      setSelectedUid((prev) => (prev === uid ? null : uid));
       setFlash(null);
     },
-    [combat, selectedUid, run, bl, applyCombatResult],
+    [combat],
   );
 
   const onPlaySelected = useCallback(() => {
@@ -437,6 +558,10 @@ export function BladeBreakGame() {
 
   const onRestHeal = useCallback(() => {
     if (!run) return;
+    if ((run.restVariant ?? "standard") === "forge") {
+      setFlash(bl.restForgeNoHeal);
+      return;
+    }
     setRunAndClearSel(restHeal(run));
     setFlash(bl.restHealed);
   }, [run, bl, setRunAndClearSel]);
@@ -478,9 +603,40 @@ export function BladeBreakGame() {
         return;
       }
       setRunAndClearSel(result.state);
-      setFlash(bl.fuseSuccess(cardTitle(result.resultId, bl)));
+      if (result.secret) {
+        setFlash(bl.secretRevealed(cardTitle(result.resultId, bl)));
+      } else {
+        setFlash(bl.fuseSuccess(cardTitle(result.resultId, bl)));
+      }
     },
     [run, bl, fusePick, setRunAndClearSel],
+  );
+
+  const onChoosePath = useCallback(
+    (optionId: string) => {
+      if (!run) return;
+      const result = choosePath(run, optionId);
+      if (!result?.ok) return;
+      setRunAndClearSel(result.state);
+      setFlash(null);
+    },
+    [run, setRunAndClearSel],
+  );
+
+  const onEventChoice = useCallback(
+    (choice: number) => {
+      if (!run) return;
+      const result = resolveEvent(run, choice);
+      if (!result?.ok) return;
+      setRunAndClearSel(result.state);
+      if (result.toast) {
+        const msg = bl.eventToasts[result.toast] ?? result.toast;
+        setFlash(msg);
+      } else {
+        setFlash(null);
+      }
+    },
+    [run, bl, setRunAndClearSel],
   );
 
   const selectedCard = useMemo(() => {
@@ -492,6 +648,15 @@ export function BladeBreakGame() {
     if (!combat || !selectedUid) return false;
     return canPlayCard(combat, selectedUid).ok;
   }, [combat, selectedUid]);
+
+  const secretRecipe = useMemo(() => {
+    if (!run) return null;
+    try {
+      return getSecretRecipe(run.secretRecipeId);
+    } catch {
+      return null;
+    }
+  }, [run]);
 
   // ——— Setup ———
   if (screen === "setup") {
@@ -531,6 +696,8 @@ export function BladeBreakGame() {
               ? bl.runWonBody(FIGHT_TOTAL)
               : bl.runLostBody}
           </p>
+          <RuleBanner ruleId={run.ruleId} bl={bl} />
+          <HighlightsPanel run={run} bl={bl} />
           <div className="row">
             <button type="button" className="primary" onClick={startRun}>
               {bl.playAgain}
@@ -544,14 +711,82 @@ export function BladeBreakGame() {
     );
   }
 
+  // ——— Path choice ———
+  if (run.phase === "pathChoice") {
+    const opts = currentPathOptions(run);
+    return (
+      <div className="blade-break blade-path">
+        <div className="panel">
+          <RuleBanner ruleId={run.ruleId} bl={bl} />
+          <h2>{bl.pathTitle}</h2>
+          <p className="hint">{bl.pathHint}</p>
+          <p className="hint blade-progress">
+            {bl.progress(run.fightIndex, FIGHT_TOTAL)}
+          </p>
+          {flash ? <p className="blade-flash">{flash}</p> : null}
+          <div className="blade-path-grid">
+            {opts.map((o) => {
+              const meta = bl.pathOptions[o.kind];
+              return (
+                <button
+                  key={o.id}
+                  type="button"
+                  className="blade-path-card glass"
+                  onClick={() => onChoosePath(o.id)}
+                >
+                  <strong>{meta?.title ?? o.kind}</strong>
+                  <p>{meta?.desc ?? ""}</p>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ——— Event ———
+  if (run.phase === "event" && run.eventId) {
+    const eid = run.eventId;
+    const choices = bl.eventChoices[eid] ?? [];
+    return (
+      <div className="blade-break blade-event">
+        <div className="panel">
+          <RuleBanner ruleId={run.ruleId} bl={bl} />
+          <h2>{bl.eventTitle[eid] ?? eid}</h2>
+          <p className="hint">{bl.eventBody[eid] ?? ""}</p>
+          {flash ? <p className="blade-flash">{flash}</p> : null}
+          <div className="blade-event-choices">
+            {choices.map((label, i) => (
+              <button
+                key={i}
+                type="button"
+                className="blade-path-card glass"
+                onClick={() => onEventChoice(i)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // ——— Reward ———
   if (run.phase === "reward") {
     return (
       <div className="blade-break blade-reward">
         <div className="panel">
+          <RuleBanner ruleId={run.ruleId} bl={bl} />
           <h2>{bl.rewardTitle}</h2>
-          <p className="hint">{bl.rewardHint}</p>
-          <div className="blade-reward-grid">
+          <p className="hint">
+            {run.ruleId === "bloodFeud" ? bl.rewardHintBlood : bl.rewardHint}
+          </p>
+          {flash ? <p className="blade-flash">{flash}</p> : null}
+          <div
+            className={`blade-reward-grid${run.rewards.length >= 4 ? " blade-reward-grid-4" : ""}`}
+          >
             {run.rewards.map((opt, i) => (
               <button
                 key={i}
@@ -562,15 +797,25 @@ export function BladeBreakGame() {
                 {opt.kind === "card" ? (
                   <>
                     <span className="blade-reward-kind">{bl.rewardCard}</span>
+                    {opt.rarity ? (
+                      <span className={`blade-rarity blade-rarity-${opt.rarity}`}>
+                        {bl.rarity[opt.rarity]}
+                      </span>
+                    ) : null}
                     <strong>{cardTitle(opt.cardId, bl)}</strong>
                     <span className="blade-reward-meta">
-                      {bl.costSpend(CARDS[opt.cardId].cost)}
+                      {bl.costSpend(CARDS[opt.cardId]?.cost ?? 0)}
                     </span>
                     <p>{cardDesc(opt.cardId, bl)}</p>
                   </>
                 ) : (
                   <>
                     <span className="blade-reward-kind">{bl.rewardPassive}</span>
+                    {opt.rarity ? (
+                      <span className={`blade-rarity blade-rarity-${opt.rarity}`}>
+                        {bl.rarity[opt.rarity]}
+                      </span>
+                    ) : null}
                     <strong>{passiveTitle(opt.passiveId, bl)}</strong>
                     <p>{passiveDesc(opt.passiveId, bl)}</p>
                   </>
@@ -588,20 +833,48 @@ export function BladeBreakGame() {
 
   // ——— Rest ———
   if (run.phase === "rest") {
+    const rv = run.restVariant ?? "standard";
+    const forgeLocked = rv === "forge";
     return (
       <div className="blade-break blade-rest">
         <div className="panel">
-          <h2>{bl.restTitle}</h2>
-          <p className="hint">{bl.restHint}</p>
+          <RuleBanner ruleId={run.ruleId} bl={bl} />
+          <h2>
+            {bl.restVariants[rv] ?? bl.restTitle}
+          </h2>
+          <p className="hint">
+            {rv === "forge"
+              ? bl.restForgeNoHeal
+              : rv === "medic"
+                ? bl.restMedicHint
+                : bl.restHint}
+          </p>
           <p className="blade-hp-line">
             HP {run.hp}/{run.maxHp}
           </p>
+          {run.secretRevealed && secretRecipe ? (
+            <details className="blade-fuse-help">
+              <summary>{bl.secretRecipesTitle}</summary>
+              <p className="hint">{bl.secretClue}</p>
+              <ul>
+                <li>
+                  {cardTitle(secretRecipe.a, bl)} + {cardTitle(secretRecipe.b, bl)} →{" "}
+                  {cardTitle(secretRecipe.result, bl)}
+                </li>
+              </ul>
+            </details>
+          ) : null}
           {flash ? <p className="blade-flash">{flash}</p> : null}
           {restMode === "menu" ? (
             <>
               <div className="row blade-rest-actions">
-                <button type="button" className="primary" onClick={onRestHeal}>
-                  {bl.restHeal(Math.max(1, Math.floor(run.maxHp * 0.3)))}
+                <button
+                  type="button"
+                  className="primary"
+                  onClick={onRestHeal}
+                  disabled={forgeLocked}
+                >
+                  {bl.restHeal(restHealAmount(run))}
                 </button>
                 <button
                   type="button"
@@ -622,7 +895,7 @@ export function BladeBreakGame() {
                     setFusePick([]);
                     setFlash(null);
                   }}
-                  disabled={run.deck.length < 2}
+                  disabled={run.deck.length <= 5}
                 >
                   {bl.restFuse}
                 </button>
@@ -643,6 +916,16 @@ export function BladeBreakGame() {
                       {cardTitle(r.result, bl)}
                     </li>
                   ))}
+                  {run.secretRevealed
+                    ? SECRET_FUSION_RECIPES.filter(
+                        (r) => r.id === run.secretRecipeId,
+                      ).map((r) => (
+                        <li key={r.result}>
+                          {cardTitle(r.a, bl)} + {cardTitle(r.b, bl)} →{" "}
+                          {cardTitle(r.result, bl)} ★
+                        </li>
+                      ))
+                    : null}
                 </ul>
               </details>
             </>
@@ -692,9 +975,7 @@ export function BladeBreakGame() {
                   );
                 })}
               </div>
-              <p className="hint">
-                {bl.fusePicked(fusePick.length)}
-              </p>
+              <p className="hint">{bl.fusePicked(fusePick.length)}</p>
               <div className="row">
                 <button
                   type="button"
@@ -721,15 +1002,19 @@ export function BladeBreakGame() {
   const player = combat.player;
   const broken = Boolean(enemy.statuses.broken);
   const enemyDef = ENEMIES[enemy.id];
+  const isNemesis = enemy.variant === "revenge";
+  const maxPoiseLabel = enemy.maxPoise ?? enemyDef?.maxPoise ?? 0;
 
   return (
     <div className="blade-break blade-duel">
+      <RuleBanner ruleId={run.ruleId} bl={bl} />
       <div className="blade-duel-layout">
         <section
           className={[
             "blade-enemy glass",
             juice === "hit" ? "blade-juice-hit" : "",
             juice === "break" ? "blade-juice-break" : "",
+            juice === "chain" ? "blade-juice-chain" : "",
           ]
             .filter(Boolean)
             .join(" ")}
@@ -740,6 +1025,19 @@ export function BladeBreakGame() {
             <span className="blade-fight-tag">
               {bl.progress(run.fightIndex + 1, FIGHT_TOTAL)}
             </span>
+          </div>
+          <div className="blade-tag-row">
+            {enemy.variant && enemy.variant !== "normal" ? (
+              <span className={`blade-chip blade-variant-${enemy.variant}`}>
+                {bl.variants[enemy.variant] ?? enemy.variant}
+              </span>
+            ) : null}
+            {enemy.elite ? (
+              <span className="blade-chip blade-chip-elite">{bl.eliteTag}</span>
+            ) : null}
+            {isNemesis ? (
+              <span className="blade-chip blade-chip-warn">{bl.nemesisTag}</span>
+            ) : null}
           </div>
           <IntentBadge
             intent={enemy.intent}
@@ -772,13 +1070,16 @@ export function BladeBreakGame() {
               <span className="blade-chip blade-chip-warn">{bl.statusPoison(enemy.statuses.poison)}</span>
             ) : null}
             {broken ? <span className="blade-chip blade-chip-warn">{bl.broken}</span> : null}
+            {combat.breakChain > 0 ? (
+              <span className="blade-chip blade-chip-chain">
+                {bl.breakChain(combat.breakChain)}
+              </span>
+            ) : null}
           </div>
           <p className="hint blade-enemy-blurb">
             {bl.enemyBlurb[enemy.id as keyof typeof bl.enemyBlurb] ?? ""}
           </p>
-          <span className="visually-hidden">
-            maxPoise {enemyDef.maxPoise}
-          </span>
+          <span className="visually-hidden">maxPoise {maxPoiseLabel}</span>
         </section>
 
         <section className="blade-player glass" aria-label={bl.playerAria}>
@@ -827,78 +1128,102 @@ export function BladeBreakGame() {
 
           {flash ? <p className="blade-flash">{flash}</p> : null}
 
-          <div className="blade-hand" role="list">
-            {player.hand.map((c) => {
-              const def = CARDS[c.cardId];
-              const selected = selectedUid === c.uid;
-              const check = canPlayCard(combat, c.uid);
-              const disabled = combat.phase !== "player";
-              return (
-                <button
-                  key={c.uid}
-                  type="button"
-                  role="listitem"
-                  className={[
-                    "blade-card",
-                    selected ? "blade-card-selected" : "",
-                    !check.ok ? "blade-card-disabled" : "",
-                  ]
-                    .filter(Boolean)
-                    .join(" ")}
-                  disabled={disabled}
-                  onClick={() => onSelectCard(c.uid)}
-                  aria-pressed={selected}
-                >
-                  <span
-                    className="blade-card-cost"
-                    title={bl.costSpend(def.cost)}
-                    aria-label={bl.costSpend(def.cost)}
-                  >
-                    {def.cost}
-                  </span>
-                  <strong className="blade-card-name">
-                    {cardTitle(c.cardId, bl)}
-                  </strong>
-                  <span className="blade-card-desc">{cardDesc(c.cardId, bl)}</span>
-                </button>
-              );
-            })}
-          </div>
-
-          {selectedCard ? (
-            <div className="blade-selected-hint hint">
-              {cardTitle(selectedCard.cardId, bl)} — {cardDesc(selectedCard.cardId, bl)}
-              {selectedPlayable
-                ? ` · ${bl.tapAgain}`
-                : ` (${(() => {
-                    const r = canPlayCard(combat, selectedCard.uid);
-                    return r.ok ? "" : bl.playFail[r.reason];
-                  })()})`}
+          <div className="blade-hand-tray">
+            <div className="blade-hand blade-hand-fan" role="list">
+              <div className="blade-hand-stage">
+                {player.hand.map((c, i) => {
+                  const n = player.hand.length;
+                  const mid = (n - 1) / 2;
+                  const angleStep = n <= 5 ? 6.5 : n <= 8 ? 5 : 3.8;
+                  const xStep = n <= 5 ? 40 : n <= 8 ? 30 : 24;
+                  let angleDeg = (i - mid) * angleStep;
+                  const x = (i - mid) * xStep;
+                  let y = Math.abs(i - mid) * Math.abs(i - mid) * 2.8;
+                  const def = CARDS[c.cardId];
+                  const cost = def?.cost ?? 0;
+                  const selected = selectedUid === c.uid;
+                  const check = canPlayCard(combat, c.uid);
+                  const disabled = combat.phase !== "player";
+                  if (selected) {
+                    y -= 32;
+                    angleDeg *= 0.25;
+                  }
+                  return (
+                    <button
+                      key={c.uid}
+                      type="button"
+                      role="listitem"
+                      className={[
+                        "blade-card",
+                        selected ? "blade-card-selected" : "",
+                        !check.ok ? "blade-card-disabled" : "",
+                      ]
+                        .filter(Boolean)
+                        .join(" ")}
+                      style={{
+                        left: "50%",
+                        zIndex: selected ? 20 : i + 1,
+                        opacity: selected ? 1 : undefined,
+                        transform: selected
+                          ? `translate(calc(-50% + ${x}px), ${y}px) rotate(${angleDeg}deg) scale(1.08)`
+                          : `translate(calc(-50% + ${x}px), ${y}px) rotate(${angleDeg}deg)`,
+                      }}
+                      disabled={disabled}
+                      onClick={() => onSelectCard(c.uid)}
+                      aria-pressed={selected}
+                    >
+                      <span
+                        className="blade-card-cost"
+                        title={bl.costSpend(cost)}
+                        aria-label={bl.costSpend(cost)}
+                      >
+                        {cost}
+                      </span>
+                      <strong className="blade-card-name">
+                        {cardTitle(c.cardId, bl)}
+                      </strong>
+                      <span className="blade-card-desc">{cardDesc(c.cardId, bl)}</span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
-          ) : (
-            <p className="hint blade-selected-hint">{bl.handHint}</p>
-          )}
 
-          <div className="blade-actions">
-            <button
-              type="button"
-              className="primary"
-              disabled={!selectedCard || !selectedPlayable || combat.phase !== "player"}
-              onClick={onPlaySelected}
-            >
-              {bl.playCard}
-            </button>
-            <button
-              type="button"
-              className="primary blade-end-turn"
-              disabled={combat.phase !== "player"}
-              onClick={onEndTurn}
-            >
-              {bl.endTurn}
-            </button>
-            <button type="button" className="ghost" onClick={backToSetup}>
-              {bl.abandon}
-            </button>
+            {selectedCard ? (
+              <div className="blade-selected-hint hint">
+                {cardTitle(selectedCard.cardId, bl)} — {cardDesc(selectedCard.cardId, bl)}
+                {selectedPlayable
+                  ? ` · ${bl.pressPlay}`
+                  : ` (${(() => {
+                      const r = canPlayCard(combat, selectedCard.uid);
+                      return r.ok ? "" : bl.playFail[r.reason];
+                    })()})`}
+              </div>
+            ) : (
+              <p className="hint blade-selected-hint">{bl.handHint}</p>
+            )}
+
+            <div className="blade-actions">
+              <button
+                type="button"
+                className="primary"
+                disabled={!selectedCard || !selectedPlayable || combat.phase !== "player"}
+                onClick={onPlaySelected}
+              >
+                {bl.playCard}
+              </button>
+              <button
+                type="button"
+                className="primary blade-end-turn"
+                disabled={combat.phase !== "player"}
+                onClick={onEndTurn}
+              >
+                {bl.endTurn}
+              </button>
+              <button type="button" className="ghost" onClick={backToSetup}>
+                {bl.abandon}
+              </button>
+            </div>
           </div>
         </section>
       </div>

@@ -1200,6 +1200,10 @@ html[data-theme="dark"] .chroma-cell {
   padding-bottom: 1.5rem;
 }
 
+.blade-break.blade-duel {
+  padding-bottom: 0.75rem;
+}
+
 .blade-setup > .panel,
 .blade-end > .panel,
 .blade-reward > .panel,
@@ -1222,13 +1226,13 @@ html[data-theme="dark"] .chroma-cell {
 .blade-duel-layout {
   display: flex;
   flex-direction: column;
-  gap: 0.7rem;
+  gap: 0.5rem;
 }
 
 .blade-enemy,
 .blade-player {
   border-radius: var(--md-sys-shape-corner-lg);
-  padding: 1rem 1.05rem;
+  padding: 0.75rem 0.9rem;
   border: 1px solid var(--glass-border);
 }
 
@@ -1237,7 +1241,7 @@ html[data-theme="dark"] .chroma-cell {
   align-items: baseline;
   justify-content: space-between;
   gap: 0.75rem;
-  margin-bottom: 0.5rem;
+  margin-bottom: 0.35rem;
 }
 
 .blade-enemy-head h2 {
@@ -1254,9 +1258,9 @@ html[data-theme="dark"] .chroma-cell {
 .blade-intent {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
-  padding: 0.85rem 1rem;
-  margin: 0.45rem 0 0.85rem;
+  gap: 0.65rem;
+  padding: 0.65rem 0.8rem;
+  margin: 0.35rem 0 0.55rem;
   border-radius: var(--md-sys-shape-corner-md);
   border: 2px solid var(--glass-border);
   background: var(--glass-bg-strong);
@@ -1451,12 +1455,30 @@ html[data-theme="dark"] .chroma-cell {
 }
 
 .blade-enemy-blurb {
-  margin: 0.5rem 0 0;
-  font-size: 0.82rem;
+  margin: 0.3rem 0 0;
+  font-size: 0.78rem;
+  line-height: 1.3;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .blade-player-hud {
-  margin-bottom: 0.5rem;
+  margin-bottom: 0;
+  flex-shrink: 0;
+}
+
+.blade-duel .blade-player {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  gap: 0.25rem;
+}
+
+.blade-duel .blade-player .blade-flash {
+  margin-bottom: 0;
+  flex-shrink: 0;
 }
 
 .blade-player-meta {
@@ -1510,14 +1532,27 @@ html[data-theme="dark"] .chroma-cell {
 }
 
 .blade-flash {
-  margin: 0.4rem 0;
-  padding: 0.5rem 0.7rem;
+  margin: 0.3rem 0;
+  padding: 0.4rem 0.6rem;
   border-radius: var(--md-sys-shape-corner-sm);
   background: color-mix(in srgb, var(--md-sys-color-primary) 18%, transparent);
   color: var(--md-sys-color-primary);
   font-weight: 700;
   font-size: 0.95rem;
   letter-spacing: 0.02em;
+}
+
+.blade-hand-tray {
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+  margin-top: 0.15rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  position: relative;
+  z-index: 3;
+  overflow: visible;
 }
 
 .blade-hand {
@@ -1529,6 +1564,38 @@ html[data-theme="dark"] .chroma-cell {
   -webkit-overflow-scrolling: touch;
 }
 
+.blade-hand-fan {
+  display: block;
+  flex: 1 1 auto;
+  min-height: 9rem;
+  overflow: visible;
+  overflow-x: visible;
+  padding: 0;
+  scroll-snap-type: none;
+  pointer-events: none;
+}
+
+.blade-hand-stage {
+  position: relative;
+  width: 100%;
+  height: 9.5rem;
+  margin: 0 auto;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.blade-hand-fan .blade-card {
+  position: absolute;
+  bottom: 0;
+  flex: none;
+  width: 5.35rem;
+  min-height: 7.15rem;
+  pointer-events: auto;
+  transform-origin: 50% 100%;
+  scroll-snap-align: unset;
+  will-change: transform;
+}
+
 .blade-card {
   flex: 0 0 auto;
   width: 7.2rem;
@@ -1536,10 +1603,10 @@ html[data-theme="dark"] .chroma-cell {
   scroll-snap-align: start;
   display: flex;
   flex-direction: column;
-  gap: 0.35rem;
+  gap: 0.28rem;
   align-items: flex-start;
   text-align: left;
-  padding: 0.65rem 0.7rem;
+  padding: 0.45rem 0.5rem;
   border-radius: var(--md-sys-shape-corner-md);
   border: 1px solid var(--glass-border);
   background: var(--glass-bg-strong);
@@ -1549,18 +1616,46 @@ html[data-theme="dark"] .chroma-cell {
   transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
+/* Non-fan hands (if any): lift on hover. Fan cards use inline transform — hover uses filter/shadow only. */
 .blade-card:hover:not(:disabled) {
   transform: translateY(-3px);
 }
 
+.blade-hand-fan .blade-card:hover:not(:disabled):not(.blade-card-selected) {
+  filter: brightness(1.06);
+  box-shadow: 0 10px 22px color-mix(in srgb, var(--md-sys-color-primary) 22%, transparent);
+}
+
 .blade-card-selected {
-  transform: translateY(-10px) scale(1.04);
   border-color: var(--md-sys-color-primary);
   box-shadow: 0 8px 24px color-mix(in srgb, var(--md-sys-color-primary) 28%, transparent);
+  opacity: 1;
+  /* Fully opaque fill — glass tokens are translucent rgba */
+  background: var(--md-sys-color-surface);
+  background-color: var(--md-sys-color-surface);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.blade-hand-fan .blade-card:not(.blade-card-selected) {
+  opacity: 0.82;
+}
+
+.blade-hand-fan .blade-card-selected,
+.blade-hand-fan .blade-card-selected.blade-card-disabled {
+  opacity: 1;
+  background: var(--md-sys-color-surface);
+  background-color: var(--md-sys-color-surface);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.blade-hand:not(.blade-hand-fan) .blade-card-selected {
+  transform: translateY(-10px) scale(1.04);
   z-index: 1;
 }
 
-.blade-card-disabled {
+.blade-card-disabled:not(.blade-card-selected) {
   opacity: 0.55;
 }
 
@@ -1588,17 +1683,24 @@ html[data-theme="dark"] .chroma-cell {
 }
 
 .blade-selected-hint {
-  min-height: 1.4rem;
-  margin: 0.15rem 0 0.55rem;
+  min-height: 1.15rem;
+  margin: 0.05rem 0 0.2rem;
+  font-size: 0.8rem;
+  line-height: 1.25;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex-shrink: 0;
 }
 
 .blade-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.55rem;
-  margin-top: 0.25rem;
+  gap: 0.4rem;
+  margin-top: 0.1rem;
   position: relative;
-  z-index: 2;
+  z-index: 5;
+  flex-shrink: 0;
 }
 
 .blade-actions button {
@@ -1764,20 +1866,27 @@ html[data-theme="dark"] .chroma-cell {
 @media (min-width: 720px) {
   .blade-duel-layout {
     display: grid;
-    grid-template-columns: 1fr 1.15fr;
+    grid-template-columns: 1fr 1fr;
     align-items: stretch;
-    gap: 1rem;
+    gap: 0.75rem;
   }
 
-  .blade-enemy {
-    position: sticky;
-    top: calc(3.5rem + var(--safe-top, 0px));
-    align-self: start;
+  .blade-enemy,
+  .blade-player {
+    align-self: stretch;
   }
 
-  .blade-hand {
-    flex-wrap: wrap;
-    overflow: visible;
+  .blade-hand-fan {
+    min-height: 10rem;
+  }
+
+  .blade-hand-stage {
+    height: 10.5rem;
+  }
+
+  .blade-hand-fan .blade-card {
+    width: 5.75rem;
+    min-height: 7.55rem;
   }
 
   .blade-card {
@@ -1787,5 +1896,119 @@ html[data-theme="dark"] .chroma-cell {
 
   .blade-reward-grid {
     grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .blade-hand-fan .blade-card:hover:not(:disabled):not(.blade-card-selected) {
+    filter: none;
+    box-shadow: var(--glass-shadow);
+  }
+}
+
+/* blade-break R1–R4 extras */
+.blade-rule-banner {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  margin: 0 0 0.5rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: var(--md-sys-shape-corner-md);
+  border: 1px solid color-mix(in srgb, var(--md-sys-color-tertiary) 45%, var(--glass-border));
+  background: color-mix(in srgb, var(--md-sys-color-tertiary) 12%, var(--glass-bg-strong));
+}
+.blade-rule-banner strong {
+  font-size: 0.92rem;
+}
+.blade-path > .panel,
+.blade-event > .panel {
+  max-width: 36rem;
+  margin-left: auto;
+  margin-right: auto;
+}
+.blade-path-grid,
+.blade-event-choices {
+  display: grid;
+  gap: 0.65rem;
+  margin-top: 0.75rem;
+}
+.blade-path-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.25rem;
+  text-align: left;
+  padding: 0.85rem 1rem;
+  border-radius: var(--md-sys-shape-corner-md);
+  border: 1px solid var(--glass-border);
+  background: var(--glass-bg);
+  color: inherit;
+  cursor: pointer;
+}
+.blade-path-card p {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--md-sys-color-on-surface-variant);
+}
+.blade-tag-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-bottom: 0.35rem;
+}
+.blade-chip-elite {
+  color: #ffb74d;
+  border-color: color-mix(in srgb, #fb8c00 50%, var(--glass-border));
+}
+.blade-chip-chain {
+  color: #ffe082;
+  border-color: color-mix(in srgb, var(--md-sys-color-tertiary) 50%, var(--glass-border));
+}
+.blade-rarity {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  opacity: 0.9;
+}
+.blade-rarity-rare { color: #64b5f6; }
+.blade-rarity-epic { color: #ce93d8; }
+.blade-rarity-common { color: var(--md-sys-color-on-surface-variant); }
+.blade-reward-grid-4 {
+  grid-template-columns: repeat(2, 1fr);
+}
+.blade-highlights {
+  margin: 0.75rem 0 1rem;
+  padding: 0.65rem 0.85rem;
+  border-radius: var(--md-sys-shape-corner-md);
+  border: 1px solid var(--glass-border);
+  background: var(--glass-bg);
+}
+.blade-highlights h3 {
+  margin: 0 0 0.4rem;
+  font-size: 0.95rem;
+}
+.blade-highlights ul {
+  margin: 0;
+  padding-left: 1.1rem;
+}
+@keyframes blade-chain-flash {
+  0% { transform: scale(1); }
+  25% {
+    transform: scale(1.035);
+    box-shadow: 0 0 32px color-mix(in srgb, #ffe082 65%, transparent);
+    background-color: color-mix(in srgb, #ffe082 18%, transparent);
+  }
+  100% { transform: scale(1); }
+}
+.blade-juice-chain {
+  animation: blade-chain-flash 0.55s ease;
+}
+@media (min-width: 720px) {
+  .blade-reward-grid-4 {
+    grid-template-columns: repeat(4, 1fr);
+  }
+  .blade-path-grid {
+    grid-template-columns: repeat(2, 1fr);
   }
 }
