@@ -6,7 +6,27 @@ const HEIGHT = 480;
 
 type Mote = Phaser.GameObjects.Arc & { fallSpeed: number };
 
-export function createMistCatchGame(parent: HTMLElement): Phaser.Game {
+export type MistCatchLabels = {
+  score: string;
+  best: string;
+  lives: string;
+  gameOver: (score: number) => string;
+};
+
+const DEFAULT_LABELS: MistCatchLabels = {
+  score: "Score",
+  best: "Best",
+  lives: "Lives",
+  gameOver: (score) => `Game over · ${score}\nclick to try again`,
+};
+
+let activeLabels: MistCatchLabels = DEFAULT_LABELS;
+
+export function createMistCatchGame(
+  parent: HTMLElement,
+  labels: MistCatchLabels = DEFAULT_LABELS,
+): Phaser.Game {
+  activeLabels = labels;
   return new Phaser.Game({
     type: Phaser.AUTO,
     parent,
@@ -195,7 +215,7 @@ class MistCatchScene extends Phaser.Scene {
     this.refreshHud();
     if (this.lives <= 0) {
       this.playing = false;
-      this.statusText?.setText(`雾散了  ·  ${this.score}\nclick to try again`);
+      this.statusText?.setText(activeLabels.gameOver(this.score));
     }
   }
 
@@ -205,6 +225,8 @@ class MistCatchScene extends Phaser.Scene {
   }
 
   private refreshHud() {
-    this.scoreText?.setText(`分 ${this.score}    最高 ${this.best}    命 ${this.lives}`);
+    this.scoreText?.setText(
+      `${activeLabels.score} ${this.score}    ${activeLabels.best} ${this.best}    ${activeLabels.lives} ${this.lives}`,
+    );
   }
 }
