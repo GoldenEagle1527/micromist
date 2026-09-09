@@ -1,0 +1,302 @@
+:root {
+  color-scheme: dark;
+  --ink: #0b0e14;
+  --ink-2: #141821;
+  --paper: #e8e4dc;
+  --muted: #8d8894;
+  --mist: #7ec8c4;
+  --mist-dim: #3d6f6d;
+  --ember: #d4a574;
+  --line: rgba(232, 228, 220, 0.1);
+  --shadow: 0 24px 80px rgba(0, 0, 0, 0.45);
+  font-family:
+    "PingFang SC",
+    "Hiragino Sans GB",
+    "Noto Sans SC",
+    "Segoe UI",
+    system-ui,
+    sans-serif;
+  line-height: 1.55;
+  font-weight: 400;
+  color: var(--paper);
+  background: var(--ink);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  background:
+    radial-gradient(1200px 600px at 10% -10%, rgba(126, 200, 196, 0.12), transparent 55%),
+    radial-gradient(900px 500px at 110% 10%, rgba(212, 165, 116, 0.1), transparent 50%),
+    var(--ink);
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+.shell {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1.1rem 1.4rem;
+  border-bottom: 1px solid var(--line);
+  backdrop-filter: blur(12px);
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: rgba(11, 14, 20, 0.72);
+}
+
+.brand {
+  display: flex;
+  flex-direction: column;
+  gap: 0.05rem;
+}
+
+.brand-zh {
+  font-family: "Songti SC", "Source Han Serif SC", "Noto Serif SC", Palatino, serif;
+  font-size: 1.35rem;
+  letter-spacing: 0.18em;
+}
+
+.brand-en {
+  font-size: 0.72rem;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.nav {
+  display: flex;
+  gap: 1.1rem;
+  font-size: 0.92rem;
+}
+
+.nav a[aria-current="page"],
+.nav a:hover {
+  color: var(--mist);
+}
+
+.main {
+  width: min(1040px, calc(100% - 2.4rem));
+  margin: 0 auto;
+  padding: 2.4rem 0 4rem;
+  flex: 1;
+}
+
+.hero {
+  margin-bottom: 2.6rem;
+}
+
+.hero h1 {
+  font-family: "Songti SC", "Source Han Serif SC", "Noto Serif SC", Palatino, serif;
+  font-size: clamp(2rem, 5vw, 3.2rem);
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  margin: 0 0 0.7rem;
+}
+
+.lede {
+  max-width: 40rem;
+  color: var(--muted);
+  margin: 0;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 1rem;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+  padding: 1.2rem 1.25rem 1.15rem;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: linear-gradient(180deg, rgba(20, 24, 33, 0.92), rgba(11, 14, 20, 0.7));
+  box-shadow: var(--shadow);
+  min-height: 12.5rem;
+}
+
+.card:hover {
+  border-color: rgba(126, 200, 196, 0.35);
+}
+
+.card h2 {
+  margin: 0;
+  font-size: 1.15rem;
+  letter-spacing: 0.04em;
+}
+
+.badge {
+  align-self: flex-start;
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ember);
+  border: 1px solid rgba(212, 165, 116, 0.35);
+  border-radius: 999px;
+  padding: 0.15rem 0.55rem;
+}
+
+.badge.soon {
+  color: var(--muted);
+  border-color: var(--line);
+}
+
+.card p {
+  margin: 0;
+  color: var(--muted);
+  flex: 1;
+}
+
+.card-cta {
+  color: var(--mist);
+  font-size: 0.9rem;
+}
+
+.play-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: flex-end;
+  margin-bottom: 1rem;
+}
+
+.play-header h1 {
+  margin: 0 0 0.25rem;
+  font-size: 1.6rem;
+}
+
+.hint {
+  color: var(--muted);
+  margin: 0;
+  font-size: 0.92rem;
+}
+
+.game-stage {
+  width: min(100%, 800px);
+  aspect-ratio: 800 / 480;
+  background: #070a0f;
+  border-radius: 14px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow);
+}
+
+.game-stage canvas {
+  display: block;
+}
+
+.panel {
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 1.25rem 1.3rem;
+  background: rgba(20, 24, 33, 0.7);
+  margin-top: 1.2rem;
+}
+
+.panel h2,
+.panel h3 {
+  margin: 0 0 0.6rem;
+}
+
+.panel p,
+.panel li {
+  color: var(--muted);
+}
+
+.panel code {
+  color: var(--mist);
+  font-size: 0.88em;
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  margin: 0.8rem 0;
+}
+
+input[type="text"] {
+  background: var(--ink);
+  color: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 0.55rem 0.75rem;
+  min-width: 12rem;
+}
+
+button.primary,
+button.ghost {
+  border-radius: 10px;
+  padding: 0.55rem 0.9rem;
+  cursor: pointer;
+}
+
+button.primary {
+  background: var(--mist);
+  color: var(--ink);
+  border: 0;
+}
+
+button.ghost {
+  background: transparent;
+  color: var(--paper);
+  border: 1px solid var(--line);
+}
+
+.log {
+  margin: 0;
+  padding: 0.8rem;
+  background: #070a0f;
+  border-radius: 10px;
+  min-height: 6rem;
+  max-height: 14rem;
+  overflow: auto;
+  font-size: 0.82rem;
+  color: #c8e6e3;
+}
+
+.footer {
+  border-top: 1px solid var(--line);
+  padding: 1.1rem 1.4rem 1.4rem;
+  color: var(--muted);
+  font-size: 0.82rem;
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.footer a:hover {
+  color: var(--mist);
+}
