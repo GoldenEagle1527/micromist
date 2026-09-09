@@ -649,7 +649,7 @@ export function ExplosiveChessGame() {
           <p className="hint" style={{ marginTop: 0 }}>
             先选好模式与规则，再进入棋盘。联机需双方准备后才会开始。
           </p>
-          <div className="row explosive-controls">
+          <div className="explosive-controls">
             <label>
               模式
               <select
@@ -800,7 +800,7 @@ export function ExplosiveChessGame() {
               {onlineStatus ||
                 "创建房间并分享链接，或输入房间码加入。双方准备后进入棋盘。密码暂未启用。"}
             </p>
-            <div className="row explosive-controls">
+            <div className="explosive-controls">
               <label>
                 房间码
                 <input
