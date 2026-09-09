@@ -76,6 +76,8 @@ function isWinMode(value: unknown): value is WinMode {
  *
  * All GameRoom instances currently run 爆炸棋. Room coordination stays
  * in memory (no user DB). SQLite class is enabled only for Workers Free.
+ * Recycle: if no red/blue player is connected, wipe the room immediately;
+ * keep state while at least one seated player remains online.
  */
 export class GameRoom extends DurableObject<Env> {
   sessions: Map<WebSocket, SessionAttachment>;
@@ -193,6 +195,20 @@ export class GameRoom extends DurableObject<Env> {
   }
 
   async webSocketClose(ws: WebSocket, code: number, reason: string) {
+    this.handleDisconnect(ws);
+    try {
+      ws.close(code, reason);
+    } catch {
+      /* already closed */
+    }
+  }
+
+  async webSocketError(ws: WebSocket) {
+    this.handleDisconnect(ws);
+  }
+
+  /** Mark player offline; if no seated player remains online, recycle immediately. */
+  private handleDisconnect(ws: WebSocket) {
     const session = this.sessions.get(ws);
     this.sessions.delete(ws);
 
@@ -204,27 +220,50 @@ export class GameRoom extends DurableObject<Env> {
           player.connected = false;
           player.ready = false;
         }
-        if (this.phase === "playing" && (session.seat === "red" || session.seat === "blue")) {
+        if (
+          (session.seat === "red" || session.seat === "blue") &&
+          (this.phase === "playing" || this.phase === "over")
+        ) {
           this.broadcastExcept(ws, "peer_left", {
             playerId: session.playerId,
             seat: session.seat,
           });
-          this.broadcastRoom();
-        } else if (this.phase === "lobby" || this.phase === "over") {
-          this.broadcastRoom();
         }
+        if (!this.anySeatedPlayerConnected()) {
+          this.recycleRoom();
+          return;
+        }
+        this.broadcastRoom();
       }
-    }
-
-    try {
-      ws.close(code, reason);
-    } catch {
-      /* already closed */
+    } else if (!this.anySeatedPlayerConnected() && this.players.size > 0) {
+      this.recycleRoom();
     }
   }
 
-  async webSocketError(ws: WebSocket) {
-    this.sessions.delete(ws);
+  private anySeatedPlayerConnected(): boolean {
+    for (const p of this.players.values()) {
+      if ((p.seat === "red" || p.seat === "blue") && p.connected) return true;
+    }
+    return false;
+  }
+
+  /** Wipe in-memory room so the next join is a fresh lobby. */
+  private recycleRoom() {
+    const leftover = [...this.sessions.keys()];
+    for (const sock of leftover) {
+      this.send(sock, "room_closed", { reason: "双方玩家均已离开，房间已回收" });
+      try {
+        sock.close(4001, "room recycled");
+      } catch {
+        /* ignore */
+      }
+    }
+    this.sessions.clear();
+    this.players.clear();
+    this.game = null;
+    this.phase = "lobby";
+    this.hostId = null;
+    this.config = { ...DEFAULT_CONFIG };
   }
 
   // --- handlers ---

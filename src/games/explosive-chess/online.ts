@@ -39,6 +39,7 @@ export type ServerHandlers = {
   onGameOver?: (payload: { winner: number | "draw" | null; winReason: string }) => void;
   onError?: (payload: { message: string }) => void;
   onPeerLeft?: (payload: { playerId: string; seat?: Seat }) => void;
+  onRoomClosed?: (payload: { reason?: string }) => void;
   onOpen?: () => void;
   onClose?: (ev: CloseEvent) => void;
 };
@@ -171,6 +172,9 @@ export class ExplosiveOnlineClient {
           break;
         case "peer_left":
           this.handlers.onPeerLeft?.(payload);
+          break;
+        case "room_closed":
+          this.handlers.onRoomClosed?.(payload);
           break;
         default:
           break;
