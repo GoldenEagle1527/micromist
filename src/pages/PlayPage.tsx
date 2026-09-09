@@ -18,22 +18,8 @@ export function PlayPage() {
     );
   }
 
-  const hint =
-    game.slug === "explosive-chess"
-      ? "先在设置页选模式与规则，再点「开始游戏」进入棋盘。联机：创建/进入房间 → 双方准备后进入棋盘（?room=码可预填）。"
-      : "方向键或 A/D 移动；也可按住指针拖动。最高分写入 localStorage，不会上传。";
-
   return (
     <>
-      <div className="play-header">
-        <div>
-          <h1>
-            {game.titleZh} / {game.title}
-          </h1>
-          <p className="hint">{hint}</p>
-        </div>
-        <Link to="/">← 游戏列表</Link>
-      </div>
       {game.slug === "mist-catch" ? <MistCatchGame /> : null}
       {game.slug === "explosive-chess" ? <ExplosiveChessGame /> : null}
     </>
