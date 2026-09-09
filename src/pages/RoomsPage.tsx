@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "react-router";
 
 function roomSocketUrl(roomId: string): string {
   const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
@@ -9,7 +10,7 @@ export function RoomsPage() {
   const [roomId, setRoomId] = useState("mist-demo");
   const [message, setMessage] = useState("hello");
   const [log, setLog] = useState<string[]>([
-    "多人玩法尚未接入。下面的探测只验证 /ws/:roomId 能否升级到 GameRoom Durable Object。",
+    "爆炸棋联机已接入 GameRoom。下面的探测仍可验证 /ws/:roomId 升级；游戏请用爆炸棋页面的创建/加入房间。",
   ]);
   const [socket, setSocket] = useState<WebSocket | null>(null);
 
@@ -46,8 +47,10 @@ export function RoomsPage() {
       <section className="hero">
         <h1>同雾房间</h1>
         <p className="lede">
-          Future multiplayer: one Durable Object per room, Hibernation WebSockets,
-          in-memory room state that disappears with the room. No accounts, no D1/KV/R2.
+          Explosive Chess online uses one Durable Object per room with Hibernation
+          WebSockets; room state is in-memory and dies with the room. No accounts,
+          no D1/KV/R2.{" "}
+          <Link to="/play/explosive-chess">去爆炸棋联机 →</Link>
         </p>
       </section>
 
@@ -57,7 +60,7 @@ export function RoomsPage() {
           The Worker only runs for <code>/ws</code> and <code>/ws/:roomId</code> (
           <code>run_worker_first</code>). Everything else is a free Static Assets SPA
           hit. A room stub accepts the upgrade with <code>ctx.acceptWebSocket</code>{" "}
-          and echoes JSON. Gameplay sync is intentionally not implemented yet.
+          and runs the Explosive Chess protocol (join / ready / move). Prefer the in-game lobby over this probe.
         </p>
         <pre className="log">{`GET /ws/:roomId
 Upgrade: websocket

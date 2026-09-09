@@ -2,6 +2,13 @@ import { GameRoom } from "./game-room";
 
 export { GameRoom };
 
+/**
+ * Route WebSocket upgrades to a Durable Object named by room id.
+ *
+ * Currently every GameRoom runs 爆炸棋 / Explosive Chess. Room ids are opaque
+ * strings (short lobby codes from the SPA). A future multi-game platform can
+ * namespace as `explosive-chess:<id>` without changing the DO class.
+ */
 function roomIdFromPath(pathname: string): string | null {
   if (pathname === "/ws" || pathname === "/ws/") {
     return null;
