@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { NavLink, Outlet, useMatch } from "react-router";
 import { getGame } from "../games/catalog";
 import { useLocale } from "../i18n";
@@ -34,10 +34,21 @@ function GamesIcon() {
   );
 }
 
+function AboutIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M11 7h2v2h-2V7zm0 4h2v6h-2v-6zm1-9C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z" />
+    </svg>
+  );
+}
+
 export function Shell() {
   const { mode, cycleMode } = useTheme();
   const { locale, t, toggleLocale } = useLocale();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [aboutOpen, setAboutOpen] = useState(false);
+  const aboutTitleId = useId();
+  const closeBtnRef = useRef<HTMLButtonElement | null>(null);
   const playMatch = useMatch("/play/:slug");
   const homeMatch = useMatch({ path: "/", end: true });
   const playGame = playMatch?.params.slug
@@ -47,6 +58,21 @@ export function Shell() {
   const themeLabel =
     mode === "system" ? t.themeSystem : mode === "light" ? t.themeLight : t.themeDark;
   const langButtonLabel = locale === "zh" ? "EN" : "中";
+
+  useEffect(() => {
+    if (!aboutOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setAboutOpen(false);
+    };
+    document.addEventListener("keydown", onKey);
+    closeBtnRef.current?.focus();
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prev;
+    };
+  }, [aboutOpen]);
 
   return (
     <div className={`shell${showBottomNav ? " shell-home" : ""}`}>
@@ -68,6 +94,15 @@ export function Shell() {
               {t.navGames}
             </NavLink>
           </nav>
+          <button
+            type="button"
+            className="icon-btn"
+            onClick={() => setAboutOpen(true)}
+            aria-label={t.aboutAria}
+            title={t.aboutAria}
+          >
+            <AboutIcon />
+          </button>
           <button
             type="button"
             className="icon-btn lang-btn"
@@ -132,6 +167,54 @@ export function Shell() {
         <span>{t.footer}</span>
         <a href="https://github.com/GoldenEagle1527/micromist">GitHub</a>
       </footer>
+
+      {aboutOpen ? (
+        <div
+          className="modal-backdrop"
+          role="presentation"
+          onClick={() => setAboutOpen(false)}
+        >
+          <div
+            className="modal-panel"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={aboutTitleId}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="modal-header">
+              <h2 id={aboutTitleId}>{t.aboutTitle}</h2>
+              <button
+                ref={closeBtnRef}
+                type="button"
+                className="icon-btn"
+                onClick={() => setAboutOpen(false)}
+                aria-label={t.aboutClose}
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M18.3 5.71 12 12.01 5.7 5.7 4.29 7.11 10.59 13.4 4.29 19.7 5.7 21.11 12 14.82l6.3 6.29 1.41-1.41-6.29-6.3 6.29-6.29z" />
+                </svg>
+              </button>
+            </div>
+            <p className="lede modal-body">{t.aboutBody}</p>
+            <div className="modal-actions">
+              <a
+                href="https://github.com/GoldenEagle1527/micromist"
+                target="_blank"
+                rel="noreferrer"
+              >
+                GitHub
+              </a>
+              <button
+                type="button"
+                className="primary"
+                onClick={() => setAboutOpen(false)}
+              >
+                {t.aboutClose}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

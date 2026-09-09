@@ -13,9 +13,11 @@ export const en: Dict = {
   langTitle: "Language: English. Click for 中文",
   footer: "MIT · Workers Static Assets · No accounts persisted",
   loading: "Loading…",
-  homeTitle: "micromist",
-  homeLede:
+  aboutAria: "About micromist",
+  aboutTitle: "About micromist",
+  aboutBody:
     "micromist is an open-source browser game platform on Cloudflare Workers Static Assets. Solo progress stays on this device. Multiplayer uses share links into Durable Object rooms (no public lobby); empty rooms are recycled.",
+  aboutClose: "Close",
   playCta: "Play",
   notFoundTitle: "Page not found",
   notFoundBody: "Nothing lives at this path.",

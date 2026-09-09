@@ -13,9 +13,11 @@ export const zh: Dict = {
   langTitle: "语言：中文，点击切换为 English",
   footer: "开源 MIT · Workers Static Assets · 不持久化账号",
   loading: "载入中…",
-  homeTitle: "微渺",
-  homeLede:
+  aboutAria: "关于微渺",
+  aboutTitle: "关于微渺",
+  aboutBody:
     "micromist 是一个开源浏览器游戏平台：前端跑在 Cloudflare Workers Static Assets 上，单人进度只存在本机。联机靠分享链接进入房间（Durable Objects + WebSocket），不设公开房间列表；人走了房间也就回收。",
+  aboutClose: "关闭",
   playCta: "开始玩",
   notFoundTitle: "没有这个页面",
   notFoundBody: "这条路径没有对应的页面。",
