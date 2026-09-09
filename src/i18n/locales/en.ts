@@ -289,11 +289,14 @@ export const en: Dict = {
     enemies: {
       scout: "Scout",
       rascal: "Rascal",
+      acolyte: "Acolyte",
       brute: "Windup Brute",
       thorn: "Thorn Warden",
       warden: "Block Warden",
+      duelist: "Duelist",
       knight: "Armored Knight",
       hexer: "Hexer",
+      juggernaut: "Juggernaut",
     },
     enemyBlurb: {
       scout: "Basic kit: attack, defend, light windup.",

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocale } from "../../i18n";
 import { CARDS, FUSION_RECIPES } from "./cards";
-import { ENCOUNTER_ORDER, ENEMIES } from "./enemies";
+import { FIGHT_COUNT, ENEMIES } from "./enemies";
 import {
   advanceAfterCombatLoss,
   advanceAfterCombatWin,
@@ -22,7 +22,7 @@ type Screen = "setup" | "run";
 type RestMode = "menu" | "remove" | "fuse";
 
 const STORAGE_KEY = "micromist.blade-break.run";
-const FIGHT_TOTAL = ENCOUNTER_ORDER.length;
+const FIGHT_TOTAL = FIGHT_COUNT;
 
 function saveRun(run: RunState | null) {
   try {
