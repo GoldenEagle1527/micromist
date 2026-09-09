@@ -13,8 +13,10 @@ export type Dict = {
   langTitle: string;
   footer: string;
   loading: string;
-  homeTitle: string;
-  homeLede: string;
+  aboutAria: string;
+  aboutTitle: string;
+  aboutBody: string;
+  aboutClose: string;
   playCta: string;
   notFoundTitle: string;
   notFoundBody: string;

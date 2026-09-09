@@ -885,3 +885,61 @@ html[data-theme="dark"] .explosive-status .explosive-count.blue {
   gap: 0.5rem 0.75rem;
   align-items: center;
 }
+
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.25rem;
+  background: color-mix(in srgb, var(--md-sys-color-scrim, #000) 45%, transparent);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+
+.modal-panel {
+  width: min(28rem, 100%);
+  max-height: min(80vh, 32rem);
+  overflow: auto;
+  padding: 1.15rem 1.2rem 1.25rem;
+  border-radius: var(--md-sys-shape-corner-lg);
+  background: var(--glass-bg-strong);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow);
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.modal-header h2 {
+  margin: 0;
+  font-size: 1.2rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+}
+
+.modal-body {
+  margin: 0;
+}
+
+.modal-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  margin-top: 1.15rem;
+}
+
+.modal-actions a {
+  color: var(--md-sys-color-primary);
+  font-weight: 600;
+  font-size: 0.92rem;
+}
