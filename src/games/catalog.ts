@@ -19,7 +19,7 @@ export const games: GameMeta[] = [
       zh: "在雾中托住坠落的微光。单人小游戏，最高分仅存在本机。",
       en: "Steer a bowl through the mist and catch falling motes. Solo only; high score stays on this device.",
     },
-    badge: { zh: "单人 · local", en: "Solo · local" },
+    badge: { zh: "单机", en: "Offline" },
   },
   {
     slug: "explosive-chess",
@@ -29,7 +29,7 @@ export const games: GameMeta[] = [
       zh: "落子叠满即爆，连锁改色占盘。单人可对战 AI 或热座；联机靠分享链接开房。",
       en: "Place until cells burst and recolor neighbors. Solo vs AI / hotseat, or online via share link.",
     },
-    badge: { zh: "单人/联机", en: "Solo / Online" },
+    badge: { zh: "单机/联机", en: "Offline / Online" },
   },
   {
     slug: "chroma-slide",
@@ -39,7 +39,7 @@ export const games: GameMeta[] = [
       zh: "滑动色块，把每种颜色收成一块实心矩形。单人本地，步数只记本局。",
       en: "Slide colored tiles until each hue forms one solid rectangle. Solo local; steps are per run.",
     },
-    badge: { zh: "单人 · local", en: "Solo · local" },
+    badge: { zh: "单机", en: "Offline" },
   },
 ];
 
