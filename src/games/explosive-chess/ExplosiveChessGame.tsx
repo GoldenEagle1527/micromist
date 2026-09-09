@@ -641,6 +641,30 @@ export function ExplosiveChessGame() {
             setTip("对手已离开，可继续等待或返回设置");
             clearMoveLock();
           },
+          onRoomClosed: (payload) => {
+            intentionalLeaveRef.current = true;
+            reconnectAttemptsRef.current = 0;
+            if (reconnectTimerRef.current) {
+              clearTimeout(reconnectTimerRef.current);
+              reconnectTimerRef.current = null;
+            }
+            clearMoveLock();
+            clientRef.current?.close();
+            clientRef.current = null;
+            setOnlinePhase("idle");
+            setOnlinePlayers([]);
+            setOnlineConfig(null);
+            setMyColor(null);
+            myColorRef.current = null;
+            setShareLink("");
+            setRoomCode("");
+            setSearchParams({}, { replace: true });
+            setOnlineStatus(payload.reason || "房间已回收");
+            setTip("双方均已离开，房间已关闭");
+            destroyBoard();
+            setScreen("setup");
+            setGameOver(false);
+          },
           onClose: () => {
             if (intentionalLeaveRef.current) {
               setOnlinePhase("idle");
