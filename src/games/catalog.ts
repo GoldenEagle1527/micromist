@@ -8,12 +8,15 @@ export type GameMeta = {
   title: Record<Locale, string>;
   blurb: Record<Locale, string>;
   badge: Record<Locale, string>;
+  /** When false, hidden from home and /play (code kept for later). Default true. */
+  listed?: boolean;
 };
 
 export const games: GameMeta[] = [
   {
     slug: "mist-catch",
     mode: "single",
+    listed: false,
     title: { zh: "拾雾", en: "Mist Catch" },
     blurb: {
       zh: "在雾中托住坠落的微光。单人小游戏，最高分仅存在本机。",
@@ -43,8 +46,12 @@ export const games: GameMeta[] = [
   },
 ];
 
+export function listedGames(): GameMeta[] {
+  return games.filter((game) => game.listed !== false);
+}
+
 export function getGame(slug: string): GameMeta | undefined {
-  return games.find((game) => game.slug === slug);
+  return listedGames().find((game) => game.slug === slug);
 }
 
 export const BEST_SCORE_KEY = "micromist.mist-catch.best";
