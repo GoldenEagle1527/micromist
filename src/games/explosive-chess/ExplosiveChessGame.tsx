@@ -29,6 +29,11 @@ import {
   type RoomPlayer,
   type Seat,
 } from "./online";
+import {
+  clearLocalProgress,
+  loadLocalProgress,
+  saveLocalProgress,
+} from "../local-persist";
 
 type OpponentMode = "ai" | "local" | "online";
 type RedOwner = "player" | "ai";
@@ -47,7 +52,45 @@ type Settings = {
 };
 
 const SETTINGS_KEY = "micromist.explosive-chess.settings";
+const SOLO_PROGRESS_SLUG = "explosive-chess";
 const FRAME_DELAY_MS = 70;
+
+type SoloPersist = {
+  settings: Settings;
+  fullState: FullState;
+  localSession?: number;
+};
+
+function loadSoloPersist(roomFromQuery: string): SoloPersist | null {
+  if (roomFromQuery) {
+    clearLocalProgress(SOLO_PROGRESS_SLUG);
+    return null;
+  }
+  const data = loadLocalProgress<SoloPersist>(SOLO_PROGRESS_SLUG);
+  if (!data?.fullState || !data.settings) return null;
+  if (data.settings.opponent === "online" || data.fullState.gameOver) {
+    clearLocalProgress(SOLO_PROGRESS_SLUG);
+    return null;
+  }
+  return data;
+}
+
+function persistSoloProgress(
+  settings: Settings,
+  game: GameInstance,
+  localSession: number,
+): void {
+  if (settings.opponent === "online") return;
+  if (game.gameOver) {
+    clearLocalProgress(SOLO_PROGRESS_SLUG);
+    return;
+  }
+  saveLocalProgress<SoloPersist>(SOLO_PROGRESS_SLUG, {
+    settings,
+    fullState: game.getFullState(),
+    localSession,
+  });
+}
 
 const DEFAULT_SETTINGS: Settings = {
   opponent: "ai",
@@ -149,10 +192,21 @@ export function ExplosiveChessGame() {
   const [searchParams, setSearchParams] = useSearchParams();
   const roomFromQuery = searchParams.get("room")?.trim().toLowerCase() || "";
 
-  const [screen, setScreen] = useState<Screen>("setup");
+  const initialSoloRef = useRef<SoloPersist | null | undefined>(undefined);
+  if (initialSoloRef.current === undefined) {
+    initialSoloRef.current = loadSoloPersist(roomFromQuery);
+  }
+  const pendingRestoreRef = useRef<SoloPersist | null>(initialSoloRef.current);
+
+  const [screen, setScreen] = useState<Screen>(() =>
+    initialSoloRef.current ? "playing" : "setup",
+  );
   const [settings, setSettings] = useState<Settings>(() => {
     const base = loadSettings();
     if (roomFromQuery) return { ...base, opponent: "online" };
+    if (initialSoloRef.current) {
+      return { ...base, ...initialSoloRef.current.settings, opponent: initialSoloRef.current.settings.opponent };
+    }
     return base;
   });
 
@@ -164,7 +218,9 @@ export function ExplosiveChessGame() {
   const [winner, setWinner] = useState<MoveResult["winner"]>(null);
   const [, setBusy] = useState(false);
   const [tip, setTip] = useState(ex.tipClick);
-  const [localSession, setLocalSession] = useState(0);
+  const [localSession, setLocalSession] = useState(
+    () => initialSoloRef.current?.localSession ?? 0,
+  );
 
   const [roomCode, setRoomCode] = useState(roomFromQuery);
   const [onlinePhase, setOnlinePhase] = useState<Phase | "idle" | "connecting" | "reconnecting">("idle");
@@ -184,6 +240,7 @@ export function ExplosiveChessGame() {
   const playerColorRef = useRef<PlayerColor>(COLOR_RED);
   const aiColorRef = useRef<PlayerColor>(COLOR_BLUE);
   const settingsRef = useRef(settings);
+  const localSessionRef = useRef(localSession);
   const runAiMoveRef = useRef<() => Promise<void>>(async () => undefined);
   const clientRef = useRef<ExplosiveOnlineClient | null>(null);
   const myColorRef = useRef<PlayerColor | null>(null);
@@ -205,6 +262,7 @@ export function ExplosiveChessGame() {
     animationFrames?: AnimationFrame[];
   } | null>(null);
   settingsRef.current = settings;
+  localSessionRef.current = localSession;
   myColorRef.current = myColor;
   screenRef.current = screen;
   onlinePhaseRef.current = onlinePhase;
@@ -286,6 +344,14 @@ export function ExplosiveChessGame() {
       syncHud(game);
       updateTip(game, mode);
 
+      if (mode !== "online") {
+        if (result.gameOver || game.gameOver) {
+          clearLocalProgress(SOLO_PROGRESS_SLUG);
+        } else {
+          persistSoloProgress(settingsRef.current, game, localSessionRef.current);
+        }
+      }
+
       if (result.gameOver) {
         setBusy(false);
         return;
@@ -327,7 +393,10 @@ export function ExplosiveChessGame() {
   // Mount local/AI board only on the playing screen.
   useEffect(() => {
     if (screen !== "playing") return;
-    if (settings.opponent === "online") return;
+    if (settings.opponent === "online") {
+      clearLocalProgress(SOLO_PROGRESS_SLUG);
+      return;
+    }
 
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -342,6 +411,12 @@ export function ExplosiveChessGame() {
       winParam,
     });
     gameRef.current = game;
+
+    const restore = pendingRestoreRef.current;
+    pendingRestoreRef.current = null;
+    if (restore && !restore.fullState.gameOver) {
+      game.loadFullState(restore.fullState);
+    }
 
     if (settings.opponent === "ai") {
       const playerColor: PlayerColor = settings.redOwner === "player" ? COLOR_RED : COLOR_BLUE;
@@ -361,9 +436,13 @@ export function ExplosiveChessGame() {
     updateTip(game, settings.opponent);
     setBusy(false);
     animatingRef.current = false;
-    setGameOver(false);
-    setWinner(null);
-    setWinReason("");
+    if (!restore) {
+      setGameOver(false);
+      setWinner(null);
+      setWinReason("");
+    }
+
+    persistSoloProgress(settings, game, localSession);
 
     const onResize = () => renderer.resize();
     window.addEventListener("resize", onResize);
@@ -583,6 +662,8 @@ export function ExplosiveChessGame() {
       setOnlinePhase(opts?.keepPlaying ? "reconnecting" : "connecting");
       setOnlineStatus(opts?.keepPlaying ? tRef.current.explosive.reconnectingStatus : tRef.current.explosive.connecting);
       setSearchParams({ room: trimmed }, { replace: true });
+      clearLocalProgress(SOLO_PROGRESS_SLUG);
+      pendingRestoreRef.current = null;
       saveSettings({ ...settingsRef.current, opponent: "online" });
       setSettings((s) => ({ ...s, opponent: "online" }));
       clearMoveLock();
@@ -760,6 +841,8 @@ export function ExplosiveChessGame() {
   // Landing with ?room= selects online mode; user still confirms join (code not editable).
   useEffect(() => {
     if (!roomFromQuery) return;
+    clearLocalProgress(SOLO_PROGRESS_SLUG);
+    pendingRestoreRef.current = null;
     setRoomCode(roomFromQuery);
     setSettings((s) => ({ ...s, opponent: "online" }));
     setOnlineStatus(t.explosive.openShare);
@@ -815,6 +898,8 @@ export function ExplosiveChessGame() {
   };
 
   const startLocalGame = () => {
+    clearLocalProgress(SOLO_PROGRESS_SLUG);
+    pendingRestoreRef.current = null;
     saveSettings(settings);
     disconnectOnline();
     setSearchParams({}, { replace: true });
@@ -831,6 +916,9 @@ export function ExplosiveChessGame() {
         setSearchParams({}, { replace: true });
         setRoomCode("");
       }
+    } else {
+      clearLocalProgress(SOLO_PROGRESS_SLUG);
+      pendingRestoreRef.current = null;
     }
     setScreen("setup");
     clearMoveLock();
@@ -839,6 +927,8 @@ export function ExplosiveChessGame() {
   };
 
   const createRoom = () => {
+    clearLocalProgress(SOLO_PROGRESS_SLUG);
+    pendingRestoreRef.current = null;
     const next = { ...settingsRef.current, opponent: "online" as const };
     saveSettings(next);
     setSettings(next);
@@ -852,6 +942,8 @@ export function ExplosiveChessGame() {
       setOnlineStatus(tRef.current.explosive.needShareLink);
       return;
     }
+    clearLocalProgress(SOLO_PROGRESS_SLUG);
+    pendingRestoreRef.current = null;
     setSettings((s) => ({ ...s, opponent: "online" }));
     connectToRoom(code);
   };
@@ -880,6 +972,8 @@ export function ExplosiveChessGame() {
                 onChange={(e) => {
                   const next = e.target.value;
                   if (next === "online") {
+                    clearLocalProgress(SOLO_PROGRESS_SLUG);
+                    pendingRestoreRef.current = null;
                     setSettings((s) => ({ ...s, opponent: "online" }));
                     return;
                   }
@@ -1180,6 +1274,8 @@ export function ExplosiveChessGame() {
               type="button"
               className="ghost"
               onClick={() => {
+                clearLocalProgress(SOLO_PROGRESS_SLUG);
+                pendingRestoreRef.current = null;
                 setLocalSession((n) => n + 1);
               }}
             >

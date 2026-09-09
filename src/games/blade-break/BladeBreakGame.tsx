@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocale } from "../../i18n";
+import {
+  loadLocalProgress,
+  saveLocalProgress,
+  useLocalGamePersist,
+} from "../local-persist";
 import { CARDS, FUSION_RECIPES } from "./cards";
 import { FIGHT_COUNT, ENEMIES } from "./enemies";
 import {
@@ -21,30 +26,38 @@ import type { CardId, CardInstance, Intent, PassiveId, RunState } from "./types"
 type Screen = "setup" | "run";
 type RestMode = "menu" | "remove" | "fuse";
 
-const STORAGE_KEY = "micromist.blade-break.run";
+const OLD_SESSION_KEY = "micromist.blade-break.run";
+const SLUG = "blade-break";
 const FIGHT_TOTAL = FIGHT_COUNT;
 
-function saveRun(run: RunState | null) {
-  try {
-    if (!run) sessionStorage.removeItem(STORAGE_KEY);
-    else sessionStorage.setItem(STORAGE_KEY, JSON.stringify(run));
-  } catch {
-    /* ignore */
+function normalizeRun(parsed: RunState): RunState {
+  // Migrate older saves missing attacksPlayedThisTurn
+  if (parsed.combat && parsed.combat.attacksPlayedThisTurn == null) {
+    parsed.combat.attacksPlayedThisTurn = 0;
   }
+  return parsed;
 }
 
-function loadRun(): RunState | null {
+let bladeBreakMigrated = false;
+
+/** One-shot: sessionStorage → shared localStorage layer. */
+function migrateBladeBreakSessionOnce(): void {
+  if (bladeBreakMigrated) return;
+  bladeBreakMigrated = true;
   try {
-    const raw = sessionStorage.getItem(STORAGE_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as RunState;
-    // Migrate older saves missing attacksPlayedThisTurn
-    if (parsed.combat && parsed.combat.attacksPlayedThisTurn == null) {
-      parsed.combat.attacksPlayedThisTurn = 0;
+    if (loadLocalProgress<RunState>(SLUG) != null) {
+      sessionStorage.removeItem(OLD_SESSION_KEY);
+      return;
     }
-    return parsed;
+    const raw = sessionStorage.getItem(OLD_SESSION_KEY);
+    if (!raw) return;
+    sessionStorage.removeItem(OLD_SESSION_KEY);
+    const parsed = normalizeRun(JSON.parse(raw) as RunState);
+    if (parsed.phase !== "runWon" && parsed.phase !== "runLost") {
+      saveLocalProgress(SLUG, parsed);
+    }
   } catch {
-    return null;
+    /* ignore */
   }
 }
 
@@ -304,17 +317,23 @@ export function BladeBreakGame() {
   const [flash, setFlash] = useState<string | null>(null);
   const [juice, setJuice] = useState<"hit" | "break" | null>(null);
 
-  useEffect(() => {
-    const saved = loadRun();
-    if (saved && saved.phase !== "runWon" && saved.phase !== "runLost") {
-      setRun(saved);
-      setScreen("run");
-    }
-  }, []);
+  // Move legacy sessionStorage save into shared localStorage before hydrate.
+  migrateBladeBreakSessionOnce();
 
-  useEffect(() => {
-    if (screen === "run" && run) saveRun(run);
-  }, [run, screen]);
+  const persistState = screen === "run" ? run : null;
+  const { clear: clearProgress } = useLocalGamePersist<RunState>(
+    SLUG,
+    persistState,
+    {
+      shouldSave: (r) => r.phase !== "runWon" && r.phase !== "runLost",
+      onHydrate: (saved) => {
+        const fixed = normalizeRun(saved);
+        if (fixed.phase === "runWon" || fixed.phase === "runLost") return;
+        setRun(fixed);
+        setScreen("run");
+      },
+    },
+  );
 
   useEffect(() => {
     if (!juice) return;
@@ -330,21 +349,21 @@ export function BladeBreakGame() {
   }, []);
 
   const startRun = useCallback(() => {
+    clearProgress();
     const r = createRun();
     setRunAndClearSel(r);
     setScreen("run");
     setFlash(null);
     setJuice(null);
-    saveRun(r);
-  }, [setRunAndClearSel]);
+  }, [setRunAndClearSel, clearProgress]);
 
   const backToSetup = useCallback(() => {
     setScreen("setup");
     setRunAndClearSel(null);
-    saveRun(null);
+    clearProgress();
     setFlash(null);
     setJuice(null);
-  }, [setRunAndClearSel]);
+  }, [setRunAndClearSel, clearProgress]);
 
   const applyCombatResult = useCallback(
     (nextCombat: NonNullable<RunState["combat"]>, base: RunState) => {
