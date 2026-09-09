@@ -58,11 +58,14 @@ export type Intent = {
 export type EnemyId =
   | "scout"
   | "rascal"
+  | "acolyte"
   | "brute"
   | "thorn"
   | "warden"
+  | "duelist"
   | "knight"
-  | "hexer";
+  | "hexer"
+  | "juggernaut";
 
 export type EnemyDef = {
   id: EnemyId;

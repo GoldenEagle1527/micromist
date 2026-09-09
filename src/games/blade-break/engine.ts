@@ -11,7 +11,7 @@ import {
   getCard,
   isAttackCard,
 } from "./cards";
-import { ENCOUNTER_ORDER, getEnemy, nextIntent } from "./enemies";
+import { FIGHT_COUNT, getEnemy, nextIntent, rollEncounterLineup } from "./enemies";
 import type {
   CardId,
   CardInstance,
@@ -78,9 +78,9 @@ function mintCard(run: RunState, cardId: CardId): CardInstance {
   return { uid, cardId };
 }
 
-function buildRunNodes(): RunNode[] {
+function buildRunNodes(rng: Rng): RunNode[] {
   // fight, fight, rest, fight, fight, rest, fight, fight, fight → N fights + 2 rests
-  const fights = ENCOUNTER_ORDER;
+  const fights = rollEncounterLineup(rng);
   const nodes: RunNode[] = [];
   let fi = 0;
   const plan: Array<"fight" | "rest"> = [
@@ -262,7 +262,7 @@ function startCombat(
       maxPoise: def.maxPoise,
       intent: null,
       statuses: {},
-      patternIndex: 0,
+      patternIndex: Math.floor(rng() * 4),
     },
     log: [],
   };
@@ -279,7 +279,7 @@ export function createRun(rng: Rng = defaultRng()): RunState {
   const run: RunState = {
     seed,
     nodeIndex: 0,
-    nodes: buildRunNodes(),
+    nodes: buildRunNodes(rng),
     phase: "combat",
     deck: [],
     passives: [],
@@ -602,6 +602,21 @@ export function plunderFor(enemyId: EnemyId): RewardOption[] {
         { kind: "card", cardId: "iron" },
         { kind: "passive", passiveId: "bulwark" },
       ];
+    case "acolyte":
+      return [
+        { kind: "card", cardId: "venom" },
+        { kind: "card", cardId: "cleanse" },
+      ];
+    case "duelist":
+      return [
+        { kind: "card", cardId: "flurry" },
+        { kind: "card", cardId: "bash" },
+      ];
+    case "juggernaut":
+      return [
+        { kind: "card", cardId: "riposte" },
+        { kind: "card", cardId: "chip" },
+      ];
     case "scout":
     default:
       return [];
@@ -882,5 +897,5 @@ export {
   FUSION_RECIPES,
   getCard,
   findFusionResult,
-  ENCOUNTER_ORDER,
+  FIGHT_COUNT,
 };
