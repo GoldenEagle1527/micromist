@@ -5,6 +5,7 @@ export const en: Dict = {
   brandSub: "微渺",
   navGames: "Games",
   navGamesMobile: "Games",
+  menuAria: "Menu",
   themeSystem: "System",
   themeLight: "Light",
   themeDark: "Dark",

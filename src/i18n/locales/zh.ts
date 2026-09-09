@@ -5,6 +5,7 @@ export const zh: Dict = {
   brandSub: "micromist",
   navGames: "游戏",
   navGamesMobile: "游戏",
+  menuAria: "菜单",
   themeSystem: "跟随系统",
   themeLight: "浅色",
   themeDark: "深色",
