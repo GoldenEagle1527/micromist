@@ -1094,11 +1094,11 @@ export function ExplosiveChessGame() {
             </div>
 
             {onlineRole === "host" && roomCode && (onlinePhase === "lobby" || onlinePhase === "connecting") ? (
-              <div className="explosive-controls explosive-room-code">
-                <label>
+              <div className="explosive-room-code">
+                <p className="room-code-line">
                   {ex.roomCode}
-                  <input type="text" value={roomCode} readOnly aria-readonly="true" />
-                </label>
+                  <span className="room-code-value">{roomCode}</span>
+                </p>
                 {shareLink ? (
                   <button
                     type="button"

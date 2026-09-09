@@ -785,14 +785,33 @@ html[data-theme="dark"] .explosive-status .explosive-count.blue {
 }
 
 
+
+
 .explosive-room-code {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  width: 100%;
   margin-top: 0.75rem;
 }
 
-.explosive-room-code input[type="text"] {
-  cursor: default;
+.room-code-line {
+  margin: 0;
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.5rem;
+  font-size: 0.95rem;
+  color: var(--md-sys-color-on-surface-variant);
+}
+
+.room-code-value {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 1.05rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: var(--md-sys-color-primary);
   user-select: all;
-  opacity: 0.95;
 }
 
 .explosive-setup {
@@ -854,15 +873,6 @@ html[data-theme="dark"] .explosive-status .explosive-count.blue {
 
 @media (min-width: 720px) {
   
-.explosive-room-code {
-  margin-top: 0.75rem;
-}
-
-.explosive-room-code input[type="text"] {
-  cursor: default;
-  user-select: all;
-  opacity: 0.95;
-}
 
 .explosive-setup {
     width: min(28rem, 100%);
