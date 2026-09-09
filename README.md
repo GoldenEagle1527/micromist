@@ -1,95 +1,101 @@
 # 微渺 / micromist
 
+[English](./README.en.md)
+
 开源浏览器游戏平台，部署在 **Cloudflare Workers Static Assets** 上（不是 Cloudflare Pages）。
 
-An open-source browser game platform on **Cloudflare Workers Static Assets** (not Cloudflare Pages).
+单机进度只写进浏览器的 `localStorage` / IndexedDB。默认后端**不**持久化用户账号或战绩库。可选联机使用 **Durable Objects + Hibernation WebSocket**：一个房间对应一个 DO，靠分享链接加入，不设公开房间大厅；双方离线后房间回收。
 
-单人进度只写进浏览器的 `localStorage` / IndexedDB。默认后端不持久化任何用户数据。可选的多人玩法预留了 **Durable Objects + Hibernation WebSocket**（一个房间一个 DO，内存态随房间消失）。
+许可证：**MIT**（见 [`LICENSE`](./LICENSE)）。
 
-Single-player progress stays in the browser (`localStorage` / IndexedDB). The Worker does not persist a user database. Optional multiplayer is reserved as **one Durable Object per room** with Hibernation WebSockets; room state is in-memory and dies with the room.
+线上：
 
-License: **MIT** (see [`LICENSE`](./LICENSE)).
+- 自定义域：https://micromist.572003.xyz
+- 备用：`*.workers.dev`
 
-## Stack
+## 技术栈
 
-| Layer | Choice |
+| 层 | 选型 |
 | --- | --- |
-| Language | TypeScript |
-| UI | Vite + React + React Router (SPA) |
-| Games | Phaser 3 |
-| Hosting | Workers Static Assets via `@cloudflare/vite-plugin` |
-| Future rooms | Durable Object `GameRoom`, `new_sqlite_classes` (required on Workers Free) |
+| 语言 | TypeScript |
+| 壳 / 路由 | Vite + React + React Router（SPA） |
+| 游戏渲染 | Phaser 3（按需；纯 DOM/Canvas 亦可） |
+| 托管 | Workers Static Assets（`@cloudflare/vite-plugin`） |
+| 联机 | 单一 Durable Object `GameRoom`，`new_sqlite_classes`（Workers Free 可用） |
 
-Not in this repo, on purpose: D1, KV, R2, auth, analytics SDKs, Cloudflare Pages.
+刻意**不**使用：D1、KV、R2、账号体系、Cloudflare Pages。
 
-## Free-tier notes
+前端还包含轻量 i18n（同时只显示一种语言）与浅色 / 深色 / 跟随系统主题。
 
-Workers Static Assets requests are **free and unlimited**. SPA routes that only serve `index.html` / JS / CSS do not invoke the Worker.
+## Free 套餐注意
 
-The thin Worker runs only for `/ws` and `/ws/:roomId` (`run_worker_first`). Those invocations count toward **Workers Free** daily limits (currently 100,000 requests/day and 10 ms CPU per invocation).
+Workers Static Assets 的静态资源请求**免费且不计次数**。只提供 `index.html` / JS / CSS 的 SPA 路径不会跑 Worker。
 
-Durable Objects are available on the free plan when created with **`new_sqlite_classes`**. This project does that so a later multiplayer room does not require a paid product. Free-plan DO limits still apply (daily request / duration / SQLite read-write caps; unused rooms should hibernate). This stub does **not** write a persistent user store — SQLite is only the required DO backend.
+薄 Worker 主要在 `/ws`、`/ws/*` 上拦截（`run_worker_first`），计入 Workers Free 每日调用与 CPU 配额。
 
-Do not add D1, KV, or R2 if you want to stay on the documented free-stack constraint.
+Durable Objects 在免费计划可用，但创建时需使用 **`new_sqlite_classes`**。本仓库已按此配置；SQLite 仅作 DO 运行时后端（例如房间短暂持久化以防休眠丢状态），**不是**用户库或历史战绩库。空房间应休眠并回收。
 
-## Develop
+若要保持「文档里的免费栈」，请勿再加 D1 / KV / R2。
 
-Requires Node.js 20.19+ (or 22.12+).
+## 架构要点
+
+- **目录与路由**：首页列出已上架游戏；`/play/:slug` 进入具体玩法。带设置的游戏采用「设置页 → 游玩页」分离。
+- **上架控制**：`src/games/catalog.ts` 登记元数据；可用 `listed: false` 暂时下架（代码可保留）。
+- **联机共用壳**：单一 `GameRoom` + 按 `gameSlug` 注册 adapter；房间 id 形如 `gameSlug:code`。服务端权威状态，客户端不做乐观更新。建房前选定规则，建房后配置冻结；加入仅靠分享链接。
+- **单机**：状态与成绩留在本机，不经 Worker 落库。
+
+## 本地开发
+
+需要 Node.js 20.19+（或 22.12+）。
 
 ```bash
-npm install   # or: pnpm install
+npm install
 npm run dev
 ```
 
-Vite + the Cloudflare plugin serve the React app and the Worker (including the `GameRoom` DO) locally.
+Vite + Cloudflare 插件会同时跑 React 与 Worker（含 `GameRoom`）。
 
 ```bash
-npm run typecheck   # also: npm run check
+npm run typecheck   # 或 npm run check
 npm run build
-npm run preview     # Workers runtime, from the Vite build output
+npm run preview     # 用 Workers 运行时预览构建产物
 ```
 
-## Deploy
+## 部署
 
 ```bash
 npm run deploy
 ```
 
-This runs `vite build` then `wrangler deploy`. You need a Cloudflare account and `wrangler` login. The generated `dist` wrangler config points `assets` at the Vite client output and keeps `not_found_handling: "single-page-application"` so React Router paths work on refresh.
+即 `vite build` 后 `wrangler deploy`。需 Cloudflare 账号并已 `wrangler login`。构建产物会把 assets 指到客户端输出，并保持 `not_found_handling: "single-page-application"`，刷新子路径可用。
 
-Production:
+WebSocket：`GET /ws/:roomId`（`Upgrade: websocket`）→ `GameRoom`。
 
-- Custom domain: https://micromist.572003.xyz (Workers Custom Domain; DNS managed by Cloudflare)
-- Fallback: https://micromist.wistermanswatskito921.workers.dev
-
-SPA pages: `/`, `/play/mist-catch`, `/rooms`.
-
-WebSocket: `GET /ws/:roomId` with `Upgrade: websocket` → `GameRoom` (爆炸棋联机协议).
-
-## Project layout
+## 目录结构
 
 ```
-src/                 React SPA (home, per-game routes, rooms placeholder)
-src/games/           Phaser games (Mist Catch / 拾雾 is the demo)
-worker/index.ts      Upgrade /ws/:roomId to a room DO
-worker/game-room.ts  Explosive Chess room DO (Hibernation WebSocket)
-shared/explosive-chess/ Shared game engine (SPA + Worker)
-wrangler.jsonc       Static Assets + GAME_ROOM binding + sqlite migration
+src/                 React SPA（壳、首页、/play、i18n、主题）
+src/games/           各游戏客户端与 catalog
+worker/              Worker 入口与 GameRoom / 游戏 adapter
+shared/              可在 SPA 与 Worker 间共用的纯逻辑（按需）
+wrangler.jsonc       Static Assets + GAME_ROOM + sqlite migration
 ```
 
-Add a game by registering it in `src/games/catalog.ts`, adding a React route target, and mounting a Phaser scene. Keep save data in `localStorage` or IndexedDB unless you are implementing a room.
+新增游戏（单机）：在 `catalog` 登记 → 实现玩法组件 → 在 `/play` 按 slug 挂载。进度优先写本机存储。
 
-## Scripts
+新增联机：写 `worker/games/<slug>/adapter.ts` 并注册到共用 `GameRoom`，客户端接共享联机壳；勿为每个游戏新建 DO 绑定。
 
-| Script | What it does |
+## 脚本
+
+| 脚本 | 作用 |
 | --- | --- |
-| `dev` | Vite + Wrangler local runtime |
-| `build` | `tsc -b` then Vite production build |
-| `deploy` | Build and `wrangler deploy` |
-| `check` / `typecheck` | TypeScript project build, no emit |
-| `preview` | Preview the production build in the Workers runtime |
-| `cf-typegen` | Regenerate `worker-configuration.d.ts` from bindings |
+| `dev` | Vite + 本地 Workers 运行时 |
+| `build` | `tsc -b` + Vite 生产构建 |
+| `deploy` | 构建并 `wrangler deploy` |
+| `check` / `typecheck` | TypeScript 检查 |
+| `preview` | 用 Workers 运行时预览生产构建 |
+| `cf-typegen` | 按绑定重新生成 `worker-configuration.d.ts` |
 
-## License
+## 许可证
 
 [MIT](./LICENSE) © 2026 GoldenEagle
