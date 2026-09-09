@@ -1,9 +1,10 @@
 /**
- * Shared Durable Object room shell: WS accept, join/reclaim, peer_left,
- * recycle when no seated player remains, broadcast helpers.
+ * Single Durable Object shell for all micromist multiplayer games.
  *
- * Subclass for each game (or one DO that routes by game slug) and override
- * the abstract hooks for config / start / game messages / reclaim sync.
+ * - DO name: `gameSlug:code` (via getByName)
+ * - Shared: WS, join/reclaim, peer_left, recycle when no seated player online
+ * - Per-game: GameRoomAdapter from registry
+ * - Persistence: SQLite storage snapshot so hibernation does not wipe mid-game
  */
 import { DurableObject } from "cloudflare:workers";
 import {
@@ -11,36 +12,41 @@ import {
   parseRoomId,
   type Phase,
   type Role,
-  type RoomPlayer,
   type Seat,
   type WireMsg,
 } from "../../shared/multiplayer";
+import type { GameRoomAdapter, RoomHost } from "./adapter";
+import { getGameAdapterFactory } from "./registry";
+import type { JoinResult, PersistedRoom, PlayerRecord, SessionAttachment } from "./types";
 
-export type SessionAttachment = {
-  playerId: string;
-  seat: Seat;
-  role: Role;
-  name: string;
-};
+export type { PlayerRecord, SessionAttachment, JoinResult, PersistedRoom };
 
-export type PlayerRecord = RoomPlayer;
+const STORAGE_KEY = "room_v1";
 
-export type JoinResult = {
-  seat: Seat;
-  role: Role;
-};
-
-export abstract class BaseGameRoom<E = Env> extends DurableObject<E> {
+export class GameRoom extends DurableObject<Env> {
   sessions: Map<WebSocket, SessionAttachment> = new Map();
   players: Map<string, PlayerRecord> = new Map();
   phase: Phase = "lobby";
   hostId: string | null = null;
-  /** From WS path `/ws/game:code` (set on fetch). */
   gameSlug = "unknown";
   roomCode = "";
+  private adapter: GameRoomAdapter | null = null;
+  private ready: Promise<void>;
 
-  constructor(ctx: DurableObjectState, env: E) {
+  constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
+
+    const name = this.ctx.id.name;
+    if (name) {
+      const parsed = parseRoomId(name);
+      this.gameSlug = parsed.game;
+      this.roomCode = parsed.code;
+    }
+
+    this.ready = this.ctx.blockConcurrencyWhile(async () => {
+      await this.restore();
+      this.ensureAdapter();
+    });
 
     for (const ws of this.ctx.getWebSockets()) {
       const attachment = ws.deserializeAttachment() as SessionAttachment | undefined;
@@ -69,51 +75,105 @@ export abstract class BaseGameRoom<E = Env> extends DurableObject<E> {
     this.ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair("ping", "pong"));
   }
 
-  /** Public config blob embedded in `room` messages. */
-  protected abstract getPublicConfig(): Record<string, unknown>;
-
-  /** Reset game-specific fields when the room is recycled. */
-  protected abstract onRecycleGame(): void;
-
-  /**
-   * After a seated player reclaims mid-game/over, push game_start / state / etc.
-   */
-  protected abstract onReclaimSync(ws: WebSocket, player: PlayerRecord): void;
-
-  /** Two seated + connected in lobby → start (or no-op). */
-  protected abstract tryStartGame(): void;
-
-  /**
-   * Handle game-specific message types. Return true if handled.
-   * Base already handles: join, and optional set_config via onSetConfig.
-   */
-  protected abstract onGameMessage(
-    ws: WebSocket,
-    type: string,
-    payload: Record<string, unknown>,
-  ): boolean;
-
-  /** Optional lobby config mutation (host only). Return true if applied. */
-  protected onSetConfig(
-    _ws: WebSocket,
-    _session: SessionAttachment,
-    _payload: Record<string, unknown>,
-  ): boolean {
-    return false;
+  private ensureAdapter(): void {
+    if (this.adapter) return;
+    if (this.gameSlug === "unknown") return;
+    const factory = getGameAdapterFactory(this.gameSlug);
+    if (!factory) return;
+    this.adapter = factory(this.asHost());
   }
 
-  /** Host's preferred seat when first player joins (default red). */
-  protected hostSeat(): Seat {
-    return "red";
+  private asHost(): RoomHost {
+    const room = this;
+    return {
+      get phase() {
+        return room.phase;
+      },
+      setPhase(phase) {
+        room.phase = phase;
+      },
+      get players() {
+        return room.players;
+      },
+      get sessions() {
+        return room.sessions;
+      },
+      get hostId() {
+        return room.hostId;
+      },
+      set hostId(v) {
+        room.hostId = v;
+      },
+      get gameSlug() {
+        return room.gameSlug;
+      },
+      get roomCode() {
+        return room.roomCode;
+      },
+      send: (ws, type, payload) => room.send(ws, type, payload),
+      broadcast: (type, payload) => room.broadcast(type, payload),
+      broadcastRoom: () => room.broadcastRoom(),
+      seatedPlayers: (opts) => room.seatedPlayers(opts),
+      requireJoined: (ws) => room.requireJoined(ws),
+      refreshAttachmentSeat: (id, seat) => room.refreshAttachmentSeat(id, seat),
+      persist: () => room.persist(),
+    };
+  }
+
+  private async restore(): Promise<void> {
+    const snap = await this.ctx.storage.get<PersistedRoom>(STORAGE_KEY);
+    if (!snap || snap.v !== 1) return;
+    if (snap.gameSlug) this.gameSlug = snap.gameSlug;
+    if (snap.roomCode) this.roomCode = snap.roomCode;
+    this.phase = snap.phase ?? "lobby";
+    this.hostId = snap.hostId ?? null;
+    this.players.clear();
+    for (const p of snap.players ?? []) {
+      // Rehydrate seats; connected flags refreshed from live sockets above/below.
+      this.players.set(p.playerId, { ...p, connected: false, ready: false });
+    }
+    this.ensureAdapter();
+    this.adapter?.hydrate(snap.adapter);
+  }
+
+  async persist(): Promise<void> {
+    if (this.gameSlug === "unknown") return;
+    const snap: PersistedRoom = {
+      v: 1,
+      gameSlug: this.gameSlug,
+      roomCode: this.roomCode,
+      phase: this.phase,
+      hostId: this.hostId,
+      players: [...this.players.values()].map((p) => ({
+        ...p,
+        // Persist seat reservation; connected is live-only.
+        connected: false,
+        ready: false,
+      })),
+      adapter: this.adapter?.serialize() ?? null,
+    };
+    await this.ctx.storage.put(STORAGE_KEY, snap);
+  }
+
+  private async clearStorage(): Promise<void> {
+    await this.ctx.storage.delete(STORAGE_KEY);
   }
 
   async fetch(request: Request): Promise<Response> {
+    await this.ready;
     const url = new URL(request.url);
     const match = url.pathname.match(/\/ws\/([^/]+)$/);
     if (match?.[1]) {
       const parsed = parseRoomId(match[1]);
       this.gameSlug = parsed.game;
       this.roomCode = parsed.code;
+    }
+    this.ensureAdapter();
+    if (!this.adapter) {
+      return Response.json(
+        { error: `Unknown game: ${this.gameSlug}` },
+        { status: 404 },
+      );
     }
 
     const pair = new WebSocketPair();
@@ -131,6 +191,8 @@ export abstract class BaseGameRoom<E = Env> extends DurableObject<E> {
   }
 
   async webSocketMessage(ws: WebSocket, message: string | ArrayBuffer) {
+    await this.ready;
+    this.ensureAdapter();
     if (typeof message !== "string") {
       this.send(ws, "error", { message: "Expected JSON text frames" });
       return;
@@ -154,6 +216,10 @@ export abstract class BaseGameRoom<E = Env> extends DurableObject<E> {
       this.handleJoin(ws, payload);
       return;
     }
+    if (!this.adapter) {
+      this.send(ws, "error", { message: `Unknown game: ${this.gameSlug}` });
+      return;
+    }
     if (msg.type === "set_config") {
       const session = this.requireJoined(ws);
       if (!session) return;
@@ -165,17 +231,18 @@ export abstract class BaseGameRoom<E = Env> extends DurableObject<E> {
         this.send(ws, "error", { message: "Only host can set config" });
         return;
       }
-      if (!this.onSetConfig(ws, session, payload)) {
+      if (!this.adapter.onSetConfig(ws, session, payload)) {
         this.send(ws, "error", { message: "Config not supported" });
       }
       return;
     }
 
-    if (this.onGameMessage(ws, msg.type, payload)) return;
+    if (this.adapter.onMessage(ws, msg.type, payload)) return;
     this.send(ws, "error", { message: `Unknown type: ${msg.type}` });
   }
 
   async webSocketClose(ws: WebSocket, code: number, reason: string) {
+    await this.ready;
     this.handleDisconnect(ws);
     try {
       ws.close(code, reason);
@@ -185,10 +252,11 @@ export abstract class BaseGameRoom<E = Env> extends DurableObject<E> {
   }
 
   async webSocketError(ws: WebSocket) {
+    await this.ready;
     this.handleDisconnect(ws);
   }
 
-  protected handleDisconnect(ws: WebSocket) {
+  private handleDisconnect(ws: WebSocket) {
     const session = this.sessions.get(ws);
     this.sessions.delete(ws);
 
@@ -207,24 +275,25 @@ export abstract class BaseGameRoom<E = Env> extends DurableObject<E> {
           });
         }
         if (!this.anySeatedPlayerConnected()) {
-          this.recycleRoom();
+          void this.recycleRoom();
           return;
         }
         this.broadcastRoom();
+        void this.persist();
       }
     } else if (!this.anySeatedPlayerConnected() && this.players.size > 0) {
-      this.recycleRoom();
+      void this.recycleRoom();
     }
   }
 
-  protected anySeatedPlayerConnected(): boolean {
+  private anySeatedPlayerConnected(): boolean {
     for (const p of this.players.values()) {
       if (isSeatedSeat(p.seat) && p.connected) return true;
     }
     return false;
   }
 
-  protected recycleRoom() {
+  private async recycleRoom() {
     const leftover = [...this.sessions.keys()];
     for (const sock of leftover) {
       this.send(sock, "room_closed", { reason: "双方玩家均已离开，房间已回收" });
@@ -238,10 +307,18 @@ export abstract class BaseGameRoom<E = Env> extends DurableObject<E> {
     this.players.clear();
     this.phase = "lobby";
     this.hostId = null;
-    this.onRecycleGame();
+    this.adapter?.onRecycle();
+    // Keep adapter instance for same gameSlug; just cleared its state.
+    await this.clearStorage();
   }
 
-  protected handleJoin(ws: WebSocket, payload: Record<string, unknown>) {
+  private handleJoin(ws: WebSocket, payload: Record<string, unknown>) {
+    this.ensureAdapter();
+    if (!this.adapter) {
+      this.send(ws, "error", { message: `Unknown game: ${this.gameSlug}` });
+      return;
+    }
+
     const playerId = typeof payload.playerId === "string" ? payload.playerId.trim() : "";
     if (!playerId) {
       this.send(ws, "error", { message: "playerId required" });
@@ -252,7 +329,6 @@ export abstract class BaseGameRoom<E = Env> extends DurableObject<E> {
         ? payload.name.trim().slice(0, 24)
         : "Player";
 
-    // Optional game slug check from client.
     if (typeof payload.game === "string" && payload.game.trim()) {
       const g = payload.game.trim().toLowerCase();
       if (this.gameSlug !== "unknown" && g !== this.gameSlug) {
@@ -272,10 +348,11 @@ export abstract class BaseGameRoom<E = Env> extends DurableObject<E> {
       this.send(ws, "welcome", { playerId, seat: existing.seat, role });
       this.sendRoom(ws);
       if (this.phase === "playing" || this.phase === "over") {
-        this.onReclaimSync(ws, existing);
+        this.adapter.onReclaimSync(ws, existing);
       }
       this.broadcastRoom();
-      if (this.phase === "lobby") this.tryStartGame();
+      if (this.phase === "lobby") this.adapter.tryStartGame();
+      void this.persist();
       return;
     }
 
@@ -299,14 +376,14 @@ export abstract class BaseGameRoom<E = Env> extends DurableObject<E> {
     });
     this.send(ws, "welcome", { playerId, seat: assigned.seat, role: assigned.role });
     this.broadcastRoom();
-    if (this.phase === "lobby") this.tryStartGame();
+    if (this.phase === "lobby") this.adapter.tryStartGame();
+    void this.persist();
   }
 
-  /** Default 2p seating: host gets hostSeat(), guest the opposite, else spectator. */
-  protected assignNewSeat(playerId: string): JoinResult {
+  private assignNewSeat(playerId: string): JoinResult {
+    const hostPreferred = this.adapter?.hostSeat() ?? "red";
     const reservedSeats = [...this.players.values()].filter((p) => isSeatedSeat(p.seat));
     const seatedConnected = reservedSeats.filter((p) => p.connected).length;
-    const hostPreferred = this.hostSeat();
     const guestSeat: Seat = hostPreferred === "red" ? "blue" : "red";
 
     if (reservedSeats.length === 0) {
@@ -323,12 +400,12 @@ export abstract class BaseGameRoom<E = Env> extends DurableObject<E> {
     return { seat: "spectator", role: "spectator" };
   }
 
-  protected attach(ws: WebSocket, attachment: SessionAttachment) {
+  private attach(ws: WebSocket, attachment: SessionAttachment) {
     ws.serializeAttachment(attachment);
     this.sessions.set(ws, attachment);
   }
 
-  protected refreshAttachmentSeat(playerId: string, seat: Seat) {
+  refreshAttachmentSeat(playerId: string, seat: Seat) {
     for (const [ws, session] of this.sessions) {
       if (session.playerId !== playerId) continue;
       const next = { ...session, seat };
@@ -342,7 +419,7 @@ export abstract class BaseGameRoom<E = Env> extends DurableObject<E> {
     }
   }
 
-  protected requireJoined(ws: WebSocket): SessionAttachment | null {
+  requireJoined(ws: WebSocket): SessionAttachment | null {
     const session = this.sessions.get(ws);
     if (!session?.playerId) {
       this.send(ws, "error", { message: "Join first" });
@@ -351,13 +428,13 @@ export abstract class BaseGameRoom<E = Env> extends DurableObject<E> {
     return session;
   }
 
-  protected seatedPlayers(opts?: { connectedOnly?: boolean }): PlayerRecord[] {
+  seatedPlayers(opts?: { connectedOnly?: boolean }): PlayerRecord[] {
     return [...this.players.values()].filter(
       (p) => isSeatedSeat(p.seat) && (!opts?.connectedOnly || p.connected),
     );
   }
 
-  protected roomPayload() {
+  private roomPayload() {
     const players = [...this.players.values()]
       .filter((p) => isSeatedSeat(p.seat) || p.connected)
       .map((p) => ({
@@ -371,21 +448,21 @@ export abstract class BaseGameRoom<E = Env> extends DurableObject<E> {
       }));
     return {
       players,
-      config: this.getPublicConfig(),
+      config: this.adapter?.getPublicConfig() ?? {},
       phase: this.phase,
       game: this.gameSlug,
     };
   }
 
-  protected sendRoom(ws: WebSocket) {
+  sendRoom(ws: WebSocket) {
     this.send(ws, "room", this.roomPayload());
   }
 
-  protected broadcastRoom() {
+  broadcastRoom() {
     this.broadcast("room", this.roomPayload());
   }
 
-  protected send(ws: WebSocket, type: string, payload: unknown) {
+  send(ws: WebSocket, type: string, payload: unknown) {
     try {
       ws.send(JSON.stringify({ type, payload }));
     } catch {
@@ -393,7 +470,7 @@ export abstract class BaseGameRoom<E = Env> extends DurableObject<E> {
     }
   }
 
-  protected broadcast(type: string, payload: unknown) {
+  broadcast(type: string, payload: unknown) {
     const raw = JSON.stringify({ type, payload });
     for (const sock of this.sessions.keys()) {
       try {
@@ -404,7 +481,7 @@ export abstract class BaseGameRoom<E = Env> extends DurableObject<E> {
     }
   }
 
-  protected broadcastExcept(except: WebSocket, type: string, payload: unknown) {
+  private broadcastExcept(except: WebSocket, type: string, payload: unknown) {
     const raw = JSON.stringify({ type, payload });
     for (const sock of this.sessions.keys()) {
       if (sock === except) continue;
