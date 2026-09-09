@@ -114,12 +114,12 @@ export function ExplosiveChessGame() {
   const [gameOver, setGameOver] = useState(false);
   const [winReason, setWinReason] = useState("");
   const [winner, setWinner] = useState<MoveResult["winner"]>(null);
-  const [busy, setBusy] = useState(false);
+  const [, setBusy] = useState(false);
   const [tip, setTip] = useState("点击格子落子");
   const [localSession, setLocalSession] = useState(0);
 
   const [roomCode, setRoomCode] = useState(roomFromQuery);
-  const [onlinePhase, setOnlinePhase] = useState<Phase | "idle" | "connecting">("idle");
+  const [onlinePhase, setOnlinePhase] = useState<Phase | "idle" | "connecting" | "reconnecting">("idle");
   const [onlineSeat, setOnlineSeat] = useState<Seat>("spectator");
   const [onlineRole, setOnlineRole] = useState<Role>("spectator");
   const [onlinePlayers, setOnlinePlayers] = useState<RoomPlayer[]>([]);
@@ -140,6 +140,13 @@ export function ExplosiveChessGame() {
   const clientRef = useRef<ExplosiveOnlineClient | null>(null);
   const myColorRef = useRef<PlayerColor | null>(null);
   const screenRef = useRef<Screen>(screen);
+  const busyRef = useRef(false);
+  const moveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const reconnectAttemptsRef = useRef(0);
+  const intentionalLeaveRef = useRef(false);
+  const onlinePhaseRef = useRef<Phase | "idle" | "connecting" | "reconnecting">("idle");
+  const roomCodeRef = useRef(roomCode);
   const pendingOnlineStartRef = useRef<{
     config: RoomConfig;
     yourColor: HostColor;
@@ -152,6 +159,8 @@ export function ExplosiveChessGame() {
   settingsRef.current = settings;
   myColorRef.current = myColor;
   screenRef.current = screen;
+  onlinePhaseRef.current = onlinePhase;
+  roomCodeRef.current = roomCode;
 
   const syncHud = useCallback((game: GameInstance) => {
     setTurn(game.currentTurn);
@@ -334,6 +343,28 @@ export function ExplosiveChessGame() {
     };
   }, [screen, settings, localSession, syncHud, updateTip, destroyBoard]);
 
+  const clearMoveLock = useCallback(() => {
+    if (moveTimeoutRef.current) {
+      clearTimeout(moveTimeoutRef.current);
+      moveTimeoutRef.current = null;
+    }
+    busyRef.current = false;
+    setBusy(false);
+  }, []);
+
+  const armMoveLock = useCallback(() => {
+    busyRef.current = true;
+    setBusy(true);
+    if (moveTimeoutRef.current) clearTimeout(moveTimeoutRef.current);
+    moveTimeoutRef.current = setTimeout(() => {
+      busyRef.current = false;
+      setBusy(false);
+      setOnlineStatus("落子超时，可重试");
+      setTip("网络较慢或连接异常，请再点一次");
+      moveTimeoutRef.current = null;
+    }, 6000);
+  }, []);
+
   const applyServerState = useCallback(
     async (
       fullState: FullState,
@@ -342,22 +373,26 @@ export function ExplosiveChessGame() {
     ) => {
       const game = gameRef.current;
       const renderer = rendererRef.current;
-      if (!game || !renderer) return;
+      if (!game || !renderer) {
+        clearMoveLock();
+        return;
+      }
 
       game.loadFullState(fullState);
       if (lastMove) renderer.setLastMove(lastMove.row, lastMove.col);
       renderer.render();
 
       if (animationFrames && animationFrames.length > 0) {
+        busyRef.current = true;
         setBusy(true);
         await playFrames(animationFrames, renderer);
       }
 
       syncHud(game);
       updateTip(game, "online");
-      setBusy(false);
+      clearMoveLock();
     },
-    [playFrames, syncHud, updateTip],
+    [playFrames, syncHud, updateTip, clearMoveLock],
   );
 
   const mountOnlineBoard = useCallback(
@@ -387,6 +422,7 @@ export function ExplosiveChessGame() {
       }
       syncHud(game);
       updateTip(game, "online");
+      busyRef.current = false;
       setBusy(false);
       setGameOver(false);
       setWinner(null);
@@ -415,6 +451,13 @@ export function ExplosiveChessGame() {
   }, [screen, settings.opponent, mountOnlineBoard, applyServerState]);
 
   const disconnectOnline = useCallback(() => {
+    intentionalLeaveRef.current = true;
+    reconnectAttemptsRef.current = 0;
+    if (reconnectTimerRef.current) {
+      clearTimeout(reconnectTimerRef.current);
+      reconnectTimerRef.current = null;
+    }
+    clearMoveLock();
     clientRef.current?.close();
     clientRef.current = null;
     setOnlinePhase("idle");
@@ -424,121 +467,216 @@ export function ExplosiveChessGame() {
     setMyColor(null);
     myColorRef.current = null;
     setShareLink("");
-  }, []);
+  }, [clearMoveLock]);
+
+  const scheduleReconnect = useCallback(() => {
+    const code = roomCodeRef.current.trim().toLowerCase();
+    if (!code || intentionalLeaveRef.current) return;
+    if (reconnectAttemptsRef.current >= 8) {
+      setOnlinePhase("idle");
+      setOnlineStatus("重连失败，请点「重新连接」或刷新页面");
+      setTip("连接已断开");
+      clearMoveLock();
+      return;
+    }
+    const attempt = reconnectAttemptsRef.current + 1;
+    reconnectAttemptsRef.current = attempt;
+    setOnlinePhase("reconnecting");
+    setOnlineStatus(`连接中断，正在重连（${attempt}/8）…`);
+    setTip("网络中断，正在重连…");
+    clearMoveLock();
+    if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
+    const delay = Math.min(1000 * attempt, 5000);
+    reconnectTimerRef.current = setTimeout(() => {
+      reconnectTimerRef.current = null;
+      const client = clientRef.current;
+      if (!client || intentionalLeaveRef.current) return;
+      if (!client.reconnect()) {
+        // recreate client if needed
+        connectToRoomRef.current(code, { keepPlaying: true });
+        return;
+      }
+      setOnlineStatus(`重连中（${attempt}/8）…`);
+    }, delay);
+  }, [clearMoveLock]);
+
+  const connectToRoomRef = useRef<(code: string, opts?: { keepPlaying?: boolean }) => void>(() => undefined);
 
   const connectToRoom = useCallback(
-    (code: string) => {
+    (code: string, opts?: { keepPlaying?: boolean }) => {
       const trimmed = code.trim().toLowerCase();
       if (!trimmed) {
         setOnlineStatus("缺少房间码，请通过分享链接加入");
         return;
       }
 
-      clientRef.current?.close();
-      destroyBoard();
+      intentionalLeaveRef.current = false;
+      if (reconnectTimerRef.current) {
+        clearTimeout(reconnectTimerRef.current);
+        reconnectTimerRef.current = null;
+      }
+      if (!opts?.keepPlaying) {
+        reconnectAttemptsRef.current = 0;
+        clientRef.current?.close();
+        destroyBoard();
+        setScreen("setup");
+        setGameOver(false);
+        setWinner(null);
+        setWinReason("");
+        setOnlinePlayers([]);
+      }
+
       setRoomCode(trimmed);
       setShareLink(shareUrl(trimmed));
-      setOnlinePhase("connecting");
-      setOnlineStatus("连接中…");
-      setOnlinePlayers([]);
-      setGameOver(false);
-      setWinner(null);
-      setWinReason("");
-      setScreen("setup");
+      setOnlinePhase(opts?.keepPlaying ? "reconnecting" : "connecting");
+      setOnlineStatus(opts?.keepPlaying ? "正在重连…" : "连接中…");
       setSearchParams({ room: trimmed }, { replace: true });
       saveSettings({ ...settingsRef.current, opponent: "online" });
       setSettings((s) => ({ ...s, opponent: "online" }));
+      clearMoveLock();
 
-      const client = new ExplosiveOnlineClient();
+      const client = clientRef.current ?? new ExplosiveOnlineClient();
       clientRef.current = client;
 
-      client.connect(trimmed, {
-        onOpen: () => {
-          client.join({ playerId: getOrCreatePlayerId(), name: "Player" });
-          setOnlineStatus("已连接，加入房间…");
-        },
-        onWelcome: (payload) => {
-          setOnlineSeat(payload.seat);
-          setOnlineRole(payload.role);
-          const color = seatToPlayerColor(payload.seat);
-          if (color != null) {
-            setMyColor(color);
-            myColorRef.current = color;
-            playerColorRef.current = color;
-          }
-          setOnlineStatus(`座位：${seatLabel(payload.seat)}（${payload.role}）`);
-          if (payload.role === "host") {
-            const s = settingsRef.current;
-            client.setConfig({
-              boardSize: s.boardSize,
-              winMode: s.winMode,
-              winParam: s.winParam,
-              hostColor: "red",
-            });
-          }
-        },
-        onRoom: (payload) => {
-          setOnlinePlayers(payload.players);
-          setOnlineConfig(payload.config);
-          setOnlinePhase(payload.phase);
-          // Stay on setup while lobby; only game_start flips to playing.
-          if (payload.phase === "lobby") {
-            setScreen("setup");
-            setTip("等待对手加入，两人到齐后自动开局。红方永远先手。");
-          }
-        },
-        onGameStart: (payload) => {
-          setOnlinePhase("playing");
-          setOnlineStatus("对局开始");
-          pendingOnlineStartRef.current = {
-            config: payload.config,
-            yourColor: payload.yourColor,
-          };
-          setScreen("playing");
-        },
-        onState: (payload) => {
-          if (screenRef.current !== "playing") {
-            setScreen("playing");
-          }
-          if (!gameRef.current) {
-            pendingOnlineStateRef.current = {
-              fullState: payload.fullState,
-              lastMove: payload.lastMove,
-              animationFrames: payload.animationFrames,
+      const bindHandlers = (): void => {
+        client.connect(trimmed, {
+          onOpen: () => {
+            client.join({ playerId: getOrCreatePlayerId(), name: "Player" });
+            setOnlineStatus(opts?.keepPlaying || screenRef.current === "playing" ? "已重连，恢复座位…" : "已连接，加入房间…");
+          },
+          onWelcome: (payload) => {
+            reconnectAttemptsRef.current = 0;
+            setOnlineSeat(payload.seat);
+            setOnlineRole(payload.role);
+            const color = seatToPlayerColor(payload.seat);
+            if (color != null) {
+              setMyColor(color);
+              myColorRef.current = color;
+              playerColorRef.current = color;
+            }
+            setOnlineStatus(`座位：${seatLabel(payload.seat)}（${payload.role}）`);
+            if (payload.role === "host" && onlinePhaseRef.current !== "playing" && screenRef.current !== "playing") {
+              const s = settingsRef.current;
+              client.setConfig({
+                boardSize: s.boardSize,
+                winMode: s.winMode,
+                winParam: s.winParam,
+                hostColor: "red",
+              });
+            }
+          },
+          onRoom: (payload) => {
+            setOnlinePlayers(payload.players);
+            setOnlineConfig(payload.config);
+            if (payload.phase === "lobby") {
+              setOnlinePhase("lobby");
+              if (screenRef.current !== "playing") {
+                setScreen("setup");
+                setTip("等待对手加入，两人到齐后自动开局。红方永远先手。");
+              }
+            } else if (payload.phase === "playing") {
+              setOnlinePhase("playing");
+              const peerOffline = payload.players.some(
+                (p) => (p.seat === "red" || p.seat === "blue") && !p.connected && p.playerId !== getOrCreatePlayerId(),
+              );
+              if (peerOffline) {
+                setOnlineStatus("对手离线，可等待其重连");
+                setTip("对手已断开，等待重连…");
+              } else {
+                setOnlineStatus("对局进行中");
+              }
+            } else if (payload.phase === "over") {
+              setOnlinePhase("over");
+            }
+          },
+          onGameStart: (payload) => {
+            reconnectAttemptsRef.current = 0;
+            setOnlinePhase("playing");
+            setOnlineStatus("对局开始");
+            pendingOnlineStartRef.current = {
+              config: payload.config,
+              yourColor: payload.yourColor,
             };
-          } else {
-            void applyServerState(payload.fullState, payload.lastMove, payload.animationFrames);
-          }
-          if (payload.fullState.gameOver) setOnlinePhase("over");
-        },
-        onGameOver: (payload) => {
-          setOnlinePhase("over");
-          setGameOver(true);
-          setWinner(payload.winner as MoveResult["winner"]);
-          setWinReason(payload.winReason);
-          setTip(
-            `${winnerLabel(payload.winner as MoveResult["winner"])}${
-              payload.winReason ? ` · ${payload.winReason}` : ""
-            }`,
-          );
-          setBusy(false);
-        },
-        onError: (payload) => setOnlineStatus(`错误：${payload.message}`),
-        onPeerLeft: () => {
-          setOnlineStatus("对手已断开（可等待重连）");
-          setTip("对手已离开房间");
-        },
-        onClose: () => {
-          setOnlinePhase("idle");
-          setOnlineStatus("连接关闭");
-          if (screenRef.current === "playing" && settingsRef.current.opponent === "online") {
-            setScreen("setup");
-          }
-        },
-      });
+            setScreen("playing");
+            clearMoveLock();
+          },
+          onState: (payload) => {
+            reconnectAttemptsRef.current = 0;
+            if (screenRef.current !== "playing") {
+              setScreen("playing");
+            }
+            if (onlinePhaseRef.current === "reconnecting" || onlinePhaseRef.current === "connecting") {
+              setOnlinePhase(payload.fullState.gameOver ? "over" : "playing");
+            }
+            if (!gameRef.current) {
+              pendingOnlineStateRef.current = {
+                fullState: payload.fullState,
+                lastMove: payload.lastMove,
+                animationFrames: payload.animationFrames,
+              };
+              clearMoveLock();
+            } else {
+              void applyServerState(payload.fullState, payload.lastMove, payload.animationFrames);
+            }
+            if (payload.fullState.gameOver) setOnlinePhase("over");
+          },
+          onGameOver: (payload) => {
+            setOnlinePhase("over");
+            setGameOver(true);
+            setWinner(payload.winner as MoveResult["winner"]);
+            setWinReason(payload.winReason);
+            setTip(
+              `${winnerLabel(payload.winner as MoveResult["winner"])}${
+                payload.winReason ? ` · ${payload.winReason}` : ""
+              }`,
+            );
+            clearMoveLock();
+          },
+          onError: (payload) => {
+            setOnlineStatus(`错误：${payload.message}`);
+            clearMoveLock();
+          },
+          onPeerLeft: () => {
+            setOnlineStatus("对手已断开，等待其重连…");
+            setTip("对手已离开，可继续等待或返回设置");
+            clearMoveLock();
+          },
+          onClose: () => {
+            if (intentionalLeaveRef.current) {
+              setOnlinePhase("idle");
+              setOnlineStatus("已离开房间");
+              clearMoveLock();
+              return;
+            }
+            // Mid-game / mid-lobby drop → auto reconnect, keep board if playing.
+            if (
+              screenRef.current === "playing" ||
+              onlinePhaseRef.current === "playing" ||
+              onlinePhaseRef.current === "over" ||
+              onlinePhaseRef.current === "lobby" ||
+              onlinePhaseRef.current === "reconnecting"
+            ) {
+              scheduleReconnect();
+              return;
+            }
+            setOnlinePhase("idle");
+            setOnlineStatus("连接关闭");
+            clearMoveLock();
+          },
+        });
+      };
+
+      // Fresh connect always rebinds handlers via connect().
+      // For keepPlaying, reconnect() uses existing handlers — ensure first bind.
+      if (opts?.keepPlaying && client.currentRoomId === trimmed && client.isOpen) {
+        return;
+      }
+      bindHandlers();
     },
-    [applyServerState, destroyBoard, setSearchParams],
+    [applyServerState, clearMoveLock, destroyBoard, scheduleReconnect, setSearchParams],
   );
+
+  connectToRoomRef.current = connectToRoom;
 
   // Landing with ?room= selects online mode; user still confirms join (code not editable).
   useEffect(() => {
@@ -550,6 +688,9 @@ export function ExplosiveChessGame() {
 
   useEffect(() => {
     return () => {
+      intentionalLeaveRef.current = true;
+      if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
+      if (moveTimeoutRef.current) clearTimeout(moveTimeoutRef.current);
       clientRef.current?.close();
       clientRef.current = null;
     };
@@ -559,18 +700,29 @@ export function ExplosiveChessGame() {
     const game = gameRef.current;
     const renderer = rendererRef.current;
     const mode = settingsRef.current.opponent;
-    if (!game || !renderer || game.gameOver || busy || animatingRef.current) return;
+    if (!game || !renderer || game.gameOver || busyRef.current || animatingRef.current) return;
 
     if (mode === "ai" && game.currentTurn === aiColorRef.current) return;
 
     if (mode === "online") {
       const mine = myColorRef.current;
       if (mine == null || game.currentTurn !== mine) return;
+      if (!clientRef.current?.isOpen) {
+        setOnlineStatus("未连接，正在尝试重连…");
+        scheduleReconnect();
+        return;
+      }
       const cell = renderer.pixelToCell(clientX, clientY);
       if (!cell) return;
       if (!game.isValidMove(cell.row, cell.col, mine)) return;
-      setBusy(true);
-      clientRef.current?.move(cell.row, cell.col);
+      if (busyRef.current) return;
+      armMoveLock();
+      const sent = clientRef.current.move(cell.row, cell.col);
+      if (!sent) {
+        clearMoveLock();
+        setOnlineStatus("发送失败，请重试或等待重连");
+        scheduleReconnect();
+      }
       return;
     }
 
@@ -594,15 +746,15 @@ export function ExplosiveChessGame() {
   const backToSetup = () => {
     destroyBoard();
     if (settings.opponent === "online") {
-      // Keep socket if still in lobby waiting; leave board only.
-      if (onlinePhase === "playing" || onlinePhase === "over") {
+      // Leaving play/over ends the online session; lobby can keep waiting.
+      if (onlinePhase === "playing" || onlinePhase === "over" || onlinePhase === "reconnecting") {
         disconnectOnline();
         setSearchParams({}, { replace: true });
         setRoomCode("");
       }
     }
     setScreen("setup");
-    setBusy(false);
+    clearMoveLock();
     setGameOver(false);
     setTip("点击格子落子");
   };
@@ -804,9 +956,9 @@ export function ExplosiveChessGame() {
                 : ""}
             </p>
             <div className="row">
-              {onlinePhase === "idle" || onlinePhase === "connecting" ? (
+              {onlinePhase === "idle" || onlinePhase === "connecting" || onlinePhase === "reconnecting" ? (
                 <>
-                  {!roomFromQuery ? (
+                  {!roomFromQuery && onlinePhase !== "reconnecting" ? (
                     <button
                       type="button"
                       className="primary"
@@ -819,10 +971,13 @@ export function ExplosiveChessGame() {
                     <button
                       type="button"
                       className="primary"
-                      onClick={joinRoom}
-                      disabled={onlinePhase === "connecting"}
+                      onClick={() => {
+                        reconnectAttemptsRef.current = 0;
+                        joinRoom();
+                      }}
+                      disabled={onlinePhase === "connecting" || onlinePhase === "reconnecting"}
                     >
-                      加入此房间
+                      {onlinePhase === "reconnecting" ? "重连中…" : "加入此房间"}
                     </button>
                   )}
                 </>
@@ -914,6 +1069,7 @@ export function ExplosiveChessGame() {
         </div>
         <p className="hint" style={{ marginTop: "0.5rem" }}>
           {gameOver ? `${winnerLabel(winner)}${winReason ? ` · ${winReason}` : ""}` : tip}
+          {settings.opponent === "online" && onlineStatus ? ` · ${onlineStatus}` : ""}
         </p>
         <div className="row">
           {settings.opponent !== "online" ? (
@@ -925,6 +1081,20 @@ export function ExplosiveChessGame() {
               }}
             >
               重开
+            </button>
+          ) : null}
+          {settings.opponent === "online" &&
+          (onlinePhase === "reconnecting" || onlinePhase === "idle") ? (
+            <button
+              type="button"
+              className="primary"
+              onClick={() => {
+                reconnectAttemptsRef.current = 0;
+                const code = roomCodeRef.current || roomFromQuery;
+                if (code) connectToRoom(code, { keepPlaying: screen === "playing" });
+              }}
+            >
+              重新连接
             </button>
           ) : null}
           {settings.opponent === "online" && onlinePhase === "playing" ? (

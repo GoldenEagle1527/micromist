@@ -209,7 +209,8 @@ export class GameRoom extends DurableObject<Env> {
             playerId: session.playerId,
             seat: session.seat,
           });
-        } else if (this.phase === "lobby") {
+          this.broadcastRoom();
+        } else if (this.phase === "lobby" || this.phase === "over") {
           this.broadcastRoom();
         }
       }
