@@ -273,6 +273,9 @@ export class GameRoom extends DurableObject<Env> {
         }
       }
       this.broadcastRoom();
+      if (this.phase === "lobby") {
+        this.tryStartGame();
+      }
       return;
     }
 
@@ -322,6 +325,10 @@ export class GameRoom extends DurableObject<Env> {
     this.attach(ws, { playerId, seat, role, name });
     this.send(ws, "welcome", { playerId, seat, role });
     this.broadcastRoom();
+    // Two seated players → start immediately (no ready step).
+    if (this.phase === "lobby") {
+      this.tryStartGame();
+    }
   }
 
   private handleSetConfig(ws: WebSocket, payload: Record<string, unknown>) {
@@ -363,30 +370,12 @@ export class GameRoom extends DurableObject<Env> {
       this.refreshAttachmentSeat(guest.playerId, guest.seat);
     }
 
-    // Clear ready when config changes.
-    for (const p of this.players.values()) {
-      if (p.seat === "red" || p.seat === "blue") p.ready = false;
-    }
-
     this.broadcastRoom();
   }
 
   private handleReady(ws: WebSocket) {
-    const session = this.requireJoined(ws);
-    if (!session) return;
-    if (this.phase !== "lobby") {
-      this.send(ws, "error", { message: "Not in lobby" });
-      return;
-    }
-    if (session.seat !== "red" && session.seat !== "blue") {
-      this.send(ws, "error", { message: "Spectators cannot ready" });
-      return;
-    }
-    const player = this.players.get(session.playerId);
-    if (!player) return;
-    player.ready = true;
-    this.broadcastRoom();
-    this.tryStartGame();
+    // Ready step removed: ignore client ready messages.
+    this.send(ws, "error", { message: "Ready is disabled; game starts with 2 players" });
   }
 
   private tryStartGame() {
@@ -394,7 +383,6 @@ export class GameRoom extends DurableObject<Env> {
       (p) => (p.seat === "red" || p.seat === "blue") && p.connected,
     );
     if (seated.length < 2) return;
-    if (!seated.every((p) => p.ready)) return;
 
     const winParam =
       this.config.winMode === WIN_MODE_ANNIHILATION ? undefined : this.config.winParam;
@@ -510,13 +498,14 @@ export class GameRoom extends DurableObject<Env> {
       (p) => (p.seat === "red" || p.seat === "blue") && p.connected,
     );
     if (seated.length >= 2 && seated.every((p) => p.rematch)) {
-      this.phase = "lobby";
-      this.game = null;
       for (const p of seated) {
-        p.ready = false;
         p.rematch = false;
+        p.ready = false;
       }
+      this.game = null;
+      this.phase = "lobby";
       this.broadcastRoom();
+      this.tryStartGame();
       return;
     }
     this.broadcastRoom();

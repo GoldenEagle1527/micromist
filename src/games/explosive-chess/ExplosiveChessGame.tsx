@@ -639,8 +639,6 @@ export function ExplosiveChessGame() {
 
   const showWinParam = settings.winMode === WIN_MODE_STEPS || settings.winMode === WIN_MODE_AREA;
   const connectedLobby = onlinePhase === "lobby" || onlinePhase === "connecting";
-  const canReady =
-    onlinePhase === "lobby" && (onlineSeat === "red" || onlineSeat === "blue");
 
   // ——— SETUP LOBBY (no board) ———
   if (screen === "setup") {
@@ -649,7 +647,7 @@ export function ExplosiveChessGame() {
         <div className="panel">
           <h2>对局设置</h2>
           <p className="hint" style={{ marginTop: 0 }}>
-            先选好模式与规则，再进入棋盘。联机需双方准备后才会开始。
+            先选好模式与规则，再进入棋盘。联机需两人到齐后自动开局。
           </p>
           <div className="explosive-controls">
             <label>
@@ -800,7 +798,7 @@ export function ExplosiveChessGame() {
             <h2>联机房间</h2>
             <p className="hint" style={{ marginTop: 0 }}>
               {onlineStatus ||
-                "点「创建房间」后分享链接给对方；对方打开链接后点「加入此房间」。双方准备后进入棋盘。"}
+                "点「创建房间」后分享链接给对方；对方打开链接后点「加入此房间」。两人到齐后自动开局。"}
             </p>
             <div className="row">
               {onlinePhase === "idle" || onlinePhase === "connecting" ? (
@@ -879,7 +877,7 @@ export function ExplosiveChessGame() {
                 {onlinePlayers.map((p) => (
                   <li key={p.playerId}>
                     {p.name} · {seatLabel(p.seat)} · {p.role}
-                    {p.ready ? " · 已准备" : ""}
+                    
                     {p.rematch ? " · 再来一局" : ""}
                     {!p.connected ? " · 离线" : ""}
                   </li>
@@ -887,17 +885,6 @@ export function ExplosiveChessGame() {
               </ul>
             ) : null}
 
-            {canReady ? (
-              <div className="row">
-                <button
-                  type="button"
-                  className="primary"
-                  onClick={() => clientRef.current?.ready()}
-                >
-                  准备（双方准备后进入棋盘）
-                </button>
-              </div>
-            ) : null}
           </div>
         ) : null}
       </div>
