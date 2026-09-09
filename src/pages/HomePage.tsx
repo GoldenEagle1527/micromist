@@ -24,7 +24,7 @@ export function HomePage() {
               <br />
               {game.blurb}
             </p>
-            <span className="card-cta">开始玩 →</span>
+            <span className="card-cta">开始玩</span>
           </Link>
         ))}
         <Link to="/rooms" className="card">
@@ -34,7 +34,7 @@ export function HomePage() {
             预留的多人路径：每个房间一个 Durable Object，Hibernation WebSocket
             维持连接。现在只有回声骨架，没有用户库。
           </p>
-          <span className="card-cta">查看占位 →</span>
+          <span className="card-cta">查看占位</span>
         </Link>
       </section>
     </>

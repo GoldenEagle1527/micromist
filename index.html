@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="zh-Hans">
+<html lang="zh-Hans" data-theme="light">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
@@ -9,6 +9,17 @@
       content="微渺 / micromist — open-source browser games on Cloudflare Workers"
     />
     <title>微渺 / micromist</title>
+    <script>
+      (function () {
+        try {
+          var mode = localStorage.getItem("micromist.theme") || "system";
+          var dark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+          var resolved = mode === "light" || mode === "dark" ? mode : dark ? "dark" : "light";
+          document.documentElement.dataset.theme = resolved;
+          document.documentElement.style.colorScheme = resolved;
+        } catch (e) {}
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>
