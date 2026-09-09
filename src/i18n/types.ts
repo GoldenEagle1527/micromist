@@ -61,6 +61,96 @@ export type Dict = {
     emptyAria: string;
     tileAria: (color: number, row: number, col: number) => string;
   };
+  blade: {
+    setupTitle: string;
+    setupHint: (fights: number) => string;
+    ruleAp: string;
+    rulePoise: string;
+    ruleRun: (fights: number) => string;
+    ruleFusion: string;
+    start: string;
+    backSetup: string;
+    playAgain: string;
+    abandon: string;
+    confirmCancel: string;
+    progress: (cur: number, total: number) => string;
+    poise: string;
+    block: string;
+    turn: string;
+    cost: string;
+    ap: string;
+    costSpend: (n: number) => string;
+    playCard: string;
+    endTurn: string;
+    handHint: string;
+    tapAgain: string;
+    enemyAria: string;
+    playerAria: string;
+    broken: string;
+    brokenBanner: string;
+    staggerFlash: string;
+    fightWon: string;
+    fightLost: string;
+    intentKicker: string;
+    intentWindupSub: (n: number) => string;
+    intentNone: string;
+    intentAttack: (n: number) => string;
+    intentHeavy: (n: number) => string;
+    intentDefend: (n: number) => string;
+    intentWindup: (n: number) => string;
+    intentStrike: (n: number) => string;
+    intentThorns: (n: number) => string;
+    intentArmor: (n: number) => string;
+    intentHex: (n: number) => string;
+    intentHeal: (n: number) => string;
+    intentDiscard: (n: number) => string;
+    intentShatterBlock: (n: number) => string;
+    statusThorns: (n: number) => string;
+    statusArmor: (n: number) => string;
+    statusPoison: (n: number) => string;
+    rewardTitle: string;
+    rewardHint: string;
+    rewardCard: string;
+    rewardPassive: string;
+    restTitle: string;
+    restHint: string;
+    restHeal: (n: number) => string;
+    restRemove: string;
+    restRemoveHint: string;
+    restFuse: string;
+    restFuseHint: string;
+    restSkip: string;
+    restHealed: string;
+    restRemoved: string;
+    fuseRecipesTitle: string;
+    fusePicked: (n: number) => string;
+    fuseSuccess: (name: string) => string;
+    fuseFail: {
+      wrong_phase: string;
+      not_found: string;
+      same_card: string;
+      no_recipe: string;
+    };
+    attacksThisTurn: (n: number) => string;
+    runWonTitle: string;
+    runWonBody: (fights: number) => string;
+    runLostTitle: string;
+    runLostBody: string;
+    playFail: {
+      no_ap: string;
+      not_in_hand: string;
+      precondition: string;
+      wrong_phase: string;
+      unknown_card: string;
+    };
+    cards: Record<
+      string,
+      { name: string; desc: string }
+    >;
+    passives: Record<string, { name: string; desc: string }>;
+    enemies: Record<string, string>;
+    enemyBlurb: Record<string, string>;
+  };
 };
 
 export type GameLocaleFields = {

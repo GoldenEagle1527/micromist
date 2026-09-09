@@ -31,7 +31,7 @@
   ],
   "routes": [
     {
-      "pattern": "micromist.572003.xyz",
+      "pattern": "micromist.goldeneaglepersonal.dpdns.org",
       "custom_domain": true
     }
   ]

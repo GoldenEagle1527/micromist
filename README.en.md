@@ -10,7 +10,7 @@ License: **MIT** (see [`LICENSE`](./LICENSE)).
 
 Live:
 
-- Custom domain: https://micromist.572003.xyz
+- Custom domain: https://micromist.goldeneaglepersonal.dpdns.org
 - Fallback: `*.workers.dev`
 
 ## Stack
