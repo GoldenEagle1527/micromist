@@ -1,0 +1,27 @@
+# Dependencies
+node_modules
+
+# Build output
+dist
+*.tsbuildinfo
+
+# Vite
+.vite
+
+# Wrangler / Cloudflare
+.wrangler
+.dev.vars*
+
+# Logs and local env
+*.log
+*.local
+.env
+.env.*
+!.env.example
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea
+.vscode/*
+!.vscode/extensions.json
