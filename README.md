@@ -10,7 +10,7 @@
 
 线上：
 
-- 自定义域：https://micromist.572003.xyz
+- 自定义域：https://micromist.goldeneaglepersonal.dpdns.org
 - 备用：`*.workers.dev`
 
 ## 技术栈
