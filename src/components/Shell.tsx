@@ -89,20 +89,6 @@ export function Shell() {
           <div className="topbar-game topbar-game-empty" aria-hidden="true" />
         )}
         <div className="topbar-actions">
-          <nav className="nav" aria-label="main">
-            <NavLink to="/" end>
-              {t.navGames}
-            </NavLink>
-          </nav>
-          <button
-            type="button"
-            className="icon-btn"
-            onClick={() => setAboutOpen(true)}
-            aria-label={t.aboutAria}
-            title={t.aboutAria}
-          >
-            <AboutIcon />
-          </button>
           <button
             type="button"
             className="icon-btn lang-btn"
@@ -136,6 +122,15 @@ export function Shell() {
                 <path d="M3 6h18v2H3V6zm0 5h18v2H3v-2zm0 5h18v2H3v-2z" />
               )}
             </svg>
+          </button>
+          <button
+            type="button"
+            className="icon-btn"
+            onClick={() => setAboutOpen(true)}
+            aria-label={t.aboutAria}
+            title={t.aboutAria}
+          >
+            <AboutIcon />
           </button>
         </div>
       </header>
