@@ -8,8 +8,8 @@ export function HomePage() {
         <h1>微渺</h1>
         <p className="lede">
           micromist 是一个开源浏览器游戏平台：前端跑在 Cloudflare Workers Static Assets
-          上，单人进度只存在本机。以后的联机房间会用 Durable Objects + Hibernation
-          WebSocket，房间散了状态也就散了。
+          上，单人进度只存在本机。联机靠分享链接进入房间（Durable Objects +
+          WebSocket），不设公开房间列表；人走了房间也就回收。
         </p>
       </section>
       <section className="grid">
@@ -27,15 +27,6 @@ export function HomePage() {
             <span className="card-cta">开始玩</span>
           </Link>
         ))}
-        <Link to="/rooms" className="card">
-          <span className="badge soon">即将 · stub</span>
-          <h2>同雾房间 / Shared rooms</h2>
-          <p>
-            预留的多人路径：每个房间一个 Durable Object，Hibernation WebSocket
-            维持连接。现在只有回声骨架，没有用户库。
-          </p>
-          <span className="card-cta">查看占位</span>
-        </Link>
       </section>
     </>
   );

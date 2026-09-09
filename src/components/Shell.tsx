@@ -25,21 +25,7 @@ function ThemeIcon({ mode }: { mode: "light" | "dark" | "system" }) {
   );
 }
 
-function GamesIcon() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M21 6H3c-1.1 0-2 .9-2 2v8c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm-10 7H8v3H6v-3H3v-2h3V8h2v3h3v2zm4.5 2a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3zm3-3a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3z" />
-    </svg>
-  );
-}
 
-function RoomsIcon() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5s-3 1.34-3 3 1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5C15 14.17 10.33 13 8 13zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z" />
-    </svg>
-  );
-}
 
 export function Shell() {
   const { mode, cycleMode } = useTheme();
@@ -70,7 +56,6 @@ export function Shell() {
             <NavLink to="/" end>
               游戏
             </NavLink>
-            <NavLink to="/rooms">房间</NavLink>
           </nav>
           <button
             type="button"
@@ -108,25 +93,12 @@ export function Shell() {
         <NavLink to="/" end onClick={() => setMenuOpen(false)}>
           游戏 Games
         </NavLink>
-        <NavLink to="/rooms" onClick={() => setMenuOpen(false)}>
-          房间 Rooms
-        </NavLink>
       </nav>
 
       <main className="main">
         <Outlet />
       </main>
 
-      <nav className="bottom-nav" aria-label="底部导航">
-        <NavLink to="/" end>
-          <GamesIcon />
-          游戏
-        </NavLink>
-        <NavLink to="/rooms">
-          <RoomsIcon />
-          房间
-        </NavLink>
-      </nav>
 
       <footer className="footer">
         <span>开源 MIT · Workers Static Assets · 不持久化账号</span>

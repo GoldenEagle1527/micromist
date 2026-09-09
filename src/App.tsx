@@ -9,11 +9,6 @@ const PlayPage = lazy(async () => {
   return { default: module.PlayPage };
 });
 
-const RoomsPage = lazy(async () => {
-  const module = await import("./pages/RoomsPage");
-  return { default: module.RoomsPage };
-});
-
 export function App() {
   return (
     <Suspense fallback={<p className="lede">载入中…</p>}>
@@ -21,7 +16,6 @@ export function App() {
         <Route element={<Shell />}>
           <Route index element={<HomePage />} />
           <Route path="play/:slug" element={<PlayPage />} />
-          <Route path="rooms" element={<RoomsPage />} />
           <Route path="*" element={<NotFoundPage />} />
         </Route>
       </Routes>
