@@ -943,3 +943,177 @@ html[data-theme="dark"] .explosive-status .explosive-count.blue {
   font-weight: 600;
   font-size: 0.92rem;
 }
+
+/* chroma-slide / 滑动色块 */
+.chroma-slide {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.chroma-setup {
+  width: min(26rem, 100%);
+  margin: 0.5rem auto 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  align-items: stretch;
+}
+
+.chroma-setup > .panel {
+  width: 100%;
+}
+
+.chroma-setup .panel h2 {
+  text-align: center;
+}
+
+.chroma-setup .panel > .hint {
+  text-align: center;
+}
+
+.chroma-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  width: 100%;
+}
+
+.chroma-controls label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.88rem;
+  font-weight: 500;
+  color: var(--md-sys-color-on-surface-variant);
+  width: 100%;
+  min-width: 0;
+}
+
+.chroma-controls select {
+  width: 100%;
+  background: var(--md-sys-color-surface-container-highest);
+  color: var(--md-sys-color-on-surface);
+  border: 1px solid var(--md-sys-color-outline-variant);
+  border-radius: var(--md-sys-shape-corner-sm);
+  padding: 0.55rem 0.7rem;
+  min-height: 2.5rem;
+}
+
+.chroma-controls select:focus {
+  outline: 2px solid color-mix(in srgb, var(--md-sys-color-primary) 55%, transparent);
+  outline-offset: 1px;
+  border-color: var(--md-sys-color-primary);
+}
+
+.chroma-preset-blurb {
+  margin: 0.35rem 0 0;
+  text-align: center;
+  font-size: 0.85rem;
+}
+
+.chroma-setup .panel > .row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  width: 100%;
+  margin: 0.85rem 0 0;
+}
+
+.chroma-setup .panel > .row button {
+  width: 100%;
+  justify-content: center;
+}
+
+@media (min-width: 720px) {
+  .chroma-setup {
+    width: min(28rem, 100%);
+    margin-top: 1.25rem;
+  }
+}
+
+.chroma-playing .chroma-status .row {
+  flex-wrap: wrap;
+  gap: 0.5rem 0.75rem;
+  align-items: center;
+}
+
+.chroma-board {
+  --chroma-gap: 3px;
+  width: min(100%, 560px);
+  aspect-ratio: 1;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: repeat(var(--chroma-size, 9), 1fr);
+  grid-template-rows: repeat(var(--chroma-size, 9), 1fr);
+  gap: var(--chroma-gap);
+  padding: var(--chroma-gap);
+  border-radius: var(--md-sys-shape-corner-md);
+  touch-action: manipulation;
+  user-select: none;
+  box-sizing: border-box;
+}
+
+.chroma-board-won {
+  outline: 2px solid color-mix(in srgb, var(--md-sys-color-primary) 55%, transparent);
+  outline-offset: 3px;
+}
+
+.chroma-cell {
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+  min-height: 0;
+  border: none;
+  border-radius: max(2px, calc(6px - var(--chroma-size, 9) * 0.15px));
+  cursor: pointer;
+  transition:
+    transform var(--md-sys-motion-fast),
+    box-shadow var(--md-sys-motion-fast),
+    filter var(--md-sys-motion-fast),
+    opacity var(--md-sys-motion-fast);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.18) inset;
+}
+
+.chroma-cell:disabled {
+  cursor: default;
+}
+
+.chroma-empty {
+  background: color-mix(in srgb, var(--md-sys-color-on-surface) 8%, transparent);
+  box-shadow: none;
+  cursor: default;
+  pointer-events: none;
+}
+
+.chroma-cell-path {
+  filter: brightness(1.08);
+  box-shadow:
+    0 0 0 1.5px color-mix(in srgb, var(--md-sys-color-primary) 65%, transparent),
+    0 1px 0 rgba(255, 255, 255, 0.18) inset;
+}
+
+.chroma-cell-target {
+  transform: scale(0.92);
+  filter: brightness(1.12);
+}
+
+.chroma-cell-won {
+  filter: saturate(1.05) brightness(1.02);
+}
+
+.chroma-cell:not(.chroma-empty):not(:disabled):hover {
+  filter: brightness(1.1);
+}
+
+.chroma-cell:not(.chroma-empty):not(:disabled):active {
+  transform: scale(0.9);
+}
+
+html[data-theme="dark"] .chroma-empty {
+  background: color-mix(in srgb, var(--md-sys-color-on-surface) 12%, transparent);
+}
+
+html[data-theme="dark"] .chroma-cell {
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.08) inset;
+}

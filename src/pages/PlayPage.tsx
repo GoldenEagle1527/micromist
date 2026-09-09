@@ -1,5 +1,6 @@
 import { Link, useParams } from "react-router";
 import { ExplosiveChessGame } from "../games/explosive-chess/ExplosiveChessGame";
+import { ChromaSlideGame } from "../games/chroma-slide/ChromaSlideGame";
 import { MistCatchGame } from "../games/mist-catch/MistCatchGame";
 import { getGame } from "../games/catalog";
 import { useLocale } from "../i18n";
@@ -24,6 +25,7 @@ export function PlayPage() {
     <>
       {game.slug === "mist-catch" ? <MistCatchGame /> : null}
       {game.slug === "explosive-chess" ? <ExplosiveChessGame /> : null}
+      {game.slug === "chroma-slide" ? <ChromaSlideGame /> : null}
     </>
   );
 }
