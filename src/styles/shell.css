@@ -521,9 +521,8 @@ button:disabled {
     grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
     gap: 1rem;
   }
-
-
 }
+
 .modal-backdrop {
   position: fixed;
   inset: 0;
