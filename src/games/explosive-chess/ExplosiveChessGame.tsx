@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import "./explosive-chess.css";
 import { useSearchParams } from "react-router";
 import { useLocale } from "../../i18n";
 import { createAI, type AiDifficulty, type AiInstance } from "./ai";

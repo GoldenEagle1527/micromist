@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import "./chroma-slide.css";
 import { useLocale } from "../../i18n";
 import { useLocalGamePersist } from "../local-persist";
 import {
