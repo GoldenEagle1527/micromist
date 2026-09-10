@@ -28,7 +28,7 @@ export type ChromaDict = {
 
 export const chromaEn: ChromaDict = {
     setupTitle: "Chroma Slide",
-    setupHint: "Gather each color into one solid rectangle. Click a tile on the empty cell's row or column to slide the whole run — that counts as 1 step.",
+    setupHint: "Gather each color into one axis-aligned rectangle (empty may be anywhere). Click a tile on the empty cell's row or column to slide the whole run — that counts as 1 step.",
     difficulty: "Difficulty",
     small: "Small",
     medium: "Medium",
@@ -39,7 +39,7 @@ export const chromaEn: ChromaDict = {
     start: "Start",
     backSetup: "← Setup",
     stepsHud: "Steps",
-    playHint: "Click a tile on the empty cell's row or column to slide. Goal: each color forms one solid rectangle.",
+    playHint: "Click a tile on the empty cell's row or column to slide. Goal: each color forms one axis-aligned rectangle (the empty may sit in a corner of a block).",
     winMessage: (steps) => `Cleared in ${steps} steps!`,
     reshuffle: "Shuffle",
     adjustSettings: "Setup",
@@ -57,7 +57,7 @@ export const chromaEn: ChromaDict = {
 
 export const chromaZh: ChromaDict = {
     setupTitle: "滑动色块",
-    setupHint: "把每种颜色收成一块实心矩形。点击与空格同行或同列的色块，整段滑向空格，计 1 步。",
+    setupHint: "把每种颜色收成一块矩形（空位位置不限）。点击与空格同行或同列的色块，整段滑向空格，计 1 步。",
     difficulty: "难度",
     small: "小",
     medium: "中",
@@ -68,7 +68,7 @@ export const chromaZh: ChromaDict = {
     start: "开始游戏",
     backSetup: "← 返回设置",
     stepsHud: "步数",
-    playHint: "点击与空格同行或同列的色块，整段滑过去。目标：每种颜色收成一块实心矩形。",
+    playHint: "点击与空格同行或同列的色块，整段滑过去。目标：每种颜色收成一块矩形（空位可在盘角，也可卡在某色块角上）。",
     winMessage: (steps) => `完成！共用 ${steps} 步`,
     reshuffle: "洗牌",
     adjustSettings: "设置",

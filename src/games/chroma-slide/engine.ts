@@ -160,8 +160,10 @@ export function clickMove(state: PuzzleState, clickIndex: number): PuzzleState {
 }
 
 /**
- * Win: each color forms exactly one axis-aligned solid rectangle.
- * Empty can be anywhere. Empty color sets are skipped (should not happen with full multisets).
+ * Win: each color forms exactly one axis-aligned rectangle.
+ * The single empty may sit anywhere — including a corner of a color's
+ * bounding box — as long as every bbox cell is either that color or EMPTY
+ * (no foreign colors). Empty outside all bboxes is also fine.
  */
 export function isWon(state: PuzzleState): boolean {
   const { size, colorCount, board } = state;
@@ -183,12 +185,20 @@ export function isWon(state: PuzzleState): boolean {
     }
     if (count === 0) continue;
     const area = (maxR - minR + 1) * (maxC - minC + 1);
-    if (area !== count) return false;
+    let emptyInBox = 0;
     for (let r = minR; r <= maxR; r++) {
       for (let c = minC; c <= maxC; c++) {
-        if (board[rcToIndex(r, c, size)] !== color) return false;
+        const v = board[rcToIndex(r, c, size)];
+        if (v === color) continue;
+        if (v === EMPTY) {
+          emptyInBox++;
+          continue;
+        }
+        return false; // foreign color inside this color's rectangle
       }
     }
+    // Bounding box = this color's tiles + optional empties only
+    if (count + emptyInBox !== area) return false;
   }
   return true;
 }
