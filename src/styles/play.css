@@ -1,0 +1,32 @@
+/* Layer 2 — in-game render container (game-agnostic play chrome) */
+
+.game-stage {
+  width: min(100%, 800px);
+  aspect-ratio: 800 / 480;
+  background: #070a0f;
+  border-radius: var(--md-sys-shape-corner-md);
+  overflow: hidden;
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow);
+  margin: 0 auto;
+}
+
+.game-stage canvas {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+}
+
+.log {
+  margin: 0;
+  padding: 0.85rem;
+  background: color-mix(in srgb, var(--md-sys-color-surface) 70%, #000 30%);
+  border: 1px solid var(--line);
+  border-radius: var(--md-sys-shape-corner-sm);
+  min-height: 6rem;
+  max-height: 14rem;
+  overflow: auto;
+  font-size: 0.82rem;
+  color: var(--md-sys-color-on-surface);
+  white-space: pre-wrap;
+}

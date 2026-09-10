@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import "./blade-break.css";
 import { useLocale } from "../../i18n";
 import {
   loadLocalProgress,
