@@ -223,9 +223,9 @@
 }
 
 .main {
-  width: min(1080px, calc(100% - 1.5rem));
-  margin: 0 auto;
-  padding: 1.5rem 0 calc(1.5rem + var(--safe-bottom));
+  width: 100%;
+  margin: 0;
+  padding: 0;
   flex: 1;
 }
 
@@ -509,8 +509,9 @@ button:disabled {
   }
 
   .main {
-    width: min(1080px, calc(100% - 2.4rem));
-    padding: 2.2rem 0 3.5rem;
+    width: 100%;
+    margin: 0;
+    padding: 0;
   }
 
   .hero {
