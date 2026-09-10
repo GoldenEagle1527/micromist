@@ -1,6 +1,6 @@
 /** Persisted best + recent run history for Chroma Slide (separate from mid-run progress). */
 
-import type { PresetId } from "./engine";
+import { normalizePresetId, type PresetId } from "./engine";
 
 export type ChromaRunRecord = {
   steps: number;
@@ -22,21 +22,18 @@ function emptyScores(): ChromaScores {
   return { best: null, recent: [] };
 }
 
-function isPresetId(v: unknown): v is PresetId {
-  return v === "small" || v === "medium" || v === "large";
-}
-
 function parseRun(raw: unknown): ChromaRunRecord | null {
   if (raw == null || typeof raw !== "object") return null;
   const o = raw as Record<string, unknown>;
   if (typeof o.steps !== "number" || !Number.isFinite(o.steps) || o.steps < 0) {
     return null;
   }
-  if (!isPresetId(o.preset)) return null;
+  const preset = normalizePresetId(o.preset);
+  if (preset == null) return null;
   if (typeof o.at !== "number" || !Number.isFinite(o.at)) return null;
   const run: ChromaRunRecord = {
     steps: Math.floor(o.steps),
-    preset: o.preset,
+    preset,
     at: o.at,
   };
   if (
