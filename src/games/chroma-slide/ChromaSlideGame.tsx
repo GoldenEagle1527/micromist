@@ -10,6 +10,7 @@ import {
   isLegalClick,
   isWon,
   newPuzzle,
+  normalizePresetId,
   type PresetId,
   type PuzzleState,
 } from "./engine";
@@ -34,10 +35,10 @@ type WinModalState = {
   isNewBest: boolean;
 };
 
-function presetLabel(ch: { small: string; medium: string; large: string }, id: PresetId): string {
-  if (id === "small") return ch.small;
-  if (id === "medium") return ch.medium;
-  return ch.large;
+function presetLabel(ch: { easy: string; normal: string; hard: string }, id: PresetId): string {
+  if (id === "easy") return ch.easy;
+  if (id === "normal") return ch.normal;
+  return ch.hard;
 }
 
 function HistoryRow({
@@ -71,7 +72,7 @@ export function ChromaSlideGame() {
   const ch = t.chroma;
 
   const [screen, setScreen] = useState<Screen>("setup");
-  const [preset, setPreset] = useState<PresetId>("small");
+  const [preset, setPreset] = useState<PresetId>("easy");
   const [puzzle, setPuzzle] = useState<PuzzleState | null>(null);
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
   const [confirm, setConfirm] = useState<ConfirmKind>(null);
@@ -93,16 +94,31 @@ export function ChromaSlideGame() {
     shouldSave: (s) => s.screen === "playing" && s.puzzle != null,
     onHydrate: (data) => {
       if (data.screen !== "playing" || !data.puzzle) return;
-      setPreset(data.preset);
-      setPuzzle(data.puzzle);
+      const pid =
+        normalizePresetId(data.preset) ??
+        normalizePresetId(data.puzzle.preset) ??
+        "easy";
+      const expect = PRESETS[pid];
+      const pz = data.puzzle;
+      // Drop incompatible mid-run saves after preset retune.
+      if (
+        pz.size !== expect.size ||
+        pz.colorCount !== expect.colorCount ||
+        pz.board.length !== expect.size * expect.size
+      ) {
+        return;
+      }
+      const puzzle = { ...pz, preset: pid };
+      setPreset(pid);
+      setPuzzle(puzzle);
       setHoverIndex(null);
       setConfirm(null);
       startedAtRef.current = null;
-      const alreadyWon = isWon(data.puzzle);
+      const alreadyWon = isWon(puzzle);
       // Already recorded: skip recordWin, but still show the result modal.
       recordedWinRef.current = alreadyWon;
       setWinModal(
-        alreadyWon ? { steps: data.puzzle.steps, isNewBest: false } : null,
+        alreadyWon ? { steps: puzzle.steps, isNewBest: false } : null,
       );
       setScreen("playing");
     },
@@ -223,23 +239,23 @@ export function ChromaSlideGame() {
                 value={preset}
                 onChange={(e) => setPreset(e.target.value as PresetId)}
               >
-                <option value="small">
-                  {ch.small} · {PRESETS.small.size}×{PRESETS.small.size} ·{" "}
-                  {PRESETS.small.colorCount} {ch.colors}
+                <option value="easy">
+                  {ch.easy} · {PRESETS.easy.size}×{PRESETS.easy.size} ·{" "}
+                  {PRESETS.easy.squareSide}×{PRESETS.easy.squareSide}
                 </option>
-                <option value="medium">
-                  {ch.medium} · {PRESETS.medium.size}×{PRESETS.medium.size} ·{" "}
-                  {PRESETS.medium.colorCount} {ch.colors}
+                <option value="normal">
+                  {ch.normal} · {PRESETS.normal.size}×{PRESETS.normal.size} ·{" "}
+                  {PRESETS.normal.squareSide}×{PRESETS.normal.squareSide}
                 </option>
-                <option value="large">
-                  {ch.large} · {PRESETS.large.size}×{PRESETS.large.size} ·{" "}
-                  {PRESETS.large.colorCount} {ch.colors}
+                <option value="hard">
+                  {ch.hard} · {PRESETS.hard.size}×{PRESETS.hard.size} ·{" "}
+                  {PRESETS.hard.squareSide}×{PRESETS.hard.squareSide}
                 </option>
               </select>
             </label>
           </div>
           <p className="hint chroma-preset-blurb">
-            {ch.presetBlurb(p.size, p.colorCount, p.tilesPerColor)}
+            {ch.presetBlurb(p.size, p.colorCount, p.squareSide)}
           </p>
           <div className="row">
             <button type="button" className="primary" onClick={startGame}>
