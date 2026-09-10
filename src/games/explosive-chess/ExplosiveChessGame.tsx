@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import "./explosive-chess.css";
 import { useSearchParams } from "react-router";
 import { useLocale } from "../../i18n";
-import { createAI, type AiDifficulty, type AiInstance } from "./ai";
+import { createAI, type AiInstance } from "./ai";
 import { createBoardRenderer, type BoardRenderer } from "./boardRenderer";
 import {
   COLOR_BLUE,
@@ -15,7 +16,6 @@ import {
   type GameInstance,
   type MoveResult,
   type PlayerColor,
-  type WinMode,
 } from "./engine";
 import {
   ExplosiveOnlineClient,
@@ -29,159 +29,27 @@ import {
   type RoomPlayer,
   type Seat,
 } from "./online";
+import { clearLocalProgress } from "../local-persist";
 import {
-  clearLocalProgress,
-  loadLocalProgress,
-  saveLocalProgress,
-} from "../local-persist";
-
-type OpponentMode = "ai" | "local" | "online";
-type RedOwner = "player" | "ai";
-/** App-level screen: setup has no board; playing shows only the board HUD. */
-type Screen = "setup" | "playing";
-
-type Settings = {
-  opponent: OpponentMode;
-  boardSize: 9 | 11 | 13;
-  winMode: WinMode;
-  winParam: number;
-  difficulty: AiDifficulty;
-  redOwner: RedOwner;
-  /** Online: host seat color chosen before creating the room. */
-  hostColor: HostColor;
-};
-
-const SETTINGS_KEY = "micromist.explosive-chess.settings";
-const SOLO_PROGRESS_SLUG = "explosive-chess";
-const FRAME_DELAY_MS = 70;
-
-type SoloPersist = {
-  settings: Settings;
-  fullState: FullState;
-  localSession?: number;
-};
-
-function loadSoloPersist(roomFromQuery: string): SoloPersist | null {
-  if (roomFromQuery) {
-    clearLocalProgress(SOLO_PROGRESS_SLUG);
-    return null;
-  }
-  const data = loadLocalProgress<SoloPersist>(SOLO_PROGRESS_SLUG);
-  if (!data?.fullState || !data.settings) return null;
-  if (data.settings.opponent === "online" || data.fullState.gameOver) {
-    clearLocalProgress(SOLO_PROGRESS_SLUG);
-    return null;
-  }
-  return data;
-}
-
-function persistSoloProgress(
-  settings: Settings,
-  game: GameInstance,
-  localSession: number,
-): void {
-  if (settings.opponent === "online") return;
-  if (game.gameOver) {
-    clearLocalProgress(SOLO_PROGRESS_SLUG);
-    return;
-  }
-  saveLocalProgress<SoloPersist>(SOLO_PROGRESS_SLUG, {
-    settings,
-    fullState: game.getFullState(),
-    localSession,
-  });
-}
-
-const DEFAULT_SETTINGS: Settings = {
-  opponent: "ai",
-  boardSize: 9,
-  winMode: WIN_MODE_ANNIHILATION,
-  winParam: 50,
-  difficulty: "medium",
-  redOwner: "player",
-  hostColor: "red",
-};
-
-function loadSettings(): Settings {
-  try {
-    const raw = localStorage.getItem(SETTINGS_KEY);
-    if (!raw) return { ...DEFAULT_SETTINGS };
-    const parsed = JSON.parse(raw) as Partial<Settings>;
-    const merged = { ...DEFAULT_SETTINGS, ...parsed };
-    if (merged.hostColor !== "red" && merged.hostColor !== "blue") merged.hostColor = "red";
-    return merged;
-  } catch {
-    return { ...DEFAULT_SETTINGS };
-  }
-}
-
-function saveSettings(settings: Settings) {
-  try {
-    localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
-  } catch {
-    /* ignore */
-  }
-}
-
-type ExplosiveDict = Record<string, string>;
-
-function colorLabel(color: PlayerColor, ex: ExplosiveDict): string {
-  return color === COLOR_RED ? ex.seatRed : ex.seatBlue;
-}
-
-function seatLabel(seat: Seat, ex: ExplosiveDict): string {
-  if (seat === "red") return ex.seatRed;
-  if (seat === "blue") return ex.seatBlue;
-  return ex.seatSpectator;
-}
-
-function winnerLabel(winner: MoveResult["winner"], ex: ExplosiveDict): string {
-  if (winner === "draw") return ex.winnerDraw;
-  if (winner === COLOR_RED) return ex.winnerRed;
-  if (winner === COLOR_BLUE) return ex.winnerBlue;
-  return "";
-}
-
-function winModeLabel(mode: WinMode, ex: ExplosiveDict): string {
-  if (mode === WIN_MODE_ANNIHILATION) return ex.annihilation;
-  if (mode === WIN_MODE_STEPS) return ex.steps;
-  return ex.area;
-}
-
-function youAreLabel(seat: Seat, ex: ExplosiveDict): string {
-  if (seat === "red") return ex.youAreRed;
-  if (seat === "blue") return ex.youAreBlue;
-  return ex.youAreSpectator;
-}
-
-function seatToPlayerColor(seat: HostColor | Seat): PlayerColor | null {
-  if (seat === "red") return COLOR_RED;
-  if (seat === "blue") return COLOR_BLUE;
-  return null;
-}
-
-function formatWinReason(reason: string, ex: Record<string, string>): string {
-  if (!reason) return "";
-  if (reason === "歼灭对手所有棋子" || reason === "annihilation") return ex.reasonAnnihilation;
-  if (reason === "对手投降" || reason === "surrender") return ex.reasonSurrender;
-  if (reason.startsWith("双方玩家均已离开") || reason === "room_recycled") {
-    return ex.roomRecycled || reason;
-  }
-  const area = /^率先占据 (\d+) 格$/.exec(reason);
-  if (area) return ex.reasonArea.replace("{n}", area[1]!);
-  const stepsMore = /^(\d+) 步后占据更多面积 \((\d+) vs (\d+)\)$/.exec(reason);
-  if (stepsMore) {
-    return ex.reasonStepsMore
-      .replace("{n}", stepsMore[1]!)
-      .replace("{a}", stepsMore[2]!)
-      .replace("{b}", stepsMore[3]!);
-  }
-  const stepsDraw = /^(\d+) 步后双方面积相同 \((\d+)\)$/.exec(reason);
-  if (stepsDraw) {
-    return ex.reasonStepsDraw.replace("{n}", stepsDraw[1]!).replace("{a}", stepsDraw[2]!);
-  }
-  return reason;
-}
+  formatWinReason,
+  seatLabel,
+  seatToPlayerColor,
+  winnerLabel,
+} from "./labels";
+import {
+  FRAME_DELAY_MS,
+  SOLO_PROGRESS_SLUG,
+  loadSettings,
+  loadSoloPersist,
+  persistSoloProgress,
+  saveSettings,
+  type OpponentMode,
+  type Screen,
+  type Settings,
+  type SoloPersist,
+} from "./settings";
+import { ExplosiveChessPlay } from "./ExplosiveChessPlay";
+import { ExplosiveChessSetup } from "./ExplosiveChessSetup";
 
 export function ExplosiveChessGame() {
   const { t } = useLocale();
@@ -955,399 +823,70 @@ export function ExplosiveChessGame() {
   const onlineConfigLocked =
     settings.opponent === "online" && onlinePhase !== "idle";
 
-  // ——— SETUP LOBBY (no board) ———
   if (screen === "setup") {
     return (
-      <div className="explosive-chess explosive-setup">
-        <div className="panel">
-          <h2>{ex.setupTitle}</h2>
-          <p className="hint" style={{ marginTop: 0 }}>
-            {ex.setupHint}
-          </p>
-          <div className="explosive-controls">
-            <label>
-              {ex.mode}
-              <select
-                value={settings.opponent === "online" ? "online" : "solo"}
-                onChange={(e) => {
-                  const next = e.target.value;
-                  if (next === "online") {
-                    clearLocalProgress(SOLO_PROGRESS_SLUG);
-                    pendingRestoreRef.current = null;
-                    setSettings((s) => ({ ...s, opponent: "online" }));
-                    return;
-                  }
-                  disconnectOnline();
-                  setSearchParams({}, { replace: true });
-                  setSettings((s) => ({
-                    ...s,
-                    opponent: s.opponent === "local" ? "local" : "ai",
-                  }));
-                }}
-              >
-                <option value="solo">{ex.solo}</option>
-                <option value="online">{ex.online}</option>
-              </select>
-            </label>
-            {settings.opponent !== "online" ? (
-              <label>
-                {ex.soloMatch}
-                <select
-                  value={settings.opponent}
-                  onChange={(e) => {
-                    const opponent = e.target.value as "ai" | "local";
-                    setSettings((s) => ({ ...s, opponent }));
-                  }}
-                >
-                  <option value="ai">{ex.vsAi}</option>
-                  <option value="local">{ex.hotseat}</option>
-                </select>
-              </label>
-            ) : null}
-
-            {/* Solo: always editable. Online: editable only before create; after create read-only. */}
-            {settings.opponent !== "online" || onlinePhase === "idle" || onlineConfig ? (
-              <>
-                <label>
-                  {ex.board}
-                  <select
-                    value={
-                      settings.opponent === "online" && onlineConfig
-                        ? onlineConfig.boardSize
-                        : settings.boardSize
-                    }
-                    disabled={onlineConfigLocked}
-                    onChange={(e) => {
-                      const boardSize = Number(e.target.value) as 9 | 11 | 13;
-                      setSettings((s) => ({ ...s, boardSize }));
-                    }}
-                  >
-                    <option value={9}>9×9</option>
-                    <option value={11}>11×11</option>
-                    <option value={13}>13×13</option>
-                  </select>
-                </label>
-                <label>
-                  {ex.winMode}
-                  <select
-                    value={
-                      settings.opponent === "online" && onlineConfig
-                        ? onlineConfig.winMode
-                        : settings.winMode
-                    }
-                    disabled={onlineConfigLocked}
-                    onChange={(e) => {
-                      const winMode = e.target.value as WinMode;
-                      setSettings((s) => ({ ...s, winMode }));
-                    }}
-                  >
-                    <option value={WIN_MODE_ANNIHILATION}>{ex.annihilation}</option>
-                    <option value={WIN_MODE_STEPS}>{ex.steps}</option>
-                    <option value={WIN_MODE_AREA}>{ex.area}</option>
-                  </select>
-                </label>
-                {showWinParam ||
-                (onlineConfig && onlineConfig.winMode !== WIN_MODE_ANNIHILATION) ? (
-                  <label>
-                    {(onlineConfig?.winMode ?? settings.winMode) === WIN_MODE_STEPS
-                      ? ex.stepCount
-                      : ex.targetCells}
-                    <input
-                      type="number"
-                      min={1}
-                      value={onlineConfig?.winParam ?? settings.winParam}
-                      disabled={onlineConfigLocked}
-                      onChange={(e) => {
-                        const winParam = Math.max(1, Number(e.target.value) || 1);
-                        setSettings((s) => ({ ...s, winParam }));
-                      }}
-                    />
-                  </label>
-                ) : null}
-              </>
-            ) : null}
-
-            {settings.opponent === "ai" ? (
-              <>
-                <label>
-                  {ex.aiDifficulty}
-                  <select
-                    value={settings.difficulty}
-                    onChange={(e) =>
-                      setSettings((s) => ({
-                        ...s,
-                        difficulty: e.target.value as AiDifficulty,
-                      }))
-                    }
-                  >
-                    <option value="easy">{ex.easy}</option>
-                    <option value="medium">{ex.medium}</option>
-                    <option value="hard">{ex.hard}</option>
-                    <option value="hell">{ex.hell}</option>
-                  </select>
-                </label>
-                <label>
-                  {ex.redFirst}
-                  <select
-                    value={settings.redOwner}
-                    onChange={(e) =>
-                      setSettings((s) => ({
-                        ...s,
-                        redOwner: e.target.value as RedOwner,
-                      }))
-                    }
-                  >
-                    <option value="player">{ex.me}</option>
-                    <option value="ai">{ex.ai}</option>
-                  </select>
-                </label>
-              </>
-            ) : null}
-
-            {settings.opponent === "online" && (onlinePhase === "idle" || onlineConfig) && !roomFromQuery ? (
-              <label>
-                {ex.myColor}
-                <select
-                  value={onlineConfig?.hostColor ?? settings.hostColor}
-                  disabled={onlineConfigLocked}
-                  onChange={(e) => {
-                    const hostColor = e.target.value as HostColor;
-                    setSettings((s) => ({ ...s, hostColor }));
-                  }}
-                >
-                  <option value="red">{ex.redFirstSeat}</option>
-                  <option value="blue">{ex.blueSecond}</option>
-                </select>
-              </label>
-            ) : null}
-            {settings.opponent === "online" && onlineConfigLocked ? (
-              <p className="hint" style={{ margin: 0 }}>
-                {ex.onlineConfigLocked}
-              </p>
-            ) : null}
-          </div>
-
-          {settings.opponent !== "online" ? (
-            <div className="row">
-              <button type="button" className="primary" onClick={startLocalGame}>
-                {ex.start}
-              </button>
-            </div>
-          ) : null}
-        </div>
-
-        {settings.opponent === "online" ? (
-          <div className="panel explosive-online-lobby">
-            <h2>{ex.onlineLobby}</h2>
-            <p className="hint" style={{ marginTop: 0 }}>
-              {onlineStatus || ex.onlineHint}
-              {onlinePhase === "lobby" && onlineSeat ? ` ${youAreLabel(onlineSeat, ex)}` : ""}
-            </p>
-            <div className="row">
-              {onlinePhase === "idle" || onlinePhase === "connecting" || onlinePhase === "reconnecting" ? (
-                <>
-                  {!roomFromQuery && onlinePhase !== "reconnecting" ? (
-                    <button
-                      type="button"
-                      className="primary"
-                      onClick={createRoom}
-                      disabled={onlinePhase === "connecting"}
-                    >
-                      {ex.createRoom}
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      className="primary"
-                      onClick={() => {
-                        reconnectAttemptsRef.current = 0;
-                        joinRoom();
-                      }}
-                      disabled={onlinePhase === "connecting" || onlinePhase === "reconnecting"}
-                    >
-                      {onlinePhase === "reconnecting" ? ex.reconnecting : ex.joinRoom}
-                    </button>
-                  )}
-                </>
-              ) : null}
-              {connectedLobby ? (
-                <button
-                  type="button"
-                  className="ghost"
-                  onClick={() => {
-                    disconnectOnline();
-                    setSearchParams({}, { replace: true });
-                    setRoomCode("");
-                    setShareLink("");
-                    setOnlineStatus(tRef.current.explosive.leftRoom);
-                  }}
-                >
-                  {ex.leaveRoom}
-                </button>
-              ) : null}
-            </div>
-
-            {onlineRole === "host" && roomCode && (onlinePhase === "lobby" || onlinePhase === "connecting") ? (
-              <div className="explosive-room-code">
-                <p className="room-code-line">
-                  {ex.roomCode}
-                  <span className="room-code-value">{roomCode}</span>
-                </p>
-                {shareLink ? (
-                  <button
-                    type="button"
-                    className="ghost"
-                    onClick={() => {
-                      void navigator.clipboard?.writeText(shareLink);
-                      setOnlineStatus(ex.linkCopied);
-                    }}
-                  >
-                    {ex.copyLink}
-                  </button>
-                ) : null}
-              </div>
-            ) : null}
-
-            {onlineConfig && onlineRole !== "host" && connectedLobby ? (
-              <p className="hint">
-                {ex.configLabel}
-                {onlineConfig.boardSize}×{onlineConfig.boardSize} · {winModeLabel(onlineConfig.winMode, ex)}
-                {onlineConfig.winMode !== WIN_MODE_ANNIHILATION
-                  ? ` (${onlineConfig.winParam})`
-                  : ""}{" "}
-                · {ex.hostLabel}{" "}
-                {onlineConfig.hostColor === "red" ? ex.colorRed : ex.colorBlue}
-              </p>
-            ) : null}
-
-            {onlinePlayers.length > 0 ? (
-              <ul className="explosive-player-list">
-                {onlinePlayers.map((p) => (
-                  <li key={p.playerId}>
-                    {p.name} · {seatLabel(p.seat, ex)} · {p.role}
-                    {p.rematch ? ` · ${ex.rematchMark}` : ""}
-                    {!p.connected ? ` · ${ex.offline}` : ""}
-                  </li>
-                ))}
-              </ul>
-            ) : null}
-
-          </div>
-        ) : null}
-      </div>
+      <ExplosiveChessSetup
+        ex={ex}
+        settings={settings}
+        setSettings={setSettings}
+        pendingRestoreRef={pendingRestoreRef}
+        disconnectOnline={disconnectOnline}
+        setSearchParams={setSearchParams}
+        onlinePhase={onlinePhase}
+        onlineConfig={onlineConfig}
+        onlineConfigLocked={onlineConfigLocked}
+        roomFromQuery={roomFromQuery}
+        showWinParam={showWinParam}
+        startLocalGame={startLocalGame}
+        onlineStatus={onlineStatus}
+        onlineSeat={onlineSeat}
+        connectedLobby={connectedLobby}
+        createRoom={createRoom}
+        joinRoom={joinRoom}
+        shareLink={shareLink}
+        roomCode={roomCode}
+        setRoomCode={setRoomCode}
+        onlinePlayers={onlinePlayers}
+        onlineRole={onlineRole}
+        setShareLink={setShareLink}
+        setOnlineStatus={setOnlineStatus}
+        reconnectAttemptsRef={reconnectAttemptsRef}
+      />
     );
   }
 
-  // ——— PLAYING (board only + thin HUD) ———
   return (
-    <div className="explosive-chess explosive-playing">
-      <div className="panel explosive-status">
-        <div className="row" style={{ marginTop: 0 }}>
-          <button type="button" className="ghost" onClick={backToSetup}>
-            {ex.backSetup}
-          </button>
-          <span>
-            {ex.turn}：<strong>{colorLabel(turn, ex)}</strong>
-          </span>
-          <span>
-            {ex.stepsHud}：{stepCount}
-          </span>
-          <span className="explosive-count red">
-            {ex.colorRed} {counts.red}
-          </span>
-          <span className="explosive-count blue">
-            {ex.colorBlue} {counts.blue}
-          </span>
-          {settings.opponent === "online" && myColor != null ? (
-            <span>
-              {ex.you}：{colorLabel(myColor, ex)}
-            </span>
-          ) : null}
-        </div>
-        <p className="hint" style={{ marginTop: "0.5rem" }}>
-          {gameOver ? `${winnerLabel(winner, ex)}${winReason ? ` · ${formatWinReason(winReason, t.explosive)}` : ""}` : tip}
-          {settings.opponent === "online" && onlineStatus ? ` · ${onlineStatus}` : ""}
-        </p>
-        <div className="row">
-          {settings.opponent !== "online" ? (
-            <button
-              type="button"
-              className="ghost"
-              onClick={() => {
-                clearLocalProgress(SOLO_PROGRESS_SLUG);
-                pendingRestoreRef.current = null;
-                setLocalSession((n) => n + 1);
-              }}
-            >
-              {ex.restart}
-            </button>
-          ) : null}
-          {settings.opponent === "online" &&
-          (onlinePhase === "reconnecting" || onlinePhase === "idle") ? (
-            <button
-              type="button"
-              className="primary"
-              onClick={() => {
-                reconnectAttemptsRef.current = 0;
-                const code = roomCodeRef.current || roomFromQuery;
-                if (code) connectToRoom(code, { keepPlaying: screen === "playing" });
-              }}
-            >
-              {ex.reconnect}
-            </button>
-          ) : null}
-          {settings.opponent === "online" && onlinePhase === "playing" ? (
-            <button type="button" className="ghost" onClick={() => clientRef.current?.surrender()}>
-              {ex.surrender}
-            </button>
-          ) : null}
-          {settings.opponent === "online" && onlinePhase === "over" ? (
-            <button
-              type="button"
-              className="primary"
-              onClick={() => {
-                clientRef.current?.rematch();
-                setScreen("setup");
-                destroyBoard();
-              }}
-            >
-              {ex.rematch}
-            </button>
-          ) : null}
-        </div>
-      </div>
-
-      <div className="explosive-board glass">
-        <canvas
-          ref={canvasRef}
-          onClick={(e) => handlePointer(e.clientX, e.clientY)}
-          onMouseMove={(e) => {
-            const renderer = rendererRef.current;
-            const game = gameRef.current;
-            if (!renderer || !game || game.gameOver) {
-              renderer?.clearHover();
-              return;
-            }
-            if (
-              settingsRef.current.opponent === "online" &&
-              myColorRef.current != null &&
-              game.currentTurn !== myColorRef.current
-            ) {
-              renderer.clearHover();
-              return;
-            }
-            const cell = renderer.pixelToCell(e.clientX, e.clientY);
-            if (cell) renderer.setHoverCell(cell.row, cell.col);
-            else renderer.clearHover();
-          }}
-          onMouseLeave={() => rendererRef.current?.clearHover()}
-          onTouchStart={(e) => {
-            e.preventDefault();
-            const touch = e.touches[0];
-            if (touch) handlePointer(touch.clientX, touch.clientY);
-          }}
-        />
-      </div>
-    </div>
+    <ExplosiveChessPlay
+      ex={ex}
+      tExplosive={t.explosive}
+      settings={settings}
+      turn={turn}
+      stepCount={stepCount}
+      counts={counts}
+      myColor={myColor}
+      gameOver={gameOver}
+      winner={winner}
+      winReason={winReason}
+      tip={tip}
+      onlineStatus={onlineStatus}
+      onlinePhase={onlinePhase}
+      screen={screen}
+      roomFromQuery={roomFromQuery}
+      canvasRef={canvasRef}
+      rendererRef={rendererRef}
+      gameRef={gameRef}
+      settingsRef={settingsRef}
+      myColorRef={myColorRef}
+      pendingRestoreRef={pendingRestoreRef}
+      reconnectAttemptsRef={reconnectAttemptsRef}
+      roomCodeRef={roomCodeRef}
+      clientRef={clientRef}
+      backToSetup={backToSetup}
+      setLocalSession={setLocalSession}
+      connectToRoom={connectToRoom}
+      setScreen={setScreen}
+      destroyBoard={destroyBoard}
+      handlePointer={handlePointer}
+    />
   );
 }
