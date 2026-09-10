@@ -42,6 +42,7 @@ export function Shell() {
   const aboutTitleId = useId();
   const closeBtnRef = useRef<HTMLButtonElement | null>(null);
   const playMatch = useMatch("/play/:slug");
+  const isHome = useMatch({ path: "/", end: true });
   const playGame = playMatch?.params.slug
     ? getGame(playMatch.params.slug)
     : undefined;
@@ -169,10 +170,12 @@ export function Shell() {
         <Outlet />
       </main>
 
-      <footer className="footer">
-        <span>{t.footer}</span>
-        <a href="https://github.com/GoldenEagle1527/micromist">GitHub</a>
-      </footer>
+      {isHome ? (
+        <footer className="footer">
+          <span>{t.footer}</span>
+          <a href="https://github.com/GoldenEagle1527/micromist">GitHub</a>
+        </footer>
+      ) : null}
 
       {aboutOpen ? (
         <div
