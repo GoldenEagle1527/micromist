@@ -1,4 +1,5 @@
 import { Link, useParams } from "react-router";
+import "../styles/play.css";
 import { ExplosiveChessGame } from "../games/explosive-chess/ExplosiveChessGame";
 import { ChromaSlideGame } from "../games/chroma-slide/ChromaSlideGame";
 import { BladeBreakGame } from "../games/blade-break/BladeBreakGame";
