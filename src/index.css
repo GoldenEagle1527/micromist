@@ -590,7 +590,7 @@ button:disabled {
 }
 
 .footer {
-  display: none;
+  display: flex;
   border-top: 1px solid var(--glass-border);
   padding: 1rem 1.2rem calc(1.1rem + var(--safe-bottom));
   color: var(--md-sys-color-on-surface-variant);
@@ -687,9 +687,6 @@ button:disabled {
   }
 
 
-  .footer {
-    display: flex;
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {
