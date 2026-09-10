@@ -211,3 +211,126 @@ html[data-theme="dark"] .chroma-empty {
 html[data-theme="dark"] .chroma-cell {
   box-shadow: 0 1px 0 rgba(255, 255, 255, 0.08) inset;
 }
+
+
+/* Setup score history */
+.chroma-history {
+  width: 100%;
+  padding: 0.85rem 1rem 1rem;
+  border-radius: var(--md-sys-shape-corner-md);
+  background: var(--glass-bg, color-mix(in srgb, var(--md-sys-color-surface) 82%, transparent));
+  border: 1px solid var(--glass-border, var(--md-sys-color-outline-variant));
+  box-sizing: border-box;
+}
+
+.chroma-history-title {
+  margin: 0 0 0.55rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--md-sys-color-on-surface);
+}
+
+.chroma-history-empty {
+  margin: 0;
+  font-size: 0.85rem;
+}
+
+.chroma-history-scroll {
+  max-height: 13rem;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding-right: 0.15rem;
+}
+
+.chroma-history-block {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.chroma-history-label {
+  margin: 0;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--md-sys-color-on-surface-variant);
+}
+
+.chroma-history-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.chroma-history-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  padding: 0.45rem 0.55rem;
+  border-radius: var(--md-sys-shape-corner-sm);
+  background: color-mix(in srgb, var(--md-sys-color-surface-container-highest) 70%, transparent);
+  border: 1px solid color-mix(in srgb, var(--md-sys-color-outline-variant) 55%, transparent);
+}
+
+.chroma-history-row-main {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.45rem 0.65rem;
+  font-size: 0.9rem;
+  color: var(--md-sys-color-on-surface);
+}
+
+.chroma-history-badge {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--md-sys-color-primary);
+  background: color-mix(in srgb, var(--md-sys-color-primary) 14%, transparent);
+  border-radius: 999px;
+  padding: 0.12rem 0.45rem;
+}
+
+.chroma-history-steps {
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+
+.chroma-history-preset {
+  color: var(--md-sys-color-on-surface-variant);
+  font-size: 0.85rem;
+}
+
+.chroma-history-row-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem 0.75rem;
+  font-size: 0.78rem;
+  color: var(--md-sys-color-on-surface-variant);
+}
+
+.chroma-history-duration {
+  font-variant-numeric: tabular-nums;
+}
+
+.chroma-win-best-badge {
+  margin: 0.65rem 0 0;
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--md-sys-color-primary);
+  background: color-mix(in srgb, var(--md-sys-color-primary) 14%, transparent);
+  border-radius: 999px;
+  padding: 0.2rem 0.55rem;
+}
