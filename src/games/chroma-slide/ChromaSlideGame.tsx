@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import "./chroma-slide.css";
 import { useLocale } from "../../i18n";
-import { useLocalGamePersist } from "../local-persist";
+import { clearLocalProgress, useLocalGamePersist } from "../local-persist";
 import {
   EMPTY,
   PRESETS,
@@ -13,6 +13,12 @@ import {
   type PresetId,
   type PuzzleState,
 } from "./engine";
+import {
+  loadScores,
+  recordWin,
+  type ChromaRunRecord,
+  type ChromaScores,
+} from "./scores";
 
 type Screen = "setup" | "playing";
 type ConfirmKind = "reshuffle" | "setup" | null;
@@ -23,6 +29,43 @@ type ChromaPersist = {
   puzzle: PuzzleState;
 };
 
+type WinModalState = {
+  steps: number;
+  isNewBest: boolean;
+};
+
+function presetLabel(ch: { small: string; medium: string; large: string }, id: PresetId): string {
+  if (id === "small") return ch.small;
+  if (id === "medium") return ch.medium;
+  return ch.large;
+}
+
+function HistoryRow({
+  run,
+  ch,
+  badge,
+}: {
+  run: ChromaRunRecord;
+  ch: ReturnType<typeof useLocale>["t"]["chroma"];
+  badge?: string;
+}) {
+  return (
+    <li className="chroma-history-row">
+      <div className="chroma-history-row-main">
+        {badge ? <span className="chroma-history-badge">{badge}</span> : null}
+        <span className="chroma-history-steps">{ch.stepsCount(run.steps)}</span>
+        <span className="chroma-history-preset">{presetLabel(ch, run.preset)}</span>
+      </div>
+      <div className="chroma-history-row-meta">
+        <time dateTime={new Date(run.at).toISOString()}>{ch.playedAt(run.at)}</time>
+        {run.durationMs != null ? (
+          <span className="chroma-history-duration">{ch.durationLabel(run.durationMs)}</span>
+        ) : null}
+      </div>
+    </li>
+  );
+}
+
 export function ChromaSlideGame() {
   const { t } = useLocale();
   const ch = t.chroma;
@@ -32,8 +75,14 @@ export function ChromaSlideGame() {
   const [puzzle, setPuzzle] = useState<PuzzleState | null>(null);
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
   const [confirm, setConfirm] = useState<ConfirmKind>(null);
+  const [scores, setScores] = useState<ChromaScores>(() => loadScores());
+  const [winModal, setWinModal] = useState<WinModalState | null>(null);
   const confirmTitleId = useId();
+  const winTitleId = useId();
   const confirmCancelRef = useRef<HTMLButtonElement | null>(null);
+  const winPlayAgainRef = useRef<HTMLButtonElement | null>(null);
+  const recordedWinRef = useRef(false);
+  const startedAtRef = useRef<number | null>(null);
 
   const persistState: ChromaPersist | null =
     screen === "playing" && puzzle
@@ -48,16 +97,47 @@ export function ChromaSlideGame() {
       setPuzzle(data.puzzle);
       setHoverIndex(null);
       setConfirm(null);
+      startedAtRef.current = null;
+      const alreadyWon = isWon(data.puzzle);
+      // Already recorded: skip recordWin, but still show the result modal.
+      recordedWinRef.current = alreadyWon;
+      setWinModal(
+        alreadyWon ? { steps: data.puzzle.steps, isNewBest: false } : null,
+      );
       setScreen("playing");
     },
   });
 
   const won = useMemo(() => (puzzle ? isWon(puzzle) : false), [puzzle]);
 
+  useEffect(() => {
+    if (screen === "setup") setScores(loadScores());
+  }, [screen]);
+
+  useEffect(() => {
+    if (!won || !puzzle || recordedWinRef.current) return;
+    recordedWinRef.current = true;
+    const at = Date.now();
+    const startedAt = startedAtRef.current;
+    const durationMs =
+      startedAt != null && at >= startedAt ? at - startedAt : undefined;
+    const { scores: next, isNewBest } = recordWin({
+      steps: puzzle.steps,
+      preset: puzzle.preset,
+      at,
+      ...(durationMs != null ? { durationMs } : {}),
+    });
+    setScores(next);
+    setWinModal({ steps: puzzle.steps, isNewBest });
+  }, [won, puzzle]);
+
   const startGame = useCallback(() => {
     setPuzzle(newPuzzle(preset));
     setHoverIndex(null);
     setConfirm(null);
+    setWinModal(null);
+    startedAtRef.current = Date.now();
+    recordedWinRef.current = false;
     setScreen("playing");
   }, [preset]);
 
@@ -66,6 +146,9 @@ export function ChromaSlideGame() {
     setPuzzle(newPuzzle(puzzle.preset));
     setHoverIndex(null);
     setConfirm(null);
+    setWinModal(null);
+    startedAtRef.current = Date.now();
+    recordedWinRef.current = false;
   }, [puzzle]);
 
   const doBackToSetup = useCallback(() => {
@@ -73,18 +156,24 @@ export function ChromaSlideGame() {
     setPuzzle(null);
     setHoverIndex(null);
     setConfirm(null);
+    setWinModal(null);
   }, []);
+
+  const playAgain = useCallback(() => {
+    clearLocalProgress("chroma-slide");
+    doBackToSetup();
+  }, [doBackToSetup]);
 
   const onCellClick = useCallback(
     (index: number) => {
-      if (!puzzle || won || confirm) return;
+      if (!puzzle || won || confirm || winModal) return;
       const next = clickMove(puzzle, index);
       if (next !== puzzle) {
         setPuzzle(next);
         setHoverIndex(null);
       }
     },
-    [puzzle, won, confirm],
+    [puzzle, won, confirm, winModal],
   );
 
   useEffect(() => {
@@ -102,8 +191,24 @@ export function ChromaSlideGame() {
     };
   }, [confirm]);
 
+  useEffect(() => {
+    if (!winModal) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setWinModal(null);
+    };
+    document.addEventListener("keydown", onKey);
+    winPlayAgainRef.current?.focus();
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prev;
+    };
+  }, [winModal]);
+
   if (screen === "setup") {
     const p = PRESETS[preset];
+    const hasHistory = scores.best != null || scores.recent.length > 0;
     return (
       <div className="chroma-slide chroma-setup">
         <div className="panel">
@@ -142,6 +247,38 @@ export function ChromaSlideGame() {
             </button>
           </div>
         </div>
+
+        <section className="chroma-history" aria-label={ch.historyTitle}>
+          <h3 className="chroma-history-title">{ch.historyTitle}</h3>
+          {!hasHistory ? (
+            <p className="hint chroma-history-empty">{ch.emptyHistory}</p>
+          ) : (
+            <div className="chroma-history-scroll">
+              {scores.best ? (
+                <div className="chroma-history-block">
+                  <p className="chroma-history-label">{ch.bestLabel}</p>
+                  <ul className="chroma-history-list">
+                    <HistoryRow run={scores.best} ch={ch} badge={ch.bestLabel} />
+                  </ul>
+                </div>
+              ) : null}
+              {scores.recent.length > 0 ? (
+                <div className="chroma-history-block">
+                  <p className="chroma-history-label">{ch.recentLabel}</p>
+                  <ul className="chroma-history-list">
+                    {scores.recent.map((run) => (
+                      <HistoryRow
+                        key={`${run.at}-${run.steps}-${run.preset}`}
+                        run={run}
+                        ch={ch}
+                      />
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+            </div>
+          )}
+        </section>
       </div>
     );
   }
@@ -150,7 +287,7 @@ export function ChromaSlideGame() {
 
   const { size, board, emptyIndex, steps } = puzzle;
   const legalHover =
-    hoverIndex != null && !won && !confirm && isLegalClick(puzzle, hoverIndex);
+    hoverIndex != null && !won && !confirm && !winModal && isLegalClick(puzzle, hoverIndex);
 
   return (
     <div className="chroma-slide chroma-playing">
@@ -211,7 +348,7 @@ export function ChromaSlideGame() {
                   ? undefined
                   : { backgroundColor: TILE_COLORS[cell] ?? "#888" }
               }
-              disabled={won || isEmpty || Boolean(confirm)}
+              disabled={won || isEmpty || Boolean(confirm) || Boolean(winModal)}
               aria-label={
                 isEmpty
                   ? ch.emptyAria
@@ -234,6 +371,7 @@ export function ChromaSlideGame() {
           type="button"
           className="ghost"
           onClick={() => setConfirm("reshuffle")}
+          disabled={Boolean(winModal)}
         >
           {ch.reshuffle}
         </button>
@@ -241,12 +379,57 @@ export function ChromaSlideGame() {
           type="button"
           className="ghost"
           onClick={() => setConfirm("setup")}
+          disabled={Boolean(winModal)}
         >
           {ch.adjustSettings}
         </button>
       </div>
 
-      {confirm ? (
+      {winModal ? (
+        <div
+          className="modal-backdrop"
+          role="presentation"
+          onClick={() => setWinModal(null)}
+        >
+          <div
+            className="modal-panel"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={winTitleId}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="modal-header">
+              <h2 id={winTitleId}>{ch.winModalTitle}</h2>
+              <button
+                type="button"
+                className="icon-btn"
+                onClick={() => setWinModal(null)}
+                aria-label={ch.confirmCancel}
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M18.3 5.71 12 12.01 5.7 5.7 4.29 7.11 10.59 13.4 4.29 19.7 5.7 21.11 12 14.82l6.3 6.29 1.41-1.41-6.29-6.3 6.29-6.29z" />
+                </svg>
+              </button>
+            </div>
+            <p className="lede modal-body">{ch.winMessage(winModal.steps)}</p>
+            {winModal.isNewBest ? (
+              <p className="chroma-win-best-badge">{ch.newBestBadge}</p>
+            ) : null}
+            <div className="modal-actions">
+              <button
+                ref={winPlayAgainRef}
+                type="button"
+                className="primary"
+                onClick={playAgain}
+              >
+                {ch.playAgain}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {confirm && !winModal ? (
         <div
           className="modal-backdrop"
           role="presentation"
