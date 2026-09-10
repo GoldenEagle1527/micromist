@@ -1,0 +1,144 @@
+/* Layer 1 — theme tokens, reset, global reduced-motion */
+
+/* MD3-inspired blue theme · glass · light/dark · responsive */
+
+:root {
+  --md-ref-primary: #1565c0;
+  --md-sys-shape-corner-xs: 8px;
+  --md-sys-shape-corner-sm: 12px;
+  --md-sys-shape-corner-md: 16px;
+  --md-sys-shape-corner-lg: 28px;
+  --md-sys-shape-corner-full: 999px;
+  --md-sys-motion-fast: 160ms cubic-bezier(0.2, 0, 0, 1);
+  --md-sys-motion: 240ms cubic-bezier(0.2, 0, 0, 1);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-top: env(safe-area-inset-top, 0px);
+  font-family:
+    "Roboto",
+    "PingFang SC",
+    "Hiragino Sans GB",
+    "Noto Sans SC",
+    "Segoe UI",
+    system-ui,
+    sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html[data-theme="light"] {
+  color-scheme: light;
+  --md-sys-color-primary: #1565c0;
+  --md-sys-color-on-primary: #ffffff;
+  --md-sys-color-primary-container: #d3e4ff;
+  --md-sys-color-on-primary-container: #001c38;
+  --md-sys-color-secondary: #535f70;
+  --md-sys-color-on-secondary: #ffffff;
+  --md-sys-color-secondary-container: #d7e3f8;
+  --md-sys-color-on-secondary-container: #101c2b;
+  --md-sys-color-surface: #f7f9ff;
+  --md-sys-color-on-surface: #191c20;
+  --md-sys-color-on-surface-variant: #42474e;
+  --md-sys-color-outline: #72777f;
+  --md-sys-color-outline-variant: #c2c7cf;
+  --md-sys-color-surface-container: rgba(255, 255, 255, 0.55);
+  --md-sys-color-surface-container-high: rgba(255, 255, 255, 0.72);
+  --md-sys-color-surface-container-highest: rgba(255, 255, 255, 0.86);
+  --md-sys-color-inverse-surface: #2e3135;
+  --md-sys-color-inverse-on-surface: #f0f0f4;
+  --glass-bg: rgba(255, 255, 255, 0.48);
+  --glass-bg-strong: rgba(255, 255, 255, 0.68);
+  --glass-border: rgba(255, 255, 255, 0.65);
+  --glass-highlight: rgba(21, 101, 192, 0.12);
+  --glass-shadow: 0 8px 32px rgba(25, 28, 32, 0.08), 0 1px 0 rgba(255, 255, 255, 0.6) inset;
+  --backdrop: blur(18px) saturate(1.35);
+  --page-glow-a: rgba(21, 101, 192, 0.18);
+  --page-glow-b: rgba(100, 181, 246, 0.16);
+  --page-base:
+    radial-gradient(1000px 520px at 8% -8%, var(--page-glow-a), transparent 55%),
+    radial-gradient(900px 480px at 100% 0%, var(--page-glow-b), transparent 50%),
+    linear-gradient(180deg, #eef3fb 0%, var(--md-sys-color-surface) 42%, #e8eef8 100%);
+  --ink: var(--md-sys-color-on-surface);
+  --muted: var(--md-sys-color-on-surface-variant);
+  --line: color-mix(in srgb, var(--md-sys-color-outline-variant) 70%, transparent);
+  --mist: var(--md-sys-color-primary);
+  --paper: var(--md-sys-color-surface);
+}
+
+html[data-theme="dark"] {
+  color-scheme: dark;
+  --md-sys-color-primary: #a8c8ff;
+  --md-sys-color-on-primary: #003062;
+  --md-sys-color-primary-container: #00498a;
+  --md-sys-color-on-primary-container: #d3e4ff;
+  --md-sys-color-secondary: #bbc7db;
+  --md-sys-color-on-secondary: #253140;
+  --md-sys-color-secondary-container: #3b4858;
+  --md-sys-color-on-secondary-container: #d7e3f8;
+  --md-sys-color-surface: #111418;
+  --md-sys-color-on-surface: #e2e2e6;
+  --md-sys-color-on-surface-variant: #c2c7cf;
+  --md-sys-color-outline: #8c9199;
+  --md-sys-color-outline-variant: #42474e;
+  --md-sys-color-surface-container: rgba(28, 32, 38, 0.55);
+  --md-sys-color-surface-container-high: rgba(36, 41, 48, 0.7);
+  --md-sys-color-surface-container-highest: rgba(44, 49, 57, 0.82);
+  --md-sys-color-inverse-surface: #e2e2e6;
+  --md-sys-color-inverse-on-surface: #2e3135;
+  --glass-bg: rgba(22, 26, 32, 0.52);
+  --glass-bg-strong: rgba(28, 33, 40, 0.72);
+  --glass-border: rgba(168, 200, 255, 0.18);
+  --glass-highlight: rgba(168, 200, 255, 0.1);
+  --glass-shadow: 0 12px 40px rgba(0, 0, 0, 0.35), 0 1px 0 rgba(255, 255, 255, 0.06) inset;
+  --backdrop: blur(20px) saturate(1.4);
+  --page-glow-a: rgba(66, 133, 244, 0.22);
+  --page-glow-b: rgba(100, 181, 246, 0.12);
+  --page-base:
+    radial-gradient(1100px 560px at 12% -12%, var(--page-glow-a), transparent 55%),
+    radial-gradient(900px 500px at 100% 8%, var(--page-glow-b), transparent 52%),
+    linear-gradient(180deg, #0c1016 0%, var(--md-sys-color-surface) 45%, #0a0d12 100%);
+  --ink: var(--md-sys-color-on-surface);
+  --muted: var(--md-sys-color-on-surface-variant);
+  --line: color-mix(in srgb, var(--md-sys-color-outline-variant) 80%, transparent);
+  --mist: var(--md-sys-color-primary);
+  --paper: var(--md-sys-color-surface);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  color: var(--md-sys-color-on-surface);
+  background: var(--page-base);
+  background-attachment: fixed;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition: none !important;
+    animation: none !important;
+  }
+}
