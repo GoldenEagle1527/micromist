@@ -10,6 +10,7 @@ import {
   type RoomPlayer,
   type Seat,
 } from "../../shared/multiplayer";
+import { gameStoreGet, gameStoreSet } from "../lib/game-store";
 
 export type { Phase, Role, RoomPlayer, Seat };
 
@@ -36,16 +37,29 @@ export function roomSocketUrl(roomId: string): string {
   return `${protocol}//${window.location.host}/ws/${encodeURIComponent(canonical)}`;
 }
 
-export function getOrCreatePlayerId(storageKey: string): string {
+/**
+ * Stable per-game player id in IndexedDB (`game` / `playerId`).
+ * `storageKey` retained for call-site compat; ignored when `gameSlug` is passed
+ * via the explosive wrapper — prefer getOrCreatePlayerIdForGame.
+ */
+export function getOrCreatePlayerIdForGame(gameSlug: string): string {
   try {
-    const existing = localStorage.getItem(storageKey);
-    if (existing) return existing;
+    const existing = gameStoreGet<string>(gameSlug, "playerId");
+    if (typeof existing === "string" && existing.length > 0) return existing;
     const id = crypto.randomUUID();
-    localStorage.setItem(storageKey, id);
+    gameStoreSet(gameSlug, "playerId", id);
     return id;
   } catch {
     return crypto.randomUUID();
   }
+}
+
+/** @deprecated pass game slug via getOrCreatePlayerIdForGame */
+export function getOrCreatePlayerId(storageKey: string): string {
+  // Infer slug from legacy key micromist.<slug>.playerId
+  const m = /^micromist\.([^.]+)\.playerId$/.exec(storageKey);
+  const slug = m?.[1] ?? "_platform";
+  return getOrCreatePlayerIdForGame(slug);
 }
 
 export class OnlineRoomClient {

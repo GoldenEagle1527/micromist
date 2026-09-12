@@ -7,6 +7,7 @@ import {
 } from "./engine";
 import type { HostColor } from "./online";
 import { clearLocalProgress, loadLocalProgress, saveLocalProgress } from "../local-persist";
+import { gameStoreGet, gameStoreSet } from "../../lib/game-store";
 
 export type OpponentMode = "ai" | "local" | "online";
 export type RedOwner = "player" | "ai";
@@ -23,6 +24,7 @@ export type Settings = {
   hostColor: HostColor;
 };
 
+/** @deprecated localStorage key — migrated into IndexedDB on boot. */
 export const SETTINGS_KEY = "micromist.explosive-chess.settings";
 export const SOLO_PROGRESS_SLUG = "explosive-chess";
 export const FRAME_DELAY_MS = 70;
@@ -76,9 +78,8 @@ export function persistSoloProgress(
 
 export function loadSettings(): Settings {
   try {
-    const raw = localStorage.getItem(SETTINGS_KEY);
-    if (!raw) return { ...DEFAULT_SETTINGS };
-    const parsed = JSON.parse(raw) as Partial<Settings>;
+    const parsed = gameStoreGet<Partial<Settings>>(SOLO_PROGRESS_SLUG, "settings");
+    if (!parsed) return { ...DEFAULT_SETTINGS };
     const merged = { ...DEFAULT_SETTINGS, ...parsed };
     if (merged.hostColor !== "red" && merged.hostColor !== "blue") merged.hostColor = "red";
     return merged;
@@ -89,7 +90,7 @@ export function loadSettings(): Settings {
 
 export function saveSettings(settings: Settings) {
   try {
-    localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+    gameStoreSet(SOLO_PROGRESS_SLUG, "settings", settings);
   } catch {
     /* ignore */
   }
