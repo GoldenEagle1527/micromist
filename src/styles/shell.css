@@ -759,3 +759,23 @@ button:disabled {
 [data-theme="dark"] .danger-btn {
   color: #ef9a9a;
 }
+
+
+/* staging environment chip (not MD3 — just a clear label) */
+.staging-badge {
+  flex-shrink: 0;
+  align-self: center;
+  margin-left: 0.35rem;
+  padding: 0.12rem 0.45rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  color: #3a2418;
+  background: color-mix(in srgb, #e8b86d 88%, #fff);
+  border: 1px solid color-mix(in srgb, #c4843a 55%, transparent);
+}
+
+.modal-actions a.about-site-switch {
+  text-decoration: none;
+}

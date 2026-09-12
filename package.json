@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "type": "module",
   "license": "MIT",
-  "description": "微渺 / micromist — open-source browser game platform on Cloudflare Workers",
+  "description": "\u5fae\u6e3a / micromist \u2014 open-source browser game platform on Cloudflare Workers",
   "engines": {
     "node": ">=20.19.0"
   },
@@ -15,7 +15,8 @@
     "deploy": "npm run build && wrangler deploy",
     "check": "tsc -b --pretty false",
     "typecheck": "tsc -b --pretty false",
-    "cf-typegen": "wrangler types --include-runtime false"
+    "cf-typegen": "wrangler types --include-runtime false",
+    "deploy:staging": "npm run build && node scripts/patch-staging-wrangler.mjs && wrangler deploy"
   },
   "dependencies": {
     "phaser": "^3.90.0",
