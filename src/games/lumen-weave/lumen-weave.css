@@ -1,4 +1,4 @@
-/* Layer 3 — lumen-weave / 织光 */
+/* Layer 3 — lumen-weave / 织光 (experiential explore) */
 
 .lumen-weave {
   display: flex;
@@ -45,7 +45,8 @@
   min-width: 0;
 }
 
-.lumen-controls select {
+.lumen-controls select,
+.lumen-controls input[type="text"] {
   width: 100%;
   background: var(--md-sys-color-surface-container-highest);
   color: var(--md-sys-color-on-surface);
@@ -53,30 +54,25 @@
   border-radius: var(--md-sys-shape-corner-sm);
   padding: 0.55rem 0.7rem;
   min-height: 2.5rem;
+  font: inherit;
 }
 
-.lumen-controls select:focus {
+.lumen-controls select:focus,
+.lumen-controls input[type="text"]:focus {
   outline: 2px solid color-mix(in srgb, var(--md-sys-color-primary) 55%, transparent);
   outline-offset: 1px;
   border-color: var(--md-sys-color-primary);
+}
+
+.lumen-seed-roll {
+  align-self: stretch;
+  width: 100%;
 }
 
 .lumen-diff-blurb {
   margin: 0.35rem 0 0;
   text-align: center;
   font-size: 0.85rem;
-}
-
-.lumen-best-line {
-  margin: 0.65rem 0 0;
-  text-align: center;
-  font-size: 0.92rem;
-  color: var(--md-sys-color-on-surface-variant);
-}
-
-.lumen-best-line strong {
-  color: var(--md-sys-color-primary);
-  font-weight: 600;
 }
 
 .lumen-setup .panel > .row {
@@ -138,69 +134,18 @@
   position: absolute;
   top: 0.7rem;
   left: 0.9rem;
-  font-size: 0.92rem;
+  right: 0.9rem;
+  font-size: 0.88rem;
   letter-spacing: 0.02em;
   color: #d8f6ff;
   text-shadow: 0 0 10px #22d3ee, 0 0 2px #000;
-}
-
-.lumen-status {
-  position: absolute;
-  left: 50%;
-  top: 46%;
-  transform: translate(-50%, -50%);
-  max-width: 86%;
-  text-align: center;
-  white-space: pre-line;
-  font-family: "Songti SC", "Palatino Linotype", Palatino, serif;
-  font-size: 1.15rem;
-  line-height: 1.45;
-  color: #e9d5ff;
-  text-shadow: 0 0 16px #a855f7, 0 0 4px #000;
-  opacity: 0;
-}
-
-.lumen-status[data-on="1"] {
-  opacity: 1;
-}
-
-.lumen-float {
-  position: absolute;
-  left: 50%;
-  top: 60%;
-  transform: translate(-50%, 8px);
-  color: #67e8f9;
-  font-size: 1.05rem;
-  letter-spacing: 0.03em;
-  text-shadow: 0 0 12px #22d3ee;
-  opacity: 0;
-  transition:
-    opacity 160ms ease-out,
-    transform 700ms ease-out;
-}
-
-.lumen-float[data-on="1"] {
-  opacity: 1;
-  transform: translate(-50%, -12px);
-}
-
-.lumen-flash {
-  position: absolute;
-  inset: 0;
-  background: rgba(255, 60, 100, 0.22);
-  opacity: 0;
-  transition: opacity 80ms linear;
-}
-
-.lumen-flash[data-on="1"] {
-  opacity: 1;
 }
 
 .lumen-vignette {
   position: absolute;
   inset: 0;
   background: radial-gradient(ellipse at 50% 44%, transparent 42%, #000 100%);
-  opacity: 0.5;
+  opacity: 0.45;
 }
 
 @media (min-width: 40rem) {

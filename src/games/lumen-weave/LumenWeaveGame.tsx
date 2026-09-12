@@ -2,17 +2,17 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import "./lumen-weave.css";
 import { useLocale } from "../../i18n";
 import { createLumenWeaveGame } from "./createGame";
-import type { LumenDifficulty } from "./i18n";
-import { readBestScore } from "./scores";
+import type { LumenCruise } from "./i18n";
+import { randomSeedString } from "./scene/seed";
 
 type Screen = "setup" | "playing";
 
-function difficultyLabel(
+function cruiseLabel(
   t: ReturnType<typeof useLocale>["t"]["lumen"],
-  id: LumenDifficulty,
+  id: LumenCruise,
 ): string {
-  if (id === "easy") return t.easy;
-  if (id === "hard") return t.hard;
+  if (id === "slow") return t.slow;
+  if (id === "fast") return t.fast;
   return t.normal;
 }
 
@@ -21,13 +21,9 @@ export function LumenWeaveGame() {
   const lw = t.lumen;
 
   const [screen, setScreen] = useState<Screen>("setup");
-  const [difficulty, setDifficulty] = useState<LumenDifficulty>("normal");
-  const [best, setBest] = useState(() => readBestScore());
+  const [seed, setSeed] = useState(() => randomSeedString());
+  const [cruise, setCruise] = useState<LumenCruise>("normal");
   const hostRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    if (screen === "setup") setBest(readBestScore());
-  }, [screen]);
 
   useEffect(() => {
     if (screen !== "playing") return;
@@ -35,31 +31,31 @@ export function LumenWeaveGame() {
     if (!host) return;
 
     const game = createLumenWeaveGame(host, {
-      difficulty,
+      seed,
+      cruise,
       labels: {
-        score: lw.score,
-        best: lw.best,
-        lives: lw.lives,
-        nearMiss: lw.nearMiss,
-        gameOver: lw.gameOver,
-        tryAgain: lw.tryAgain,
+        seed: lw.seed,
+        biome: lw.biome,
         hint: lw.hint,
       },
-      onBestChange: (next) => setBest(next),
+      biomeName: lw.biomeName,
     });
 
     return () => {
       game.destroy(true);
     };
-  }, [screen, difficulty, locale, lw]);
+  }, [screen, seed, cruise, locale, lw]);
 
   const startGame = useCallback(() => {
     setScreen("playing");
   }, []);
 
   const backToSetup = useCallback(() => {
-    setBest(readBestScore());
     setScreen("setup");
+  }, []);
+
+  const rollSeed = useCallback(() => {
+    setSeed(randomSeedString());
   }, []);
 
   if (screen === "setup") {
@@ -72,23 +68,32 @@ export function LumenWeaveGame() {
           </p>
           <div className="lumen-controls">
             <label>
-              {lw.difficulty}
+              {lw.seed}
+              <input
+                type="text"
+                value={seed}
+                placeholder={lw.seedPlaceholder}
+                spellCheck={false}
+                autoComplete="off"
+                onChange={(e) => setSeed(e.target.value)}
+              />
+            </label>
+            <button type="button" className="ghost lumen-seed-roll" onClick={rollSeed}>
+              {lw.randomSeed}
+            </button>
+            <label>
+              {lw.cruise}
               <select
-                value={difficulty}
-                onChange={(e) => setDifficulty(e.target.value as LumenDifficulty)}
+                value={cruise}
+                onChange={(e) => setCruise(e.target.value as LumenCruise)}
               >
-                <option value="easy">{difficultyLabel(lw, "easy")}</option>
-                <option value="normal">{difficultyLabel(lw, "normal")}</option>
-                <option value="hard">{difficultyLabel(lw, "hard")}</option>
+                <option value="slow">{cruiseLabel(lw, "slow")}</option>
+                <option value="normal">{cruiseLabel(lw, "normal")}</option>
+                <option value="fast">{cruiseLabel(lw, "fast")}</option>
               </select>
             </label>
           </div>
-          <p className="hint lumen-diff-blurb">{lw.difficultyBlurb(difficulty)}</p>
-          <p className="lumen-best-line">
-            {lw.bestLabel}
-            {": "}
-            <strong>{best > 0 ? lw.bestValue(best) : lw.emptyBest}</strong>
-          </p>
+          <p className="hint lumen-diff-blurb">{lw.cruiseBlurb(cruise)}</p>
           <div className="row">
             <button type="button" className="primary" onClick={startGame}>
               {lw.start}

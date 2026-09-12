@@ -73,8 +73,8 @@ export const games: GameMeta[] = [
     audience: "staging",
     title: { zh: "织光", en: "Lumen Weave" },
     blurb: {
-      zh: "冲入光带织成的隧道，穿梭掠过霓虹光束。单机本地，最高分只存本机。",
-      en: "Rush a glowing craft through a tunnel of woven neon beams. Solo local; best score stays on this device.",
+      zh: "第一人称漫游无尽的种子粒子生态域。同一种子同一世界，无得分无失败。",
+      en: "First-person roam through endless seeded particle biomes. Same seed, same world — experiential, not scored.",
     },
     badge: { zh: "单机", en: "Offline" },
   },
