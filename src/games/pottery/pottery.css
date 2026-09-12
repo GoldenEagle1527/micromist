@@ -1,0 +1,402 @@
+/* Layer 3 — pottery workshop (scoped; leave shell MD3 alone) */
+
+.pottery {
+  --pottery-wood: #5c3d2e;
+  --pottery-wood-dark: #3a2418;
+  --pottery-clay: #8b6550;
+  --pottery-clay-warm: #a07055;
+  --pottery-umber: #4a3226;
+  --pottery-ember: #c45a28;
+  --pottery-ember-hot: #e07035;
+  --pottery-parchment: #d4c4a8;
+  --pottery-parchment-dim: #b8a68c;
+  --pottery-shelf: #2e211a;
+  --pottery-chip-radius: 0.65rem;
+
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  width: min(26rem, 100%);
+  margin: 0.5rem auto 1.5rem;
+  color: var(--pottery-parchment);
+}
+
+.pottery-setup {
+  align-items: stretch;
+}
+
+.pottery-setup > .panel {
+  width: 100%;
+  background:
+    linear-gradient(165deg, rgba(72, 48, 36, 0.92), rgba(36, 24, 18, 0.96)),
+    #2a1c16;
+  border: 2px solid var(--pottery-wood);
+  border-radius: 0.85rem;
+  box-shadow:
+    inset 0 1px 0 rgba(210, 180, 140, 0.12),
+    0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+.pottery-setup .panel h2 {
+  text-align: center;
+  color: var(--pottery-parchment);
+  letter-spacing: 0.04em;
+}
+
+.pottery-setup .panel > .hint {
+  text-align: center;
+}
+
+.pottery-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  width: 100%;
+  margin-top: 0.35rem;
+}
+
+.pottery-field-label {
+  margin: 0;
+  font-size: 0.88rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  color: var(--pottery-parchment-dim);
+}
+
+.pottery-size-row {
+  display: flex;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+}
+
+.pottery-size-row button {
+  flex: 1 1 0;
+  justify-content: center;
+  min-width: 4.5rem;
+}
+
+.pottery-preset-blurb {
+  margin: 0.15rem 0 0;
+  text-align: center;
+  font-size: 0.85rem;
+}
+
+.pottery-setup .panel > .row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  width: 100%;
+  margin: 0.85rem 0 0;
+}
+
+.pottery-setup .panel > .row button {
+  width: 100%;
+  justify-content: center;
+}
+
+/* Warm parchment hints — override shell MD on-surface-variant */
+.pottery .hint,
+.pottery-tool-hint,
+.pottery-preset-blurb,
+.pottery-empty {
+  color: var(--pottery-parchment-dim) !important;
+}
+
+.pottery-hud {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.pottery-screen-title {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-align: center;
+  color: var(--pottery-parchment);
+}
+
+/* Stage: thick warm wood / clay frame */
+.pottery-stage {
+  width: min(100%, 22rem);
+  aspect-ratio: 3 / 4;
+  margin: 0 auto;
+  border-radius: 0.7rem;
+  overflow: hidden;
+  border: 5px solid var(--pottery-wood);
+  box-shadow:
+    inset 0 0 28px rgba(0, 0, 0, 0.45),
+    inset 0 1px 0 rgba(210, 180, 140, 0.1),
+    0 0 0 1px var(--pottery-wood-dark),
+    0 10px 28px rgba(0, 0, 0, 0.4);
+  background: #1a120f;
+  touch-action: none;
+}
+
+.pottery-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+  cursor: grab;
+  user-select: none;
+}
+
+.pottery-canvas:active {
+  cursor: grabbing;
+}
+
+.pottery-tool-hint {
+  text-align: center;
+  min-height: 2.4em;
+}
+
+.pottery-tools,
+.pottery-actions {
+  display: flex;
+  justify-content: center;
+  gap: 0.55rem;
+  flex-wrap: wrap;
+}
+
+.pottery-tools button,
+.pottery-actions button {
+  min-width: 5.2rem;
+  justify-content: center;
+}
+
+/* Clay-tablet / stamped chips — override shell pill buttons */
+.pottery button.primary,
+.pottery button.ghost,
+.pottery .pottery-chip {
+  border-radius: var(--pottery-chip-radius) !important;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 230, 200, 0.12),
+    0 2px 0 rgba(0, 0, 0, 0.25) !important;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    box-shadow 0.15s ease,
+    transform 0.1s ease;
+}
+
+.pottery button.primary {
+  background: linear-gradient(180deg, var(--pottery-ember-hot), var(--pottery-ember)) !important;
+  color: #fff4e8 !important;
+  border: 1.5px solid #8a3a18 !important;
+  text-shadow: 0 1px 0 rgba(60, 20, 0, 0.35);
+}
+
+.pottery button.primary:hover:not(:disabled) {
+  background: linear-gradient(180deg, #ef8a48, #d06030) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 230, 200, 0.2),
+    0 3px 8px rgba(196, 90, 40, 0.35) !important;
+}
+
+.pottery button.ghost {
+  background: linear-gradient(180deg, #6a4a3a, var(--pottery-umber)) !important;
+  color: var(--pottery-parchment) !important;
+  border: 1.5px solid #2e1c14 !important;
+}
+
+.pottery button.ghost:hover:not(:disabled) {
+  background: linear-gradient(180deg, #7a5846, #553828) !important;
+  border-color: #1e120c !important;
+}
+
+/* Selected tool / clay size = warmer clay fill (primary already ember;
+   size/tool selected use primary — warm clay override for tools row) */
+.pottery-tools button.primary,
+.pottery-size-row button.primary {
+  background: linear-gradient(180deg, var(--pottery-clay-warm), var(--pottery-clay)) !important;
+  border-color: #5a3c2c !important;
+  color: #f5ebe0 !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 220, 180, 0.18),
+    inset 0 -2px 4px rgba(40, 20, 10, 0.25),
+    0 2px 0 rgba(0, 0, 0, 0.2) !important;
+}
+
+.pottery-tools button.primary:hover:not(:disabled),
+.pottery-size-row button.primary:hover:not(:disabled) {
+  background: linear-gradient(180deg, #b08068, #986850) !important;
+}
+
+/* Fire stays kiln ember orange */
+.pottery-actions button.primary {
+  background: linear-gradient(180deg, var(--pottery-ember-hot), var(--pottery-ember)) !important;
+  border-color: #8a3a18 !important;
+  color: #fff4e8 !important;
+}
+
+.pottery-actions button.primary:hover:not(:disabled) {
+  background: linear-gradient(180deg, #ef8a48, #d06030) !important;
+}
+
+/* Undo / settings = darker umber outline chips */
+.pottery-actions button.ghost {
+  background: transparent !important;
+  color: var(--pottery-parchment-dim) !important;
+  border: 1.5px solid var(--pottery-umber) !important;
+  box-shadow: inset 0 0 0 1px rgba(90, 60, 42, 0.35) !important;
+}
+
+.pottery-actions button.ghost:hover:not(:disabled) {
+  background: rgba(74, 50, 38, 0.45) !important;
+  color: var(--pottery-parchment) !important;
+  border-color: #6a4838 !important;
+}
+
+.pottery button:disabled {
+  opacity: 0.45;
+  box-shadow: none !important;
+}
+
+/* Collection: clay shelf cards */
+.pottery-grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(7.5rem, 1fr));
+  gap: 0.7rem;
+}
+
+.pottery-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  width: 100%;
+  padding: 0.45rem;
+  border: 2px solid var(--pottery-wood);
+  border-radius: 0.55rem;
+  background:
+    linear-gradient(180deg, rgba(70, 48, 36, 0.95), rgba(36, 24, 18, 0.98)),
+    var(--pottery-shelf);
+  color: var(--pottery-parchment);
+  cursor: pointer;
+  text-align: left;
+  box-shadow:
+    inset 0 1px 0 rgba(210, 180, 140, 0.1),
+    0 4px 12px rgba(0, 0, 0, 0.28);
+}
+
+.pottery-card:hover {
+  background:
+    linear-gradient(180deg, rgba(88, 60, 44, 0.98), rgba(48, 32, 24, 0.98)),
+    #3a2820;
+  border-color: var(--pottery-clay);
+}
+
+.pottery-thumb {
+  display: block;
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  object-fit: cover;
+  border-radius: 0.4rem;
+  background: #1a120f;
+  border: 1px solid rgba(0, 0, 0, 0.35);
+}
+
+.pottery-thumb-fallback {
+  background:
+    radial-gradient(circle at 50% 40%, #3a2a24, #16100d);
+}
+
+.pottery-card-name {
+  font-size: 0.82rem;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 0 0.15rem 0.1rem;
+  color: var(--pottery-parchment);
+}
+
+.pottery-empty {
+  text-align: center;
+  padding: 1.25rem 0.5rem;
+}
+
+.pottery-name-field {
+  display: block;
+  margin-top: 0.85rem;
+}
+
+.pottery-name-field input {
+  width: 100%;
+  box-sizing: border-box;
+  border-radius: var(--pottery-chip-radius);
+  border: 1.5px solid var(--pottery-wood);
+  background: #2a1c16;
+  color: var(--pottery-parchment);
+}
+
+.pottery-fire-veil {
+  position: fixed;
+  inset: 0;
+  z-index: 35;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, #3a1408 55%, transparent);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  pointer-events: none;
+}
+
+.pottery-fire-veil p {
+  margin: 0;
+  font-size: 1.35rem;
+  font-weight: 650;
+  letter-spacing: 0.14em;
+  color: #ffe6c8;
+  text-shadow: 0 0 18px rgba(255, 140, 60, 0.65);
+}
+
+.pottery-firing .pottery-stage {
+  outline: 2px solid color-mix(in srgb, #ff8a3a 70%, transparent);
+  outline-offset: 3px;
+  animation: pottery-kiln 1s ease-in-out;
+}
+
+@keyframes pottery-kiln {
+  0% { filter: saturate(1) brightness(1); }
+  45% { filter: saturate(1.35) brightness(1.12) hue-rotate(-8deg); }
+  100% { filter: saturate(1.1) brightness(1.04); }
+}
+
+@media (min-width: 720px) {
+  .pottery {
+    width: min(28rem, 100%);
+    margin-top: 1.25rem;
+  }
+}
+
+@media (max-width: 420px) {
+  .pottery-tools,
+  .pottery-actions {
+    gap: 0.4rem;
+  }
+
+  .pottery-tools button,
+  .pottery-actions button {
+    min-width: 4.4rem;
+    font-size: 0.88rem;
+  }
+
+  .pottery-stage {
+    border-width: 4px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pottery-firing .pottery-stage {
+    animation: none;
+  }
+}
