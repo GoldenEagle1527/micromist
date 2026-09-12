@@ -13,7 +13,7 @@ export const mistEn: MistDict = {
     lives: "Lives",
     gameOver: "Game over",
     tryAgain: "Click to try again",
-    hint: "Arrow keys or A/D to move; drag also works. High score stays in localStorage.",
+    hint: "Arrow keys or A/D to move; drag also works. High score stays on this device.",
 };
 
 export const mistZh: MistDict = {
