@@ -11,8 +11,9 @@ export function createSoftPointTexture(): THREE.CanvasTexture {
   }
   const g = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
   g.addColorStop(0, "rgba(255,255,255,1)");
-  g.addColorStop(0.2, "rgba(210,245,255,0.9)");
-  g.addColorStop(0.45, "rgba(70,200,255,0.28)");
+  g.addColorStop(0.18, "rgba(230,250,255,0.95)");
+  g.addColorStop(0.4, "rgba(90,210,255,0.4)");
+  g.addColorStop(0.7, "rgba(40,140,255,0.12)");
   g.addColorStop(1, "rgba(0,0,0,0)");
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, size, size);
