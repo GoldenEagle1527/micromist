@@ -68,6 +68,17 @@ export const games: GameMeta[] = [
     badge: { zh: "单机", en: "Offline" },
   },
   {
+    slug: "lumen-weave",
+    mode: "single",
+    audience: "staging",
+    title: { zh: "织光", en: "Lumen Weave" },
+    blurb: {
+      zh: "冲入光带织成的隧道，穿梭掠过霓虹光束。单机本地，最高分只存本机。",
+      en: "Rush a glowing craft through a tunnel of woven neon beams. Solo local; best score stays on this device.",
+    },
+    badge: { zh: "单机", en: "Offline" },
+  },
+  {
     slug: "blade-break",
     mode: "single",
     title: { zh: "破阵之刃", en: "Blade Break" },
