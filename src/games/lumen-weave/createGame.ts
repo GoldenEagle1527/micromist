@@ -29,7 +29,7 @@ export function createLumenWeaveGame(
   renderer.setClearColor(0x000000, 1);
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.05;
+  renderer.toneMappingExposure = 1.18;
   renderer.autoClear = true;
   renderer.domElement.style.display = "block";
   renderer.domElement.style.width = "100%";
@@ -39,7 +39,7 @@ export function createLumenWeaveGame(
 
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x000000);
-  scene.fog = new THREE.Fog(0x000000, 18, 72);
+  scene.fog = new THREE.Fog(0x000000, 22, 88);
 
   const camera = new THREE.PerspectiveCamera(72, 800 / 480, 0.08, 120);
 
@@ -60,7 +60,7 @@ export function createLumenWeaveGame(
 
   const composer = new EffectComposer(renderer);
   composer.addPass(new RenderPass(scene, camera));
-  const bloom = new UnrealBloomPass(new THREE.Vector2(800, 480), 0.88, 0.52, 0.14);
+  const bloom = new UnrealBloomPass(new THREE.Vector2(800, 480), 1.35, 0.58, 0.08);
   composer.addPass(bloom);
   composer.addPass(new OutputPass());
 
