@@ -39,9 +39,9 @@ export function createLumenWeaveGame(
 
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x000000);
-  scene.fog = new THREE.Fog(0x000000, 22, 88);
+  scene.fog = new THREE.Fog(0x000000, 28, 110);
 
-  const camera = new THREE.PerspectiveCamera(72, 800 / 480, 0.08, 120);
+  const camera = new THREE.PerspectiveCamera(68, 800 / 480, 0.08, 140);
 
   const glowMap = createSoftPointTexture();
   const hud = createHud(parent, options.labels);

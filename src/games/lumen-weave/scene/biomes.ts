@@ -19,16 +19,16 @@ const VIOLET = new THREE.Color(0xa78bfa);
 const WHITE = new THREE.Color(0xe8f7ff);
 
 /**
- * Softmax-ish biome weights. Smaller spatial scale → larger contiguous regions
- * so biomes persist through longer travel before flipping.
+ * Soft biome weights over world XZ. Wider lobes so colors/micro-structure
+ * lerp continuously — no hard chunk dominant pop.
  */
 export function sampleBiomeWeights(
   worldSeed: number,
   wx: number,
   wz: number,
 ): Record<BiomeId, number> {
-  // Was ~0.011 (regions flipped quickly). ~0.0035 ≈ 3× larger domains.
-  const scale = 0.0035;
+  // Large contiguous domains that still overlap enough to morph visibly.
+  const scale = 0.0028;
   const n0 = fbm2D(worldSeed ^ 0x11a1, wx * scale, wz * scale, 4);
   const n1 = fbm2D(
     worldSeed ^ 0x22b2,
@@ -36,15 +36,15 @@ export function sampleBiomeWeights(
     wz * scale * 0.71 - 17,
     3,
   );
-  const n2 = valueNoise2D(worldSeed ^ 0x33c3, wx * scale * 1.35, wz * scale * 1.35);
+  const n2 = valueNoise2D(worldSeed ^ 0x33c3, wx * scale * 1.2, wz * scale * 1.2);
 
-  // Sharper lobes so one (or two) biomes dominate a chunk at a glance.
+  // Softer lobes (larger variance) → smooth multi-biome blends.
   const raw: Record<BiomeId, number> = {
-    dunes: Math.exp(-((n0 - 0.18) ** 2) / 0.028) * (0.65 + n2 * 0.5),
-    helix: Math.exp(-((n0 - 0.38) ** 2) / 0.026) * (0.65 + n1 * 0.45),
-    warp: Math.exp(-((n0 - 0.56) ** 2) / 0.024) * (0.6 + n2 * 0.55),
-    void: Math.exp(-((n0 - 0.76) ** 2) / 0.032) * (0.55 + (1 - n1) * 0.5),
-    ridges: Math.exp(-((n1 - 0.58) ** 2) / 0.028) * (0.6 + n0 * 0.4),
+    dunes: Math.exp(-((n0 - 0.16) ** 2) / 0.055) * (0.7 + n2 * 0.45),
+    helix: Math.exp(-((n0 - 0.38) ** 2) / 0.05) * (0.7 + n1 * 0.4),
+    warp: Math.exp(-((n0 - 0.58) ** 2) / 0.048) * (0.65 + n2 * 0.5),
+    void: Math.exp(-((n0 - 0.8) ** 2) / 0.06) * (0.55 + (1 - n1) * 0.45),
+    ridges: Math.exp(-((n1 - 0.55) ** 2) / 0.052) * (0.65 + n0 * 0.35),
   };
 
   let sum = 0;
@@ -74,7 +74,7 @@ export function dominantBiome(weights: Record<BiomeId, number>): BiomeId {
 export function secondaryBiome(
   weights: Record<BiomeId, number>,
   primary: BiomeId,
-  minWeight = 0.22,
+  minWeight = 0.18,
 ): BiomeId | null {
   let best: BiomeId | null = null;
   let bestW = minWeight;
@@ -95,6 +95,17 @@ export function sampleBiomeAt(worldSeed: number, wx: number, wz: number): BiomeI
   return { id, key: id, weights };
 }
 
+/** Blended HUD label when two biomes share the sea. */
+export function biomeBlendLabel(
+  weights: Record<BiomeId, number>,
+  nameOf: (id: BiomeId) => string,
+): string {
+  const primary = dominantBiome(weights);
+  const secondary = secondaryBiome(weights, primary, 0.22);
+  if (!secondary) return nameOf(primary);
+  return `${nameOf(primary)} · ${nameOf(secondary)}`;
+}
+
 export function colorForBiome(
   id: BiomeId,
   t: number,
@@ -105,7 +116,6 @@ export function colorForBiome(
     case "dunes":
       return out.copy(CYAN).lerp(ICE, u * 0.45);
     case "helix":
-      // Distinct cyan + amber strands (caller picks t≈0 or ≈1).
       return u < 0.5
         ? out.copy(CYAN).lerp(ICE, u * 0.35)
         : out.copy(AMBER).lerp(new THREE.Color(0xffd089), (u - 0.5) * 0.5);
@@ -118,4 +128,31 @@ export function colorForBiome(
     default:
       return out.copy(CYAN);
   }
+}
+
+/**
+ * Soft-lerp particle color from all biome weights on the continuous sea.
+ */
+export function colorFromWeights(
+  weights: Record<BiomeId, number>,
+  t: number,
+  out: THREE.Color,
+  scratchA: THREE.Color,
+  scratchB: THREE.Color,
+): THREE.Color {
+  out.setRGB(0, 0, 0);
+  let sum = 0;
+  for (const id of BIOME_IDS) {
+    const w = weights[id]!;
+    if (w < 0.02) continue;
+    colorForBiome(id, t, scratchA);
+    out.r += scratchA.r * w;
+    out.g += scratchA.g * w;
+    out.b += scratchA.b * w;
+    sum += w;
+  }
+  if (sum > 1e-6) out.multiplyScalar(1 / sum);
+  else colorForBiome("dunes", t, out);
+  void scratchB;
+  return out;
 }
