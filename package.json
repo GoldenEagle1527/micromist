@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "type": "module",
   "license": "MIT",
-  "description": "\u5fae\u6e3a / micromist \u2014 open-source browser game platform on Cloudflare Workers",
+  "description": "微渺 / micromist — open-source browser game platform on Cloudflare Workers",
   "engines": {
     "node": ">=20.19.0"
   },
@@ -22,13 +22,15 @@
     "phaser": "^3.90.0",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
-    "react-router": "^7.8.2"
+    "react-router": "^7.8.2",
+    "three": "^0.186.0"
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "^1.13.0",
     "@cloudflare/workers-types": "^5.20260908.1",
     "@types/react": "^19.1.12",
     "@types/react-dom": "^19.1.9",
+    "@types/three": "^0.185.4",
     "@vitejs/plugin-react": "^5.0.2",
     "typescript": "~5.9.2",
     "vite": "^7.1.5",
