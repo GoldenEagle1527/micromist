@@ -176,14 +176,16 @@ export function Shell() {
     <div className="shell">
       <header className="topbar">
         <NavLink to="/" className="brand" onClick={() => setMenuOpen(false)}>
-          <span className="brand-zh">{t.brand}</span>
+          <span className="brand-title-row">
+            <span className="brand-zh">{t.brand}</span>
+            {kind === "staging" ? (
+              <span className="staging-badge" title={t.stagingBadgeAria}>
+                {t.stagingBadge}
+              </span>
+            ) : null}
+          </span>
           {locale === "zh" ? <span className="brand-en">{t.brandSub}</span> : null}
         </NavLink>
-        {kind === "staging" ? (
-          <span className="staging-badge" title={t.stagingBadgeAria} aria-label={t.stagingBadgeAria}>
-            {t.stagingBadge}
-          </span>
-        ) : null}
         {playGame ? (
           <div className="topbar-game" aria-current="page">
             {playGame.title[locale]}
