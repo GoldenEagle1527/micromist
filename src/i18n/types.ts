@@ -25,6 +25,11 @@ export type Dict = {
   aboutTitle: string;
   aboutBody: string;
   aboutClose: string;
+  aboutSwitchToStaging: string;
+  aboutSwitchToProd: string;
+  aboutOpenStaging: string;
+  stagingBadge: string;
+  stagingBadgeAria: string;
   floatAria: string;
   floatTitle: string;
   floatBlocked: string;
