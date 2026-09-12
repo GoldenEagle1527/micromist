@@ -23,6 +23,12 @@ export const en: Dict = {
   aboutBody:
     "micromist is an open-source browser game platform on Cloudflare Workers Static Assets. Solo progress stays on this device. Multiplayer uses share links into Durable Object rooms (no public lobby); empty rooms are recycled.",
   aboutClose: "Close",
+  floatAria: "Open float window (disguised as an ad)",
+  floatTitle: "Float",
+  floatBlocked: "The popup was blocked. Allow popups for this site and try again.",
+  floatUnsupported: "Document Picture-in-Picture isn’t supported here. Try the latest Chrome or Edge.",
+  floatAdBadge: "Ad",
+  floatAdTitle: "Sponsored content",
   playCta: "Play",
   notFoundTitle: "Page not found",
   notFoundBody: "Nothing lives at this path.",

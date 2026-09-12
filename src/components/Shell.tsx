@@ -3,6 +3,11 @@ import { NavLink, Outlet, useMatch } from "react-router";
 import { getGame } from "../games/catalog";
 import { useLocale } from "../i18n";
 import { useTheme } from "../hooks/useTheme";
+import {
+  isFloatEmbed,
+  openAdDocumentPip,
+  supportsDocumentPip,
+} from "../lib/document-pip";
 
 function ThemeIcon({ mode }: { mode: "light" | "dark" | "system" }) {
   if (mode === "dark") {
@@ -34,11 +39,22 @@ function AboutIcon() {
   );
 }
 
+function FloatIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M19 7h-8v6h8V7zm-2 4h-4V9h4v2zm4-8H3c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H3V5h18v14z" />
+    </svg>
+  );
+}
+
 export function Shell() {
   const { mode, cycleMode } = useTheme();
   const { locale, t, toggleLocale } = useLocale();
   const [menuOpen, setMenuOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
+  const [floatBusy, setFloatBusy] = useState(false);
+  const inFloat = isFloatEmbed();
+  const canFloat = !inFloat && supportsDocumentPip();
   const aboutTitleId = useId();
   const closeBtnRef = useRef<HTMLButtonElement | null>(null);
   const playMatch = useMatch("/play/:slug");
@@ -75,6 +91,28 @@ export function Shell() {
   const openAbout = () => {
     setMenuOpen(false);
     setAboutOpen(true);
+  };
+
+  const openFloat = async () => {
+    setMenuOpen(false);
+    if (!supportsDocumentPip()) {
+      window.alert(t.floatUnsupported);
+      return;
+    }
+    if (floatBusy) return;
+    setFloatBusy(true);
+    try {
+      await openAdDocumentPip({
+        adBadge: t.floatAdBadge,
+        adTitle: t.floatAdTitle,
+        unsupported: t.floatUnsupported,
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : t.floatUnsupported;
+      window.alert(msg);
+    } finally {
+      setFloatBusy(false);
+    }
   };
 
   return (
@@ -126,6 +164,18 @@ export function Shell() {
               )}
             </svg>
           </button>
+          {canFloat ? (
+            <button
+              type="button"
+              className="icon-btn desktop-only"
+              onClick={() => void openFloat()}
+              aria-label={t.floatAria}
+              title={t.floatTitle}
+              disabled={floatBusy}
+            >
+              <FloatIcon />
+            </button>
+          ) : null}
           <button
             type="button"
             className="icon-btn desktop-only"
@@ -158,6 +208,19 @@ export function Shell() {
             <ThemeIcon mode={mode} />
           </span>
         </button>
+        {canFloat ? (
+          <button
+            type="button"
+            className="mobile-nav-item"
+            onClick={() => void openFloat()}
+            disabled={floatBusy}
+          >
+            <span className="mobile-nav-item-label">{t.floatTitle}</span>
+            <span className="mobile-nav-item-icon" aria-hidden="true">
+              <FloatIcon />
+            </span>
+          </button>
+        ) : null}
         <button type="button" className="mobile-nav-item" onClick={openAbout}>
           <span className="mobile-nav-item-label">{t.aboutAria}</span>
           <span className="mobile-nav-item-icon" aria-hidden="true">
