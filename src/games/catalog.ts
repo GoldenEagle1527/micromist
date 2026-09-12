@@ -45,6 +45,17 @@ export const games: GameMeta[] = [
     badge: { zh: "单机", en: "Offline" },
   },
   {
+    slug: "pottery",
+    mode: "single",
+    listed: true,
+    title: { zh: "陶艺", en: "Pottery" },
+    blurb: {
+      zh: "拉坯塑形，烧成收藏。剖面即陶，单机本地，作品只存在本机。",
+      en: "Throw clay on the wheel, fire, and keep a shelf. Solo local; pieces stay on this device.",
+    },
+    badge: { zh: "单机", en: "Offline" },
+  },
+  {
     slug: "blade-break",
     mode: "single",
     listed: true,
