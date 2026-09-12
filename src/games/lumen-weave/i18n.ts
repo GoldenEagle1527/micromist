@@ -24,7 +24,7 @@ export type LumenDict = {
 export const lumenEn: LumenDict = {
   setupTitle: "Lumen Weave",
   setupHint:
-    "First-person glide through endless seeded particle biomes. Same seed remakes the same world — wander, look around, no score and no fail state.",
+    "Skim a continuous seeded particle ocean — landforms morph softly beneath you. Same seed remakes the same sea. Steer left and right only; auto-forward sightseeing, no score and no fail state.",
   seed: "Seed",
   seedPlaceholder: "text or number",
   randomSeed: "New random seed",
@@ -33,9 +33,9 @@ export const lumenEn: LumenDict = {
   normal: "Normal",
   fast: "Fast",
   cruiseBlurb: (id) => {
-    if (id === "slow") return "Gentle drift — easy on motion comfort.";
-    if (id === "fast") return "Swift glide — still exploratory, not a score chase.";
-    return "Balanced cruise through the weave.";
+    if (id === "slow") return "Gentle skim — easy on motion comfort.";
+    if (id === "fast") return "Swift skim across the particle sea.";
+    return "Balanced glide over the weave ocean.";
   },
   start: "Enter the weave",
   backSetup: "← Setup",
@@ -47,14 +47,14 @@ export const lumenEn: LumenDict = {
     if (id === "void") return "Star void";
     return "Magenta ridges";
   },
-  hint: "Drag to look · A/D strafe · W/S cruise boost/brake · ↑/Space up · ↓/Shift down",
-  stageAria: "Lumen Weave explore field",
+  hint: "Glide left-right on the particle sea · A/D or ←/→ or horizontal drag · auto-forward",
+  stageAria: "Lumen Weave particle sea",
 };
 
 export const lumenZh: LumenDict = {
   setupTitle: "织光",
   setupHint:
-    "第一人称漫游无尽的种子粒子生态域。同一种子复现同一世界 — 随意穿梭环顾，无得分、无失败。",
+    "在连续的种子粒子海面上滑翔参观 — 地貌随生态域柔和渐变。同一种子复现同一片海。只需左右转向；自动前进而观光，无得分、无失败。",
   seed: "种子",
   seedPlaceholder: "文字或数字",
   randomSeed: "随机新种子",
@@ -63,9 +63,9 @@ export const lumenZh: LumenDict = {
   normal: "普通",
   fast: "快速",
   cruiseBlurb: (id) => {
-    if (id === "slow") return "缓速漂游 — 更舒适的动感。";
-    if (id === "fast") return "疾速滑翔 — 仍是漫游，不是竞速计分。";
-    return "均衡巡航，穿行织界。";
+    if (id === "slow") return "缓速贴面滑翔 — 更舒适的动感。";
+    if (id === "fast") return "疾速划过粒子海面。";
+    return "均衡滑翔，穿行织界之海。";
   },
   start: "进入织界",
   backSetup: "← 返回设置",
@@ -77,6 +77,6 @@ export const lumenZh: LumenDict = {
     if (id === "void") return "星空虚空";
     return "品红脊格";
   },
-  hint: "拖动环顾 · A/D 横移 · W/S 加速/减速 · ↑/空格 上升 · ↓/Shift 下降",
-  stageAria: "织光漫游区",
+  hint: "左右滑翔参观粒子海 · A/D 或 ←/→ 或左右拖动 · 自动前进",
+  stageAria: "织光粒子海",
 };
