@@ -3,6 +3,7 @@ import type { ChromaDict } from "../games/chroma-slide/i18n";
 import type { ExplosiveDict } from "../games/explosive-chess/i18n";
 import type { MistDict } from "../games/mist-catch/i18n";
 import type { PotteryDict } from "../games/pottery/i18n";
+import type { LumenDict } from "../games/lumen-weave/i18n";
 
 export type Locale = "zh" | "en";
 
@@ -66,6 +67,7 @@ export type Dict = {
   chroma: ChromaDict;
   blade: BladeDict;
   pottery: PotteryDict;
+  lumen: LumenDict;
 };
 
 export type GameLocaleFields = {

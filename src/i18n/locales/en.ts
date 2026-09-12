@@ -4,6 +4,7 @@ import { chromaEn } from "../../games/chroma-slide/i18n";
 import { explosiveEn } from "../../games/explosive-chess/i18n";
 import { mistEn } from "../../games/mist-catch/i18n";
 import { potteryEn } from "../../games/pottery/i18n";
+import { lumenEn } from "../../games/lumen-weave/i18n";
 
 export const en: Dict = {
   brand: "micromist",
@@ -67,4 +68,5 @@ export const en: Dict = {
   chroma: chromaEn,
   blade: bladeEn,
   pottery: potteryEn,
+  lumen: lumenEn,
 };

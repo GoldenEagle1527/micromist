@@ -4,6 +4,7 @@ import { chromaZh } from "../../games/chroma-slide/i18n";
 import { explosiveZh } from "../../games/explosive-chess/i18n";
 import { mistZh } from "../../games/mist-catch/i18n";
 import { potteryZh } from "../../games/pottery/i18n";
+import { lumenZh } from "../../games/lumen-weave/i18n";
 
 export const zh: Dict = {
   brand: "微渺",
@@ -67,4 +68,5 @@ export const zh: Dict = {
   chroma: chromaZh,
   blade: bladeZh,
   pottery: potteryZh,
+  lumen: lumenZh,
 };
