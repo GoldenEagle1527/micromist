@@ -10,6 +10,7 @@ import {
 } from "../lib/document-pip";
 import { LocalDataModal } from "./LocalDataModal";
 import { ensureLocalDbReady } from "../lib/game-store";
+import { siteKind, switchSiteHref } from "../lib/sites";
 
 function ThemeIcon({ mode }: { mode: "light" | "dark" | "system" }) {
   if (mode === "dark") {
@@ -88,6 +89,14 @@ export function Shell() {
     mode === "system" ? t.themeSystem : mode === "light" ? t.themeLight : t.themeDark;
   const langButtonLabel = locale === "zh" ? "EN" : "中";
   const langRowLabel = locale === "zh" ? "中文 / EN" : "English / 中";
+  const kind = siteKind();
+  const switchHref = switchSiteHref(kind);
+  const switchLabel =
+    kind === "staging"
+      ? t.aboutSwitchToProd
+      : kind === "prod"
+        ? t.aboutSwitchToStaging
+        : t.aboutOpenStaging;
 
   useEffect(() => {
     if (!aboutOpen && !menuOpen && !storageOpen) return;
@@ -170,6 +179,11 @@ export function Shell() {
           <span className="brand-zh">{t.brand}</span>
           {locale === "zh" ? <span className="brand-en">{t.brandSub}</span> : null}
         </NavLink>
+        {kind === "staging" ? (
+          <span className="staging-badge" title={t.stagingBadgeAria} aria-label={t.stagingBadgeAria}>
+            {t.stagingBadge}
+          </span>
+        ) : null}
         {playGame ? (
           <div className="topbar-game" aria-current="page">
             {playGame.title[locale]}
@@ -359,6 +373,11 @@ export function Shell() {
             </div>
             <p className="lede modal-body">{t.aboutBody}</p>
             <div className="modal-actions">
+              {switchHref ? (
+                <a href={switchHref} className="ghost about-site-switch">
+                  {switchLabel}
+                </a>
+              ) : null}
               <a
                 href="https://github.com/GoldenEagle1527/micromist"
                 target="_blank"

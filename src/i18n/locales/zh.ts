@@ -25,6 +25,11 @@ export const zh: Dict = {
   aboutBody:
     "micromist 是一个开源浏览器游戏平台：前端跑在 Cloudflare Workers Static Assets 上，单人进度只存在本机。联机靠分享链接进入房间（Durable Objects + WebSocket），不设公开房间列表；人走了房间也就回收。",
   aboutClose: "关闭",
+  aboutSwitchToStaging: "打开测试版",
+  aboutSwitchToProd: "打开正式版",
+  aboutOpenStaging: "打开测试版",
+  stagingBadge: "测试",
+  stagingBadgeAria: "当前是测试环境",
   floatAria: "打开摸鱼浮窗（假装广告）",
   floatTitle: "浮窗",
   floatBlocked: "弹窗被拦截了。请允许本站弹出窗口后再试。",

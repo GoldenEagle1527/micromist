@@ -34,5 +34,18 @@
       "pattern": "micromist.goldeneaglepersonal.dpdns.org",
       "custom_domain": true
     }
-  ]
+  ],
+  "env": {
+    "staging": {
+      "name": "micromist-staging",
+      "workers_dev": true,
+      "preview_urls": true,
+      "routes": [
+        {
+          "pattern": "micromist-staging.goldeneaglepersonal.dpdns.org",
+          "custom_domain": true
+        }
+      ]
+    }
+  }
 }
