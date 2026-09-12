@@ -8,6 +8,8 @@ import {
   openAdDocumentPip,
   supportsDocumentPip,
 } from "../lib/document-pip";
+import { LocalDataModal } from "./LocalDataModal";
+import { ensureLocalDbReady } from "../lib/game-store";
 
 function ThemeIcon({ mode }: { mode: "light" | "dark" | "system" }) {
   if (mode === "dark") {
@@ -47,14 +49,34 @@ function FloatIcon() {
   );
 }
 
+function StorageIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M4 6h16v2H4V6zm0 5h16v2H4v-2zm0 5h16v2H4v-2zM2 4v16c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2H4c-1.1 0-2 .9-2 2zm2 0h16v16H4V4z" />
+    </svg>
+  );
+}
+
 export function Shell() {
   const { mode, cycleMode } = useTheme();
   const { locale, t, toggleLocale } = useLocale();
   const [menuOpen, setMenuOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
+  const [storageOpen, setStorageOpen] = useState(false);
+  const [dbReady, setDbReady] = useState(false);
   const [floatBusy, setFloatBusy] = useState(false);
   const inFloat = isFloatEmbed();
   const canFloat = !inFloat && supportsDocumentPip();
+  useEffect(() => {
+    let cancelled = false;
+    void ensureLocalDbReady().then(() => {
+      if (!cancelled) setDbReady(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const aboutTitleId = useId();
   const closeBtnRef = useRef<HTMLButtonElement | null>(null);
   const playMatch = useMatch("/play/:slug");
@@ -68,15 +90,25 @@ export function Shell() {
   const langRowLabel = locale === "zh" ? "中文 / EN" : "English / 中";
 
   useEffect(() => {
-    if (!aboutOpen && !menuOpen) return;
+    if (!aboutOpen && !menuOpen && !storageOpen) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
-      if (aboutOpen) setAboutOpen(false);
+      if (storageOpen) setStorageOpen(false);
+      else if (aboutOpen) setAboutOpen(false);
       else if (menuOpen) setMenuOpen(false);
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [aboutOpen, menuOpen]);
+  }, [aboutOpen, menuOpen, storageOpen]);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [menuOpen]);
 
   useEffect(() => {
     if (!aboutOpen) return;
@@ -91,6 +123,12 @@ export function Shell() {
   const openAbout = () => {
     setMenuOpen(false);
     setAboutOpen(true);
+  };
+
+  const openStorage = () => {
+    setMenuOpen(false);
+    setAboutOpen(false);
+    setStorageOpen(true);
   };
 
   const openFloat = async () => {
@@ -114,6 +152,16 @@ export function Shell() {
       setFloatBusy(false);
     }
   };
+
+  if (!dbReady) {
+    return (
+      <div className="shell">
+        <main className="main" style={{ padding: "2rem", textAlign: "center" }}>
+          <p className="hint">{t.loading}</p>
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="shell">
@@ -179,6 +227,15 @@ export function Shell() {
           <button
             type="button"
             className="icon-btn desktop-only"
+            onClick={openStorage}
+            aria-label={t.storageAria}
+            title={t.storageAria}
+          >
+            <StorageIcon />
+          </button>
+          <button
+            type="button"
+            className="icon-btn desktop-only"
             onClick={() => setAboutOpen(true)}
             aria-label={t.aboutAria}
             title={t.aboutAria}
@@ -188,11 +245,30 @@ export function Shell() {
         </div>
       </header>
 
+      <button
+        type="button"
+        className={`mobile-nav-backdrop${menuOpen ? " open" : ""}`}
+        aria-label={t.menuAria}
+        tabIndex={menuOpen ? 0 : -1}
+        onClick={() => setMenuOpen(false)}
+      />
       <nav
         id="mobile-nav"
         className={`mobile-nav${menuOpen ? " open" : ""}`}
         aria-label={t.menuAria}
+        aria-hidden={!menuOpen}
       >
+        <button
+          type="button"
+          className="mobile-nav-header"
+          onClick={() => setMenuOpen(false)}
+        >
+          <svg className="mobile-nav-back-chevron" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M15.41 7.41 14 6l-6 6 6 6 1.41-1.41L10.83 12z" />
+          </svg>
+          <span className="mobile-nav-back-label">{t.menuBack}</span>
+        </button>
+        <div className="mobile-nav-body">
         <button type="button" className="mobile-nav-item" onClick={toggleLocale}>
           <span className="mobile-nav-item-label">{t.langAria}</span>
           <span className="mobile-nav-item-value">{langRowLabel}</span>
@@ -221,12 +297,19 @@ export function Shell() {
             </span>
           </button>
         ) : null}
+        <button type="button" className="mobile-nav-item" onClick={openStorage}>
+          <span className="mobile-nav-item-label">{t.storageAria}</span>
+          <span className="mobile-nav-item-icon" aria-hidden="true">
+            <StorageIcon />
+          </span>
+        </button>
         <button type="button" className="mobile-nav-item" onClick={openAbout}>
           <span className="mobile-nav-item-label">{t.aboutAria}</span>
           <span className="mobile-nav-item-icon" aria-hidden="true">
             <AboutIcon />
           </span>
         </button>
+        </div>
       </nav>
 
       <main className="main">
@@ -239,6 +322,13 @@ export function Shell() {
           <a href="https://github.com/GoldenEagle1527/micromist">GitHub</a>
         </footer>
       ) : null}
+
+      <LocalDataModal
+        open={storageOpen}
+        onClose={() => setStorageOpen(false)}
+        locale={locale}
+        t={t}
+      />
 
       {aboutOpen ? (
         <div

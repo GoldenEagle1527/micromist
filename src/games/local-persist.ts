@@ -1,15 +1,20 @@
 /**
  * Shared local progress persist for micromist solo games.
  *
- * All listed solo games (chroma-slide, blade-break, explosive-chess solo,
- * mist-catch) must use this layer. Online / multiplayer play is excluded —
- * never write micromist.local.* progress while opponent === "online".
+ * All solo games must use this layer (or `gameStore*` directly). Storage is
+ * IndexedDB via `src/lib/game-store.ts`. Online / multiplayer play is excluded —
+ * never write progress while opponent === "online".
  *
- * TODO(mist-catch): mid-run Phaser resume skipped; best-score stays via
- * src/lib/bestScore.ts (catalog BEST_SCORE_KEY). Wire runtime resume later
- * if Phaser scene snapshot is practical.
+ * TODO(mist-catch): mid-run Phaser resume skipped; best-score uses game-store
+ * key `best` on slug mist-catch.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  ensureLocalDbReady,
+  gameStoreDelete,
+  gameStoreGet,
+  gameStoreSet,
+} from "../lib/game-store";
 
 export type LocalProgressEnvelope<T> = {
   v: number;
@@ -18,7 +23,9 @@ export type LocalProgressEnvelope<T> = {
 };
 
 const DEFAULT_VERSION = 1;
+const PROGRESS_KEY = "progress";
 
+/** @deprecated key was localStorage-only; kept for docs / grepping. */
 export function localProgressKey(slug: string): string {
   return `micromist.local.${slug}.progress`;
 }
@@ -34,10 +41,9 @@ export function saveLocalProgress<T>(
       savedAt: Date.now(),
       data,
     };
-    localStorage.setItem(localProgressKey(slug), JSON.stringify(envelope));
+    gameStoreSet(slug, PROGRESS_KEY, envelope);
     return true;
   } catch {
-    // Quota exceeded / private mode — ignore; gameplay continues.
     return false;
   }
 }
@@ -50,9 +56,10 @@ export function loadLocalProgress<T>(
   },
 ): T | null {
   try {
-    const raw = localStorage.getItem(localProgressKey(slug));
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as Partial<LocalProgressEnvelope<unknown>>;
+    const parsed = gameStoreGet<Partial<LocalProgressEnvelope<unknown>>>(
+      slug,
+      PROGRESS_KEY,
+    );
     if (parsed == null || typeof parsed !== "object" || !("data" in parsed)) {
       return null;
     }
@@ -70,26 +77,19 @@ export function loadLocalProgress<T>(
 }
 
 export function clearLocalProgress(slug: string): void {
-  try {
-    localStorage.removeItem(localProgressKey(slug));
-  } catch {
-    /* ignore */
-  }
+  gameStoreDelete(slug, PROGRESS_KEY);
 }
 
 export type UseLocalGamePersistOptions<T> = {
-  /** When false, skip autosave (e.g. online mode). Default true. */
   enabled?: boolean;
   version?: number;
-  /** Return false to clear instead of save. Default: always save when state is set. */
   shouldSave?: (state: T) => boolean;
   onHydrate?: (data: T) => void;
   migrate?: (data: unknown, fromVersion: number) => T;
 };
 
 /**
- * Load once on mount; autosave on `state` changes (0ms debounce via effect).
- * When enabled and state fails shouldSave (or is nullish), clears storage.
+ * Wait for IDB cache, load once, autosave on `state` changes.
  */
 export function useLocalGamePersist<T>(
   slug: string,
@@ -108,14 +108,19 @@ export function useLocalGamePersist<T>(
   const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
-    const data = loadLocalProgress<T>(slug, {
-      version,
-      migrate: migrateRef.current,
+    let cancelled = false;
+    void ensureLocalDbReady().then(() => {
+      if (cancelled) return;
+      const data = loadLocalProgress<T>(slug, {
+        version,
+        migrate: migrateRef.current,
+      });
+      if (data != null) onHydrateRef.current?.(data);
+      setHydrated(true);
     });
-    if (data != null) {
-      onHydrateRef.current?.(data);
-    }
-    setHydrated(true);
+    return () => {
+      cancelled = true;
+    };
   }, [slug, version]);
 
   useEffect(() => {

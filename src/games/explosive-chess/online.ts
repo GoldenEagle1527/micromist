@@ -4,7 +4,7 @@
 import { generateRoomCode as sharedGenerateRoomCode } from "../../../shared/multiplayer";
 import {
   OnlineRoomClient,
-  getOrCreatePlayerId as sharedGetPlayerId,
+  getOrCreatePlayerIdForGame,
   type CommonHandlers,
   type Phase,
   type Role,
@@ -40,11 +40,10 @@ export type ServerHandlers = {
   onClose?: CommonHandlers["onClose"];
 };
 
-const PLAYER_ID_KEY = "micromist.explosive-chess.playerId";
 const GAME_SLUG = "explosive-chess";
 
 export function getOrCreatePlayerId(): string {
-  return sharedGetPlayerId(PLAYER_ID_KEY);
+  return getOrCreatePlayerIdForGame(GAME_SLUG);
 }
 
 export function generateRoomCode(): string {

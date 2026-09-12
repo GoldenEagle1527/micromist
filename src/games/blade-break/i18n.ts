@@ -198,7 +198,7 @@ export const bladeEn: BladeDict = {
     attacksThisTurn: (n) => `Attacks this turn: ${n}`,
     runWonTitle: "Array broken!",
     runWonBody: (fights) =>
-      `All ${fights} duels cleared. Progress is saved in this browser (localStorage).`,
+      `All ${fights} duels cleared. Progress is saved on this device.`,
     runLostTitle: "Blade snapped",
     runLostBody: "The array held. Tune your deck and try again.",
     playFail: {
@@ -468,7 +468,7 @@ export const bladeZh: BladeDict = {
     },
     attacksThisTurn: (n) => `本回合已打出攻击：${n}`,
     runWonTitle: "阵破！",
-    runWonBody: (fights) => `${fights} 场对决全部拿下。本局进度保存在本浏览器（localStorage）。`,
+    runWonBody: (fights) => `${fights} 场对决全部拿下。本局进度保存在本机。`,
     runLostTitle: "刀折阵在",
     runLostBody: "这次没能破阵。调整构筑再试。",
     playFail: {

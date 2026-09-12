@@ -1,10 +1,17 @@
-import { BEST_SCORE_KEY } from "../games/catalog";
+import { gameStoreGet, gameStoreSet } from "./game-store";
+
+const GAME = "mist-catch";
+const KEY = "best";
 
 export function readBestScore(): number {
   try {
-    const raw = localStorage.getItem(BEST_SCORE_KEY);
-    const value = raw ? Number.parseInt(raw, 10) : 0;
-    return Number.isFinite(value) ? value : 0;
+    const raw = gameStoreGet<unknown>(GAME, KEY);
+    if (typeof raw === "number" && Number.isFinite(raw)) return raw;
+    if (typeof raw === "string") {
+      const value = Number.parseInt(raw, 10);
+      return Number.isFinite(value) ? value : 0;
+    }
+    return 0;
   } catch {
     return 0;
   }
@@ -13,9 +20,9 @@ export function readBestScore(): number {
 export function writeBestScore(score: number): number {
   const next = Math.max(score, readBestScore());
   try {
-    localStorage.setItem(BEST_SCORE_KEY, String(next));
+    gameStoreSet(GAME, KEY, next);
   } catch {
-    // Private mode or full quota — ignore; the run still plays.
+    /* ignore */
   }
   return next;
 }

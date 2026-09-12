@@ -1,5 +1,6 @@
-/** Persisted best + recent run history for Chroma Slide (separate from mid-run progress). */
+/** Persisted best + recent run history for Chroma Slide (IndexedDB via game-store). */
 
+import { gameStoreGet, gameStoreSet } from "../../lib/game-store";
 import { normalizePresetId, type PresetId } from "./engine";
 
 export type ChromaRunRecord = {
@@ -15,6 +16,9 @@ export type ChromaScores = {
   recent: ChromaRunRecord[];
 };
 
+export const CHROMA_GAME = "chroma-slide";
+export const CHROMA_SCORES_STORE_KEY = "scores";
+/** @deprecated localStorage key — migrated into IndexedDB on boot. */
 export const CHROMA_SCORES_KEY = "micromist.local.chroma-slide.scores";
 export const MAX_RECENT = 10;
 
@@ -46,19 +50,22 @@ function parseRun(raw: unknown): ChromaRunRecord | null {
   return run;
 }
 
+function coerceScores(raw: unknown): ChromaScores {
+  if (raw == null || typeof raw !== "object") return emptyScores();
+  const parsed = raw as Partial<ChromaScores>;
+  const best = parsed.best != null ? parseRun(parsed.best) : null;
+  const recent = Array.isArray(parsed.recent)
+    ? parsed.recent
+        .map(parseRun)
+        .filter((r): r is ChromaRunRecord => r != null)
+        .slice(0, MAX_RECENT)
+    : [];
+  return { best, recent };
+}
+
 export function loadScores(): ChromaScores {
   try {
-    const raw = localStorage.getItem(CHROMA_SCORES_KEY);
-    if (!raw) return emptyScores();
-    const parsed = JSON.parse(raw) as Partial<ChromaScores>;
-    const best = parsed.best != null ? parseRun(parsed.best) : null;
-    const recent = Array.isArray(parsed.recent)
-      ? parsed.recent
-          .map(parseRun)
-          .filter((r): r is ChromaRunRecord => r != null)
-          .slice(0, MAX_RECENT)
-      : [];
-    return { best, recent };
+    return coerceScores(gameStoreGet(CHROMA_GAME, CHROMA_SCORES_STORE_KEY));
   } catch {
     return emptyScores();
   }
@@ -66,13 +73,10 @@ export function loadScores(): ChromaScores {
 
 export function saveScores(scores: ChromaScores): boolean {
   try {
-    localStorage.setItem(
-      CHROMA_SCORES_KEY,
-      JSON.stringify({
-        best: scores.best,
-        recent: scores.recent.slice(0, MAX_RECENT),
-      }),
-    );
+    gameStoreSet(CHROMA_GAME, CHROMA_SCORES_STORE_KEY, {
+      best: scores.best,
+      recent: scores.recent.slice(0, MAX_RECENT),
+    });
     return true;
   } catch {
     return false;

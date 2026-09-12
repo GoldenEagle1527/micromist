@@ -65,4 +65,5 @@ export function getGame(slug: string): GameMeta | undefined {
   return listedGames().find((game) => game.slug === slug);
 }
 
+/** @deprecated migrated to IndexedDB mist-catch/best */
 export const BEST_SCORE_KEY = "micromist.mist-catch.best";

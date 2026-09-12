@@ -30,6 +30,7 @@
   -webkit-backdrop-filter: var(--backdrop);
 }
 
+
 .topbar-game {
   justify-self: center;
   max-width: min(42vw, 12rem);
@@ -192,19 +193,95 @@
   fill: currentColor;
 }
 
-.mobile-nav {
+.mobile-nav-backdrop {
   display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  background: color-mix(in srgb, #000 42%, transparent);
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+}
+
+.mobile-nav-backdrop.open {
+  display: block;
+}
+
+.mobile-nav {
+  display: flex;
   flex-direction: column;
-  gap: 0.35rem;
-  padding: 0.75rem 1rem 1rem;
+  gap: 0;
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 41;
+  width: min(18.5rem, 86vw);
+  padding: 0;
   background: var(--glass-bg-strong);
-  border-bottom: 1px solid var(--glass-border);
+  border-left: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow);
   backdrop-filter: var(--backdrop);
   -webkit-backdrop-filter: var(--backdrop);
+  transform: translateX(105%);
+  transition: transform 0.22s ease;
+  overflow: hidden;
+  pointer-events: none;
 }
 
 .mobile-nav.open {
+  transform: translateX(0);
+  pointer-events: auto;
+}
+
+.mobile-nav-header {
+  flex: 0 0 auto;
   display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0.15rem;
+  width: 100%;
+  /* Same vertical padding as .topbar (+ 2.5rem icon row) */
+  padding: calc(0.75rem + var(--safe-top)) 0.85rem 0.75rem 0.65rem;
+  min-height: calc(var(--safe-top) + 0.75rem + 2.5rem + 0.75rem);
+  border: 0;
+  border-bottom: 1px solid var(--glass-border);
+  box-sizing: border-box;
+  background: color-mix(in srgb, var(--glass-bg) 70%, transparent);
+  color: var(--md-sys-color-on-surface);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.mobile-nav-header:active {
+  background: var(--glass-highlight);
+}
+
+.mobile-nav-back-chevron {
+  flex: 0 0 auto;
+  width: 1.5rem;
+  height: 1.5rem;
+  fill: currentColor;
+  opacity: 0.85;
+}
+
+.mobile-nav-back-label {
+  font-weight: 600;
+  font-size: 1rem;
+  letter-spacing: 0.01em;
+}
+
+.mobile-nav-body {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 0.75rem 1rem calc(1rem + var(--safe-bottom));
+  overflow-y: auto;
+  min-height: 0;
 }
 
 .mobile-nav a {
@@ -503,6 +580,8 @@ button:disabled {
     display: inline-flex;
   }
 
+  .mobile-nav-backdrop,
+  .mobile-nav-backdrop.open,
   .mobile-nav,
   .mobile-nav.open {
     display: none;
@@ -591,4 +670,92 @@ button:disabled {
   clip: rect(0, 0, 0, 0);
   white-space: nowrap;
   border: 0;
+}
+
+
+/* local-data modal */
+.local-data-modal {
+  max-width: min(28rem, 100%);
+  width: 100%;
+}
+.local-data-hint,
+.local-data-quota,
+.local-data-legacy-note {
+  margin: 0 0 0.5rem;
+}
+.local-data-error {
+  color: var(--danger, #c62828);
+  margin: 0 0 0.75rem;
+  font-size: 0.9rem;
+}
+.local-data-list {
+  list-style: none;
+  margin: 0 0 1rem;
+  padding: 0;
+  max-height: min(40vh, 22rem);
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.local-data-empty {
+  padding: 0.75rem;
+  opacity: 0.7;
+  font-size: 0.95rem;
+}
+.local-data-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.65rem 0.75rem;
+  border-radius: 12px;
+  border: 1px solid var(--glass-border);
+  background: var(--glass-bg);
+}
+.local-data-row-main {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+.local-data-row-title {
+  font-weight: 600;
+}
+.local-data-row-meta {
+  font-size: 0.8rem;
+  opacity: 0.75;
+}
+.local-data-actions {
+  flex-wrap: wrap;
+}
+.local-data-confirm {
+  margin-top: 0.75rem;
+  padding: 0.75rem;
+  border-radius: 12px;
+  border: 1px solid var(--glass-border);
+  background: var(--glass-bg-strong, var(--glass-bg));
+}
+.ghost-btn,
+.danger-btn {
+  appearance: none;
+  border-radius: 999px;
+  padding: 0.4rem 0.85rem;
+  font: inherit;
+  cursor: pointer;
+  border: 1px solid var(--glass-border);
+  background: transparent;
+  color: inherit;
+}
+.ghost-btn:disabled,
+.danger-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.danger-btn {
+  border-color: color-mix(in srgb, #c62828 55%, var(--glass-border));
+  color: #c62828;
+}
+[data-theme="dark"] .danger-btn {
+  color: #ef9a9a;
 }
