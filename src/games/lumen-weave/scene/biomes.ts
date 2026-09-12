@@ -18,24 +18,33 @@ const MAGENTA = new THREE.Color(0xe879f9);
 const VIOLET = new THREE.Color(0xa78bfa);
 const WHITE = new THREE.Color(0xe8f7ff);
 
-/** Softmax-ish biome weights from dual noise domains (continuous, not templates). */
+/**
+ * Softmax-ish biome weights. Smaller spatial scale → larger contiguous regions
+ * so biomes persist through longer travel before flipping.
+ */
 export function sampleBiomeWeights(
   worldSeed: number,
   wx: number,
   wz: number,
 ): Record<BiomeId, number> {
-  const scale = 0.011;
+  // Was ~0.011 (regions flipped quickly). ~0.0035 ≈ 3× larger domains.
+  const scale = 0.0035;
   const n0 = fbm2D(worldSeed ^ 0x11a1, wx * scale, wz * scale, 4);
-  const n1 = fbm2D(worldSeed ^ 0x22b2, wx * scale * 0.73 + 40, wz * scale * 0.73 - 17, 3);
-  const n2 = valueNoise2D(worldSeed ^ 0x33c3, wx * scale * 1.6, wz * scale * 1.6);
+  const n1 = fbm2D(
+    worldSeed ^ 0x22b2,
+    wx * scale * 0.71 + 40,
+    wz * scale * 0.71 - 17,
+    3,
+  );
+  const n2 = valueNoise2D(worldSeed ^ 0x33c3, wx * scale * 1.35, wz * scale * 1.35);
 
-  // Map noise to five lobes with gentle overlap so transitions blend.
+  // Sharper lobes so one (or two) biomes dominate a chunk at a glance.
   const raw: Record<BiomeId, number> = {
-    dunes: Math.exp(-((n0 - 0.22) ** 2) / 0.045) * (0.55 + n2),
-    helix: Math.exp(-((n0 - 0.42) ** 2) / 0.04) * (0.55 + n1),
-    warp: Math.exp(-((n0 - 0.58) ** 2) / 0.038) * (0.5 + n2 * 0.8),
-    void: Math.exp(-((n0 - 0.74) ** 2) / 0.05) * (0.45 + (1 - n1)),
-    ridges: Math.exp(-((n1 - 0.55) ** 2) / 0.042) * (0.5 + n0 * 0.6),
+    dunes: Math.exp(-((n0 - 0.18) ** 2) / 0.028) * (0.65 + n2 * 0.5),
+    helix: Math.exp(-((n0 - 0.38) ** 2) / 0.026) * (0.65 + n1 * 0.45),
+    warp: Math.exp(-((n0 - 0.56) ** 2) / 0.024) * (0.6 + n2 * 0.55),
+    void: Math.exp(-((n0 - 0.76) ** 2) / 0.032) * (0.55 + (1 - n1) * 0.5),
+    ridges: Math.exp(-((n1 - 0.58) ** 2) / 0.028) * (0.6 + n0 * 0.4),
   };
 
   let sum = 0;
@@ -61,20 +70,29 @@ export function dominantBiome(weights: Record<BiomeId, number>): BiomeId {
   return best;
 }
 
+/** Second-strongest biome if it is a meaningful soft blend partner. */
+export function secondaryBiome(
+  weights: Record<BiomeId, number>,
+  primary: BiomeId,
+  minWeight = 0.22,
+): BiomeId | null {
+  let best: BiomeId | null = null;
+  let bestW = minWeight;
+  for (const id of BIOME_IDS) {
+    if (id === primary) continue;
+    const w = weights[id]!;
+    if (w > bestW) {
+      bestW = w;
+      best = id;
+    }
+  }
+  return best;
+}
+
 export function sampleBiomeAt(worldSeed: number, wx: number, wz: number): BiomeInfo {
   const weights = sampleBiomeWeights(worldSeed, wx, wz);
   const id = dominantBiome(weights);
   return { id, key: id, weights };
-}
-
-/** Roulette pick biome for a particle given weights + rng. */
-export function pickBiome(weights: Record<BiomeId, number>, u: number): BiomeId {
-  let r = clamp(u, 0, 0.999999);
-  for (const id of BIOME_IDS) {
-    r -= weights[id]!;
-    if (r <= 0) return id;
-  }
-  return "dunes";
 }
 
 export function colorForBiome(
@@ -85,15 +103,18 @@ export function colorForBiome(
   const u = clamp(t, 0, 1);
   switch (id) {
     case "dunes":
-      return out.copy(CYAN).lerp(ICE, u * 0.55);
+      return out.copy(CYAN).lerp(ICE, u * 0.45);
     case "helix":
-      return out.copy(AMBER).lerp(CYAN, 0.25 + u * 0.55);
+      // Distinct cyan + amber strands (caller picks t≈0 or ≈1).
+      return u < 0.5
+        ? out.copy(CYAN).lerp(ICE, u * 0.35)
+        : out.copy(AMBER).lerp(new THREE.Color(0xffd089), (u - 0.5) * 0.5);
     case "warp":
-      return out.copy(ICE).lerp(VIOLET, u * 0.45).lerp(CYAN, 0.2);
+      return out.copy(ICE).lerp(CYAN, 0.35 + u * 0.4).lerp(VIOLET, u * 0.25);
     case "void":
-      return out.copy(WHITE).lerp(ICE, u * 0.4).multiplyScalar(0.55 + u * 0.35);
+      return out.copy(WHITE).lerp(ICE, u * 0.35).multiplyScalar(0.45 + u * 0.4);
     case "ridges":
-      return out.copy(MAGENTA).lerp(VIOLET, u * 0.5).lerp(CYAN, 0.12);
+      return out.copy(MAGENTA).lerp(VIOLET, u * 0.55).lerp(ICE, 0.08);
     default:
       return out.copy(CYAN);
   }
