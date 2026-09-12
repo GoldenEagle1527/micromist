@@ -23,6 +23,12 @@ export type Dict = {
   aboutTitle: string;
   aboutBody: string;
   aboutClose: string;
+  floatAria: string;
+  floatTitle: string;
+  floatBlocked: string;
+  floatUnsupported: string;
+  floatAdBadge: string;
+  floatAdTitle: string;
   playCta: string;
   notFoundTitle: string;
   notFoundBody: string;
