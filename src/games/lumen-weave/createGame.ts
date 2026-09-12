@@ -6,6 +6,7 @@ import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js"
 import { createSoftPointTexture } from "./scene/glow";
 import { createHud } from "./scene/hud";
 import { createPlayfield } from "./scene/playfield";
+import { seedFromInput } from "./scene/seed";
 import type { LumenGameOptions, LumenLabels } from "./types";
 
 export type { LumenGameOptions, LumenLabels };
@@ -38,20 +39,23 @@ export function createLumenWeaveGame(
 
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x000000);
-  scene.fog = new THREE.Fog(0x000000, 16, 56);
+  scene.fog = new THREE.Fog(0x000000, 18, 72);
 
-  const camera = new THREE.PerspectiveCamera(72, 800 / 480, 0.08, 80);
+  const camera = new THREE.PerspectiveCamera(72, 800 / 480, 0.08, 120);
 
   const glowMap = createSoftPointTexture();
   const hud = createHud(parent, options.labels);
+  const seedNumeric = seedFromInput(options.seed);
   const playfield = createPlayfield({
     scene,
     camera,
-    difficulty: options.difficulty,
+    seed: options.seed.trim() || String(seedNumeric),
+    seedNumeric,
+    cruise: options.cruise,
     labels: options.labels,
     hud,
     glowMap,
-    onBestChange: options.onBestChange,
+    biomeName: options.biomeName,
   });
 
   const composer = new EffectComposer(renderer);
@@ -100,7 +104,6 @@ export function createLumenWeaveGame(
     playfield.pointerDown(nx, ny);
   };
   const onPointerMove = (event: PointerEvent) => {
-    if (!playfield.isPlaying()) return;
     const { nx, ny } = toNdc(event);
     playfield.pointerMove(nx, ny);
   };

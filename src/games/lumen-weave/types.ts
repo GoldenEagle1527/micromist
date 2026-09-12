@@ -1,18 +1,16 @@
-import type { LumenDifficulty } from "./i18n";
+import type { BiomeId } from "./biomeIds";
+import type { LumenCruise } from "./i18n";
 
 export type LumenLabels = {
-  score: string;
-  best: string;
-  lives: string;
-  nearMiss: string;
-  gameOver: string;
-  tryAgain: string;
+  seed: string;
+  biome: string;
   hint: string;
 };
 
 export type LumenGameOptions = {
-  difficulty: LumenDifficulty;
+  seed: string;
+  cruise: LumenCruise;
   labels: LumenLabels;
-  onBestChange?: (best: number) => void;
+  biomeName: (id: BiomeId) => string;
   onExitRequest?: () => void;
 };
