@@ -5,8 +5,6 @@
  * IndexedDB via `src/lib/game-store.ts`. Online / multiplayer play is excluded —
  * never write progress while opponent === "online".
  *
- * TODO(mist-catch): mid-run Phaser resume skipped; best-score uses game-store
- * key `best` on slug mist-catch.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import {

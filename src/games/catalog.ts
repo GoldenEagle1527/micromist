@@ -26,17 +26,6 @@ export type GameMeta = {
 
 export const games: GameMeta[] = [
   {
-    slug: "mist-catch",
-    mode: "single",
-    audience: "staging",
-    title: { zh: "拾雾", en: "Mist Catch" },
-    blurb: {
-      zh: "在雾中托住坠落的微光。单人小游戏，最高分仅存在本机。",
-      en: "Steer a bowl through the mist and catch falling motes. Solo only; high score stays on this device.",
-    },
-    badge: { zh: "单机", en: "Offline" },
-  },
-  {
     slug: "explosive-chess",
     mode: "single-online",
     title: { zh: "爆炸棋", en: "Explosive Chess" },
@@ -53,28 +42,6 @@ export const games: GameMeta[] = [
     blurb: {
       zh: "滑动色块，把每种颜色收成一块实心矩形。单人本地，步数只记本局。",
       en: "Slide colored tiles until each hue forms one solid rectangle. Solo local; steps are per run.",
-    },
-    badge: { zh: "单机", en: "Offline" },
-  },
-  {
-    slug: "pottery",
-    mode: "single",
-    audience: "staging",
-    title: { zh: "陶艺", en: "Pottery" },
-    blurb: {
-      zh: "拉坯塑形，烧成收藏。剖面即陶，单机本地，作品只存在本机。",
-      en: "Throw clay on the wheel, fire, and keep a shelf. Solo local; pieces stay on this device.",
-    },
-    badge: { zh: "单机", en: "Offline" },
-  },
-  {
-    slug: "lumen-weave",
-    mode: "single",
-    audience: "staging",
-    title: { zh: "织光", en: "Lumen Weave" },
-    blurb: {
-      zh: "第一人称漫游无尽的种子粒子生态域。同一种子同一世界，无得分无失败。",
-      en: "First-person roam through endless seeded particle biomes. Same seed, same world — experiential, not scored.",
     },
     badge: { zh: "单机", en: "Offline" },
   },
@@ -116,6 +83,3 @@ export function getGame(
 ): GameMeta | undefined {
   return listedGames(kind).find((game) => game.slug === slug);
 }
-
-/** @deprecated migrated to IndexedDB mist-catch/best */
-export const BEST_SCORE_KEY = "micromist.mist-catch.best";
