@@ -2,9 +2,6 @@ import type { Dict } from "../types";
 import { bladeZh } from "../../games/blade-break/i18n";
 import { chromaZh } from "../../games/chroma-slide/i18n";
 import { explosiveZh } from "../../games/explosive-chess/i18n";
-import { mistZh } from "../../games/mist-catch/i18n";
-import { potteryZh } from "../../games/pottery/i18n";
-import { lumenZh } from "../../games/lumen-weave/i18n";
 
 export const zh: Dict = {
   brand: "微渺",
@@ -63,10 +60,7 @@ export const zh: Dict = {
   storageUnknownGame: "其他",
   storageRefresh: "刷新",
   storageLegacyNote: "清除「平台设置」会影响主题与语言等偏好。",
-  mist: mistZh,
   explosive: explosiveZh,
   chroma: chromaZh,
   blade: bladeZh,
-  pottery: potteryZh,
-  lumen: lumenZh,
 };

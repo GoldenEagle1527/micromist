@@ -3,9 +3,6 @@ import "../styles/play.css";
 import { ExplosiveChessGame } from "../games/explosive-chess/ExplosiveChessGame";
 import { ChromaSlideGame } from "../games/chroma-slide/ChromaSlideGame";
 import { BladeBreakGame } from "../games/blade-break/BladeBreakGame";
-import { PotteryGame } from "../games/pottery/PotteryGame";
-import { MistCatchGame } from "../games/mist-catch/MistCatchGame";
-import { LumenWeaveGame } from "../games/lumen-weave/LumenWeaveGame";
 import { getGame } from "../games/catalog";
 import { useLocale } from "../i18n";
 
@@ -27,12 +24,9 @@ export function PlayPage() {
 
   return (
     <>
-      {game.slug === "mist-catch" ? <MistCatchGame /> : null}
       {game.slug === "explosive-chess" ? <ExplosiveChessGame /> : null}
       {game.slug === "chroma-slide" ? <ChromaSlideGame /> : null}
       {game.slug === "blade-break" ? <BladeBreakGame /> : null}
-      {game.slug === "pottery" ? <PotteryGame /> : null}
-      {game.slug === "lumen-weave" ? <LumenWeaveGame /> : null}
     </>
   );
 }
