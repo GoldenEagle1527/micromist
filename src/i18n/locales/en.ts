@@ -2,9 +2,6 @@ import type { Dict } from "../types";
 import { bladeEn } from "../../games/blade-break/i18n";
 import { chromaEn } from "../../games/chroma-slide/i18n";
 import { explosiveEn } from "../../games/explosive-chess/i18n";
-import { mistEn } from "../../games/mist-catch/i18n";
-import { potteryEn } from "../../games/pottery/i18n";
-import { lumenEn } from "../../games/lumen-weave/i18n";
 
 export const en: Dict = {
   brand: "micromist",
@@ -63,10 +60,7 @@ export const en: Dict = {
   storageUnknownGame: "Other",
   storageRefresh: "Refresh",
   storageLegacyNote: "Clearing Platform also removes theme and language preferences.",
-  mist: mistEn,
   explosive: explosiveEn,
   chroma: chromaEn,
   blade: bladeEn,
-  pottery: potteryEn,
-  lumen: lumenEn,
 };
