@@ -1,4 +1,5 @@
 import type { BladeDict } from "../games/blade-break/i18n";
+import type { BrickSurgeDict } from "../games/brick-surge/i18n";
 import type { ChromaDict } from "../games/chroma-slide/i18n";
 import type { ExplosiveDict } from "../games/explosive-chess/i18n";
 
@@ -62,6 +63,7 @@ export type Dict = {
   explosive: ExplosiveDict;
   chroma: ChromaDict;
   blade: BladeDict;
+  brickSurge: BrickSurgeDict;
 };
 
 export type GameLocaleFields = {
