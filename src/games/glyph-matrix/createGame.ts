@@ -1,8 +1,4 @@
 import * as THREE from "three";
-import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
-import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
-import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
-import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
 import type { GlyphMatrixHandle, GlyphMatrixOptions } from "./types";
 import { createWorld } from "./scene/world";
 
@@ -23,10 +19,10 @@ export function createGlyphMatrixGame(
     alpha: false,
     powerPreference: "high-performance",
   });
-  renderer.setClearColor(0x03060c, 1);
+  renderer.setClearColor(0x1a1c1f, 1);
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.05;
+  renderer.toneMappingExposure = 1.0;
   renderer.domElement.style.display = "block";
   renderer.domElement.style.width = "100%";
   renderer.domElement.style.height = "100%";
@@ -38,12 +34,6 @@ export function createGlyphMatrixGame(
 
   const world = createWorld(scene, camera, options);
 
-  const composer = new EffectComposer(renderer);
-  composer.addPass(new RenderPass(scene, camera));
-  const bloom = new UnrealBloomPass(new THREE.Vector2(800, 480), 0.72, 0.48, 0.18);
-  composer.addPass(bloom);
-  composer.addPass(new OutputPass());
-
   const clock = new THREE.Clock();
   let disposed = false;
 
@@ -54,9 +44,6 @@ export function createGlyphMatrixGame(
     const dpr = Math.min(window.devicePixelRatio || 1, 1.75);
     renderer.setPixelRatio(dpr);
     renderer.setSize(w, h, false);
-    composer.setPixelRatio(dpr);
-    composer.setSize(w, h);
-    bloom.resolution.set(w, h);
     camera.aspect = w / h;
     camera.updateProjectionMatrix();
   };
@@ -109,7 +96,7 @@ export function createGlyphMatrixGame(
   const tick = () => {
     if (disposed) return;
     world.update(clock.getDelta());
-    composer.render();
+    renderer.render(scene, camera);
   };
   renderer.setAnimationLoop(tick);
 
@@ -124,7 +111,6 @@ export function createGlyphMatrixGame(
     canvas.removeEventListener("pointercancel", onPointerUp);
     canvas.removeEventListener("pointerleave", onPointerLeave);
     world.dispose();
-    composer.dispose();
     renderer.dispose();
     parent.replaceChildren();
   };

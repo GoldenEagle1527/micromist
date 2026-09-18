@@ -30,28 +30,30 @@ export function createWorld(
   const layers = createDualLayers(scene);
   const { floor, ceiling } = layers;
 
-  // Ambient cool sci-fi lighting
-  scene.background = new THREE.Color(0x03060c);
-  scene.fog = new THREE.FogExp2(0x03060c, 0.045);
-  const amb = new THREE.AmbientLight(0x1a2438, 0.55);
+  // Cooler neutral gray-dark — no thick cyan fog soup
+  const bg = 0x1a1c1f;
+  scene.background = new THREE.Color(bg);
+  scene.fog = new THREE.FogExp2(bg, 0.028);
+
+  const amb = new THREE.AmbientLight(0xb8bac0, 0.42);
   scene.add(amb);
-  const key = new THREE.DirectionalLight(0x9fd4ff, 0.55);
-  key.position.set(2.5, 4, 1.5);
+  const hemi = new THREE.HemisphereLight(0xd0d2d6, 0x3a3c40, 0.55);
+  scene.add(hemi);
+  const key = new THREE.DirectionalLight(0xf2f2f0, 0.75);
+  key.position.set(2.8, 3.6, 2.2);
   scene.add(key);
-  const fill = new THREE.DirectionalLight(0x4060a0, 0.25);
-  fill.position.set(-3, -2, 2);
+  const fill = new THREE.DirectionalLight(0x8a8e96, 0.28);
+  fill.position.set(-3.2, -1.8, 1.4);
   scene.add(fill);
-  // Soft corridor ribbon
-  const ribbonGeo = new THREE.PlaneGeometry(0.08, 80);
-  const ribbonMat = new THREE.MeshBasicMaterial({
-    color: 0x3a8cff,
-    transparent: true,
-    opacity: 0.22,
-    depthWrite: false,
-    blending: THREE.AdditiveBlending,
+
+  // Subtle matte corridor edge guides (no additive glow)
+  const ribbonGeo = new THREE.BoxGeometry(0.06, 0.04, 80);
+  const ribbonMat = new THREE.MeshStandardMaterial({
+    color: 0x4a4d52,
+    roughness: 0.9,
+    metalness: 0.05,
   });
   const ribbonL = new THREE.Mesh(ribbonGeo, ribbonMat);
-  ribbonL.rotation.x = -Math.PI / 2;
   ribbonL.position.set(-((11 - 1) * 0.5) * PITCH - 0.55, 0, 20);
   const ribbonR = ribbonL.clone();
   ribbonR.position.x *= -1;
@@ -165,7 +167,7 @@ export function createWorld(
     update,
     dispose: () => {
       layers.dispose();
-      scene.remove(amb, key, fill, ribbonL, ribbonR);
+      scene.remove(amb, hemi, key, fill, ribbonL, ribbonR);
       ribbonGeo.dispose();
       ribbonMat.dispose();
     },

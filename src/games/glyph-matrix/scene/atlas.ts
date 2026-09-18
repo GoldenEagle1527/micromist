@@ -47,7 +47,7 @@ export type GlyphAtlas = {
   rows: number;
 };
 
-/** Build a canvas atlas of emissive-looking glyphs on transparent cells. */
+/** Build a canvas atlas of solid dark ink glyphs on opaque light plaster cells. */
 export function createGlyphAtlas(): GlyphAtlas {
   const cols = ATLAS_COLS;
   const rows = ATLAS_ROWS;
@@ -60,7 +60,6 @@ export function createGlyphAtlas(): GlyphAtlas {
     throw new Error("glyph-matrix: 2d canvas unavailable");
   }
 
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   ctx.font = `700 ${Math.floor(cell * 0.62)}px "Noto Sans SC","PingFang SC","Microsoft YaHei",sans-serif`;
@@ -69,31 +68,32 @@ export function createGlyphAtlas(): GlyphAtlas {
   for (let i = 0; i < count; i += 1) {
     const col = i % cols;
     const row = Math.floor(i / cols);
-    const cx = col * cell + cell * 0.5;
-    const cy = row * cell + cell * 0.52;
+    const x0 = col * cell;
+    const y0 = row * cell;
+    const cx = x0 + cell * 0.5;
+    const cy = y0 + cell * 0.52;
     const ch = GLYPH_CHARS[i]!;
 
-    // Soft outer glow (height for emboss via alpha/luma)
-    ctx.save();
-    ctx.shadowColor = "rgba(120, 220, 255, 0.95)";
-    ctx.shadowBlur = cell * 0.18;
-    ctx.fillStyle = "rgba(180, 235, 255, 0.95)";
-    ctx.fillText(ch, cx, cy);
-    ctx.restore();
+    // Opaque matte plaster cell (no soft glow)
+    ctx.fillStyle = "#e6e4de";
+    ctx.fillRect(x0, y0, cell, cell);
 
-    // Crisp core
-    ctx.fillStyle = "rgba(230, 248, 255, 1)";
-    ctx.fillText(ch, cx, cy);
+    // Subtle inset bevel on cell (helps read as a physical block face)
+    ctx.strokeStyle = "rgba(0, 0, 0, 0.06)";
+    ctx.lineWidth = 2;
+    ctx.strokeRect(x0 + 1.5, y0 + 1.5, cell - 3, cell - 3);
 
-    // Slight darker edge pass for emboss height contrast
-    ctx.globalCompositeOperation = "source-atop";
-    const grad = ctx.createRadialGradient(cx, cy - cell * 0.08, 2, cx, cy, cell * 0.38);
-    grad.addColorStop(0, "rgba(255,255,255,0.35)");
-    grad.addColorStop(0.55, "rgba(255,255,255,0)");
-    grad.addColorStop(1, "rgba(0,20,40,0.25)");
-    ctx.fillStyle = grad;
+    // Solid dark ink character — no shadowBlur / outer glow
+    ctx.fillStyle = "#2a2c30";
+    ctx.fillText(ch, cx, cy);
+  }
+
+  // Fill unused cells with plaster so atlas sampling never hits empty
+  for (let i = count; i < cols * rows; i += 1) {
+    const col = i % cols;
+    const row = Math.floor(i / cols);
+    ctx.fillStyle = "#e6e4de";
     ctx.fillRect(col * cell, row * cell, cell, cell);
-    ctx.globalCompositeOperation = "source-over";
   }
 
   const texture = new THREE.CanvasTexture(canvas);
