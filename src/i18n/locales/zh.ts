@@ -1,6 +1,5 @@
 import type { Dict } from "../types";
 import { bladeZh } from "../../games/blade-break/i18n";
-import { brickSurgeZh } from "../../games/brick-surge/i18n";
 import { chromaZh } from "../../games/chroma-slide/i18n";
 import { explosiveZh } from "../../games/explosive-chess/i18n";
 
@@ -64,5 +63,4 @@ export const zh: Dict = {
   explosive: explosiveZh,
   chroma: chromaZh,
   blade: bladeZh,
-  brickSurge: brickSurgeZh,
 };
