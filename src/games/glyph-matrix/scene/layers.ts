@@ -7,7 +7,7 @@ import {
 } from "./atlas";
 import {
   glyphFragmentColor,
-  glyphFragmentEmissive,
+  glyphFragmentNormal,
   glyphFragmentPars,
   glyphVertexMain,
   glyphVertexPars,
@@ -76,10 +76,10 @@ function makeMaterial(
 
   const mat = new THREE.MeshStandardMaterial({
     color: 0xffffff,
-    roughness: 0.55,
-    metalness: 0.35,
+    roughness: 0.88,
+    metalness: 0.04,
     emissive: 0x000000,
-    emissiveIntensity: 1,
+    emissiveIntensity: 0,
     toneMapped: true,
   });
 
@@ -108,12 +108,12 @@ ${glyphFragmentPars}`,
 ${glyphFragmentColor}`,
       )
       .replace(
-        "#include <emissivemap_fragment>",
-        `#include <emissivemap_fragment>
-${glyphFragmentEmissive}`,
+        "#include <normal_fragment_maps>",
+        `#include <normal_fragment_maps>
+${glyphFragmentNormal}`,
       );
   };
-  mat.customProgramCacheKey = () => `glyph-matrix-v1-${layerSign}`;
+  mat.customProgramCacheKey = () => `glyph-matrix-matte-v2-${layerSign}`;
 
   return { mat, uniforms };
 }
@@ -267,7 +267,8 @@ export function createDualLayers(scene: THREE.Scene): {
   dispose: () => void;
 } {
   const atlas = createGlyphAtlas();
-  const accent = new THREE.Color(0x6ec8ff);
+  // Cool neutral ink accent (not cyan glow)
+  const accent = new THREE.Color(0x3a3d42);
   const floor = createLayer(scene, "floor", atlas, accent);
   const ceiling = createLayer(scene, "ceiling", atlas, accent);
   return {
