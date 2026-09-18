@@ -42,54 +42,47 @@ varying vec3 vWorldNormal;
 varying vec3 vWorldPos;
 varying vec3 vLocalNormal;
 
-float glyphSample(vec2 uv) {
-  return texture2D(uAtlas, uv).a;
+float glyphLuma(vec2 uv) {
+  vec3 rgb = texture2D(uAtlas, uv).rgb;
+  return dot(rgb, vec3(0.299, 0.587, 0.114));
+}
+
+float glyphHeight(vec2 uv) {
+  return clamp(1.0 - glyphLuma(uv), 0.0, 1.0);
 }
 `;
 
+/** Albedo only — real MeshStandardMaterial lights shade the cubes. */
 export const glyphFragmentColor = /* glsl */ `
-  vec3 wn = normalize(vWorldNormal);
   // Inner corridor face: floor uses +Y local, ceiling uses -Y local
   float faceMask = smoothstep(0.55, 0.92, abs(vLocalNormal.y) * step(0.0, vLocalNormal.y * uLayerSign));
 
   vec4 atlas = texture2D(uAtlas, vGlyphUv);
-  float h = atlas.a;
+  float h = glyphHeight(vGlyphUv);
 
-  // Fake emboss / parallax-ish via finite differences on alpha height
-  vec2 texel = vec2(1.5) / max(uAtlasSize, vec2(1.0));
-  float hx = glyphSample(vGlyphUv + vec2(texel.x, 0.0)) - glyphSample(vGlyphUv - vec2(texel.x, 0.0));
-  float hy = glyphSample(vGlyphUv + vec2(0.0, texel.y)) - glyphSample(vGlyphUv - vec2(0.0, texel.y));
-  vec3 embossN = normalize(vec3(-hx * 3.2, -hy * 3.2, 0.35));
+  // Matte plaster / plastic body — light gray, slight tint variation
+  vec3 plaster = mix(vec3(0.90, 0.89, 0.86), vec3(0.82, 0.82, 0.80), vTint * 0.4);
+  // Side faces slightly cooler/darker so boxes read with thickness
+  float sideAmt = 1.0 - abs(vLocalNormal.y);
+  vec3 sideCol = mix(plaster, plaster * vec3(0.72, 0.73, 0.74), sideAmt * 0.85);
+  vec3 body = mix(sideCol, plaster, faceMask);
 
-  vec3 viewDir = normalize(cameraPosition - vWorldPos);
-  vec3 litN = normalize(mix(wn, normalize(wn + embossN * 0.65 * faceMask), faceMask * h));
-  float ndl = clamp(dot(litN, normalize(vec3(0.25, uLayerSign * 0.85, 0.35))), 0.0, 1.0);
-  float rim = pow(1.0 - clamp(dot(wn, viewDir), 0.0, 1.0), 2.4);
-
-  vec3 baseCol = mix(vec3(0.035, 0.05, 0.08), vec3(0.06, 0.09, 0.12), vTint);
-  vec3 metal = baseCol * (0.35 + 0.65 * ndl) + rim * uAccent * 0.12;
-
-  vec3 glyphCol = atlas.rgb * uAccent * (0.55 + 0.45 * vTint);
-  float pulse = 0.85 + 0.15 * sin(uTime * 1.4 + vWorldPos.x * 0.35 + vWorldPos.z * 0.2);
-  vec3 embEmissive = glyphCol * h * faceMask * (1.15 + 0.55 * ndl) * pulse;
-  embEmissive += glyphCol * h * faceMask * rim * 0.85;
-
-  float shade = mix(0.55, 1.15, 0.5 + 0.5 * embossN.x + 0.25 * embossN.y);
-  embEmissive *= mix(1.0, shade, faceMask * h);
-
-  vec3 color = mix(metal, metal * 0.35 + embEmissive, faceMask * smoothstep(0.05, 0.45, h));
-  float spark = step(0.985, fract(vWorldPos.x * 2.1 + vWorldPos.z * 1.7 + uTime * 0.08));
-  color += uAccent * spark * (1.0 - faceMask) * 0.08;
+  // Dark ink glyph on the inner face (atlas RGB already dark-on-light)
+  float inkMask = faceMask * smoothstep(0.06, 0.38, h);
+  vec3 ink = mix(atlas.rgb, mix(vec3(0.16, 0.17, 0.19), uAccent, 0.12), 0.35);
+  vec3 color = mix(body, ink, inkMask);
 
   diffuseColor.rgb = color;
 `;
 
-export const glyphFragmentEmissive = /* glsl */ `
-  // Recompute a light emissive add for bloom (matches color path)
-  float faceMaskE = smoothstep(0.55, 0.92, abs(vLocalNormal.y) * step(0.0, vLocalNormal.y * uLayerSign));
-  vec4 atlasE = texture2D(uAtlas, vGlyphUv);
-  float hE = atlasE.a;
-  vec3 glyphColE = atlasE.rgb * uAccent * (0.55 + 0.45 * vTint);
-  float pulseE = 0.85 + 0.15 * sin(uTime * 1.4 + vWorldPos.x * 0.35 + vWorldPos.z * 0.2);
-  totalEmissiveRadiance += glyphColE * hE * faceMaskE * 1.35 * pulseE;
+/** Mild fake emboss via normal perturbation — no emissive / bloom path. */
+export const glyphFragmentNormal = /* glsl */ `
+  float faceMaskN = smoothstep(0.55, 0.92, abs(vLocalNormal.y) * step(0.0, vLocalNormal.y * uLayerSign));
+  float hN = glyphHeight(vGlyphUv);
+  vec2 texelN = vec2(1.25) / max(uAtlasSize, vec2(1.0));
+  float hxN = glyphHeight(vGlyphUv + vec2(texelN.x, 0.0)) - glyphHeight(vGlyphUv - vec2(texelN.x, 0.0));
+  float hyN = glyphHeight(vGlyphUv + vec2(0.0, texelN.y)) - glyphHeight(vGlyphUv - vec2(0.0, texelN.y));
+  vec3 embossN = normalize(vec3(-hxN * 2.2, -hyN * 2.2, 1.0));
+  float embAmt = faceMaskN * hN * 0.55;
+  normal = normalize(mix(normal, normalize(normal + embossN * embAmt), embAmt));
 `;
