@@ -22,11 +22,17 @@ export const GRID_X = 11;
 export const CHUNK_Z = 14;
 export const CHUNK_COUNT = 5;
 
+/** Thin plaque thickness — literal raise into the corridor (凸起). */
+export const PLAQUE_THICK = 0.07;
+/** Plaque face scale vs cube (slight inset so cube rim frames the glyph). */
+export const PLAQUE_SCALE = 0.88;
+
 export type LayerKind = "floor" | "ceiling";
 
 export type GlyphLayer = {
   kind: LayerKind;
   mesh: THREE.InstancedMesh;
+  plaque: THREE.InstancedMesh;
   baseY: Float32Array;
   curY: Float32Array;
   targetLift: Float32Array;
@@ -54,7 +60,7 @@ type LayerUniforms = {
   uAccent: { value: THREE.Color };
 };
 
-function makeMaterial(
+function makePlaqueMaterial(
   atlas: GlyphAtlas,
   layerSign: number,
   accent: THREE.Color,
@@ -76,8 +82,8 @@ function makeMaterial(
 
   const mat = new THREE.MeshStandardMaterial({
     color: 0xffffff,
-    roughness: 0.88,
-    metalness: 0.04,
+    roughness: 0.9,
+    metalness: 0.03,
     emissive: 0x000000,
     emissiveIntensity: 0,
     toneMapped: true,
@@ -113,9 +119,20 @@ ${glyphFragmentColor}`,
 ${glyphFragmentNormal}`,
       );
   };
-  mat.customProgramCacheKey = () => `glyph-matrix-emboss-v3-${layerSign}`;
+  mat.customProgramCacheKey = () => `glyph-matrix-plaque-v1-${layerSign}`;
 
   return { mat, uniforms };
+}
+
+function makeBodyMaterial(): THREE.MeshStandardMaterial {
+  return new THREE.MeshStandardMaterial({
+    color: 0xe4e0d8,
+    roughness: 0.92,
+    metalness: 0.02,
+    emissive: 0x000000,
+    emissiveIntensity: 0,
+    toneMapped: true,
+  });
 }
 
 function hashGlyph(gx: number, gz: number, salt: number): number {
@@ -139,13 +156,29 @@ export function createLayer(
 
   const perChunk = GRID_X * CHUNK_Z;
   const count = perChunk * CHUNK_COUNT;
-  const geo = new THREE.BoxGeometry(CUBE, CUBE, CUBE);
-  const { mat, uniforms } = makeMaterial(atlas, layerSign, accent);
 
-  const mesh = new THREE.InstancedMesh(geo, mat, count);
+  const bodyGeo = new THREE.BoxGeometry(CUBE, CUBE, CUBE);
+  const bodyMat = makeBodyMaterial();
+  const mesh = new THREE.InstancedMesh(bodyGeo, bodyMat, count);
   mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
   mesh.frustumCulled = false;
   scene.add(mesh);
+
+  const plaqueFace = CUBE * PLAQUE_SCALE;
+  const plaqueGeo = new THREE.BoxGeometry(
+    plaqueFace,
+    PLAQUE_THICK,
+    plaqueFace,
+  );
+  const { mat: plaqueMat, uniforms } = makePlaqueMaterial(
+    atlas,
+    layerSign,
+    accent,
+  );
+  const plaque = new THREE.InstancedMesh(plaqueGeo, plaqueMat, count);
+  plaque.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+  plaque.frustumCulled = false;
+  scene.add(plaque);
 
   const aGlyph = new Float32Array(count);
   const aTint = new Float32Array(count);
@@ -174,39 +207,59 @@ export function createLayer(
     }
   }
 
-  geo.setAttribute("aGlyph", new THREE.InstancedBufferAttribute(aGlyph, 1));
-  geo.setAttribute("aTint", new THREE.InstancedBufferAttribute(aTint, 1));
+  plaqueGeo.setAttribute(
+    "aGlyph",
+    new THREE.InstancedBufferAttribute(aGlyph, 1),
+  );
+  plaqueGeo.setAttribute(
+    "aTint",
+    new THREE.InstancedBufferAttribute(aTint, 1),
+  );
 
   const dummy = new THREE.Object3D();
+  const plaqueDummy = new THREE.Object3D();
   let chunkOriginZ = 0;
 
   const worldX = (gx: number) => (gx - halfX) * PITCH;
   const worldZ = (gzLocal: number) => chunkOriginZ + gzLocal * PITCH;
 
+  /** Plaque center: sit on cube's corridor face, thickness proud into corridor. */
+  const plaqueCenterY = (cubeY: number) =>
+    kind === "floor"
+      ? cubeY + CUBE * 0.5 + PLAQUE_THICK * 0.5
+      : cubeY - CUBE * 0.5 - PLAQUE_THICK * 0.5;
+
   const syncMatrices = () => {
     for (let i = 0; i < count; i += 1) {
-      dummy.position.set(worldX(gxArr[i]!), curY[i]!, worldZ(gzArr[i]!));
+      const x = worldX(gxArr[i]!);
+      const y = curY[i]!;
+      const z = worldZ(gzArr[i]!);
+
+      dummy.position.set(x, y, z);
       dummy.rotation.set(0, 0, 0);
       dummy.scale.set(1, 1, 1);
       dummy.updateMatrix();
       mesh.setMatrixAt(i, dummy.matrix);
+
+      plaqueDummy.position.set(x, plaqueCenterY(y), z);
+      plaqueDummy.rotation.set(0, 0, 0);
+      plaqueDummy.scale.set(1, 1, 1);
+      plaqueDummy.updateMatrix();
+      plaque.setMatrixAt(i, plaqueDummy.matrix);
     }
     mesh.instanceMatrix.needsUpdate = true;
+    plaque.instanceMatrix.needsUpdate = true;
   };
 
   const setChunkOriginZ = (originZ: number) => {
     chunkOriginZ = originZ;
-    // Remap gz into sliding window [0, CHUNK_COUNT*CHUNK_Z)
-    const span = CHUNK_COUNT * CHUNK_Z;
     for (let i = 0; i < count; i += 1) {
-      // Keep local indices; worldZ uses origin — when recycling, bump glyph variety
       const absGz = Math.floor(originZ / PITCH) + gzArr[i]!;
       aGlyph[i] = hashGlyph(gxArr[i]!, absGz, kind === "floor" ? 3 : 7);
     }
-    (geo.getAttribute("aGlyph") as THREE.InstancedBufferAttribute).needsUpdate =
-      true;
-    // silence unused
-    void span;
+    (
+      plaqueGeo.getAttribute("aGlyph") as THREE.InstancedBufferAttribute
+    ).needsUpdate = true;
     syncMatrices();
   };
 
@@ -226,7 +279,6 @@ export function createLayer(
         const d2 = dx * dx + dz * dz;
         target = maxRise * Math.exp(-d2 * invTwoSigma2);
       }
-      // Smooth toward target
       const curLift = (curY[i]! - baseY[i]!) * riseSign;
       const next =
         curLift + (target - curLift) * Math.min(1, 1 - Math.exp(-dt * 10));
@@ -242,6 +294,7 @@ export function createLayer(
   return {
     kind,
     mesh,
+    plaque,
     baseY,
     curY,
     targetLift,
@@ -253,8 +306,11 @@ export function createLayer(
     syncMatrices,
     dispose: () => {
       scene.remove(mesh);
-      geo.dispose();
-      mat.dispose();
+      scene.remove(plaque);
+      bodyGeo.dispose();
+      bodyMat.dispose();
+      plaqueGeo.dispose();
+      plaqueMat.dispose();
     },
   };
 }

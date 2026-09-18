@@ -49,7 +49,8 @@ export type GlyphAtlas = {
 
 /**
  * Opaque plaster cells + raised-look glyphs via multi-pass bevel
- * (light NW highlight, dark SE shadow, mid fill) — no bloom/glow.
+ * (larger NW highlight / SE shadow) — no bloom/glow.
+ * Luma doubles as a height atlas for shader bump.
  */
 export function createGlyphAtlas(): GlyphAtlas {
   const cols = ATLAS_COLS;
@@ -78,46 +79,53 @@ export function createGlyphAtlas(): GlyphAtlas {
     const cy = y0 + cell * 0.52;
     const ch = GLYPH_CHARS[i]!;
 
-    ctx.fillStyle = "#ebe8e1";
+    // Base plaster (bright) so stroke luma → height is unambiguous
+    ctx.fillStyle = "#f0ebe3";
     ctx.fillRect(x0, y0, cell, cell);
 
-    // Soft plate inset so the face feels recessed around the raised glyph
-    ctx.strokeStyle = "rgba(0, 0, 0, 0.08)";
+    // Soft plate inset
+    ctx.strokeStyle = "rgba(0, 0, 0, 0.1)";
     ctx.lineWidth = 2.5;
     ctx.strokeRect(x0 + 2, y0 + 2, cell - 4, cell - 4);
-    ctx.strokeStyle = "rgba(255, 255, 255, 0.35)";
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.4)";
     ctx.lineWidth = 1.5;
     ctx.strokeRect(x0 + 3.5, y0 + 3.5, cell - 7, cell - 7);
 
-    const ox = cell * 0.028;
-    const oy = cell * 0.028;
+    // Larger bevel offsets so NW highlight / SE shadow read clearly in height
+    const ox = cell * 0.048;
+    const oy = cell * 0.048;
 
-    // Deep shadow (SE) — suggests thickness
-    ctx.fillStyle = "rgba(32, 34, 38, 0.55)";
-    ctx.fillText(ch, cx + ox * 1.35, cy + oy * 1.35);
+    // Deep SE shadow — thickness cue + dark luma for height
+    ctx.fillStyle = "rgba(18, 20, 24, 0.72)";
+    ctx.fillText(ch, cx + ox * 1.55, cy + oy * 1.55);
 
-    // Mid body
-    ctx.fillStyle = "#3a3d44";
-    ctx.fillText(ch, cx + ox * 0.35, cy + oy * 0.35);
+    // Mid-dark body undercut
+    ctx.fillStyle = "rgba(40, 43, 50, 0.85)";
+    ctx.fillText(ch, cx + ox * 0.7, cy + oy * 0.7);
 
-    // Main face
-    ctx.fillStyle = "#2c2f36";
+    // Main face (dark → high relief in shader)
+    ctx.fillStyle = "#262932";
     ctx.fillText(ch, cx, cy);
 
-    // NW highlight ridge on strokes (raised edge catching light)
-    ctx.fillStyle = "rgba(255, 252, 245, 0.72)";
-    ctx.fillText(ch, cx - ox, cy - oy);
+    // Strong NW highlight ridge (raised edge catching key light)
+    ctx.fillStyle = "rgba(255, 252, 245, 0.88)";
+    ctx.fillText(ch, cx - ox * 1.15, cy - oy * 1.15);
 
-    // Carve highlight back so only edges stay bright: redraw body clipped soft
-    ctx.globalCompositeOperation = "source-over";
-    ctx.fillStyle = "#32353c";
-    ctx.fillText(ch, cx - ox * 0.15, cy - oy * 0.15);
+    // Recarve body so only the NW rim stays bright
+    ctx.fillStyle = "#2e323a";
+    ctx.fillText(ch, cx - ox * 0.2, cy - oy * 0.2);
+
+    // Soft secondary highlight for bevel crown
+    ctx.fillStyle = "rgba(255, 250, 240, 0.35)";
+    ctx.fillText(ch, cx - ox * 0.55, cy - oy * 0.55);
+    ctx.fillStyle = "#30343c";
+    ctx.fillText(ch, cx - ox * 0.08, cy - oy * 0.08);
   }
 
   for (let i = count; i < cols * rows; i += 1) {
     const col = i % cols;
     const row = Math.floor(i / cols);
-    ctx.fillStyle = "#ebe8e1";
+    ctx.fillStyle = "#f0ebe3";
     ctx.fillRect(col * cell, row * cell, cell, cell);
   }
 
