@@ -37,9 +37,9 @@ export function createWorld(
 
   const amb = new THREE.AmbientLight(0xb8bac0, 0.42);
   scene.add(amb);
-  const hemi = new THREE.HemisphereLight(0xd0d2d6, 0x3a3c40, 0.55);
+  const hemi = new THREE.HemisphereLight(0xe8eaee, 0x2e3034, 0.45);
   scene.add(hemi);
-  const key = new THREE.DirectionalLight(0xf2f2f0, 0.75);
+  const key = new THREE.DirectionalLight(0xfff8f0, 1.05);
   key.position.set(2.8, 3.6, 2.2);
   scene.add(key);
   const fill = new THREE.DirectionalLight(0x8a8e96, 0.28);

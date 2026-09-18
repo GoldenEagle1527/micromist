@@ -113,7 +113,7 @@ ${glyphFragmentColor}`,
 ${glyphFragmentNormal}`,
       );
   };
-  mat.customProgramCacheKey = () => `glyph-matrix-matte-v2-${layerSign}`;
+  mat.customProgramCacheKey = () => `glyph-matrix-emboss-v3-${layerSign}`;
 
   return { mat, uniforms };
 }

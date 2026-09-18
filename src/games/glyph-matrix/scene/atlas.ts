@@ -38,7 +38,7 @@ export const GLYPH_CHARS = [
 
 export const ATLAS_COLS = 8;
 export const ATLAS_ROWS = 4;
-export const ATLAS_CELL = 128;
+export const ATLAS_CELL = 160;
 
 export type GlyphAtlas = {
   texture: THREE.CanvasTexture;
@@ -47,7 +47,10 @@ export type GlyphAtlas = {
   rows: number;
 };
 
-/** Build a canvas atlas of solid dark ink glyphs on opaque light plaster cells. */
+/**
+ * Opaque plaster cells + raised-look glyphs via multi-pass bevel
+ * (light NW highlight, dark SE shadow, mid fill) — no bloom/glow.
+ */
 export function createGlyphAtlas(): GlyphAtlas {
   const cols = ATLAS_COLS;
   const rows = ATLAS_ROWS;
@@ -62,7 +65,8 @@ export function createGlyphAtlas(): GlyphAtlas {
 
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.font = `700 ${Math.floor(cell * 0.62)}px "Noto Sans SC","PingFang SC","Microsoft YaHei",sans-serif`;
+  const fontPx = Math.floor(cell * 0.64);
+  ctx.font = `700 ${fontPx}px "Noto Sans SC","PingFang SC","Microsoft YaHei",sans-serif`;
 
   const count = Math.min(GLYPH_CHARS.length, cols * rows);
   for (let i = 0; i < count; i += 1) {
@@ -74,25 +78,46 @@ export function createGlyphAtlas(): GlyphAtlas {
     const cy = y0 + cell * 0.52;
     const ch = GLYPH_CHARS[i]!;
 
-    // Opaque matte plaster cell (no soft glow)
-    ctx.fillStyle = "#e6e4de";
+    ctx.fillStyle = "#ebe8e1";
     ctx.fillRect(x0, y0, cell, cell);
 
-    // Subtle inset bevel on cell (helps read as a physical block face)
-    ctx.strokeStyle = "rgba(0, 0, 0, 0.06)";
-    ctx.lineWidth = 2;
-    ctx.strokeRect(x0 + 1.5, y0 + 1.5, cell - 3, cell - 3);
+    // Soft plate inset so the face feels recessed around the raised glyph
+    ctx.strokeStyle = "rgba(0, 0, 0, 0.08)";
+    ctx.lineWidth = 2.5;
+    ctx.strokeRect(x0 + 2, y0 + 2, cell - 4, cell - 4);
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.35)";
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(x0 + 3.5, y0 + 3.5, cell - 7, cell - 7);
 
-    // Solid dark ink character — no shadowBlur / outer glow
-    ctx.fillStyle = "#2a2c30";
+    const ox = cell * 0.028;
+    const oy = cell * 0.028;
+
+    // Deep shadow (SE) — suggests thickness
+    ctx.fillStyle = "rgba(32, 34, 38, 0.55)";
+    ctx.fillText(ch, cx + ox * 1.35, cy + oy * 1.35);
+
+    // Mid body
+    ctx.fillStyle = "#3a3d44";
+    ctx.fillText(ch, cx + ox * 0.35, cy + oy * 0.35);
+
+    // Main face
+    ctx.fillStyle = "#2c2f36";
     ctx.fillText(ch, cx, cy);
+
+    // NW highlight ridge on strokes (raised edge catching light)
+    ctx.fillStyle = "rgba(255, 252, 245, 0.72)";
+    ctx.fillText(ch, cx - ox, cy - oy);
+
+    // Carve highlight back so only edges stay bright: redraw body clipped soft
+    ctx.globalCompositeOperation = "source-over";
+    ctx.fillStyle = "#32353c";
+    ctx.fillText(ch, cx - ox * 0.15, cy - oy * 0.15);
   }
 
-  // Fill unused cells with plaster so atlas sampling never hits empty
   for (let i = count; i < cols * rows; i += 1) {
     const col = i % cols;
     const row = Math.floor(i / cols);
-    ctx.fillStyle = "#e6e4de";
+    ctx.fillStyle = "#ebe8e1";
     ctx.fillRect(col * cell, row * cell, cell, cell);
   }
 
@@ -100,6 +125,7 @@ export function createGlyphAtlas(): GlyphAtlas {
   texture.colorSpace = THREE.SRGBColorSpace;
   texture.magFilter = THREE.LinearFilter;
   texture.minFilter = THREE.LinearMipmapLinearFilter;
+  texture.anisotropy = 4;
   texture.generateMipmaps = true;
   texture.needsUpdate = true;
 
@@ -114,7 +140,6 @@ export function glyphUvOffset(
   const i = ((index % (cols * rows)) + cols * rows) % (cols * rows);
   const col = i % cols;
   const row = Math.floor(i / cols);
-  // WebGL atlas: v grows upward; canvas row 0 is top → flip
   return {
     u: col / cols,
     v: 1 - (row + 1) / rows,
