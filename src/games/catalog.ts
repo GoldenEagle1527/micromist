@@ -55,17 +55,6 @@ export const games: GameMeta[] = [
     },
     badge: { zh: "单机", en: "Offline" },
   },
-  {
-    slug: "brick-surge",
-    mode: "single",
-    audience: "staging",
-    title: { zh: "砖涌", en: "Brick Surge" },
-    blurb: {
-      zh: "黑暗隧廊无尽三维打砖：波次驻停至清约 75% 再涌入。漏球掉命，倍率归零。灰盒单机。",
-      en: "Endless 3D breakout in a dark tunnel — clear ~75% of a wave and the next surges in. Miss resets the multiplier. Solo graybox.",
-    },
-    badge: { zh: "单机 · 测试", en: "Offline · Staging" },
-  },
 ];
 
 function audienceAllows(audience: GameAudience | undefined, kind: SiteKind): boolean {
