@@ -13,7 +13,9 @@ export type HudLabels = {
   heading: string;
   chunks: string;
   loading: string;
-  bump: string;
+  contactFloor: string;
+  contactCeiling: string;
+  contactWall: string;
 };
 
 export type DeepMarchOptions = {
@@ -144,12 +146,14 @@ export function createDeepMarch(host: HTMLElement, opts: DeepMarchOptions): Deep
     if (hudTimer <= 0) {
       hudTimer = 0.15;
       const L = opts.labels;
+      const c = sub.contact;
+      const contact = c === "floor" ? L.contactFloor : c === "ceiling" ? L.contactCeiling : c === "wall" ? L.contactWall : "";
       const heading = ((((-sub.yaw * 180) / Math.PI) % 360) + 360) % 360;
       hud.innerHTML =
         `<span>${L.depth} <b>${(100 - sub.position.y).toFixed(1)} m</b></span>` +
         `<span>${L.speed} <b>${sub.speed.toFixed(1)}</b></span>` +
         `<span>${L.heading} <b>${heading.toFixed(0).padStart(3, "0")}°</b></span>` +
-        (sub.sinceBump < 0.4 ? `<span class="dm-bump">${L.bump}</span>` : "");
+        (contact ? `<span class="dm-bump">${contact}</span>` : "");
       const s = chunks.stats();
       stats.textContent = `${fps.toFixed(0)} fps · ${L.chunks} ${s.meshes}/${s.active} · q${s.queued}+${s.pending} · ${(s.triangles / 1000).toFixed(0)}k tri · ${s.workers ? `${s.workers}w` : "main"} ${s.avgMs.toFixed(1)}ms`;
     }

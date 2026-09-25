@@ -30,7 +30,9 @@ export function DeepMarchGame() {
         heading: dm.hudHeading,
         chunks: dm.hudChunks,
         loading: dm.hudLoading,
-        bump: dm.hudBump,
+        contactFloor: dm.hudGrounded,
+        contactCeiling: dm.hudCeiling,
+        contactWall: dm.hudScrape,
       },
     });
     gameRef.current = game;

@@ -18,7 +18,12 @@ export type DensityField = {
   base: (y: number) => number;
   /** Upper bound of `noise * noiseWeight` (noise term is always ≥ 0). */
   noiseMax: number;
-  /** Central-difference gradient (points toward solid). */
+  /**
+   * Gradient pointing toward solid. The terracing term `(y % h) * w` and the
+   * hard floor are discontinuous in y, so a plain central difference explodes
+   * (≈ ±55/unit) whenever the stencil straddles a terrace boundary. Instead the
+   * noise part is differenced numerically and the y-only part analytically.
+   */
   gradient: (x: number, y: number, z: number, out: Float64Array, h?: number) => void;
 };
 
@@ -63,9 +68,15 @@ export function createDensityField(seed: number, s: TerrainSettings): DensityFie
   let ampSum = 0;
   for (let j = 0, a = 1; j < s.octaves; j++, a *= s.persistence) ampSum += a;
 
+  /** d/dy of the smooth pieces of base(y) (jumps at terrace / hard-floor boundaries ignored). */
+  const baseSlope = (y: number): number =>
+    -1 + s.terraceWeight + (y > s.ceilingHeight ? s.ceilingSlope : 0);
+
   const gradient = (x: number, y: number, z: number, out: Float64Array, h = 0.15) => {
+    // sample() - base() is the continuous noise term.
     out[0] = (sample(x + h, y, z) - sample(x - h, y, z)) / (2 * h);
-    out[1] = (sample(x, y + h, z) - sample(x, y - h, z)) / (2 * h);
+    out[1] =
+      (sample(x, y + h, z) - base(y + h) - (sample(x, y - h, z) - base(y - h))) / (2 * h) + baseSlope(y);
     out[2] = (sample(x, y, z + h) - sample(x, y, z - h)) / (2 * h);
   };
 

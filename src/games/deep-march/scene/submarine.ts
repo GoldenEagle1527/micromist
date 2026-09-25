@@ -41,8 +41,10 @@ export class SubController {
   speed = SUB.maxSpeed * 0.6;
   yawVelocity = 0;
   pitchVelocity = 0;
-  /** Seconds since the last terrain contact (for HUD feedback). */
-  sinceBump = 99;
+  /** Seconds left on the HUD contact hold; refreshed only by a real contact this frame. */
+  contactTimer = 0;
+  /** y component of the last real contact normal (toward open water). */
+  contactNormalY = 0;
 
   private readonly field: DensityField;
   private readonly euler = new THREE.Euler(0, 0, 0, "YXZ");
@@ -81,11 +83,44 @@ export class SubController {
     this.velocity.lerp(this.target, Math.min(1, dt * SUB.smoothSpeed));
     this.position.addScaledVector(this.velocity, dt);
 
-    this.sinceBump += dt;
+    this.contactTimer = Math.max(0, this.contactTimer - dt);
     this.resolveCollisions();
   }
 
-  /** Push the camera sphere out of rock along the density gradient; kill inward velocity. */
+  /** Current contact kind for the HUD (held ~0.3 s after the last real contact). */
+  get contact(): "floor" | "ceiling" | "wall" | null {
+    if (this.contactTimer <= 0) return null;
+    if (this.contactNormalY > 0.5) return "floor";
+    if (this.contactNormalY < -0.5) return "ceiling";
+    return "wall";
+  }
+
+  /**
+   * Distance t ∈ [0, r] along unit dir (dx,dy,dz) from p to the first rock, or -1
+   * if the probe end is still water. Bisection, so it also works across the
+   * density's y-discontinuities (terrace steps are real mesh faces).
+   */
+  private probe(dx: number, dy: number, dz: number, r: number): number {
+    const f = this.field;
+    const iso = f.settings.isoLevel;
+    const p = this.position;
+    if (f.sample(p.x + dx * r, p.y + dy * r, p.z + dz * r) < iso) return -1;
+    let lo = 0;
+    let hi = r;
+    for (let i = 0; i < 8; i++) {
+      const m = (lo + hi) * 0.5;
+      if (f.sample(p.x + dx * m, p.y + dy * m, p.z + dz * m) >= iso) hi = m;
+      else lo = m;
+    }
+    return hi;
+  }
+
+  /**
+   * Point collider: a sphere of radius SUB.colliderRadius at the camera.
+   * Contact = rock actually within r (verified by sampling, not just by the
+   * linear distance estimate). Push out along the contact normal and remove
+   * inward velocity.
+   */
   resolveCollisions() {
     const f = this.field;
     const iso = f.settings.isoLevel;
@@ -95,12 +130,33 @@ export class SubController {
       const d = f.sample(p.x, p.y, p.z);
       f.gradient(p.x, p.y, p.z, this.g, 0.05);
       const len = Math.hypot(this.g[0], this.g[1], this.g[2]);
-      if (len < 1e-6) break;
-      const sd = (iso - d) / len; // signed distance estimate, positive in water
-      if (sd >= r) break;
-      // Normal toward open water = -gradient.
-      const nx = -this.g[0] / len, ny = -this.g[1] / len, nz = -this.g[2] / len;
-      const push = Math.min(r - sd, 1.5);
+      let nx = 0, ny = 1, nz = 0;
+      if (len > 1e-6) {
+        nx = -this.g[0] / len;
+        ny = -this.g[1] / len;
+        nz = -this.g[2] / len;
+      }
+      let push = 0;
+      if (d >= iso) {
+        // Inside rock: linear estimate along the smooth normal.
+        push = Math.min(r + (d - iso) / Math.max(len, 1e-3), 1.5);
+      } else {
+        // Probe toward the nearest surface and straight down / up (terrace steps).
+        const probes: [number, number, number][] = [[-nx, -ny, -nz], [0, -1, 0], [0, 1, 0]];
+        for (const [dx, dy, dz] of probes) {
+          const t = this.probe(dx, dy, dz, r);
+          if (t < 0) continue;
+          const pen = r - t;
+          if (pen > push) {
+            push = pen;
+            nx = -dx;
+            ny = -dy;
+            nz = -dz;
+          }
+        }
+      }
+      if (push <= 1e-4) break;
+      push += 1e-3;
       p.x += nx * push;
       p.y += ny * push;
       p.z += nz * push;
@@ -113,7 +169,8 @@ export class SubController {
         const head = -(this.forward.x * nx + this.forward.y * ny + this.forward.z * nz);
         if (head > 0.6) this.speed *= 0.96;
       }
-      this.sinceBump = 0;
+      this.contactTimer = 0.3;
+      this.contactNormalY = ny;
     }
   }
 
@@ -145,5 +202,6 @@ export class SubController {
     this.pitch = 0;
     this.updateOrientation();
     for (let i = 0; i < 10; i++) this.resolveCollisions();
+    this.contactTimer = 0;
   }
 }

@@ -18,7 +18,9 @@ export type DeepMarchDict = {
   hudHeading: string;
   hudChunks: string;
   hudLoading: string;
-  hudBump: string;
+  hudGrounded: string;
+  hudCeiling: string;
+  hudScrape: string;
   seedNow: (seed: string) => string;
 };
 
@@ -47,7 +49,9 @@ export const deepMarchEn: DeepMarchDict = {
   hudHeading: "Heading",
   hudChunks: "chunks",
   hudLoading: "Generating seabed…",
-  hudBump: "Hull contact",
+  hudGrounded: "Hull grounded",
+  hudCeiling: "Hitting ceiling",
+  hudScrape: "Scraping rock",
   seedNow: (seed) => `Seed ${seed}`,
 };
 
@@ -75,6 +79,8 @@ export const deepMarchZh: DeepMarchDict = {
   hudHeading: "航向",
   hudChunks: "区块",
   hudLoading: "正在生成海床…",
-  hudBump: "船体触底",
+  hudGrounded: "船体触底",
+  hudCeiling: "触顶",
+  hudScrape: "擦碰岩壁",
   seedNow: (seed) => `种子 ${seed}`,
 };
