@@ -1,12 +1,11 @@
-/** Deep March scene: renderer, underwater look, chunked terrain, sub + camera loop. */
+/** Deep March scene: renderer, underwater look, chunked terrain, first-person sub loop. */
 import * as THREE from "three";
 import { SEA_COLORS, terrainForDevice } from "../terrain/config";
 import { createDensityField } from "../terrain/density";
 import { ChunkManager } from "../terrain/chunks";
-import { FollowCamera, type CamMode } from "./camera";
 import { InputController } from "./input";
 import { MarineSnow } from "./particles";
-import { SubController, createSubModel } from "./submarine";
+import { SubController } from "./submarine";
 
 export type HudLabels = {
   depth: string;
@@ -21,12 +20,10 @@ export type DeepMarchOptions = {
   seed: number;
   invertPitch: boolean;
   labels: HudLabels;
-  onCameraMode?: (mode: CamMode) => void;
 };
 
 export type DeepMarchHandle = {
   destroy: () => void;
-  toggleCamera: () => void;
   setThrottleHold: (v: number) => void;
   setBoost: (v: boolean) => void;
 };
@@ -78,26 +75,25 @@ export function createDeepMarch(host: HTMLElement, opts: DeepMarchOptions): Deep
 
   const sub = new SubController(field);
   sub.spawn(0, 0);
-  const model = createSubModel();
-  scene.add(model.root);
-  sub.applyToModel(model);
+  // First person: the camera *is* the sub. Headlight rides on the camera
+  // (reference: spot, colour (1, .88, .40), range 60, angle 46°).
+  const headlight = new THREE.SpotLight(new THREE.Color(1, 0.884, 0.401), 28, 60, THREE.MathUtils.degToRad(30), 0.55, 1.2);
+  headlight.position.set(0, -0.12, 0);
+  headlight.target.position.set(0, -0.4, -5);
+  camera.add(headlight, headlight.target);
+  scene.add(camera);
 
-  const follow = new FollowCamera(camera);
-  follow.snap(sub);
+  const syncCamera = () => {
+    camera.position.copy(sub.position);
+    camera.quaternion.copy(sub.quaternion);
+  };
+  syncCamera();
 
   const snow = new MarineSnow(900, opts.seed);
   scene.add(snow.points);
 
-  const toggleCamera = () => {
-    follow.mode = follow.mode === "third" ? "first" : "third";
-    model.body.visible = follow.mode === "third";
-    follow.snap(sub);
-    opts.onCameraMode?.(follow.mode);
-  };
-
   const input = new InputController(renderer.domElement, overlay, {
     invertPitch: opts.invertPitch,
-    onToggleCamera: toggleCamera,
   });
 
   const resize = () => {
@@ -131,8 +127,7 @@ export function createDeepMarch(host: HTMLElement, opts: DeepMarchOptions): Deep
       ready = true;
       loading.classList.add("done");
     }
-    sub.applyToModel(model);
-    follow.update(sub, dt);
+    syncCamera();
     chunks.update(sub.position, camera, dt);
     snow.update(camera.position, dt);
 
@@ -162,7 +157,6 @@ export function createDeepMarch(host: HTMLElement, opts: DeepMarchOptions): Deep
   raf = requestAnimationFrame(frame);
 
   return {
-    toggleCamera,
     setThrottleHold: (v) => {
       input.throttleHold = v;
     },
@@ -175,7 +169,7 @@ export function createDeepMarch(host: HTMLElement, opts: DeepMarchOptions): Deep
       input.dispose();
       chunks.dispose();
       snow.dispose();
-      model.dispose();
+      headlight.dispose();
       terrainMat.dispose();
       renderer.dispose();
       renderer.domElement.remove();
