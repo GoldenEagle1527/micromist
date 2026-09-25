@@ -1,0 +1,210 @@
+/* Layer 3 — deep-march / 深潜 */
+
+.deep-march {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.dm-setup {
+  width: min(28rem, 100%);
+  margin: 0.5rem auto 1.5rem;
+}
+
+.dm-setup .panel h2,
+.dm-setup .panel > .hint {
+  text-align: center;
+}
+
+.dm-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-top: 0.75rem;
+  font-size: 0.9rem;
+}
+
+.dm-seed-row {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.dm-seed-row input {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0.5rem 0.65rem;
+  border-radius: var(--md-sys-shape-corner-sm);
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--md-sys-color-surface) 80%, transparent);
+  color: var(--md-sys-color-on-surface);
+  font: inherit;
+}
+
+.dm-check {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.7rem;
+  font-size: 0.88rem;
+}
+
+.dm-setup .panel > .row {
+  display: flex;
+  flex-direction: column;
+  margin: 0.9rem 0 0;
+}
+
+.dm-setup .panel > .row button {
+  width: 100%;
+}
+
+.dm-controls h3 {
+  margin: 1rem 0 0.35rem;
+  font-size: 0.92rem;
+}
+
+.dm-controls ul {
+  margin: 0;
+  padding-left: 1.1rem;
+  font-size: 0.82rem;
+  line-height: 1.55;
+  opacity: 0.85;
+}
+
+.dm-playing {
+  width: min(100%, 960px);
+  margin: 0 auto 1.25rem;
+  gap: 0.55rem;
+}
+
+.dm-play-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.8rem;
+}
+
+.dm-seed-tag {
+  font-size: 0.82rem;
+  opacity: 0.75;
+  font-variant-numeric: tabular-nums;
+}
+
+.dm-play-hint {
+  margin: 0;
+  flex: 1 1 14rem;
+  font-size: 0.82rem;
+}
+
+.dm-stage {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  max-height: 78vh;
+  background: #002a73;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+}
+
+.dm-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  color: #d8ecff;
+  font-size: 0.8rem;
+  text-shadow: 0 1px 2px rgb(0 0 0 / 0.6);
+}
+
+.dm-hud {
+  position: absolute;
+  top: 0.6rem;
+  left: 0.75rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 1rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.dm-hud b {
+  font-weight: 600;
+  color: #fff3c4;
+}
+
+.dm-bump {
+  color: #ffb4a0;
+}
+
+.dm-stats {
+  position: absolute;
+  bottom: 0.5rem;
+  left: 0.75rem;
+  font-size: 0.7rem;
+  opacity: 0.7;
+  font-variant-numeric: tabular-nums;
+}
+
+.dm-loading {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: 1rem;
+  background: rgb(0 20 60 / 0.55);
+  transition: opacity 0.6s ease;
+}
+
+.dm-loading.done {
+  opacity: 0;
+}
+
+.dm-reticle {
+  position: absolute;
+  width: 84px;
+  height: 84px;
+  margin: -42px 0 0 -42px;
+  border: 2px solid rgb(200 230 255 / 0.45);
+  border-radius: 50%;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.dm-reticle.on {
+  opacity: 1;
+}
+
+.dm-reticle-knob {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: rgb(255 230 150 / 0.7);
+}
+
+.dm-touch {
+  position: absolute;
+  right: 0.6rem;
+  bottom: 0.6rem;
+  display: flex;
+  gap: 0.4rem;
+  z-index: 2;
+}
+
+.dm-touch button {
+  width: 2.6rem;
+  height: 2.6rem;
+  border-radius: 50%;
+  border: 1px solid rgb(200 230 255 / 0.4);
+  background: rgb(0 30 80 / 0.45);
+  color: #e6f3ff;
+  font-size: 1.2rem;
+  line-height: 1;
+  padding: 0;
+  touch-action: none;
+}
+
+.dm-touch button:active {
+  background: rgb(255 210 120 / 0.35);
+}
