@@ -1,5 +1,6 @@
 /** Transparent layer under the panel widgets: drag anywhere else to look (touch or mouse). */
 import { useRef } from "react";
+import { screenDelta } from "../viewRotation";
 
 export function LookPad({ onLook }: { onLook: (dx: number, dy: number, touch: boolean) => void }) {
   const pid = useRef<number | null>(null);
@@ -15,7 +16,8 @@ export function LookPad({ onLook }: { onLook: (dx: number, dy: number, touch: bo
       }}
       onPointerMove={(e) => {
         if (e.pointerId !== pid.current) return;
-        onLook(e.clientX - last.current[0], e.clientY - last.current[1], e.pointerType !== "mouse");
+        const [dx, dy] = screenDelta(e.clientX - last.current[0], e.clientY - last.current[1]);
+        onLook(dx, dy, e.pointerType !== "mouse");
         last.current = [e.clientX, e.clientY];
       }}
       onPointerUp={(e) => {

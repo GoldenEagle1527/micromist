@@ -4,6 +4,7 @@
  * touch, plus analog state pushed in by the sci-fi control panel.
  */
 import type { DiverInput } from "./diver";
+import { screenDelta } from "../viewRotation";
 
 const HANDLED = new Set([
   "KeyW", "KeyA", "KeyS", "KeyD", "KeyR", "KeyF",
@@ -122,7 +123,8 @@ export class InputController {
 
   private onPointerMove = (e: PointerEvent) => {
     if (e.pointerId !== this.touchId) return;
-    this.addLookPx(e.clientX - this.touchX, e.clientY - this.touchY, true);
+    const [dx, dy] = screenDelta(e.clientX - this.touchX, e.clientY - this.touchY);
+    this.addLookPx(dx, dy, true);
     this.touchX = e.clientX;
     this.touchY = e.clientY;
   };

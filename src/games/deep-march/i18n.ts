@@ -32,6 +32,8 @@ export type DeepMarchDict = {
   dialMove: string;
   showPanel: string;
   hidePanel: string;
+  exit: string;
+  flip: string;
   seedNow: (seed: string) => string;
 };
 
@@ -76,6 +78,8 @@ export const deepMarchEn: DeepMarchDict = {
   dialMove: "Move",
   showPanel: "Show control panel",
   hidePanel: "Hide control panel",
+  exit: "Exit dive",
+  flip: "Flip view 180°",
   seedNow: (seed) => `Seed ${seed}`,
 };
 
@@ -119,5 +123,7 @@ export const deepMarchZh: DeepMarchDict = {
   dialMove: "移动",
   showPanel: "显示操控面板",
   hidePanel: "隐藏操控面板",
+  exit: "退出下潜",
+  flip: "画面翻转 180°",
   seedNow: (seed) => `种子 ${seed}`,
 };
