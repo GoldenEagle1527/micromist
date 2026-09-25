@@ -1,24 +1,61 @@
 /**
- * CPU port of SebLague `MarchingCubes.compute` + `MeshGenerator.UpdateChunkMesh`.
+ * Column mesher: CPU port of SebLague `MarchingCubes.compute` +
+ * `MeshGenerator.UpdateChunkMesh`, generating one full-height column
+ * (hard floor → hard ceiling) per job, with floating-rock removal.
  *
- * Differences from the reference:
- * - density grid is padded by one sample so vertex normals come from the
- *   density gradient (seamless across chunks) instead of RecalculateNormals;
- * - vertices are shared per grid edge (indexed geometry, ~6× fewer vertices);
- * - rows whose density provably can't cross isoLevel skip the noise call.
+ * Global lattice: point (gi, gj, gk) sits at (-b/2 + g * spacing) on each axis,
+ * spacing = boundsSize / (numPointsPerAxis - 1). Column (cx, cz) owns
+ * gi ∈ [cx*(n-1), cx*(n-1) + n-2] (same for z) and meshes points
+ * cx*(n-1) .. cx*(n-1)+n-1, so neighbouring columns share their seam points.
+ *
+ * Vertically a column spans lattice rows gjMin..gjMax, where both end rows are
+ * "hard": base(y) > isoLevel, i.e. solid for any noise value (below the hard
+ * floor at y≈-7 and above the ceiling at y≈25.5). Those rows anchor the rock.
+ *
+ * Floating rock removal (26-connectivity on solid lattice points):
+ *  1. flood from hard rows inside the padded column → anchored;
+ *  2. every remaining solid component is searched best-first (toward the hard
+ *     rows) through the column *and* lazily sampled lattice points in a window
+ *     `floaterMargin` units around it:
+ *       - reaches a hard row / anchored point → keep;
+ *       - reaches the window edge or the node cap → ambiguous → keep;
+ *       - exhausted → the whole component is enclosed and unanchored → it is a
+ *         true floater globally → remove (density forced below iso).
+ *     Removal therefore only happens for components that are provably floating,
+ *     which makes the decision identical in every column that touches the same
+ *     component as long as it fits inside each column's window.
+ *
+ * Other differences from the reference: gradient normals from the padded grid,
+ * shared per-edge vertices (indexed), rows provably above/below iso skip noise.
  */
 import type { DensityField } from "./density";
 import { CORNER_OFFSETS, EDGE_CORNER_A, EDGE_CORNER_B, TRI_TABLE } from "./tables";
 import { seaWorldColor } from "./colors";
 
-export type ChunkMeshData = {
+export type ColumnStats = {
+  /** Components removed as floating rock. */
+  floaters: number;
+  floaterPoints: number;
+  /** Components kept only because the search hit the window edge / cap. */
+  ambiguous: number;
+  /** Lattice points visited by component searches (incl. lazily sampled). */
+  searched: number;
+  noiseSamples: number;
+};
+
+export type ColumnMeshData = {
   positions: Float32Array;
   normals: Float32Array;
   colors: Float32Array;
   indices: Uint16Array | Uint32Array;
-  /** Number of density samples actually evaluated with noise (perf stat). */
-  noiseSamples: number;
+  /** Removed (floating) lattice points owned by this column: (i, j, k) triplets, j relative to gjMin. */
+  removed: Int32Array;
+  stats: ColumnStats;
 };
+
+export type ColumnRows = { gjMin: number; gjMax: number };
+
+const SEARCH_NODE_CAP = 250_000;
 
 let scratchPos = new Float32Array(1 << 16);
 let scratchNrm = new Float32Array(1 << 16);
@@ -36,112 +73,309 @@ function ensureScratch(n: number) {
   scratchNrm = q;
 }
 
-export function chunkCentre(cx: number, cy: number, cz: number, boundsSize: number): [number, number, number] {
-  return [cx * boundsSize, cy * boundsSize, cz * boundsSize];
-}
-
-/** Quick reject: true when the chunk can't contain any surface. */
-export function chunkIsTrivial(field: DensityField, cy: number): boolean {
+export function latticeSpacing(field: DensityField): number {
   const s = field.settings;
-  const n = s.numPointsPerAxis;
-  const spacing = s.boundsSize / (n - 1);
-  const y0 = cy * s.boundsSize - s.boundsSize / 2;
-  let lo = Infinity;
-  let hi = -Infinity;
-  for (let j = -1; j <= n; j++) {
-    const b = field.base(y0 + j * spacing);
-    if (b < lo) lo = b;
-    if (b > hi) hi = b;
-  }
-  return hi + field.noiseMax < s.isoLevel || lo > s.isoLevel;
+  return s.boundsSize / (s.numPointsPerAxis - 1);
 }
 
-export function generateChunkMesh(
+export function latticeCoord(g: number, field: DensityField): number {
+  return -field.settings.boundsSize / 2 + g * latticeSpacing(field);
+}
+
+/** Vertical lattice span of every column (same for all columns of a field). */
+export function columnRows(field: DensityField): ColumnRows {
+  const iso = field.settings.isoLevel;
+  const hard = (gj: number) => field.base(latticeCoord(gj, field)) > iso;
+  const run = 80; // rows that must all be hard beyond the boundary row
+  const allHard = (from: number, dir: number) => {
+    for (let i = 0; i < run; i++) if (!hard(from + dir * i)) return false;
+    return true;
+  };
+  let gjMin = 0;
+  while (!allHard(gjMin, -1) && gjMin > -4000) gjMin--;
+  let gjMax = 0;
+  while (!allHard(gjMax, 1) && gjMax < 4000) gjMax++;
+  return { gjMin, gjMax };
+}
+
+const NEIGHBOURS: number[] = [];
+for (let dz = -1; dz <= 1; dz++)
+  for (let dy = -1; dy <= 1; dy++)
+    for (let dx = -1; dx <= 1; dx++) if (dx || dy || dz) NEIGHBOURS.push(dx, dy, dz);
+
+// Grid point states
+const WATER = 0;
+const SOLID = 1;
+const KEEP = 2;
+const REMOVED = 3;
+
+export function generateColumnMesh(
   field: DensityField,
   cx: number,
-  cy: number,
   cz: number,
-): ChunkMeshData {
+  rows: ColumnRows,
+  floaterMargin: number,
+  /** Debug/test: receives global (gi, gj, gk) of every removed point in the padded grid. */
+  debugRemoved?: number[],
+): ColumnMeshData {
   const s = field.settings;
   const iso = s.isoLevel;
   const n = s.numPointsPerAxis;
-  const p = n + 2; // padded
-  const spacing = s.boundsSize / (n - 1);
-  const [ccx, ccy, ccz] = chunkCentre(cx, cy, cz, s.boundsSize);
-  const x0 = ccx - s.boundsSize / 2;
-  const y0 = ccy - s.boundsSize / 2;
-  const z0 = ccz - s.boundsSize / 2;
+  const sp = latticeSpacing(field);
+  const { gjMin, gjMax } = rows;
+  const ny = gjMax - gjMin + 1;
+  const gi0 = cx * (n - 1);
+  const gk0 = cz * (n - 1);
+  const x0 = latticeCoord(gi0, field);
+  const y0 = latticeCoord(gjMin, field);
+  const z0 = latticeCoord(gk0, field);
 
-  if (chunkIsTrivial(field, cy)) {
-    return { positions: new Float32Array(0), normals: new Float32Array(0), colors: new Float32Array(0), indices: new Uint16Array(0), noiseSamples: 0 };
-  }
+  // Padded grid: one extra lattice point on every side.
+  const px = n + 2;
+  const py = ny + 2;
+  const pz = n + 2;
+  const plane = px * py; // index = (k * py + j) * px + i   (padded coords)
+  const size = plane * pz;
+  const stats: ColumnStats = { floaters: 0, floaterPoints: 0, ambiguous: 0, searched: 0, noiseSamples: 0 };
 
-  // Per-row classification: 0 = must sample, 1 = trivially below iso, 2 = above.
-  const rowBase = new Float64Array(p);
-  const rowKind = new Uint8Array(p);
-  for (let j = 0; j < p; j++) {
-    const b = field.base(y0 + (j - 1) * spacing);
+  // Row classification: 0 = sample, 1 = always water, 2 = always solid (hard).
+  const rowBase = new Float64Array(py);
+  const rowKind = new Uint8Array(py);
+  for (let j = 0; j < py; j++) {
+    const b = field.base(y0 + (j - 1) * sp);
     rowBase[j] = b;
     rowKind[j] = b + field.noiseMax < iso ? 1 : b > iso ? 2 : 0;
   }
-  const rowSkip = new Uint8Array(p);
-  for (let j = 0; j < p; j++) {
+  const rowSkip = new Uint8Array(py);
+  for (let j = 0; j < py; j++) {
     const k = rowKind[j];
     if (k === 0) continue;
     let ok = true;
     for (let d = -2; d <= 2 && ok; d++) {
       const jj = j + d;
-      if (jj >= 0 && jj < p && rowKind[jj] !== k) ok = false;
+      if (jj >= 0 && jj < py && rowKind[jj] !== k) ok = false;
     }
     rowSkip[j] = ok ? 1 : 0;
   }
 
-  // Density grid, index = (k * p + j) * p + i  (z-major like the reference).
-  const dens = new Float32Array(p * p * p);
-  let noiseSamples = 0;
-  for (let k = 0; k < p; k++) {
-    const wz = z0 + (k - 1) * spacing;
-    for (let j = 0; j < p; j++) {
-      const wy = y0 + (j - 1) * spacing;
-      const row = (k * p + j) * p;
+  const dens = new Float32Array(size);
+  const state = new Uint8Array(size);
+  for (let k = 0; k < pz; k++) {
+    const wz = z0 + (k - 1) * sp;
+    for (let j = 0; j < py; j++) {
+      const wy = y0 + (j - 1) * sp;
+      const row = (k * py + j) * px;
       if (rowSkip[j]) {
-        dens.fill(rowBase[j], row, row + p);
+        dens.fill(rowBase[j], row, row + px);
+        state.fill(rowBase[j] >= iso ? SOLID : WATER, row, row + px);
         continue;
       }
-      for (let i = 0; i < p; i++) {
-        dens[row + i] = field.sample(x0 + (i - 1) * spacing, wy, wz);
+      for (let i = 0; i < px; i++) {
+        const v = field.sample(x0 + (i - 1) * sp, wy, wz);
+        dens[row + i] = v;
+        state[row + i] = v >= iso ? SOLID : WATER;
       }
-      noiseSamples += p;
+      stats.noiseSamples += px;
     }
   }
 
-  // Gradient at unpadded points (points toward solid).
-  const grad = new Float32Array(n * n * n * 3);
-  const inv = 1 / (2 * spacing);
-  for (let k = 0; k < n; k++) {
-    for (let j = 0; j < n; j++) {
-      for (let i = 0; i < n; i++) {
-        const pi = ((k + 1) * p + (j + 1)) * p + (i + 1);
-        const gi = ((k * n + j) * n + i) * 3;
-        grad[gi] = (dens[pi + 1] - dens[pi - 1]) * inv;
-        grad[gi + 1] = (dens[pi + p] - dens[pi - p]) * inv;
-        grad[gi + 2] = (dens[pi + p * p] - dens[pi - p * p]) * inv;
+  // --- 1. anchored flood from hard rows -------------------------------------
+  const stack = new Int32Array(size);
+  let sp_ = 0;
+  for (let j = 0; j < py; j++) {
+    if (rowKind[j] !== 2) continue;
+    for (let k = 0; k < pz; k++) {
+      for (let i = 0; i < px; i++) {
+        const idx = (k * py + j) * px + i;
+        if (state[idx] === SOLID) {
+          state[idx] = KEEP;
+          stack[sp_++] = idx;
+        }
       }
     }
   }
+  const floodInGrid = (to: number) => {
+    while (sp_ > 0) {
+      const idx = stack[--sp_];
+      const i = idx % px;
+      const j = ((idx - i) / px) % py;
+      const k = Math.floor(idx / plane);
+      for (let q = 0; q < NEIGHBOURS.length; q += 3) {
+        const ii = i + NEIGHBOURS[q], jj = j + NEIGHBOURS[q + 1], kk = k + NEIGHBOURS[q + 2];
+        if (ii < 0 || jj < 0 || kk < 0 || ii >= px || jj >= py || kk >= pz) continue;
+        const nidx = (kk * py + jj) * px + ii;
+        if (state[nidx] !== SOLID) continue;
+        state[nidx] = to;
+        stack[sp_++] = nidx;
+      }
+    }
+  };
+  floodInGrid(KEEP);
+
+  // --- 2. search remaining components -----------------------------------
+  const Mi = Math.max(1, Math.ceil(floaterMargin / sp));
+  // Window-local coords: padded grid i=0 ↔ lx = Mi.
+  const WX = px + 2 * Mi;
+  const WZ = pz + 2 * Mi;
+  const wx0 = gi0 - 1 - Mi; // global gi at lx = 0
+  const wz0 = gk0 - 1 - Mi;
+  const keyOf = (lx: number, ly: number, lz: number) => (lz * WX + lx) * py + ly;
+  const outsideSolid = new Map<number, boolean>(); // lazily sampled, shared by searches
+  const isOutsideSolid = (lx: number, ly: number, lz: number): boolean => {
+    const key = keyOf(lx, ly, lz);
+    let v = outsideSolid.get(key);
+    if (v === undefined) {
+      if (rowKind[ly] === 2) v = true;
+      else if (rowKind[ly] === 1) v = false;
+      else {
+        v = field.sample(latticeCoord(wx0 + lx, field), y0 + (ly - 1) * sp, latticeCoord(wz0 + lz, field)) >= iso;
+        stats.noiseSamples++;
+      }
+      outsideSolid.set(key, v);
+    }
+    return v;
+  };
+  const halfRows = Math.ceil(py / 2) + 1;
+  const priority = (ly: number) => {
+    // distance (rows) to the nearest hard row: greedy toward anchors
+    let d = halfRows;
+    for (let j = ly; j >= 0 && ly - j < d; j--) if (rowKind[j] === 2) { d = ly - j; break; }
+    for (let j = ly; j < py && j - ly < d; j++) if (rowKind[j] === 2) { d = j - ly; break; }
+    return d;
+  };
+  const rowPriority = new Int32Array(py);
+  for (let j = 0; j < py; j++) rowPriority[j] = priority(j);
+
+  /** 0 = anchored, 1 = ambiguous, 2 = exhausted (floating). */
+  const search = (startIdx: number): number => {
+    const buckets: number[][] = [];
+    let minBucket = Infinity;
+    const visited = new Set<number>();
+    const push = (key: number, ly: number) => {
+      const p = rowPriority[ly];
+      (buckets[p] ??= []).push(key);
+      if (p < minBucket) minBucket = p;
+    };
+    const si = startIdx % px;
+    const sj = ((startIdx - si) / px) % py;
+    const sk = Math.floor(startIdx / plane);
+    const startKey = keyOf(si + Mi, sj, sk + Mi);
+    visited.add(startKey);
+    push(startKey, sj);
+    let count = 0;
+    while (minBucket < Infinity) {
+      const b = buckets[minBucket];
+      if (!b || b.length === 0) {
+        minBucket++;
+        if (minBucket >= buckets.length) minBucket = Infinity;
+        continue;
+      }
+      const key = b.pop()!;
+      if (++count > SEARCH_NODE_CAP) {
+        stats.searched += count;
+        return 1;
+      }
+      const ly = key % py;
+      const rest = (key - ly) / py;
+      const lx = rest % WX;
+      const lz = (rest - lx) / WX;
+      if (rowKind[ly] === 2) {
+        stats.searched += count;
+        return 0;
+      }
+      if (lx === 0 || lz === 0 || lx === WX - 1 || lz === WZ - 1) {
+        stats.searched += count;
+        return 1;
+      }
+      for (let q = 0; q < NEIGHBOURS.length; q += 3) {
+        const nx = lx + NEIGHBOURS[q], nyy = ly + NEIGHBOURS[q + 1], nz = lz + NEIGHBOURS[q + 2];
+        if (nyy < 0 || nyy >= py) continue;
+        const nkey = keyOf(nx, nyy, nz);
+        if (visited.has(nkey)) continue;
+        const gx = nx - Mi, gz = nz - Mi;
+        if (gx >= 0 && gz >= 0 && gx < px && gz < pz) {
+          const st = state[(gz * py + nyy) * px + gx];
+          if (st === KEEP) {
+            stats.searched += count;
+            return 0;
+          }
+          if (st !== SOLID) continue;
+        } else if (!isOutsideSolid(nx, nyy, nz)) continue;
+        visited.add(nkey);
+        push(nkey, nyy);
+      }
+    }
+    stats.searched += count;
+    return 2;
+  };
+
+  for (let idx = 0; idx < size; idx++) {
+    if (state[idx] !== SOLID) continue;
+    const result = search(idx);
+    const to = result === 2 ? REMOVED : KEEP;
+    state[idx] = to;
+    stack[sp_++] = idx;
+    let marked = 1;
+    // flood this in-grid component with the decision
+    while (sp_ > 0) {
+      const cur = stack[--sp_];
+      const i = cur % px;
+      const j = ((cur - i) / px) % py;
+      const k = Math.floor(cur / plane);
+      for (let q = 0; q < NEIGHBOURS.length; q += 3) {
+        const ii = i + NEIGHBOURS[q], jj = j + NEIGHBOURS[q + 1], kk = k + NEIGHBOURS[q + 2];
+        if (ii < 0 || jj < 0 || kk < 0 || ii >= px || jj >= py || kk >= pz) continue;
+        const nidx = (kk * py + jj) * px + ii;
+        if (state[nidx] !== SOLID) continue;
+        state[nidx] = to;
+        stack[sp_++] = nidx;
+        marked++;
+      }
+    }
+    if (result === 2) {
+      stats.floaters++;
+      stats.floaterPoints += marked;
+    } else if (result === 1) stats.ambiguous++;
+  }
+
+  // Remove floaters from the density field; collect owned removed points.
+  const removedList: number[] = [];
+  for (let k = 0; k < pz; k++) {
+    for (let j = 0; j < py; j++) {
+      for (let i = 0; i < px; i++) {
+        const idx = (k * py + j) * px + i;
+        if (state[idx] !== REMOVED) continue;
+        dens[idx] = Math.min(dens[idx], iso - 1);
+        const ui = i - 1, uj = j - 1, uk = k - 1;
+        if (debugRemoved) debugRemoved.push(gi0 + ui, gjMin + uj, gk0 + uk);
+        if (ui >= 0 && uk >= 0 && ui <= n - 2 && uk <= n - 2 && uj >= 0 && uj < ny) removedList.push(ui, uj, uk);
+      }
+    }
+  }
+
+  // --- 3. gradient normals + marching cubes ----------------------------------
+  const gradAt = (i: number, j: number, k: number, out: Float32Array, o: number) => {
+    const pi = ((k + 1) * py + (j + 1)) * px + (i + 1);
+    const inv = 1 / (2 * sp);
+    out[o] = (dens[pi + 1] - dens[pi - 1]) * inv;
+    out[o + 1] = (dens[pi + px] - dens[pi - px]) * inv;
+    out[o + 2] = (dens[pi + plane] - dens[pi - plane]) * inv;
+  };
+  const ga = new Float32Array(3);
+  const gb = new Float32Array(3);
 
   const cornerVal = new Float32Array(8);
   const cornerI = new Int32Array(8);
   const cornerJ = new Int32Array(8);
   const cornerK = new Int32Array(8);
-  // Shared-vertex cache: one vertex per grid edge (lower point index * 3 + axis).
-  const edgeVertex = new Int32Array(n * n * n * 3).fill(-1);
+  const edgeVertex = new Int32Array(n * ny * n * 3).fill(-1);
   let vcount = 0;
   let icount = 0;
   const tri = new Int32Array(3);
 
   for (let k = 0; k < n - 1; k++) {
-    for (let j = 0; j < n - 1; j++) {
+    for (let j = 0; j < ny - 1; j++) {
+      if (rowSkip[j + 1] && rowSkip[j + 2] && rowKind[j + 1] === rowKind[j + 2]) continue;
       for (let i = 0; i < n - 1; i++) {
         let cubeIndex = 0;
         for (let c = 0; c < 8; c++) {
@@ -151,7 +385,7 @@ export function generateChunkMesh(
           cornerI[c] = ci;
           cornerJ[c] = cj;
           cornerK[c] = ck;
-          const v = dens[((ck + 1) * p + (cj + 1)) * p + (ci + 1)];
+          const v = dens[((ck + 1) * py + (cj + 1)) * px + (ci + 1)];
           cornerVal[c] = v;
           if (v < iso) cubeIndex |= 1 << c;
         }
@@ -163,7 +397,6 @@ export function generateChunkMesh(
             const edge = TRI_TABLE[base + t + e];
             let a = EDGE_CORNER_A[edge];
             let b = EDGE_CORNER_B[edge];
-            // Canonical direction (a = lower corner) so neighbours share the vertex.
             if (cornerI[a] + cornerJ[a] + cornerK[a] > cornerI[b] + cornerJ[b] + cornerK[b]) {
               const tmp = a;
               a = b;
@@ -171,7 +404,7 @@ export function generateChunkMesh(
             }
             const ai = cornerI[a], aj = cornerJ[a], ak = cornerK[a];
             const axis = cornerI[b] !== ai ? 0 : cornerJ[b] !== aj ? 1 : 2;
-            const key = ((ak * n + aj) * n + ai) * 3 + axis;
+            const key = ((ak * ny + aj) * n + ai) * 3 + axis;
             let vi = edgeVertex[key];
             if (vi < 0) {
               vi = vcount++;
@@ -181,32 +414,31 @@ export function generateChunkMesh(
               const vb = cornerVal[b];
               const f = Math.abs(vb - va) < 1e-9 ? 0.5 : (iso - va) / (vb - va);
               const o = vi * 3;
-              scratchPos[o] = x0 + (ai + (cornerI[b] - ai) * f) * spacing;
-              scratchPos[o + 1] = y0 + (aj + (cornerJ[b] - aj) * f) * spacing;
-              scratchPos[o + 2] = z0 + (ak + (cornerK[b] - ak) * f) * spacing;
-              const ga = ((ak * n + aj) * n + ai) * 3;
-              const gb = ((cornerK[b] * n + cornerJ[b]) * n + cornerI[b]) * 3;
-              let nx = -(grad[ga] + (grad[gb] - grad[ga]) * f);
-              let ny = -(grad[ga + 1] + (grad[gb + 1] - grad[ga + 1]) * f);
-              let nz = -(grad[ga + 2] + (grad[gb + 2] - grad[ga + 2]) * f);
-              const len = Math.hypot(nx, ny, nz) || 1;
+              scratchPos[o] = x0 + (ai + (cornerI[b] - ai) * f) * sp;
+              scratchPos[o + 1] = y0 + (aj + (cornerJ[b] - aj) * f) * sp;
+              scratchPos[o + 2] = z0 + (ak + (cornerK[b] - ak) * f) * sp;
+              gradAt(ai, aj, ak, ga, 0);
+              gradAt(cornerI[b], cornerJ[b], cornerK[b], gb, 0);
+              let nx = -(ga[0] + (gb[0] - ga[0]) * f);
+              let nyv = -(ga[1] + (gb[1] - ga[1]) * f);
+              let nz = -(ga[2] + (gb[2] - ga[2]) * f);
+              const len = Math.hypot(nx, nyv, nz) || 1;
               nx /= len;
-              ny /= len;
+              nyv /= len;
               nz /= len;
               scratchNrm[o] = nx;
-              scratchNrm[o + 1] = ny;
+              scratchNrm[o + 1] = nyv;
               scratchNrm[o + 2] = nz;
             }
             tri[e] = vi;
           }
-          if (tri[0] === tri[1] || tri[1] === tri[2] || tri[0] === tri[2]) continue; // degenerate
+          if (tri[0] === tri[1] || tri[1] === tri[2] || tri[0] === tri[2]) continue;
           if (scratchIdx.length < icount + 3) {
             const q = new Uint32Array(scratchIdx.length * 2);
             q.set(scratchIdx);
             scratchIdx = q;
           }
-          // Like the reference (which stores vertexC, vertexB, vertexA), emit the
-          // table triangle reversed so CCW front faces point into the water.
+          // Like the reference (vertexC, vertexB, vertexA): reversed so CCW faces the water.
           scratchIdx[icount++] = tri[2];
           scratchIdx[icount++] = tri[1];
           scratchIdx[icount++] = tri[0];
@@ -219,8 +451,6 @@ export function generateChunkMesh(
   const normals = scratchNrm.slice(0, vcount * 3);
   const indices = vcount <= 65535 ? Uint16Array.from(scratchIdx.subarray(0, icount)) : scratchIdx.slice(0, icount);
   const colors = new Float32Array(vcount * 3);
-  for (let v = 0; v < vcount; v++) {
-    seaWorldColor(positions[v * 3 + 1], normals[v * 3 + 1], colors, v * 3);
-  }
-  return { positions, normals, colors, indices, noiseSamples };
+  for (let v = 0; v < vcount; v++) seaWorldColor(positions[v * 3 + 1], normals[v * 3 + 1], colors, v * 3);
+  return { positions, normals, colors, indices, removed: Int32Array.from(removedList), stats };
 }

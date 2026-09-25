@@ -1,16 +1,20 @@
 import type { TerrainSettings } from "./config";
+import type { ColumnStats } from "./mesher";
 
 /** Messages between the main thread and `mesher.worker.ts`. */
 export type MesherRequest =
   | { type: "init"; seed: number; settings: TerrainSettings }
-  | { type: "chunk"; id: number; cx: number; cy: number; cz: number };
+  | { type: "column"; id: number; cx: number; cz: number };
 
 export type MesherResponse = {
-  type: "chunk";
+  type: "column";
   id: number;
   positions: Float32Array;
   normals: Float32Array;
   colors: Float32Array;
   indices: Uint16Array | Uint32Array;
+  /** Removed floating lattice points owned by the column: (i, j, k) triplets. */
+  removed: Int32Array;
+  stats: ColumnStats;
   ms: number;
 };

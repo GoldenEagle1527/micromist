@@ -51,8 +51,19 @@ export class SubController {
   private readonly target = new THREE.Vector3();
   private readonly g = new Float64Array(3);
 
-  constructor(field: DensityField) {
+  /** Returns true where floating rock was removed from the rendered terrain. */
+  private readonly isRemoved: (x: number, y: number, z: number) => boolean;
+
+  constructor(field: DensityField, isRemoved: (x: number, y: number, z: number) => boolean = () => false) {
     this.field = field;
+    this.isRemoved = isRemoved;
+  }
+
+  /** Density as rendered: removed floating rock counts as water. */
+  private sample(x: number, y: number, z: number): number {
+    const d = this.field.sample(x, y, z);
+    const iso = this.field.settings.isoLevel;
+    return d >= iso && this.isRemoved(x, y, z) ? iso - 1 : d;
   }
 
   private updateOrientation() {
@@ -104,12 +115,12 @@ export class SubController {
     const f = this.field;
     const iso = f.settings.isoLevel;
     const p = this.position;
-    if (f.sample(p.x + dx * r, p.y + dy * r, p.z + dz * r) < iso) return -1;
+    if (this.sample(p.x + dx * r, p.y + dy * r, p.z + dz * r) < iso) return -1;
     let lo = 0;
     let hi = r;
     for (let i = 0; i < 8; i++) {
       const m = (lo + hi) * 0.5;
-      if (f.sample(p.x + dx * m, p.y + dy * m, p.z + dz * m) >= iso) hi = m;
+      if (this.sample(p.x + dx * m, p.y + dy * m, p.z + dz * m) >= iso) hi = m;
       else lo = m;
     }
     return hi;
@@ -127,7 +138,7 @@ export class SubController {
     const r = SUB.colliderRadius;
     const p = this.position;
     for (let iter = 0; iter < 4; iter++) {
-      const d = f.sample(p.x, p.y, p.z);
+      const d = this.sample(p.x, p.y, p.z);
       f.gradient(p.x, p.y, p.z, this.g, 0.05);
       const len = Math.hypot(this.g[0], this.g[1], this.g[2]);
       let nx = 0, ny = 1, nz = 0;

@@ -31,6 +31,12 @@ export type TerrainSettings = {
    */
   ceilingHeight: number;
   ceilingSlope: number;
+
+  /**
+   * Floating-rock removal search window (units beyond the column footprint).
+   * Components that are still unresolved at this distance are kept.
+   */
+  floaterMargin: number;
 };
 
 export const TERRAIN: TerrainSettings = {
@@ -54,6 +60,8 @@ export const TERRAIN: TerrainSettings = {
 
   ceilingHeight: 14,
   ceilingSlope: 3,
+
+  floaterMargin: 12,
 };
 
 /**
