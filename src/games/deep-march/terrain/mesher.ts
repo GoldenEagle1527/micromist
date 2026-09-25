@@ -30,7 +30,6 @@
  */
 import type { DensityField } from "./density";
 import { CORNER_OFFSETS, EDGE_CORNER_A, EDGE_CORNER_B, TRI_TABLE } from "./tables";
-import { seaWorldColor } from "./colors";
 
 export type ColumnStats = {
   /** Components removed as floating rock. */
@@ -46,7 +45,8 @@ export type ColumnStats = {
 export type ColumnMeshData = {
   positions: Float32Array;
   normals: Float32Array;
-  colors: Float32Array;
+  /** Per-vertex ambient occlusion (1 = open water, 0 = fully enclosed). */
+  ao: Float32Array;
   indices: Uint16Array | Uint32Array;
   /** Removed (floating) lattice points owned by this column: (i, j, k) triplets, j relative to gjMin. */
   removed: Int32Array;
@@ -60,6 +60,7 @@ const SEARCH_NODE_CAP = 250_000;
 let scratchPos = new Float32Array(1 << 16);
 let scratchNrm = new Float32Array(1 << 16);
 let scratchIdx = new Uint32Array(1 << 16);
+let scratchGrad = new Float32Array(1 << 15);
 
 function ensureScratch(n: number) {
   if (scratchPos.length >= n) return;
@@ -71,6 +72,9 @@ function ensureScratch(n: number) {
   const q = new Float32Array(len);
   q.set(scratchNrm);
   scratchNrm = q;
+  const g = new Float32Array(len / 3 + 1);
+  g.set(scratchGrad.subarray(0, Math.min(scratchGrad.length, g.length)));
+  scratchGrad = g;
 }
 
 export function latticeSpacing(field: DensityField): number {
@@ -354,11 +358,15 @@ export function generateColumnMesh(
   }
 
   // --- 3. gradient normals + marching cubes ----------------------------------
+  // Smooth gradient: the terracing term jumps at terrace boundaries, so the
+  // y difference is taken on (density - base) and base's smooth slope added back.
+  const rowSlope = new Float32Array(py);
+  for (let j = 0; j < py; j++) rowSlope[j] = field.baseSlope(y0 + (j - 1) * sp);
   const gradAt = (i: number, j: number, k: number, out: Float32Array, o: number) => {
     const pi = ((k + 1) * py + (j + 1)) * px + (i + 1);
     const inv = 1 / (2 * sp);
     out[o] = (dens[pi + 1] - dens[pi - 1]) * inv;
-    out[o + 1] = (dens[pi + px] - dens[pi - px]) * inv;
+    out[o + 1] = (dens[pi + px] - rowBase[j + 2] - (dens[pi - px] - rowBase[j])) * inv + rowSlope[j + 1];
     out[o + 2] = (dens[pi + plane] - dens[pi - plane]) * inv;
   };
   const ga = new Float32Array(3);
@@ -423,6 +431,7 @@ export function generateColumnMesh(
               let nyv = -(ga[1] + (gb[1] - ga[1]) * f);
               let nz = -(ga[2] + (gb[2] - ga[2]) * f);
               const len = Math.hypot(nx, nyv, nz) || 1;
+              scratchGrad[vi] = len;
               nx /= len;
               nyv /= len;
               nz /= len;
@@ -450,7 +459,54 @@ export function generateColumnMesh(
   const positions = scratchPos.slice(0, vcount * 3);
   const normals = scratchNrm.slice(0, vcount * 3);
   const indices = vcount <= 65535 ? Uint16Array.from(scratchIdx.subarray(0, icount)) : scratchIdx.slice(0, icount);
-  const colors = new Float32Array(vcount * 3);
-  for (let v = 0; v < vcount; v++) seaWorldColor(positions[v * 3 + 1], normals[v * 3 + 1], colors, v * 3);
-  return { positions, normals, colors, indices, removed: Int32Array.from(removedList), stats };
+  // Where the smooth gradient disagrees with the actual surface (terrace steps
+  // are real faces of the discontinuous field), fall back to the area-weighted
+  // face normal so lighting / material matches the geometry.
+  const faceN = new Float32Array(vcount * 3);
+  for (let t = 0; t < icount; t += 3) {
+    const a = scratchIdx[t] * 3, b = scratchIdx[t + 1] * 3, c = scratchIdx[t + 2] * 3;
+    const ux = positions[b] - positions[a], uy = positions[b + 1] - positions[a + 1], uz = positions[b + 2] - positions[a + 2];
+    const vx = positions[c] - positions[a], vy = positions[c + 1] - positions[a + 1], vz = positions[c + 2] - positions[a + 2];
+    const fx = uy * vz - uz * vy, fy = uz * vx - ux * vz, fz = ux * vy - uy * vx;
+    for (const q of [a, b, c]) {
+      faceN[q] += fx;
+      faceN[q + 1] += fy;
+      faceN[q + 2] += fz;
+    }
+  }
+  for (let v = 0; v < vcount; v++) {
+    const o = v * 3;
+    const len = Math.hypot(faceN[o], faceN[o + 1], faceN[o + 2]);
+    if (len < 1e-9) continue;
+    const fx = faceN[o] / len, fy = faceN[o + 1] / len, fz = faceN[o + 2] / len;
+    const d = fx * normals[o] + fy * normals[o + 1] + fz * normals[o + 2];
+    if (d < 0.5) {
+      const w = d <= 0 ? 1 : 1 - d / 0.5;
+      const nx = normals[o] * (1 - w) + fx * w, ny = normals[o + 1] * (1 - w) + fy * w, nz = normals[o + 2] * (1 - w) + fz * w;
+      const l2 = Math.hypot(nx, ny, nz) || 1;
+      normals[o] = nx / l2;
+      normals[o + 1] = ny / l2;
+      normals[o + 2] = nz / l2;
+    }
+  }
+
+  // Ambient occlusion: compare the density a short way out along the normal
+  // with what a flat surface (same gradient) would give. Concave spots — cave
+  // corners, crevices, under overhangs — stay denser → darker.
+  const ao = new Float32Array(vcount);
+  const AO_STEPS = [0.8, 2.2];
+  const AO_WEIGHTS = [0.55, 0.45];
+  for (let v = 0; v < vcount; v++) {
+    const o = v * 3;
+    const g = Math.max(0.3, scratchGrad[v]);
+    let occ = 0;
+    for (let q = 0; q < AO_STEPS.length; q++) {
+      const t = AO_STEPS[q];
+      const d = field.sample(positions[o] + normals[o] * t, positions[o + 1] + normals[o + 1] * t, positions[o + 2] + normals[o + 2] * t);
+      const expected = g * t; // iso - d on a plane
+      occ += AO_WEIGHTS[q] * Math.min(1, Math.max(0, 1 - (iso - d) / expected));
+    }
+    ao[v] = 1 - occ;
+  }
+  return { positions, normals, ao, indices, removed: Int32Array.from(removedList), stats };
 }

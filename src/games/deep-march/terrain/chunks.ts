@@ -258,7 +258,7 @@ export class ChunkManager {
       const geo = new THREE.BufferGeometry();
       geo.setAttribute("position", new THREE.BufferAttribute(r.positions, 3));
       geo.setAttribute("normal", new THREE.BufferAttribute(r.normals, 3));
-      geo.setAttribute("color", new THREE.BufferAttribute(r.colors, 3));
+      geo.setAttribute("ao", new THREE.BufferAttribute(r.ao, 1));
       geo.setIndex(new THREE.BufferAttribute(r.indices, 1));
       this.setColumnBox(e.cx, e.cz);
       geo.boundingBox = this.box.clone();

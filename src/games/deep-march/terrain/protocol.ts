@@ -11,7 +11,7 @@ export type MesherResponse = {
   id: number;
   positions: Float32Array;
   normals: Float32Array;
-  colors: Float32Array;
+  ao: Float32Array;
   indices: Uint16Array | Uint32Array;
   /** Removed floating lattice points owned by the column: (i, j, k) triplets. */
   removed: Int32Array;

@@ -1,10 +1,11 @@
 /** Deep March scene: renderer, underwater look, chunked terrain, first-person sub loop. */
 import * as THREE from "three";
-import { SEA_COLORS, terrainForDevice } from "../terrain/config";
+import { SEA_COLORS, isLowSpecDevice, terrainForDevice } from "../terrain/config";
 import { createDensityField } from "../terrain/density";
 import { ChunkManager } from "../terrain/chunks";
 import { InputController } from "./input";
 import { MarineSnow } from "./particles";
+import { createSeabedMaterial } from "./seabedMaterial";
 import { SubController } from "./submarine";
 
 export type HudLabels = {
@@ -53,7 +54,8 @@ export function createDeepMarch(host: HTMLElement, opts: DeepMarchOptions): Deep
   loading.textContent = opts.labels.loading;
   overlay.appendChild(loading);
 
-  const terrain = terrainForDevice();
+  const lowSpec = isLowSpecDevice();
+  const terrain = terrainForDevice(lowSpec);
 
   // Underwater look — reference: fog == camera background (0, .168, .453), linear fog to viewDistance * .81.
   const fogColor = new THREE.Color().setRGB(SEA_COLORS.fog[0], SEA_COLORS.fog[1], SEA_COLORS.fog[2], THREE.SRGBColorSpace);
@@ -63,23 +65,44 @@ export function createDeepMarch(host: HTMLElement, opts: DeepMarchOptions): Deep
 
   const camera = new THREE.PerspectiveCamera(70, 1, 0.05, terrain.viewDistance + 12);
 
-  const ambient = new THREE.HemisphereLight(0x6a8cbc, 0x1d2c4c, 1.35);
+  // Down-welling light: teal sky fill from above, very dark from below,
+  // plus a blue-green filtered "sun" from the surface.
+  const ambient = new THREE.HemisphereLight(0x3f86a6, 0x0a1426, 0.95);
   scene.add(ambient);
-  // Reference directional light: colour (1, .957, .839), intensity .57.
-  const sun = new THREE.DirectionalLight(new THREE.Color(1, 0.957, 0.839), 1.1);
-  sun.position.set(0.3, 1, 0.2);
+  const sun = new THREE.DirectionalLight(new THREE.Color(0.55, 0.85, 1.0), 1.05);
+  sun.position.set(0.25, 1, 0.15);
   scene.add(sun);
 
-  const terrainMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.6, metalness: 0 });
+  let texturesReady = false;
+  const seabed = createSeabedMaterial({
+    lowSpec,
+    anisotropy: Math.min(8, renderer.capabilities.getMaxAnisotropy()),
+    onReady: () => {
+      texturesReady = true;
+    },
+  });
+  const terrainMat = seabed.material;
 
   const field = createDensityField(opts.seed, terrain);
   const chunks = new ChunkManager(scene, field, opts.seed, terrainMat);
 
   const sub = new SubController(field, (x, y, z) => chunks.isRemoved(x, y, z));
   sub.spawn(0, 0);
+  // Optional viewpoint for sharing / screenshots: ?at=x,y,z,yawDeg,pitchDeg (starts stopped).
+  const at = new URLSearchParams(window.location.search).get("at");
+  if (at) {
+    const v = at.split(",").map(Number);
+    if (v.length >= 3 && v.every(Number.isFinite)) {
+      sub.position.set(v[0], v[1], v[2]);
+      sub.yaw = ((v[3] ?? 0) * Math.PI) / 180;
+      sub.pitch = ((v[4] ?? 0) * Math.PI) / 180;
+      sub.speed = 0;
+      sub.update(0, { pitch: 0, yaw: 0, throttle: 0, boost: false, throttleImpulse: 0 });
+    }
+  }
   // First person: the camera *is* the sub. Headlight rides on the camera
   // (reference: spot, colour (1, .88, .40), range 60, angle 46°).
-  const headlight = new THREE.SpotLight(new THREE.Color(1, 0.884, 0.401), 28, 60, THREE.MathUtils.degToRad(30), 0.55, 1.2);
+  const headlight = new THREE.SpotLight(new THREE.Color(1, 0.93, 0.78), 9, 45, THREE.MathUtils.degToRad(32), 0.8, 1.3);
   headlight.position.set(0, -0.12, 0);
   headlight.target.position.set(0, -0.4, -5);
   camera.add(headlight, headlight.target);
@@ -125,13 +148,14 @@ export function createDeepMarch(host: HTMLElement, opts: DeepMarchOptions): Deep
     const inp = input.read();
     if (ready) {
       sub.update(dt, inp);
-    } else if (chunks.nearReady(sub.position, 14)) {
+    } else if (texturesReady && chunks.nearReady(sub.position, 14)) {
       ready = true;
       loading.classList.add("done");
     }
     syncCamera();
     chunks.update(sub.position, camera, dt);
     snow.update(camera.position, dt);
+    seabed.update(now / 1000);
 
     renderer.render(scene, camera);
 
@@ -174,7 +198,7 @@ export function createDeepMarch(host: HTMLElement, opts: DeepMarchOptions): Deep
       chunks.dispose();
       snow.dispose();
       headlight.dispose();
-      terrainMat.dispose();
+      seabed.dispose();
       renderer.dispose();
       renderer.domElement.remove();
       overlay.remove();
