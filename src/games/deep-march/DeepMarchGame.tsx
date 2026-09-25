@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import "./deep-march.css";
 import { useLocale } from "../../i18n";
 import { seedFromString } from "./terrain/noise";
 import { createDeepMarch, type DeepMarchHandle } from "./scene/world";
-import { loadSettings, randomSeed, saveSettings } from "./settings";
+import { isTouchDevice, loadSettings, panelEnabled, randomSeed, saveSettings } from "./settings";
+import { ControlPanel } from "./ui/ControlPanel";
 
 type Screen = "setup" | "playing";
 
@@ -13,51 +14,90 @@ export function DeepMarchGame() {
 
   const [screen, setScreen] = useState<Screen>("setup");
   const [seed, setSeed] = useState(() => loadSettings().seed);
-  const [invertPitch, setInvertPitch] = useState(() => loadSettings().invertPitch);
+  const [sensitivity, setSensitivity] = useState(() => loadSettings().sensitivity);
+  const [invertY, setInvertY] = useState(() => loadSettings().invertY);
+  const [panelOn, setPanelOn] = useState(() => panelEnabled(loadSettings()));
+  const [game, setGame] = useState<DeepMarchHandle | null>(null);
   const hostRef = useRef<HTMLDivElement | null>(null);
-  const gameRef = useRef<DeepMarchHandle | null>(null);
+  const [touch] = useState(isTouchDevice);
+
+  const persist = useCallback(
+    (patch: Partial<{ seed: string; panel: boolean; sensitivity: number; invertY: boolean }>) => {
+      const cur = loadSettings();
+      saveSettings({ ...cur, ...patch });
+    },
+    [],
+  );
 
   useEffect(() => {
     if (screen !== "playing") return;
     const host = hostRef.current;
     if (!host) return;
-    const game = createDeepMarch(host, {
+    const g = createDeepMarch(host, {
       seed: seedFromString(seed || "1"),
-      invertPitch,
+      sensitivity,
+      invertY,
+      panel: panelOn,
       labels: {
-        depth: dm.hudDepth,
-        speed: dm.hudSpeed,
-        heading: dm.hudHeading,
         chunks: dm.hudChunks,
         loading: dm.hudLoading,
-        contactFloor: dm.hudGrounded,
-        contactCeiling: dm.hudCeiling,
-        contactWall: dm.hudScrape,
+        lockPrompt: dm.lockPrompt,
       },
     });
-    gameRef.current = game;
+    setGame(g);
     return () => {
-      gameRef.current = null;
-      game.destroy();
+      setGame(null);
+      g.destroy();
     };
-    // Labels are read once per dive; a locale switch mid-dive keeps the old HUD text.
+    // Settings/labels are read once per dive; the panel toggle is pushed via setPanelMode.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [screen]);
+
+  // Tall mode (touch + panel): fit the stage to the space left below the header / play bar.
+  const tall = touch && panelOn && screen === "playing";
+  useLayoutEffect(() => {
+    const host = hostRef.current;
+    if (!tall || !host) return;
+    const fit = () => {
+      const top = host.getBoundingClientRect().top + window.scrollY;
+      const vh = window.visualViewport?.height ?? window.innerHeight;
+      host.style.setProperty("--dm-stage-h", `${Math.max(220, Math.floor(vh - top - 8))}px`);
+    };
+    fit();
+    window.addEventListener("resize", fit);
+    window.visualViewport?.addEventListener("resize", fit);
+    return () => {
+      window.removeEventListener("resize", fit);
+      window.visualViewport?.removeEventListener("resize", fit);
+      host.style.removeProperty("--dm-stage-h");
+    };
+  }, [tall]);
 
   const start = useCallback(() => {
     const s = seed.trim() || "1";
     setSeed(s);
-    saveSettings({ seed: s, invertPitch });
+    persist({ seed: s, sensitivity, invertY, panel: panelOn });
     setScreen("playing");
-  }, [seed, invertPitch]);
+  }, [seed, sensitivity, invertY, panelOn, persist]);
   const back = useCallback(() => setScreen("setup"), []);
 
-  const hold = (v: number) => ({
-    onPointerDown: () => gameRef.current?.setThrottleHold(v),
-    onPointerUp: () => gameRef.current?.setThrottleHold(0),
-    onPointerLeave: () => gameRef.current?.setThrottleHold(0),
-    onPointerCancel: () => gameRef.current?.setThrottleHold(0),
-  });
+  const togglePanel = useCallback(() => {
+    setPanelOn((on) => {
+      const next = !on;
+      persist({ panel: next });
+      if (game) {
+        const p = game.panelInput;
+        p.moveX = 0;
+        p.moveY = 0;
+        p.swimZone = false;
+        p.up = false;
+        p.down = false;
+        p.swimLatch = false;
+        game.setPanelMode(next);
+      }
+      return next;
+    });
+  }, [game, persist]);
 
   if (screen === "setup") {
     return (
@@ -85,9 +125,29 @@ export function DeepMarchGame() {
               </button>
             </div>
           </label>
+          <label className="dm-field">
+            <span>
+              {dm.sensitivity} <b className="dm-sens-val">{sensitivity.toFixed(1)}×</b>
+            </span>
+            <input
+              type="range"
+              min={0.2}
+              max={3}
+              step={0.1}
+              value={sensitivity}
+              onChange={(e) => setSensitivity(Number(e.target.value))}
+            />
+          </label>
           <label className="dm-check">
-            <input type="checkbox" checked={invertPitch} onChange={(e) => setInvertPitch(e.target.checked)} />
-            <span>{dm.invertPitch}</span>
+            <input type="checkbox" checked={invertY} onChange={(e) => setInvertY(e.target.checked)} />
+            <span>{dm.invertY}</span>
+          </label>
+          <label className="dm-check">
+            <input type="checkbox" checked={panelOn} onChange={(e) => setPanelOn(e.target.checked)} />
+            <span>
+              {dm.panelToggle}
+              <small className="dm-check-hint">{dm.panelToggleHint}</small>
+            </span>
           </label>
           <div className="row">
             <button type="button" className="primary" onClick={start}>
@@ -114,27 +174,35 @@ export function DeepMarchGame() {
           {dm.backSetup}
         </button>
         <span className="dm-seed-tag">{dm.seedNow(seed)}</span>
-        <p className="hint dm-play-hint">{dm.hint}</p>
+        <p className="hint dm-play-hint">{panelOn ? dm.hintPanel : dm.hint}</p>
       </div>
-      <div ref={hostRef} className="game-stage dm-stage" aria-label={dm.stageAria}>
-        <div className="dm-touch">
-          <button type="button" {...hold(-1)} aria-label={dm.slower}>
-            −
-          </button>
-          <button
-            type="button"
-            onPointerDown={() => gameRef.current?.setBoost(true)}
-            onPointerUp={() => gameRef.current?.setBoost(false)}
-            onPointerLeave={() => gameRef.current?.setBoost(false)}
-            onPointerCancel={() => gameRef.current?.setBoost(false)}
-            aria-label={dm.boost}
-          >
-            ⇈
-          </button>
-          <button type="button" {...hold(1)} aria-label={dm.faster}>
-            +
-          </button>
-        </div>
+      <div
+        ref={hostRef}
+        className={`game-stage dm-stage${tall ? " dm-tall" : ""}`}
+        aria-label={dm.stageAria}
+      >
+        <ControlPanel
+          game={game}
+          panelOn={panelOn}
+          onTogglePanel={togglePanel}
+          labels={{
+            depth: dm.hudDepth,
+            speed: dm.hudSpeed,
+            heading: dm.hudHeading,
+            stateSwim: dm.stateSwim,
+            stateHover: dm.stateHover,
+            contactFloor: dm.hudGrounded,
+            contactCeiling: dm.hudCeiling,
+            contactWall: dm.hudScrape,
+            btnUp: dm.btnUp,
+            btnDown: dm.btnDown,
+            btnSwim: dm.btnSwim,
+            btnLamp: dm.btnLamp,
+            dialMove: dm.dialMove,
+            showPanel: dm.showPanel,
+            hidePanel: dm.hidePanel,
+          }}
+        />
       </div>
     </div>
   );
