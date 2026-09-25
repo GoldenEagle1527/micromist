@@ -16,6 +16,8 @@ export type DensityField = {
   sample: (x: number, y: number, z: number) => number;
   /** y-only part of the density (everything except the noise term). */
   base: (y: number) => number;
+  /** d/dy of the smooth pieces of base(y) (terrace / hard-floor jumps ignored). */
+  baseSlope: (y: number) => number;
   /** Upper bound of `noise * noiseWeight` (noise term is always ≥ 0). */
   noiseMax: number;
   /**
@@ -80,5 +82,5 @@ export function createDensityField(seed: number, s: TerrainSettings): DensityFie
     out[2] = (sample(x, y, z + h) - sample(x, y, z - h)) / (2 * h);
   };
 
-  return { settings: s, sample, base, noiseMax: ampSum * s.noiseWeight, gradient };
+  return { settings: s, sample, base, baseSlope, noiseMax: ampSum * s.noiseWeight, gradient };
 }

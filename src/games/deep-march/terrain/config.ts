@@ -64,32 +64,20 @@ export const TERRAIN: TerrainSettings = {
   floaterMargin: 12,
 };
 
-/**
- * Lighter preset for touch / low-core devices: coarser voxels (≈0.6× triangles)
- * and a shorter view distance.
- */
-export function terrainForDevice(): TerrainSettings {
+/** Touch / low-core devices get the light preset (coarser voxels, 512px textures). */
+export function isLowSpecDevice(): boolean {
   const coarse = typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches;
   const cores = typeof navigator !== "undefined" ? navigator.hardwareConcurrency || 4 : 4;
-  if (!coarse && cores > 4) return TERRAIN;
-  return { ...TERRAIN, numPointsPerAxis: 22, viewDistance: 34 };
+  return coarse || cores <= 4;
 }
 
-/** SeaWorldColours / Sea World shader settings from the reference scene. */
+/** Lighter preset: coarser voxels (≈0.6× triangles) and a shorter view distance. */
+export function terrainForDevice(lowSpec = isLowSpecDevice()): TerrainSettings {
+  return lowSpec ? { ...TERRAIN, numPointsPerAxis: 22, viewDistance: 34 } : TERRAIN;
+}
+
+/** Underwater look. Fog colour == camera background from the reference scene (sRGB). */
 export const SEA_COLORS = {
-  /** Camera background == fog colour (sRGB). */
   fog: [0, 0.1677149, 0.4528302] as const,
   fogDstMultiplier: 0.81,
-  /** shaderParams: h = ((y + pow(ny*.5+.5, z) * x) / y) % 1 */
-  params: [2.2, 10.74, 1.11] as const,
-  /** Gradient keys (sRGB) + times (0..65535). */
-  keys: [
-    [0.8207547, 0.0038714937, 0.0038714937, 0],
-    [0.8396226, 0.6737195, 0.059407253, 10595],
-    [0.5834407, 0.41131186, 0.745283, 22499],
-    [0.16019939, 0.43997237, 0.754717, 35187],
-    [0.13915095, 0.21354534, 0.5, 51277],
-    [0.3688814, 0.063412234, 0.5377358, 59518],
-    [0.81960785, 0.003921569, 0.003921569, 65535],
-  ] as const,
 };
