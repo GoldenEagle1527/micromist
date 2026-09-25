@@ -75,7 +75,7 @@ export function createDeepMarch(host: HTMLElement, opts: DeepMarchOptions): Deep
   const field = createDensityField(opts.seed, terrain);
   const chunks = new ChunkManager(scene, field, opts.seed, terrainMat);
 
-  const sub = new SubController(field);
+  const sub = new SubController(field, (x, y, z) => chunks.isRemoved(x, y, z));
   sub.spawn(0, 0);
   // First person: the camera *is* the sub. Headlight rides on the camera
   // (reference: spot, colour (1, .88, .40), range 60, angle 46°).
@@ -155,7 +155,7 @@ export function createDeepMarch(host: HTMLElement, opts: DeepMarchOptions): Deep
         `<span>${L.heading} <b>${heading.toFixed(0).padStart(3, "0")}°</b></span>` +
         (contact ? `<span class="dm-bump">${contact}</span>` : "");
       const s = chunks.stats();
-      stats.textContent = `${fps.toFixed(0)} fps · ${L.chunks} ${s.meshes}/${s.active} · q${s.queued}+${s.pending} · ${(s.triangles / 1000).toFixed(0)}k tri · ${s.workers ? `${s.workers}w` : "main"} ${s.avgMs.toFixed(1)}ms`;
+      stats.textContent = `${fps.toFixed(0)} fps · ${L.chunks} ${s.meshes}/${s.active} · −${s.floaters} float · q${s.queued}+${s.pending} · ${(s.triangles / 1000).toFixed(0)}k tri · ${s.workers ? `${s.workers}w` : "main"} ${s.avgMs.toFixed(1)}ms`;
     }
   };
   raf = requestAnimationFrame(frame);
