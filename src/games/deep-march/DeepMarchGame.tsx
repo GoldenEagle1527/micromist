@@ -3,7 +3,6 @@ import "./deep-march.css";
 import { useLocale } from "../../i18n";
 import { seedFromString } from "./terrain/noise";
 import { createDeepMarch, type DeepMarchHandle } from "./scene/world";
-import type { CamMode } from "./scene/camera";
 import { loadSettings, randomSeed, saveSettings } from "./settings";
 
 type Screen = "setup" | "playing";
@@ -15,7 +14,6 @@ export function DeepMarchGame() {
   const [screen, setScreen] = useState<Screen>("setup");
   const [seed, setSeed] = useState(() => loadSettings().seed);
   const [invertPitch, setInvertPitch] = useState(() => loadSettings().invertPitch);
-  const [camMode, setCamMode] = useState<CamMode>("third");
   const hostRef = useRef<HTMLDivElement | null>(null);
   const gameRef = useRef<DeepMarchHandle | null>(null);
 
@@ -34,7 +32,6 @@ export function DeepMarchGame() {
         loading: dm.hudLoading,
         bump: dm.hudBump,
       },
-      onCameraMode: setCamMode,
     });
     gameRef.current = game;
     return () => {
@@ -49,7 +46,6 @@ export function DeepMarchGame() {
     const s = seed.trim() || "1";
     setSeed(s);
     saveSettings({ seed: s, invertPitch });
-    setCamMode("third");
     setScreen("playing");
   }, [seed, invertPitch]);
   const back = useCallback(() => setScreen("setup"), []);
@@ -116,9 +112,6 @@ export function DeepMarchGame() {
           {dm.backSetup}
         </button>
         <span className="dm-seed-tag">{dm.seedNow(seed)}</span>
-        <button type="button" className="ghost" onClick={() => gameRef.current?.toggleCamera()}>
-          {camMode === "third" ? dm.camFirst : dm.camThird}
-        </button>
         <p className="hint dm-play-hint">{dm.hint}</p>
       </div>
       <div ref={hostRef} className="game-stage dm-stage" aria-label={dm.stageAria}>

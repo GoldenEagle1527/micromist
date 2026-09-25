@@ -2,13 +2,12 @@
 import type { SubInput } from "./submarine";
 
 const HANDLED = new Set([
-  "KeyW", "KeyA", "KeyS", "KeyD", "KeyQ", "KeyE", "KeyC",
+  "KeyW", "KeyA", "KeyS", "KeyD", "KeyQ", "KeyE",
   "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "ShiftLeft", "ShiftRight", "Space",
 ]);
 
 export type InputOptions = {
   invertPitch: boolean;
-  onToggleCamera: () => void;
 };
 
 export class InputController {
@@ -54,7 +53,6 @@ export class InputController {
   private onKeyDown = (e: KeyboardEvent) => {
     if (this.isTyping() || !HANDLED.has(e.code)) return;
     e.preventDefault();
-    if (e.code === "KeyC" && !e.repeat) this.opts.onToggleCamera();
     this.keys.add(e.code);
   };
 
