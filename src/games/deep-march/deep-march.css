@@ -174,6 +174,15 @@
   .dm-play-hint {
     display: none;
   }
+  .dm-stats {
+    top: 48px;
+    bottom: auto;
+    left: auto;
+    right: 8px;
+    transform: none;
+    max-width: 42%;
+    text-align: right;
+  }
 }
 
 /* Short landscape phones: keep the play bar compact. */

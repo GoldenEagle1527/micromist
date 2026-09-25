@@ -85,10 +85,10 @@ export function ActionFan({
       <path d={arcPath(OX, OY, R0 - 8, A0 + 2, A1 - 2)} className="dm-hud-dim" fill="none" strokeDasharray="2 4" />
       {/* core: state */}
       <path d={sectorPath(OX, OY, 0, R0 - 14, A0, A1)} className="dm-fan-core" />
-      <text x={OX - 30} y={OY - 34} className="dm-hud-text dm-fan-state" textAnchor="middle">
+      <text x={OX - 36} y={OY - 42} className="dm-hud-text dm-fan-state" textAnchor="middle">
         {stateLabel}
       </text>
-      <text x={OX - 30} y={OY - 18} className="dm-hud-text dm-hud-small" textAnchor="middle">
+      <text x={OX - 36} y={OY - 28} className="dm-hud-text dm-hud-small" textAnchor="middle">
         {speed.toFixed(1)} m/s
       </text>
       {buttons.map((b, i) => {
