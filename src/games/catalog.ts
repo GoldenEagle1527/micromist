@@ -55,17 +55,6 @@ export const games: GameMeta[] = [
     },
     badge: { zh: "单机", en: "Offline" },
   },
-  {
-    slug: "glyph-matrix",
-    mode: "single",
-    audience: "staging",
-    title: { zh: "字阵", en: "Glyph Matrix" },
-    blurb: {
-      zh: "上下汉字立方夹层廊道的纯视觉灰盒：指针鼓起波纹，冷色科幻光晕。仅测试站。",
-      en: "Visual graybox: corridor between dual glyph-cube layers; pointer bulge waves, cool bloom. Staging only.",
-    },
-    badge: { zh: "视觉 · 测试", en: "Visual · Staging" },
-  },
 ];
 
 function audienceAllows(audience: GameAudience | undefined, kind: SiteKind): boolean {
