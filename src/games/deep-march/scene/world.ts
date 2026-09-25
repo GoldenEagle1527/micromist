@@ -1,34 +1,53 @@
-/** Deep March scene: renderer, underwater look, chunked terrain, first-person sub loop. */
+/** Deep March scene: renderer, underwater look, chunked terrain, first-person diver loop. */
 import * as THREE from "three";
 import { SEA_COLORS, isLowSpecDevice, terrainForDevice } from "../terrain/config";
 import { createDensityField } from "../terrain/density";
 import { ChunkManager } from "../terrain/chunks";
-import { InputController } from "./input";
+import { InputController, type PanelInput } from "./input";
 import { MarineSnow } from "./particles";
 import { createSeabedMaterial } from "./seabedMaterial";
-import { SubController } from "./submarine";
+import { DiverController, type DiverState } from "./diver";
 
 export type HudLabels = {
-  depth: string;
-  speed: string;
-  heading: string;
   chunks: string;
   loading: string;
-  contactFloor: string;
-  contactCeiling: string;
-  contactWall: string;
+  lockPrompt: string;
 };
 
 export type DeepMarchOptions = {
   seed: number;
-  invertPitch: boolean;
+  sensitivity: number;
+  invertY: boolean;
+  panel: boolean;
   labels: HudLabels;
+};
+
+export type Telemetry = {
+  depth: number;
+  heading: number;
+  pitch: number;
+  speed: number;
+  state: DiverState;
+  contact: "floor" | "ceiling" | "wall" | null;
+  lamp: boolean;
+  swimLatch: boolean;
+  ready: boolean;
+  /** Simulated ticks so far (20/s of sim time). */
+  ticks: number;
+  x: number;
+  y: number;
+  z: number;
 };
 
 export type DeepMarchHandle = {
   destroy: () => void;
-  setThrottleHold: (v: number) => void;
-  setBoost: (v: boolean) => void;
+  /** Analog state from the on-screen panel. */
+  panelInput: PanelInput;
+  setPanelMode: (on: boolean) => void;
+  addLook: (dxPx: number, dyPx: number, touch: boolean) => void;
+  toggleLamp: () => boolean;
+  toggleSwimLatch: () => boolean;
+  telemetry: () => Telemetry;
 };
 
 export function createDeepMarch(host: HTMLElement, opts: DeepMarchOptions): DeepMarchHandle {
@@ -43,9 +62,10 @@ export function createDeepMarch(host: HTMLElement, opts: DeepMarchOptions): Deep
   const overlay = document.createElement("div");
   overlay.className = "dm-overlay";
   host.appendChild(overlay);
-  const hud = document.createElement("div");
-  hud.className = "dm-hud";
-  overlay.appendChild(hud);
+  const lockPrompt = document.createElement("div");
+  lockPrompt.className = "dm-lock-prompt";
+  lockPrompt.textContent = opts.labels.lockPrompt;
+  overlay.appendChild(lockPrompt);
   const stats = document.createElement("div");
   stats.className = "dm-stats";
   overlay.appendChild(stats);
@@ -86,40 +106,74 @@ export function createDeepMarch(host: HTMLElement, opts: DeepMarchOptions): Deep
   const field = createDensityField(opts.seed, terrain);
   const chunks = new ChunkManager(scene, field, opts.seed, terrainMat);
 
-  const sub = new SubController(field, (x, y, z) => chunks.isRemoved(x, y, z));
-  sub.spawn(0, 0);
-  // Optional viewpoint for sharing / screenshots: ?at=x,y,z,yawDeg,pitchDeg (starts stopped).
+  const diver = new DiverController(field, (x, y, z) => chunks.isRemoved(x, y, z));
+  diver.spawn(0, 0);
+  // Optional viewpoint for sharing / screenshots: ?at=x,y,z,yawDeg,pitchDeg.
   const at = new URLSearchParams(window.location.search).get("at");
   if (at) {
     const v = at.split(",").map(Number);
     if (v.length >= 3 && v.every(Number.isFinite)) {
-      sub.position.set(v[0], v[1], v[2]);
-      sub.yaw = ((v[3] ?? 0) * Math.PI) / 180;
-      sub.pitch = ((v[4] ?? 0) * Math.PI) / 180;
-      sub.speed = 0;
-      sub.update(0, { pitch: 0, yaw: 0, throttle: 0, boost: false, throttleImpulse: 0 });
+      diver.position.set(v[0], v[1], v[2]);
+      diver.prev.copy(diver.position);
+      diver.setView(((v[3] ?? 0) * Math.PI) / 180, ((v[4] ?? 0) * Math.PI) / 180);
     }
   }
-  // First person: the camera *is* the sub. Headlight rides on the camera
-  // (reference: spot, colour (1, .88, .40), range 60, angle 46°).
-  const headlight = new THREE.SpotLight(new THREE.Color(1, 0.93, 0.78), 9, 45, THREE.MathUtils.degToRad(32), 0.8, 1.3);
-  headlight.position.set(0, -0.12, 0);
-  headlight.target.position.set(0, -0.4, -5);
-  camera.add(headlight, headlight.target);
+  // First person: the camera is the diver's eyes; the head lamp rides just above them.
+  const BASE_FOV = 70;
+  const lamp = new THREE.SpotLight(new THREE.Color(1, 0.95, 0.85), 8, 40, THREE.MathUtils.degToRad(30), 0.75, 1.3);
+  // Source sits a little behind the eyes so a wall at arm's length doesn't blow out.
+  lamp.position.set(0.04, 0.06, 0.35);
+  lamp.target.position.set(0, -0.1, -5);
+  camera.add(lamp, lamp.target);
   scene.add(camera);
+  let lampOn = true;
 
-  const syncCamera = () => {
-    camera.position.copy(sub.position);
-    camera.quaternion.copy(sub.quaternion);
+  let fovMod = 1;
+  let swimBlend = 0;
+  let bobT = 0;
+  const renderPos = new THREE.Vector3();
+  const syncCamera = (dt: number) => {
+    // MC sprint FOV: fov × (1 + 0.15) eased ~0.5 per tick; body goes horizontal → eyes a bit lower.
+    const swimming = diver.state === "swim";
+    const target = swimming ? 1.15 : 1;
+    fovMod += (target - fovMod) * (1 - Math.pow(0.5, dt * 20));
+    swimBlend += ((swimming ? 1 : 0) - swimBlend) * Math.min(1, dt * 6);
+    bobT += dt * (1.2 + swimBlend * 1.6);
+    const fov = BASE_FOV * fovMod;
+    if (Math.abs(camera.fov - fov) > 0.01) {
+      camera.fov = fov;
+      camera.updateProjectionMatrix();
+    }
+    diver.renderPosition(renderPos);
+    camera.position.copy(renderPos);
+    camera.position.y += -0.05 * swimBlend + Math.sin(bobT) * (0.008 + 0.006 * swimBlend);
+    camera.quaternion.copy(diver.quaternion);
+    if (swimBlend > 0.001) {
+      // subtle roll with the stroke while swimming
+      camera.rotateZ(Math.sin(bobT * 0.5) * 0.012 * swimBlend);
+    }
   };
-  syncCamera();
+  syncCamera(0);
 
   const snow = new MarineSnow(900, opts.seed);
   scene.add(snow.points);
 
-  const input = new InputController(renderer.domElement, overlay, {
-    invertPitch: opts.invertPitch,
+  const toggleLamp = () => {
+    lampOn = !lampOn;
+    lamp.visible = lampOn;
+    return lampOn;
+  };
+  const input = new InputController(renderer.domElement, {
+    sensitivity: opts.sensitivity,
+    invertY: opts.invertY,
+    onLampToggle: toggleLamp,
+    onLockChange: () => updatePrompt(),
   });
+  input.panelMode = opts.panel;
+  const coarse = typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches;
+  const updatePrompt = () => {
+    lockPrompt.classList.toggle("on", ready && !input.panelMode && !input.locked && !coarse);
+  };
 
   const resize = () => {
     const w = Math.max(1, host.clientWidth);
@@ -142,25 +196,29 @@ export function createDeepMarch(host: HTMLElement, opts: DeepMarchOptions): Deep
 
   const frame = (now: number) => {
     raf = requestAnimationFrame(frame);
-    const dt = Math.min(0.05, (now - last) / 1000);
+    const rawDt = (now - last) / 1000;
+    const dt = Math.min(0.05, rawDt);
     last = now;
 
-    const inp = input.read();
+    const [dYaw, dPitch] = input.takeLook();
+    diver.look(-dYaw, -dPitch);
     if (ready) {
-      sub.update(dt, inp);
-    } else if (texturesReady && chunks.nearReady(sub.position, 14)) {
+      diver.update(dt, input.move());
+      if (diver.lastTicks > 0) input.consumePulse();
+    } else if (texturesReady && chunks.nearReady(diver.position, 14)) {
       ready = true;
       loading.classList.add("done");
+      updatePrompt();
     }
-    syncCamera();
-    chunks.update(sub.position, camera, dt);
+    syncCamera(dt);
+    chunks.update(diver.position, camera, dt);
     snow.update(camera.position, dt);
     seabed.update(now / 1000);
 
     renderer.render(scene, camera);
 
     fpsFrames++;
-    fpsTime += dt;
+    fpsTime += rawDt; // real time, not the clamped sim step
     if (fpsTime >= 0.5) {
       fps = fpsFrames / fpsTime;
       fpsFrames = 0;
@@ -168,36 +226,48 @@ export function createDeepMarch(host: HTMLElement, opts: DeepMarchOptions): Deep
     }
     hudTimer -= dt;
     if (hudTimer <= 0) {
-      hudTimer = 0.15;
-      const L = opts.labels;
-      const c = sub.contact;
-      const contact = c === "floor" ? L.contactFloor : c === "ceiling" ? L.contactCeiling : c === "wall" ? L.contactWall : "";
-      const heading = ((((-sub.yaw * 180) / Math.PI) % 360) + 360) % 360;
-      hud.innerHTML =
-        `<span>${L.depth} <b>${(100 - sub.position.y).toFixed(1)} m</b></span>` +
-        `<span>${L.speed} <b>${sub.speed.toFixed(1)}</b></span>` +
-        `<span>${L.heading} <b>${heading.toFixed(0).padStart(3, "0")}°</b></span>` +
-        (contact ? `<span class="dm-bump">${contact}</span>` : "");
-      const s = chunks.stats();
-      stats.textContent = `${fps.toFixed(0)} fps · ${L.chunks} ${s.meshes}/${s.active} · −${s.floaters} float · q${s.queued}+${s.pending} · ${(s.triangles / 1000).toFixed(0)}k tri · ${s.workers ? `${s.workers}w` : "main"} ${s.avgMs.toFixed(1)}ms`;
+      hudTimer = 0.25;
+      const st = chunks.stats();
+      stats.textContent = `${fps.toFixed(0)} fps · ${opts.labels.chunks} ${st.meshes}/${st.active} · −${st.floaters} float · q${st.queued}+${st.pending} · ${(st.triangles / 1000).toFixed(0)}k tri · ${st.workers ? `${st.workers}w` : "main"} ${st.avgMs.toFixed(1)}ms`;
     }
   };
   raf = requestAnimationFrame(frame);
 
   return {
-    setThrottleHold: (v) => {
-      input.throttleHold = v;
+    panelInput: input.panel,
+    setPanelMode: (on) => {
+      input.panelMode = on;
+      if (on) input.releaseLock();
+      updatePrompt();
     },
-    setBoost: (v) => {
-      input.boostHold = v;
+    addLook: (dx, dy, touch) => input.addLookPx(dx, dy, touch),
+    toggleLamp,
+    toggleSwimLatch: () => {
+      input.panel.swimLatch = !input.panel.swimLatch;
+      return input.panel.swimLatch;
     },
+    telemetry: () => ({
+      depth: 100 - diver.position.y,
+      heading: ((((-diver.yaw * 180) / Math.PI) % 360) + 360) % 360,
+      pitch: (diver.pitch * 180) / Math.PI,
+      speed: diver.speed,
+      state: diver.state,
+      contact: diver.contact,
+      lamp: lampOn,
+      swimLatch: input.panel.swimLatch,
+      ready,
+      ticks: diver.totalTicks,
+      x: diver.position.x,
+      y: diver.position.y,
+      z: diver.position.z,
+    }),
     destroy: () => {
       cancelAnimationFrame(raf);
       ro.disconnect();
       input.dispose();
       chunks.dispose();
       snow.dispose();
-      headlight.dispose();
+      lamp.dispose();
       seabed.dispose();
       renderer.dispose();
       renderer.domElement.remove();

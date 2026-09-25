@@ -61,8 +61,8 @@ export const games: GameMeta[] = [
     audience: "staging",
     title: { zh: "深潜", en: "Deep March" },
     blurb: {
-      zh: "驾驶小潜艇穿行无尽的 Marching Cubes 海底洞穴，种子决定地形。纯探索，仅测试站。",
-      en: "Pilot a tiny sub through an endless marching-cubes cavern sea; the seed shapes the world. Exploration only, staging.",
+      zh: "以潜水员视角游过无尽的 Marching Cubes 海底洞穴，种子决定地形。纯探索，仅测试站。",
+      en: "Swim as a diver through an endless marching-cubes cavern sea; the seed shapes the world. Exploration only, staging.",
     },
     badge: { zh: "3D · 测试", en: "3D · Staging" },
   },

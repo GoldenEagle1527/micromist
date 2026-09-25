@@ -1,0 +1,400 @@
+/* Layer 3 — deep-march sci-fi diving HUD */
+
+.dm-hud-layer {
+  --hud: #62f3ff;
+  --hud-2: #2de0c4;
+  --hud-dim: rgb(98 243 255 / 0.32);
+  --hud-faint: rgb(98 243 255 / 0.12);
+  --hud-warn: #ffb08a;
+  --hud-lamp: #ffe2a0;
+  --hud-glow: drop-shadow(0 0 3px rgb(98 243 255 / 0.55));
+  --hud-font: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, "PingFang SC", monospace;
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+  color: var(--hud);
+  font-family: var(--hud-font);
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* shared SVG strokes */
+.dm-hud-layer svg {
+  overflow: visible;
+}
+.dm-hud-stroke {
+  stroke: var(--hud);
+  stroke-width: 1.2;
+  fill: none;
+  filter: var(--hud-glow);
+}
+.dm-hud-dim {
+  stroke: var(--hud-dim);
+  stroke-width: 1;
+}
+.dm-hud-fill {
+  fill: var(--hud);
+  filter: var(--hud-glow);
+}
+.dm-hud-box {
+  fill: rgb(0 30 50 / 0.55);
+  stroke: var(--hud);
+  stroke-width: 1;
+}
+.dm-hud-text {
+  fill: var(--hud);
+  font-family: var(--hud-font);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+}
+.dm-hud-small {
+  font-size: 8px;
+  fill: rgb(98 243 255 / 0.7);
+}
+.dm-hud-cardinal {
+  font-size: 11px;
+  font-weight: 700;
+}
+.dm-hud-num {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  font-weight: 600;
+}
+
+/* ---- compass (top centre) ---- */
+.dm-compass {
+  position: absolute;
+  top: 4px;
+  left: 50%;
+  width: clamp(170px, 34%, 280px);
+  transform: translateX(-50%);
+}
+
+/* ---- readout block (top left) ---- */
+.dm-readout {
+  position: absolute;
+  top: 10px;
+  left: calc(10px + env(safe-area-inset-left, 0px));
+  min-width: 118px;
+}
+.dm-readout-frame {
+  position: relative;
+  padding: 6px 12px 7px 10px;
+  background: linear-gradient(100deg, rgb(0 40 60 / 0.55), rgb(0 40 60 / 0.12));
+  clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 12px 100%, 0 calc(100% - 12px));
+  border-left: 2px solid var(--hud);
+  box-shadow: inset 0 0 0 1px var(--hud-faint);
+}
+.dm-readout-frame::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  top: 0;
+  width: 17px;
+  height: 1px;
+  background: var(--hud);
+  transform-origin: right top;
+  transform: rotate(45deg) translate(3px, -2px);
+  opacity: 0.8;
+}
+.dm-readout-label {
+  font-size: 9px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  opacity: 0.7;
+}
+.dm-readout-depth {
+  font-size: 22px;
+  line-height: 1.05;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 0 6px rgb(98 243 255 / 0.55);
+}
+.dm-readout-depth small,
+.dm-readout-speed small {
+  margin-left: 3px;
+  font-size: 10px;
+  font-weight: 400;
+  opacity: 0.7;
+}
+.dm-readout-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 4px;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.dm-state-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 1px 7px 1px 5px;
+  border: 1px solid var(--hud-dim);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  color: rgb(98 243 255 / 0.8);
+}
+.dm-state-chip i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--hud-dim);
+}
+.dm-state-chip.on {
+  border-color: var(--hud-2);
+  color: #eafffb;
+  background: rgb(45 224 196 / 0.18);
+  text-shadow: 0 0 6px rgb(45 224 196 / 0.9);
+}
+.dm-state-chip.on i {
+  background: var(--hud-2);
+  box-shadow: 0 0 6px var(--hud-2);
+  animation: dm-pulse 1s ease-in-out infinite;
+}
+.dm-pitch {
+  position: absolute;
+  right: 4px;
+  top: 16px;
+  bottom: 8px;
+  width: 3px;
+  border-left: 1px solid var(--hud-faint);
+}
+.dm-pitch span {
+  position: absolute;
+  left: -3px;
+  width: 7px;
+  height: 1px;
+  background: var(--hud);
+  box-shadow: 0 0 4px var(--hud);
+}
+.dm-readout-warn {
+  margin-top: 5px;
+  padding: 2px 8px;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: var(--hud-warn);
+  border-left: 2px solid var(--hud-warn);
+  background: rgb(80 20 0 / 0.35);
+  text-shadow: 0 0 6px rgb(255 120 60 / 0.6);
+}
+
+/* ---- panel toggle (top right) ---- */
+.dm-panel-toggle {
+  position: absolute;
+  top: 8px;
+  right: calc(8px + env(safe-area-inset-right, 0px));
+  width: 34px;
+  height: 34px;
+  padding: 7px;
+  border-radius: 50%;
+  border: 1px solid var(--hud-dim);
+  background: rgb(0 30 50 / 0.5);
+  color: var(--hud);
+  pointer-events: auto;
+  cursor: pointer;
+  touch-action: manipulation;
+  box-shadow: none;
+}
+.dm-panel-toggle svg {
+  width: 100%;
+  height: 100%;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  fill: currentColor;
+}
+.dm-panel-toggle svg path {
+  fill: none;
+}
+.dm-panel-toggle.on {
+  border-color: var(--hud);
+  box-shadow: 0 0 8px rgb(98 243 255 / 0.45), inset 0 0 6px rgb(98 243 255 / 0.25);
+}
+
+/* ---- look pad ---- */
+.dm-lookpad {
+  position: absolute;
+  inset: 0;
+  pointer-events: auto;
+  touch-action: none;
+}
+
+/* ---- move dial (bottom left) ---- */
+.dm-dial {
+  position: absolute;
+  left: calc(2px + env(safe-area-inset-left, 0px));
+  bottom: calc(2px + env(safe-area-inset-bottom, 0px));
+  width: clamp(150px, 36vmin, 220px);
+  height: auto;
+  aspect-ratio: 1;
+  pointer-events: none;
+  touch-action: none;
+}
+.dm-dial .dm-hit {
+  pointer-events: all;
+}
+.dm-swim-wedge {
+  fill: rgb(45 224 196 / 0.06);
+  transition: fill 0.2s;
+}
+.dm-swim-band {
+  fill: rgb(45 224 196 / 0.1);
+  stroke: rgb(45 224 196 / 0.55);
+  stroke-width: 1;
+  transition: fill 0.2s, stroke 0.2s;
+}
+.dm-swim-ticks {
+  stroke: rgb(45 224 196 / 0.45);
+  stroke-width: 1;
+}
+.dm-dial-swim-label {
+  fill: rgb(45 224 196 / 0.8);
+  font-size: 9px;
+  letter-spacing: 0.3em;
+}
+.dm-dial.lit .dm-swim-wedge {
+  fill: rgb(45 224 196 / 0.16);
+}
+.dm-dial.lit .dm-swim-band {
+  fill: rgb(45 224 196 / 0.42);
+  stroke: #9ffff0;
+  filter: drop-shadow(0 0 6px rgb(45 224 196 / 0.9));
+}
+.dm-dial.lit .dm-swim-ticks {
+  stroke: #eafffb;
+}
+.dm-dial.lit .dm-dial-swim-label {
+  fill: #eafffb;
+  filter: drop-shadow(0 0 4px rgb(45 224 196 / 0.9));
+}
+.dm-thumb-ring {
+  fill: none;
+  stroke: var(--hud);
+  stroke-width: 1.2;
+  stroke-dasharray: 20 6.7;
+  filter: var(--hud-glow);
+}
+.dm-thumb-core {
+  fill: rgb(98 243 255 / 0.14);
+  stroke: var(--hud-dim);
+}
+.dm-dial.active .dm-thumb-core {
+  fill: rgb(98 243 255 / 0.3);
+}
+.dm-dial.active .dm-thumb-ring {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: dm-spin 3s linear infinite;
+}
+
+/* ---- action fan (bottom right) ---- */
+.dm-fan {
+  position: absolute;
+  right: calc(0px + env(safe-area-inset-right, 0px));
+  bottom: calc(0px + env(safe-area-inset-bottom, 0px));
+  width: clamp(160px, 38vmin, 240px);
+  height: auto;
+  aspect-ratio: 1;
+  pointer-events: none;
+  touch-action: none;
+}
+.dm-fan-core {
+  fill: rgb(0 30 50 / 0.45);
+  stroke: var(--hud-dim);
+  stroke-width: 1;
+}
+.dm-fan-state {
+  font-size: 11px;
+  font-weight: 600;
+}
+.dm-fan.lit .dm-fan-state {
+  fill: #eafffb;
+  filter: drop-shadow(0 0 4px rgb(45 224 196 / 0.9));
+}
+.dm-fan-btn {
+  pointer-events: all;
+  cursor: pointer;
+  touch-action: none;
+}
+.dm-fan-seg {
+  fill: rgb(0 40 60 / 0.42);
+  stroke: var(--hud-dim);
+  stroke-width: 1;
+  transition: fill 0.12s, stroke 0.12s;
+}
+.dm-fan-edge {
+  stroke: var(--hud);
+  stroke-width: 2;
+  opacity: 0.35;
+  transition: opacity 0.12s;
+}
+.dm-fan-icon {
+  fill: none;
+  stroke: var(--hud);
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.dm-fan-label {
+  font-size: 8.5px;
+  fill: rgb(98 243 255 / 0.75);
+}
+.dm-fan-btn:hover .dm-fan-seg {
+  fill: rgb(0 60 80 / 0.5);
+}
+.dm-fan-btn.on .dm-fan-seg {
+  fill: rgb(45 224 196 / 0.3);
+  stroke: #9ffff0;
+}
+.dm-fan-btn.on .dm-fan-edge {
+  opacity: 1;
+  filter: drop-shadow(0 0 5px rgb(98 243 255 / 0.9));
+}
+.dm-fan-btn.on .dm-fan-icon {
+  stroke: #eafffb;
+  filter: drop-shadow(0 0 4px rgb(98 243 255 / 0.9));
+}
+.dm-fan-btn.on .dm-fan-label {
+  fill: #eafffb;
+}
+.dm-fan-lamp.on .dm-fan-seg {
+  fill: rgb(255 210 120 / 0.2);
+  stroke: var(--hud-lamp);
+}
+.dm-fan-lamp.on .dm-fan-icon,
+.dm-fan-lamp.on .dm-fan-edge {
+  stroke: var(--hud-lamp);
+  filter: drop-shadow(0 0 4px rgb(255 210 120 / 0.9));
+}
+.dm-fan-lamp.on .dm-fan-label {
+  fill: var(--hud-lamp);
+}
+
+@keyframes dm-pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+@keyframes dm-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 560px) {
+  .dm-readout {
+    top: 52px;
+    min-width: 0;
+  }
+  .dm-readout-depth {
+    font-size: 18px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dm-state-chip.on i,
+  .dm-dial.active .dm-thumb-ring {
+    animation: none;
+  }
+}
