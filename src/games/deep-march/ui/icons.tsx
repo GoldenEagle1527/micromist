@@ -28,3 +28,20 @@ export function IconPanel() {
     </svg>
   );
 }
+export function IconExit() {
+  return (
+    <svg viewBox="-12 -12 24 24" aria-hidden="true">
+      <path d="M 2 -9 L 9 -9 L 9 9 L 2 9" fill="none" />
+      <path d="M 4 0 L -9 0 M -5 -4 L -9 0 L -5 4" fill="none" />
+    </svg>
+  );
+}
+export function IconFlip() {
+  return (
+    <svg viewBox="-12 -12 24 24" aria-hidden="true">
+      <path d="M -8 -2 A 8 8 0 0 1 7 -4" fill="none" />
+      <path d="M 8 2 A 8 8 0 0 1 -7 4" fill="none" />
+      <path d="M 7 -9 L 7 -4 L 2 -4 M -7 9 L -7 4 L -2 4" fill="none" />
+    </svg>
+  );
+}

@@ -1,3 +1,5 @@
+import { localRect, screenToLocal } from "../viewRotation";
+
 /** SVG helpers for the HUD. Angles in degrees, 0 = up, clockwise (screen space). */
 export function polar(cx: number, cy: number, r: number, deg: number): [number, number] {
   const a = (deg * Math.PI) / 180;
@@ -45,8 +47,9 @@ export function ticksPath(
   return d;
 }
 
-/** Client → SVG viewBox coordinates. */
+/** Client → SVG viewBox coordinates (aware of the rotated portrait fallback). */
 export function toViewBox(svg: SVGSVGElement, clientX: number, clientY: number, vb: number): [number, number] {
-  const r = svg.getBoundingClientRect();
-  return [((clientX - r.left) / r.width) * vb, ((clientY - r.top) / r.height) * vb];
+  const r = localRect(svg);
+  const [x, y] = screenToLocal(clientX, clientY);
+  return [((x - r.left) / r.width) * vb, ((y - r.top) / r.height) * vb];
 }

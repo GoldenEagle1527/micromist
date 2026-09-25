@@ -1,10 +1,43 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
+import { createPortal } from "react-dom";
 import "./deep-march.css";
 import { useLocale } from "../../i18n";
 import { seedFromString } from "./terrain/noise";
 import { createDeepMarch, type DeepMarchHandle } from "./scene/world";
 import { isTouchDevice, loadSettings, panelEnabled, randomSeed, saveSettings } from "./settings";
 import { ControlPanel } from "./ui/ControlPanel";
+import { viewRotation, type Rotation } from "./viewRotation";
+
+/** Best effort: fullscreen + landscape lock (Android Chrome). Rejections are expected elsewhere (iOS). */
+async function enterLandscape(): Promise<void> {
+  try {
+    const el = document.documentElement;
+    if (!document.fullscreenElement && typeof el.requestFullscreen === "function") {
+      await el.requestFullscreen({ navigationUI: "hide" });
+    }
+  } catch {
+    /* not allowed / unsupported */
+  }
+  try {
+    const o = screen.orientation as ScreenOrientation & { lock?: (o: string) => Promise<void> };
+    await o?.lock?.("landscape");
+  } catch {
+    /* iOS Safari, desktop, or not fullscreen */
+  }
+}
+
+function leaveLandscape(): void {
+  try {
+    screen.orientation?.unlock?.();
+  } catch {
+    /* ignore */
+  }
+  if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+}
+
+function viewportSize() {
+  return { w: window.innerWidth, h: window.innerHeight };
+}
 
 type Screen = "setup" | "playing";
 
@@ -53,33 +86,53 @@ export function DeepMarchGame() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [screen]);
 
-  // Tall mode (touch + panel): fit the stage to the space left below the header / play bar.
-  const tall = touch && panelOn && screen === "playing";
-  useLayoutEffect(() => {
-    const host = hostRef.current;
-    if (!tall || !host) return;
-    const fit = () => {
-      const top = host.getBoundingClientRect().top + window.scrollY;
-      const vh = window.visualViewport?.height ?? window.innerHeight;
-      host.style.setProperty("--dm-stage-h", `${Math.max(220, Math.floor(vh - top - 8))}px`);
-    };
-    fit();
-    window.addEventListener("resize", fit);
-    window.visualViewport?.addEventListener("resize", fit);
+  // Immersive landscape play on touch devices; portrait falls back to a CSS-rotated play area.
+  const immersive = touch && screen === "playing";
+  const [vp, setVp] = useState(viewportSize);
+  const [flip, setFlip] = useState(false);
+  useEffect(() => {
+    if (!immersive) return;
+    const onResize = () => setVp(viewportSize());
+    onResize();
+    window.addEventListener("resize", onResize);
+    window.addEventListener("orientationchange", onResize);
+    window.visualViewport?.addEventListener("resize", onResize);
+    document.documentElement.classList.add("dm-immersive-on");
     return () => {
-      window.removeEventListener("resize", fit);
-      window.visualViewport?.removeEventListener("resize", fit);
-      host.style.removeProperty("--dm-stage-h");
+      window.removeEventListener("resize", onResize);
+      window.removeEventListener("orientationchange", onResize);
+      window.visualViewport?.removeEventListener("resize", onResize);
+      document.documentElement.classList.remove("dm-immersive-on");
+      leaveLandscape();
     };
-  }, [tall]);
+  }, [immersive]);
+  const rot: Rotation = immersive && vp.h > vp.w ? (flip ? -90 : 90) : 0;
+  useLayoutEffect(() => {
+    viewRotation.deg = rot;
+    viewRotation.w = vp.w;
+    viewRotation.h = vp.h;
+    return () => {
+      viewRotation.deg = 0;
+    };
+  }, [rot, vp.w, vp.h]);
+  const rotorStyle: CSSProperties | undefined =
+    rot === 90
+      ? { width: vp.h, height: vp.w, transform: `translateX(${vp.w}px) rotate(90deg)` }
+      : rot === -90
+        ? { width: vp.h, height: vp.w, transform: `translateY(${vp.h}px) rotate(-90deg)` }
+        : undefined;
 
   const start = useCallback(() => {
     const s = seed.trim() || "1";
     setSeed(s);
     persist({ seed: s, sensitivity, invertY, panel: panelOn });
+    if (touch) void enterLandscape();
     setScreen("playing");
-  }, [seed, sensitivity, invertY, panelOn, persist]);
-  const back = useCallback(() => setScreen("setup"), []);
+  }, [seed, sensitivity, invertY, panelOn, persist, touch]);
+  const back = useCallback(() => {
+    leaveLandscape();
+    setScreen("setup");
+  }, []);
 
   const togglePanel = useCallback(() => {
     setPanelOn((on) => {
@@ -167,6 +220,44 @@ export function DeepMarchGame() {
     );
   }
 
+  if (immersive) {
+    return createPortal(
+      <div className="deep-march dm-immersive">
+        <div className="dm-rotor" data-rot={rot} style={rotorStyle}>
+          <div ref={hostRef} className="game-stage dm-stage" aria-label={dm.stageAria}>
+            <ControlPanel
+              game={game}
+              panelOn={panelOn}
+              onTogglePanel={togglePanel}
+              onExit={back}
+              onFlip={rot !== 0 ? () => setFlip((f) => !f) : undefined}
+              labels={{
+                depth: dm.hudDepth,
+                speed: dm.hudSpeed,
+                heading: dm.hudHeading,
+                stateSwim: dm.stateSwim,
+                stateHover: dm.stateHover,
+                contactFloor: dm.hudGrounded,
+                contactCeiling: dm.hudCeiling,
+                contactWall: dm.hudScrape,
+                btnUp: dm.btnUp,
+                btnDown: dm.btnDown,
+                btnSwim: dm.btnSwim,
+                btnLamp: dm.btnLamp,
+                dialMove: dm.dialMove,
+                showPanel: dm.showPanel,
+                hidePanel: dm.hidePanel,
+                exit: dm.exit,
+                flip: dm.flip,
+              }}
+            />
+          </div>
+        </div>
+      </div>,
+      document.body,
+    );
+  }
+
   return (
     <div className="deep-march dm-playing">
       <div className="dm-play-bar">
@@ -176,11 +267,7 @@ export function DeepMarchGame() {
         <span className="dm-seed-tag">{dm.seedNow(seed)}</span>
         <p className="hint dm-play-hint">{panelOn ? dm.hintPanel : dm.hint}</p>
       </div>
-      <div
-        ref={hostRef}
-        className={`game-stage dm-stage${tall ? " dm-tall" : ""}`}
-        aria-label={dm.stageAria}
-      >
+      <div ref={hostRef} className="game-stage dm-stage" aria-label={dm.stageAria}>
         <ControlPanel
           game={game}
           panelOn={panelOn}
@@ -201,6 +288,8 @@ export function DeepMarchGame() {
             dialMove: dm.dialMove,
             showPanel: dm.showPanel,
             hidePanel: dm.hidePanel,
+            exit: dm.exit,
+            flip: dm.flip,
           }}
         />
       </div>

@@ -97,6 +97,11 @@
 }
 
 .dm-stage {
+  container: dm-stage / inline-size;
+  --dm-sl: env(safe-area-inset-left, 0px);
+  --dm-sr: env(safe-area-inset-right, 0px);
+  --dm-st: 0px;
+  --dm-sb: 0px;
   position: relative;
   width: 100%;
   aspect-ratio: 16 / 10;
@@ -162,18 +167,13 @@
   opacity: 1;
 }
 
-/* Touch devices with the panel: use (almost) the whole viewport height. */
-.dm-stage.dm-tall {
-  aspect-ratio: auto;
-  max-height: none;
-  height: var(--dm-stage-h, calc(100dvh - 7.25rem - var(--safe-top) - var(--safe-bottom)));
-  min-height: 220px;
-}
-
 @media (max-width: 560px) {
   .dm-play-hint {
     display: none;
   }
+}
+
+@container dm-stage (max-width: 560px) {
   .dm-stats {
     top: 48px;
     bottom: auto;
@@ -212,4 +212,58 @@
   display: block;
   font-size: 0.75rem;
   opacity: 0.7;
+}
+
+/* ---- Immersive mobile play: fixed full-viewport layer above the platform header ---- */
+.dm-immersive {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: block;
+  background: #001631;
+  overflow: hidden;
+  overscroll-behavior: none;
+  touch-action: none;
+}
+
+.dm-rotor {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  transform-origin: 0 0;
+}
+
+.dm-immersive .dm-stage {
+  width: 100%;
+  height: 100%;
+  aspect-ratio: auto;
+  max-height: none;
+  border-radius: 0;
+  --dm-sl: env(safe-area-inset-left, 0px);
+  --dm-sr: env(safe-area-inset-right, 0px);
+  --dm-st: env(safe-area-inset-top, 0px);
+  --dm-sb: env(safe-area-inset-bottom, 0px);
+}
+
+/* Rotated portrait fallback: map the physical insets onto the rotated sides. */
+.dm-rotor[data-rot="90"] .dm-stage {
+  --dm-sl: env(safe-area-inset-top, 0px);
+  --dm-sr: env(safe-area-inset-bottom, 0px);
+  --dm-st: env(safe-area-inset-right, 0px);
+  --dm-sb: env(safe-area-inset-left, 0px);
+}
+
+.dm-rotor[data-rot="-90"] .dm-stage {
+  --dm-sl: env(safe-area-inset-bottom, 0px);
+  --dm-sr: env(safe-area-inset-top, 0px);
+  --dm-st: env(safe-area-inset-left, 0px);
+  --dm-sb: env(safe-area-inset-right, 0px);
+}
+
+html.dm-immersive-on,
+html.dm-immersive-on body {
+  overflow: hidden;
+  overscroll-behavior: none;
 }

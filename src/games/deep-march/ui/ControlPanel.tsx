@@ -2,7 +2,7 @@
 import { useCallback, useState } from "react";
 import type { DeepMarchHandle } from "../scene/world";
 import { ActionFan } from "./ActionFan";
-import { IconPanel } from "./icons";
+import { IconExit, IconFlip, IconPanel } from "./icons";
 import { LookPad } from "./LookPad";
 import { MoveDial } from "./MoveDial";
 import { Readout, type ReadoutLabels } from "./Readout";
@@ -17,17 +17,25 @@ export type PanelLabels = ReadoutLabels & {
   dialMove: string;
   showPanel: string;
   hidePanel: string;
+  exit: string;
+  flip: string;
 };
 
 export function ControlPanel({
   game,
   panelOn,
   onTogglePanel,
+  onExit,
+  onFlip,
   labels,
 }: {
   game: DeepMarchHandle | null;
   panelOn: boolean;
   onTogglePanel: () => void;
+  /** In-HUD exit (immersive mobile play, where the play bar is hidden). */
+  onExit?: () => void;
+  /** Flip the rotated portrait fallback by 180°. */
+  onFlip?: () => void;
   labels: PanelLabels;
 }) {
   const tel = useTelemetry(game);
@@ -53,16 +61,28 @@ export function ControlPanel({
   return (
     <div className={`dm-hud-layer${panelOn ? " panel-on" : ""}`}>
       <Readout tel={tel} labels={labels} />
-      <button
-        type="button"
-        className={`dm-panel-toggle${panelOn ? " on" : ""}`}
-        onClick={onTogglePanel}
-        aria-label={panelOn ? labels.hidePanel : labels.showPanel}
-        aria-pressed={panelOn}
-        title={panelOn ? labels.hidePanel : labels.showPanel}
-      >
-        <IconPanel />
-      </button>
+      <div className="dm-hud-buttons">
+        {onFlip ? (
+          <button type="button" className="dm-hud-btn dm-flip-btn" onClick={onFlip} aria-label={labels.flip} title={labels.flip}>
+            <IconFlip />
+          </button>
+        ) : null}
+        <button
+          type="button"
+          className={`dm-hud-btn dm-panel-toggle${panelOn ? " on" : ""}`}
+          onClick={onTogglePanel}
+          aria-label={panelOn ? labels.hidePanel : labels.showPanel}
+          aria-pressed={panelOn}
+          title={panelOn ? labels.hidePanel : labels.showPanel}
+        >
+          <IconPanel />
+        </button>
+        {onExit ? (
+          <button type="button" className="dm-hud-btn dm-exit-btn" onClick={onExit} aria-label={labels.exit} title={labels.exit}>
+            <IconExit />
+          </button>
+        ) : null}
+      </div>
       {panelOn && game ? (
         <>
           <LookPad onLook={game.addLook} />
