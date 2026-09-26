@@ -1,5 +1,5 @@
 /** Compact holographic readout: heading compass arc (top centre) + depth/state block (top left). */
-import type { ReactNode } from "react";
+import { memo, type ReactNode } from "react";
 import type { Telemetry } from "../scene/world";
 import type { EnvironmentKind } from "../terrain/terrainInfo";
 import { REGION_COLORS, REGION_KEYS, type RegionKey } from "../terrain/regions";
@@ -35,7 +35,8 @@ const TERRAIN_GLYPH: Record<EnvironmentKind, string> = {
 
 const CARDINAL: Record<number, string> = { 0: "N", 45: "NE", 90: "E", 135: "SE", 180: "S", 225: "SW", 270: "W", 315: "NW" };
 
-function Compass({ heading }: { heading: number }) {
+/** Re-renders only when the (0.5°-rounded) heading changes. */
+const Compass = memo(function Compass({ heading }: { heading: number }) {
   // Heading tape bent onto an arc: ±60° of heading shown over ±48° of arc.
   const W = 260;
   const cx = W / 2;
@@ -87,7 +88,7 @@ function Compass({ heading }: { heading: number }) {
       </text>
     </svg>
   );
-}
+});
 
 export function Readout({ tel, labels }: { tel: Telemetry | null; labels: ReadoutLabels }) {
   if (!tel) return null;
@@ -104,7 +105,7 @@ export function Readout({ tel, labels }: { tel: Telemetry | null; labels: Readou
   const pitchPct = 50 - (tel.pitch / 90) * 50;
   return (
     <>
-      <Compass heading={tel.heading} />
+      <Compass heading={Math.round(tel.heading * 2) / 2} />
       <div className="dm-readout" data-state={tel.state} data-y={tel.y.toFixed(3)} data-x={tel.x.toFixed(3)} data-z={tel.z.toFixed(3)} data-ticks={tel.ticks}>
         <div className="dm-readout-frame">
           <div className="dm-readout-label">{labels.depth}</div>

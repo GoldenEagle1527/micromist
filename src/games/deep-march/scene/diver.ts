@@ -224,6 +224,22 @@ export class DiverController {
   }
 
   /**
+   * Density gradient into this.g from 4 tetrahedral taps (vs 6 for central
+   * differences): g = Σ kᵢ·f(p + h·kᵢ) / (4h), exact for a linear field.
+   */
+  private gradient4(x: number, y: number, z: number, h: number) {
+    const f = this.field;
+    const a = f.sample(x + h, y - h, z - h);
+    const b = f.sample(x - h, y - h, z + h);
+    const c = f.sample(x - h, y + h, z - h);
+    const d = f.sample(x + h, y + h, z + h);
+    const k = 1 / (4 * h);
+    this.g[0] = (a - b - c + d) * k;
+    this.g[1] = (-a - b + c + d) * k;
+    this.g[2] = (-a + b - c + d) * k;
+  }
+
+  /**
    * Distance t ∈ [0, r] along unit dir (dx,dy,dz) from p to the first rock, or -1
    * if the probe end is still water. Bisection, so it also works across the
    * field's thin, high-frequency features.
@@ -256,7 +272,7 @@ export class DiverController {
     const p = this.position;
     for (let iter = 0; iter < 4; iter++) {
       const d = this.sample(p.x, p.y, p.z);
-      f.gradient(p.x, p.y, p.z, this.g, 0.05);
+      this.gradient4(p.x, p.y, p.z, 0.05);
       const len = Math.hypot(this.g[0], this.g[1], this.g[2]);
       let nx = 0, ny = 1, nz = 0;
       if (len > 1e-6) {
