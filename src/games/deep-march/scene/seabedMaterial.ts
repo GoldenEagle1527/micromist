@@ -131,20 +131,21 @@ float dmCaustics(vec2 p, float t) {
 
 const MAP_FRAGMENT = /* glsl */ `
   vec3 wp = vWPos;
-  // geometric (flat) normal: on thin / high-frequency features the grid
-  // field normal can disagree there → use the facet for projection weights
+  // Smooth (field-gradient) normal drives projection and material choice so
+  // rock reads rounded; the flat facet normal is only a fallback where the two
+  // truly disagree (grazing / sub-voxel features), never a per-triangle switch.
   vec3 geoN = normalize(cross(dFdx(wp), dFdy(wp)));
   if (dot(geoN, cameraPosition - wp) < 0.0) geoN = -geoN;
   vec3 wn = normalize(vWNrm);
   float nAgree = dot(wn, geoN);
-  wn = normalize(mix(geoN, wn, smoothstep(0.1, 0.5, nAgree)));
-  vec3 bn = normalize(mix(geoN, wn, 0.4));
+  wn = normalize(mix(geoN, wn, smoothstep(-0.15, 0.25, nAgree)));
+  vec3 bn = wn;
   vec3 bw = pow(abs(bn), vec3(4.0));
   bw /= (bw.x + bw.y + bw.z);
   vec3 axisSign = vec3(bn.x < 0.0 ? -1.0 : 1.0, bn.y < 0.0 ? -1.0 : 1.0, bn.z < 0.0 ? -1.0 : 1.0);
 
   // ---- material weights -------------------------------------------------
-  float up = min(wn.y, bn.y + 0.15);
+  float up = wn.y;
   float nA = dmFbm(wp * 0.07);          // large patches
   float nB = dmFbm(wp * 0.23 + 31.0);   // medium breakup
   float floorW = smoothstep(0.45, 0.8, up + (nB - 0.5) * 0.25);
