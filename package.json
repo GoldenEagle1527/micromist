@@ -15,6 +15,7 @@
     "deploy": "npm run build && wrangler deploy",
     "check": "tsc -b --pretty false",
     "typecheck": "tsc -b --pretty false",
+    "test:classify": "esbuild scripts/deep-march-classify-test.ts --bundle --platform=node --outfile=node_modules/.cache/dm-classify-test.cjs --log-level=warning && node node_modules/.cache/dm-classify-test.cjs",
     "cf-typegen": "wrangler types --include-runtime false",
     "deploy:staging": "npm run build && node scripts/patch-staging-wrangler.mjs && wrangler deploy"
   },
