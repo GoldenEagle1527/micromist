@@ -3,7 +3,8 @@ import * as THREE from "three";
 import { SEA_COLORS, isLowSpecDevice, terrainForDevice } from "../terrain/config";
 import { createDensityField } from "../terrain/density";
 import { ChunkManager } from "../terrain/chunks";
-import { EnvironmentTracker, createTerrainProbe, type EnvironmentKind } from "../terrain/classify";
+import type { EnvironmentKind } from "../terrain/terrainInfo";
+import { SpawnDebugView } from "./spawnDebug";
 import { InputController, type PanelInput } from "./input";
 import { MarineSnow } from "./particles";
 import { createSeabedMaterial } from "./seabedMaterial";
@@ -109,10 +110,41 @@ export function createDeepMarch(host: HTMLElement, opts: DeepMarchOptions): Deep
   const field = createDensityField(opts.seed, terrain);
   const chunks = new ChunkManager(scene, field, opts.seed, terrainMat);
 
-  const isRemoved = (x: number, y: number, z: number) => chunks.isRemoved(x, y, z);
-  const diver = new DiverController(field, isRemoved);
-  // Terrain type around the diver: same rock as collision, time-sliced ~4 Hz with hysteresis.
-  const envTracker = new EnvironmentTracker(createTerrainProbe(field, isRemoved));
+  const diver = new DiverController(field, (x, y, z) => chunks.isRemoved(x, y, z));
+  // HUD terrain chip: lookup in the generation-time class grid (no probing), with
+  // a short hold so the label doesn't flicker on class-cell borders.
+  let terrainKind: EnvironmentKind | null = null;
+  let terrainCandidate: EnvironmentKind | null = null;
+  let terrainHold = 0;
+  const TERRAIN_HOLD = 0.3;
+  const updateTerrainKind = (dt: number) => {
+    const k = chunks.terrain.getEnvAt(diver.position.x, diver.position.y, diver.position.z)?.kind ?? null;
+    if (k === null || k === terrainKind) {
+      terrainCandidate = null;
+      return;
+    }
+    if (terrainKind === null) {
+      terrainKind = k;
+      return;
+    }
+    if (k !== terrainCandidate) {
+      terrainCandidate = k;
+      terrainHold = 0;
+      return;
+    }
+    terrainHold += dt;
+    if (terrainHold >= TERRAIN_HOLD) terrainKind = k;
+  };
+  // Debug: spawn-candidate markers (B, or ?debugSpawns=1); off in normal play.
+  const spawnDebug = new SpawnDebugView(scene, chunks.terrain, overlay);
+  if (new URLSearchParams(window.location.search).get("debugSpawns") === "1") spawnDebug.setVisible(true);
+  const onDebugKey = (ev: KeyboardEvent) => {
+    if (ev.code !== "KeyB" || ev.repeat) return;
+    const t = ev.target as HTMLElement | null;
+    if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
+    spawnDebug.setVisible(!spawnDebug.visible);
+  };
+  window.addEventListener("keydown", onDebugKey);
   diver.spawn(0, 0);
   // Optional viewpoint for sharing / screenshots: ?at=x,y,z,yawDeg,pitchDeg.
   const at = new URLSearchParams(window.location.search).get("at");
@@ -211,7 +243,6 @@ export function createDeepMarch(host: HTMLElement, opts: DeepMarchOptions): Deep
     if (ready) {
       diver.update(dt, input.move());
       if (diver.lastTicks > 0) input.consumePulse();
-      envTracker.update(diver.position.x, diver.position.y, diver.position.z, dt);
     } else if (texturesReady && chunks.nearReady(diver.position, 14)) {
       ready = true;
       loading.classList.add("done");
@@ -219,6 +250,7 @@ export function createDeepMarch(host: HTMLElement, opts: DeepMarchOptions): Deep
     }
     syncCamera(dt);
     chunks.update(diver.position, camera, dt);
+    spawnDebug.update();
     snow.update(camera.position, dt);
     seabed.update(now / 1000);
 
@@ -233,9 +265,10 @@ export function createDeepMarch(host: HTMLElement, opts: DeepMarchOptions): Deep
     }
     hudTimer -= dt;
     if (hudTimer <= 0) {
+      updateTerrainKind(0.25 - hudTimer);
       hudTimer = 0.25;
       const st = chunks.stats();
-      stats.textContent = `${fps.toFixed(0)} fps · ${opts.labels.chunks} ${st.meshes}/${st.active} · −${st.floaters} float · q${st.queued}+${st.pending} · ${(st.triangles / 1000).toFixed(0)}k tri · ${st.workers ? `${st.workers}w` : "main"} ${st.avgMs.toFixed(1)}ms · env ${envTracker.lastCostMs.toFixed(1)}ms`;
+      stats.textContent = `${fps.toFixed(0)} fps · ${opts.labels.chunks} ${st.meshes}/${st.active} · −${st.floaters} float · q${st.queued}+${st.pending} · ${(st.triangles / 1000).toFixed(0)}k tri · ${st.workers ? `${st.workers}w` : "main"} ${st.avgMs.toFixed(1)}ms (cls ${st.avgInfoMs.toFixed(1)})`;
     }
   };
   raf = requestAnimationFrame(frame);
@@ -260,7 +293,7 @@ export function createDeepMarch(host: HTMLElement, opts: DeepMarchOptions): Deep
       speed: diver.speed,
       state: diver.state,
       contact: diver.contact,
-      terrain: envTracker.kind,
+      terrain: terrainKind,
       lamp: lampOn,
       swimLatch: input.panel.swimLatch,
       ready,
@@ -273,6 +306,8 @@ export function createDeepMarch(host: HTMLElement, opts: DeepMarchOptions): Deep
       cancelAnimationFrame(raf);
       ro.disconnect();
       input.dispose();
+      window.removeEventListener("keydown", onDebugKey);
+      spawnDebug.dispose();
       chunks.dispose();
       snow.dispose();
       lamp.dispose();

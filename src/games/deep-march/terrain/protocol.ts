@@ -1,5 +1,6 @@
 import type { TerrainSettings } from "./config";
 import type { ColumnStats } from "./mesher";
+import type { ChunkTerrainInfo } from "./terrainInfo";
 
 /** Messages between the main thread and `mesher.worker.ts`. */
 export type MesherRequest =
@@ -16,5 +17,8 @@ export type MesherResponse = {
   /** Removed floating lattice points owned by the column: (i, j, k) triplets. */
   removed: Int32Array;
   stats: ColumnStats;
+  /** Generation-time terrain classification of the column. */
+  info: ChunkTerrainInfo | null;
+  infoMs: number;
   ms: number;
 };

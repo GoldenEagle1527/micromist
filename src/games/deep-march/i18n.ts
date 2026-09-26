@@ -1,4 +1,4 @@
-import type { EnvironmentKind } from "./terrain/classify";
+import type { EnvironmentKind } from "./terrain/terrainInfo";
 
 export type DeepMarchDict = {
   setupTitle: string;

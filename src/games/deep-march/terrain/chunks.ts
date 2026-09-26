@@ -10,11 +10,14 @@
  *
  * Each column also reports which lattice points it removed as floating rock;
  * `isRemoved()` lets collision ignore exactly what the renderer dropped.
+ * Columns also carry their generation-time terrain classification, kept in
+ * `terrain` (TerrainInfoStore: getEnvAt / getSpawnCandidates).
  */
 import * as THREE from "three";
 import type { DensityField } from "./density";
 import { columnRows, generateColumnMesh, latticeCoord, latticeSpacing, type ColumnRows } from "./mesher";
 import type { MesherRequest, MesherResponse } from "./protocol";
+import { TerrainInfoStore } from "./terrainInfo";
 
 type ColumnState = "queued" | "pending" | "ready";
 
@@ -41,6 +44,8 @@ export type ChunkStats = {
   triangles: number;
   workers: number;
   avgMs: number;
+  /** Mean terrain-classification share of avgMs. */
+  avgInfoMs: number;
   floaters: number;
 };
 
@@ -71,6 +76,9 @@ export class ChunkManager {
   private triangles = 0;
   private msTotal = 0;
   private msCount = 0;
+  private infoMsTotal = 0;
+  /** Generation-time terrain classification of every loaded column. */
+  readonly terrain: TerrainInfoStore;
   private floaters = 0;
   private disposed = false;
 
@@ -79,6 +87,7 @@ export class ChunkManager {
     this.field = field;
     this.material = material;
     this.rows = columnRows(field);
+    this.terrain = new TerrainInfoStore({ seed, boundsSize: field.settings.boundsSize, numPointsPerAxis: field.settings.numPointsPerAxis });
     this.yMin = latticeCoord(this.rows.gjMin, field);
     this.yMax = latticeCoord(this.rows.gjMax, field);
     scene.add(this.group);
@@ -197,6 +206,7 @@ export class ChunkManager {
     if (entry.state === "pending") this.byId.delete(entry.id);
     entry.state = "queued";
     entry.removed = null;
+    this.terrain.delete(entry.cx, entry.cz);
     if (entry.mesh) {
       this.triangles -= (entry.mesh.geometry.index?.count ?? 0) / 3;
       entry.mesh.geometry.dispose();
@@ -243,6 +253,7 @@ export class ChunkManager {
     while (this.results.length && performance.now() - t0 < UPLOAD_BUDGET_MS) {
       const r = this.results.shift()!;
       this.msTotal += r.ms;
+      this.infoMsTotal += r.infoMs;
       this.msCount++;
       const e = this.byId.get(r.id);
       if (!e) continue; // recycled while in flight
@@ -254,6 +265,7 @@ export class ChunkManager {
         removed.add((r.removed[q + 1] * (n - 1) + r.removed[q + 2]) * (n - 1) + r.removed[q]);
       }
       e.removed = removed;
+      if (r.info) this.terrain.set(r.info);
       if (r.indices.length === 0) continue;
       const geo = new THREE.BufferGeometry();
       geo.setAttribute("position", new THREE.BufferAttribute(r.positions, 3));
@@ -322,6 +334,7 @@ export class ChunkManager {
       triangles: this.triangles,
       workers: this.liveWorkers,
       avgMs: this.msCount ? this.msTotal / this.msCount : 0,
+      avgInfoMs: this.msCount ? this.infoMsTotal / this.msCount : 0,
       floaters: this.floaters,
     };
   }

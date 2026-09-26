@@ -29,6 +29,8 @@ import { createSimplex3, mulberry32 } from "./noise";
 
 export type DensityField = {
   settings: TerrainSettings;
+  /** World seed the field was built from (for deterministic per-position hashing). */
+  seed: number;
   /** Full density at a world position (vertically smoothed; this is the terrain). */
   sample: (x: number, y: number, z: number) => number;
   /** Unsmoothed density; sample = Σ smoothWeights[i] · sampleRaw(x, y + (i − h)·smoothStep, z), h = (len − 1)/2. */
@@ -194,5 +196,5 @@ export function createDensityField(seed: number, s: TerrainSettings): DensityFie
     out[2] = (sample(x, y, z + h) - sample(x, y, z - h)) * inv;
   };
 
-  return { settings: s, sample, sampleRaw, smoothStep, smoothWeights: SW, bounds, gradient };
+  return { settings: s, seed, sample, sampleRaw, smoothStep, smoothWeights: SW, bounds, gradient };
 }

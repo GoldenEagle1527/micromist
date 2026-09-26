@@ -1,7 +1,7 @@
 /** Compact holographic readout: heading compass arc (top centre) + depth/state block (top left). */
 import type { ReactNode } from "react";
 import type { Telemetry } from "../scene/world";
-import type { EnvironmentKind } from "../terrain/classify";
+import type { EnvironmentKind } from "../terrain/terrainInfo";
 import { arcPath, polar } from "./geom";
 
 export type ReadoutLabels = {

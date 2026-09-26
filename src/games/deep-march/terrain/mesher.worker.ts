@@ -2,6 +2,7 @@
 import { createDensityField, type DensityField } from "./density";
 import { columnRows, generateColumnMesh, type ColumnRows } from "./mesher";
 import type { MesherRequest, MesherResponse } from "./protocol";
+import { terrainInfoTransfers } from "./terrainInfo";
 
 type WorkerScope = {
   onmessage: ((ev: MessageEvent<MesherRequest>) => void) | null;
@@ -23,6 +24,8 @@ ctx.onmessage = (ev) => {
     const t0 = performance.now();
     const m = generateColumnMesh(field, msg.cx, msg.cz, rows, field.settings.floaterMargin);
     const res: MesherResponse = { type: "column", id: msg.id, ...m, ms: performance.now() - t0 };
-    ctx.postMessage(res, [m.positions.buffer, m.normals.buffer, m.ao.buffer, m.indices.buffer, m.removed.buffer]);
+    const transfer: Transferable[] = [m.positions.buffer, m.normals.buffer, m.ao.buffer, m.indices.buffer, m.removed.buffer];
+    if (m.info) transfer.push(...terrainInfoTransfers(m.info));
+    ctx.postMessage(res, transfer);
   }
 };
