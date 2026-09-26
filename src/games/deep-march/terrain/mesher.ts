@@ -31,7 +31,7 @@
  * field.bounds) skip noise, and the field's vertical smoothing is assembled from
  * raw lattice rows (no extra noise evaluations).
  */
-import { ALL_REGIONS_MASK, createDensityField, type DensityField } from "./density";
+import { ALL_REGIONS_MASK, type DensityField } from "./density";
 import { CORNER_OFFSETS, EDGE_CORNER_A, EDGE_CORNER_B, TRI_TABLE } from "./tables";
 import { buildColumnTerrainInfo, createLineSampler } from "./terrainInfoGen";
 import type { ChunkTerrainInfo } from "./terrainInfo";
@@ -195,26 +195,6 @@ export function lodSpacing(field: DensityField, lod: number): number {
  * coarser lattice (settings.farLodCells) over the same footprint; their points are then
  * not a subset of level 0 (skirts cover the transitions anyway).
  */
-const lodFields = new WeakMap<DensityField, DensityField[]>();
-/**
- * Field used to mesh a LOD level: ridged octaves whose wavelength is under ~2.5
- * lattice cells of that level are dropped. The lattice can't represent them; they
- * would only alias into dense pock-marks on distant rock. Level 0 (and collision)
- * keeps the full field; coarser levels are a low-passed version of it.
- */
-export function lodField(field: DensityField, lod: number): DensityField {
-  if (lod === 0) return field;
-  const s = field.settings;
-  const spBase = lodSpacing(field, lod) / s.worldScale;
-  let n = 0;
-  while (n < s.octaves && 100 / (s.noiseScale * 2 ** n) >= 2.5 * spBase) n++;
-  n = Math.max(1, n);
-  if (n >= s.octaves) return field;
-  let arr = lodFields.get(field);
-  if (!arr) lodFields.set(field, (arr = []));
-  return (arr[lod] ??= createDensityField(field.seed, { ...s, octaves: n }));
-}
-
 export function lodPoints(field: DensityField, lod: number): number {
   const s = field.settings;
   return lod > 0 && s.farLodCells > 0 && lod >= s.farLodFrom ? s.farLodCells + 1 : s.numPointsPerAxis;

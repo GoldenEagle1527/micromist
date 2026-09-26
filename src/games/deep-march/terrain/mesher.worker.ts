@@ -2,7 +2,7 @@
 /// base-scale terrain classification off the main thread.
 import { baseTerrain } from "./config";
 import { createDensityField, type DensityField } from "./density";
-import { columnRows, generateColumnMesh, lodField, type ColumnRows } from "./mesher";
+import { columnRows, generateColumnMesh, type ColumnRows } from "./mesher";
 import type { MesherRequest, MesherResponse } from "./protocol";
 import { terrainInfoTransfers } from "./terrainInfo";
 
@@ -30,9 +30,8 @@ ctx.onmessage = (ev) => {
   const t0 = performance.now();
   let m: ReturnType<typeof generateColumnMesh>;
   if (msg.type === "column") {
-    const f = lodField(field, msg.lod);
-    const rows = (rowsByLod[msg.lod] ??= columnRows(f, msg.lod));
-    m = generateColumnMesh(f, msg.cx, msg.cz, rows, field.settings.floaterMargin * (1 << msg.lod), undefined, false, undefined, msg.lod);
+    const rows = (rowsByLod[msg.lod] ??= columnRows(field, msg.lod));
+    m = generateColumnMesh(field, msg.cx, msg.cz, rows, field.settings.floaterMargin * (1 << msg.lod), undefined, false, undefined, msg.lod);
   } else {
     const full = generateColumnMesh(base, msg.cx, msg.cz, baseRows, base.settings.floaterMargin, undefined, true);
     m = { ...full, positions: new Float32Array(0), normals: new Float32Array(0), ao: new Float32Array(0), indices: new Uint16Array(0), removed: new Int32Array(0) };
