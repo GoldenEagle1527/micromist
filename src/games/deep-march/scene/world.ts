@@ -13,6 +13,7 @@ import { WATER_GLSL, createSeabedMaterial, createWaterUniforms } from "./seabedM
 import { DiverController, type DiverState } from "./diver";
 import { LampRig } from "./lampRig";
 import { NightVision } from "./nightVision";
+import { createParticleLightUniforms } from "./particleLight";
 import { SURVIVAL_TUNING, createSurvival, type LightMode, type LightState } from "../survival";
 
 export type HudLabels = {
@@ -112,6 +113,7 @@ export function createDeepMarch(host: HTMLElement, opts: DeepMarchOptions): Deep
   fogColor.multiplyScalar(0.42);
   const baseFog = fogColor.clone();
   let lastDeep = -1;
+  let lastWater = -1;
   const scene = new THREE.Scene();
   scene.background = null;
   // three's fog now only tints the marine snow near the camera
@@ -149,6 +151,8 @@ void main() {
   const lights = survival.lights;
   const rig = new LampRig(camera);
   const nightVision = new NightVision(renderer);
+  const particleLights = createParticleLightUniforms();
+  const camForward = new THREE.Vector3();
 
   // Down-welling light: teal sky fill from above, very dark from below,
   // plus a blue-green filtered "sun" from the surface.
@@ -164,6 +168,7 @@ void main() {
     water,
     worldScale: terrain.worldScale,
     beam: rig.beam,
+    particleLights,
     anisotropy: Math.min(8, renderer.capabilities.getMaxAnisotropy()),
     onReady: () => {
       texturesReady = true;
@@ -335,22 +340,27 @@ void main() {
     chunks.update(diver.position, camera, dt);
     spawnDebug.update();
     snow.update(camera.position, dt);
+    snow.fillLights(camera.position, camera.getWorldDirection(camForward), particleLights);
     seabed.update(now / 1000);
 
-    // Lighting: depth-driven base (deeper = darker) × light-mode boosts (night vision, high beam).
+    // Lighting: depth-driven base (deeper = darker) × light mode (lights off = black
+    // water and no ambient; night vision brings its own fill).
     const W = terrain.worldScale;
     const deep = THREE.MathUtils.smoothstep(-camera.position.y, 8 * W, 26 * W);
-    if (Math.abs(deep - lastDeep) > 0.002) {
-      lastDeep = deep;
-      fogColor.copy(baseFog).multiplyScalar(1 - 0.7 * deep);
-      (scene.fog as THREE.Fog).color.copy(fogColor);
-      water.uWaterHorizon.value.copy(baseWater.horizon).multiplyScalar(1 - 0.72 * deep);
-      water.uWaterTop.value.copy(baseWater.top).multiplyScalar(1 - 0.6 * deep);
-      water.uWaterBottom.value.copy(baseWater.bottom).multiplyScalar(1 - 0.85 * deep);
-    }
     const env = rig.env;
-    ambient.intensity = 0.38 * (1 - 0.6 * deep) * env.ambient;
-    sun.intensity = 0.4 * (1 - 0.75 * deep) * env.sun;
+    const wk = env.water;
+    if (Math.abs(deep - lastDeep) > 0.002 || wk !== lastWater) {
+      lastDeep = deep;
+      lastWater = wk;
+      fogColor.copy(baseFog).multiplyScalar((1 - 0.7 * deep) * wk);
+      (scene.fog as THREE.Fog).color.copy(fogColor);
+      water.uWaterHorizon.value.copy(baseWater.horizon).multiplyScalar((1 - 0.72 * deep) * wk);
+      water.uWaterTop.value.copy(baseWater.top).multiplyScalar((1 - 0.6 * deep) * wk);
+      water.uWaterBottom.value.copy(baseWater.bottom).multiplyScalar((1 - 0.85 * deep) * wk);
+    }
+    seabed.envLight.value = wk;
+    ambient.intensity = 0.38 * (1 - 0.6 * deep) * env.ambientMul + env.ambientAdd;
+    sun.intensity = 0.4 * (1 - 0.75 * deep) * env.sunMul + env.sunAdd;
     water.uHaze.value = baseHaze * env.haze;
     seabed.absorb.copy(baseAbsorb).multiplyScalar(env.absorb);
 
