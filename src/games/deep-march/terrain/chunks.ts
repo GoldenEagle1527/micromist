@@ -108,7 +108,8 @@ export class ChunkManager {
   private floaters = 0;
   private disposed = false;
 
-  constructor(scene: THREE.Scene, field: DensityField, seed: number, material: THREE.Material) {
+  /** lowSpec: at most 2 mesher workers (leaves the main thread / GPU driver room on phones). */
+  constructor(scene: THREE.Scene, field: DensityField, seed: number, material: THREE.Material, lowSpec = false) {
     this.scene = scene;
     this.field = field;
     this.material = material;
@@ -123,7 +124,9 @@ export class ChunkManager {
     this.yMax = lodCoord(this.rows.gjMax, field, 0);
     scene.add(this.group);
     const cores = typeof navigator !== "undefined" ? navigator.hardwareConcurrency || 4 : 4;
-    const count = Math.max(1, Math.min(6, cores - 1));
+    // Desktop: min(4, cores − 2) keeps two cores for the main thread + GPU driver
+    // (6 workers made the main thread stutter while streaming); low-spec: 2.
+    const count = lowSpec ? Math.max(1, Math.min(2, cores - 1)) : Math.max(1, Math.min(4, cores - 2));
     for (let i = 0; i < count; i++) {
       try {
         const worker = new Worker(new URL("./mesher.worker.ts", import.meta.url), { type: "module" });

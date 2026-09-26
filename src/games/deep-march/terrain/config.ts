@@ -25,6 +25,13 @@ export type TerrainSettings = {
    */
   lodLevels: number;
   lodNear: number;
+  /**
+   * Far rings (level ≥ farLodFrom) use this many cells per column side instead of
+   * numPointsPerAxis − 1 (same footprint, coarser lattice): they are hundreds of metres
+   * away in fog, so fewer triangles / samples. 0 = off.
+   */
+  farLodCells: number;
+  farLodFrom: number;
   /** Terrain classification (base-scale columns) is built within this distance of the viewer. */
   infoRadius: number;
 
@@ -105,6 +112,8 @@ export const TERRAIN: TerrainSettings = {
   viewDistance: 420,
   lodLevels: 5,
   lodNear: 20,
+  farLodCells: 22, // 29 → 22 cells: L3 / L4 spacing × 1.32, ≈ 0.58× triangles
+  farLodFrom: 3,
   infoRadius: 22,
 
   octaves: 10, // reference 8 + log2(worldScale): fine detail at the diver's scale
@@ -155,7 +164,7 @@ export function isLowSpecDevice(): boolean {
 
 /** Lighter preset: coarser voxels (≈0.6× triangles), fewer LOD rings, a shorter view distance. */
 export function terrainForDevice(lowSpec = isLowSpecDevice()): TerrainSettings {
-  return lowSpec ? { ...TERRAIN, numPointsPerAxis: 22, viewDistance: 230, lodLevels: 4, lodNear: 18, infoRadius: 14 } : TERRAIN;
+  return lowSpec ? { ...TERRAIN, numPointsPerAxis: 22, viewDistance: 230, lodLevels: 4, lodNear: 18, infoRadius: 14, farLodCells: 16 } : TERRAIN;
 }
 
 /**
