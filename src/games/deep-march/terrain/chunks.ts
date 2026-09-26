@@ -206,6 +206,16 @@ export class ChunkManager {
     }
   }
 
+  /** The group holding every column mesh (occlusion culling walks it). */
+  get meshGroup(): THREE.Object3D {
+    return this.group;
+  }
+
+  /** True unless the mesh is mid LOD-crossfade (drawn with a fade variant). */
+  isStable(mesh: THREE.Mesh): boolean {
+    return mesh.material === this.material;
+  }
+
   /** Width of a node's footprint (units). */
   private size(n: { kind: "mesh" | "info"; lod: number }): number {
     const b = this.field.settings.boundsSize;
