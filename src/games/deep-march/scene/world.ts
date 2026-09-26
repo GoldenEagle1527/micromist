@@ -14,6 +14,7 @@ import { DiverController, type DiverState } from "./diver";
 import { LampRig } from "./lampRig";
 import { NightVision } from "./nightVision";
 import { FramePacer } from "./framePacer";
+import { TerrainOcclusion } from "./occlusion";
 import { createParticleLightUniforms } from "./particleLight";
 import { SURVIVAL_TUNING, createSurvival, type LightMode, type LightState } from "../survival";
 
@@ -195,6 +196,8 @@ void main() {
 
   const field = createDensityField(opts.seed, terrain);
   const chunks = new ChunkManager(scene, field, opts.seed, terrainMat, lowSpec, seabed.fadeMaterial);
+  // GPU occlusion culling of terrain columns (?occ=0 disables)
+  const occlusion = new TerrainOcclusion(renderer, scene, new URLSearchParams(window.location.search).get("occ") !== "0");
   {
     // compile the LOD-crossfade program up front: no shader-compile hitch at the first swap
     const warm = new THREE.Mesh(new THREE.BufferGeometry(), seabed.fadeMaterial().material);
@@ -361,6 +364,7 @@ void main() {
     camera.updateMatrixWorld();
     rig.update(dt, lights.state(), !ready);
     chunks.update(diver.position, camera, dt);
+    occlusion.update(chunks.meshGroup, camera, (m) => chunks.isStable(m));
     spawnDebug.update();
     snow.update(camera.position, dt);
     snow.fillLights(camera.position, camera.getWorldDirection(camForward), particleLights);
@@ -407,7 +411,7 @@ void main() {
       spawnDebug.updateDiver(diver.position.x, diver.position.z, -diver.yaw);
       hudTimer = 0.25;
       const st = chunks.stats();
-      stats.textContent = `${fps.toFixed(0)} fps ×${pacer.ratio.toFixed(2)} · ${labels.chunks} ${st.meshes}/${st.active} (LOD ${st.lodMeshes.join("/")}) · −${st.floaters} ${labels.floaters} · q${st.queued}+${st.pending} · ${(st.triangles / 1000).toFixed(0)}k ${labels.tris} · ${st.workers ? `${st.workers}w` : labels.mainThread} ${st.avgMs.toFixed(1)}ms (${labels.classify} ${st.avgInfoMs.toFixed(1)})`;
+      stats.textContent = `${fps.toFixed(0)} fps ×${pacer.ratio.toFixed(2)} · ${labels.chunks} ${st.meshes}/${st.active} (LOD ${st.lodMeshes.join("/")}) · −${st.floaters} ${labels.floaters} · q${st.queued}+${st.pending} · ${(st.triangles / 1000).toFixed(0)}k ${labels.tris} · ${st.workers ? `${st.workers}w` : labels.mainThread} ${st.avgMs.toFixed(1)}ms (${labels.classify} ${st.avgInfoMs.toFixed(1)}) · occ ${occlusion.enabled ? `−${occlusion.culledCount}` : "off"}`;
     }
   };
   raf = requestAnimationFrame(frame);
@@ -477,6 +481,7 @@ void main() {
       rig.dispose();
       nightVision.dispose();
       survival.dispose();
+      occlusion.dispose();
       seabed.dispose();
       dome.geometry.dispose();
       (dome.material as THREE.Material).dispose();
