@@ -33,6 +33,8 @@
  */
 import type { DensityField } from "./density";
 import { CORNER_OFFSETS, EDGE_CORNER_A, EDGE_CORNER_B, TRI_TABLE } from "./tables";
+import { buildColumnTerrainInfo, createLineSampler } from "./terrainInfoGen";
+import type { ChunkTerrainInfo } from "./terrainInfo";
 
 export type ColumnStats = {
   /** Components removed as floating rock. */
@@ -54,7 +56,58 @@ export type ColumnMeshData = {
   /** Removed (floating) lattice points owned by this column: (i, j, k) triplets, j relative to gjMin. */
   removed: Int32Array;
   stats: ColumnStats;
+  /** Generation-time terrain classification (class grid + spawn candidates); null if not requested. */
+  info: ChunkTerrainInfo | null;
+  /** Time spent building `info`, ms. */
+  infoMs: number;
 };
+
+/**
+ * Per padded row j (j = 0 ↔ lattice row gjMin − 1): 0 = sample, 1 = always water,
+ * 2 = always solid; rowFill = bound written into skipped rows; rowSkip = row and
+ * its ±2 neighbours share a trivial kind. Identical for every column of a field.
+ */
+export type RowPlan = { py: number; rowKind: Uint8Array; rowFill: Float64Array; rowSkip: Uint8Array };
+
+const planCache = new WeakMap<DensityField, RowPlan>();
+export function columnRowPlan(field: DensityField, rows: ColumnRows): RowPlan {
+  const cached = planCache.get(field);
+  if (cached && cached.py === rows.gjMax - rows.gjMin + 3) return cached;
+  const iso = field.settings.isoLevel;
+  const sp = latticeSpacing(field);
+  const y0 = latticeCoord(rows.gjMin, field);
+  const py = rows.gjMax - rows.gjMin + 3;
+  const rowFill = new Float64Array(py);
+  const rowKind = new Uint8Array(py);
+  const bnd = new Float64Array(2);
+  for (let j = 0; j < py; j++) {
+    field.bounds(y0 + (j - 1) * sp, bnd);
+    if (bnd[1] < iso) {
+      rowKind[j] = 1;
+      rowFill[j] = bnd[1];
+    } else if (bnd[0] > iso) {
+      rowKind[j] = 2;
+      rowFill[j] = bnd[0];
+    } else {
+      rowKind[j] = 0;
+      rowFill[j] = iso;
+    }
+  }
+  const rowSkip = new Uint8Array(py);
+  for (let j = 0; j < py; j++) {
+    const k = rowKind[j];
+    if (k === 0) continue;
+    let ok = true;
+    for (let d = -2; d <= 2 && ok; d++) {
+      const jj = j + d;
+      if (jj >= 0 && jj < py && rowKind[jj] !== k) ok = false;
+    }
+    rowSkip[j] = ok ? 1 : 0;
+  }
+  const plan = { py, rowKind, rowFill, rowSkip };
+  planCache.set(field, plan);
+  return plan;
+}
 
 export type ColumnRows = { gjMin: number; gjMax: number };
 
@@ -128,6 +181,8 @@ export function generateColumnMesh(
   floaterMargin: number,
   /** Debug/test: receives global (gi, gj, gk) of every removed point in the padded grid. */
   debugRemoved?: number[],
+  /** Also build the terrain classification (ChunkTerrainInfo). Default true. */
+  withInfo = true,
 ): ColumnMeshData {
   const s = field.settings;
   const iso = s.isoLevel;
@@ -151,33 +206,8 @@ export function generateColumnMesh(
 
   // Row classification: 0 = sample, 1 = always water, 2 = always solid (hard).
   // rowFill: value written into skipped rows (a bound, so its side of iso is right).
-  const rowFill = new Float64Array(py);
-  const rowKind = new Uint8Array(py);
-  const bnd = new Float64Array(2);
-  for (let j = 0; j < py; j++) {
-    field.bounds(y0 + (j - 1) * sp, bnd);
-    if (bnd[1] < iso) {
-      rowKind[j] = 1;
-      rowFill[j] = bnd[1];
-    } else if (bnd[0] > iso) {
-      rowKind[j] = 2;
-      rowFill[j] = bnd[0];
-    } else {
-      rowKind[j] = 0;
-      rowFill[j] = iso;
-    }
-  }
-  const rowSkip = new Uint8Array(py);
-  for (let j = 0; j < py; j++) {
-    const k = rowKind[j];
-    if (k === 0) continue;
-    let ok = true;
-    for (let d = -2; d <= 2 && ok; d++) {
-      const jj = j + d;
-      if (jj >= 0 && jj < py && rowKind[jj] !== k) ok = false;
-    }
-    rowSkip[j] = ok ? 1 : 0;
-  }
+  const plan = columnRowPlan(field, rows);
+  const { rowFill, rowKind, rowSkip } = plan;
 
   // field.sample is a vertical binomial blur of sampleRaw with taps K rows
   // apart, so the blurred value of every sampled row is assembled exactly from
@@ -510,5 +540,16 @@ export function generateColumnMesh(
     }
     ao[v] = 1 - occ;
   }
-  return { positions, normals, ao, indices, removed: Int32Array.from(removedList), stats };
+  let info: ChunkTerrainInfo | null = null;
+  let infoMs = 0;
+  if (withInfo) {
+    const t0 = performance.now();
+    info = buildColumnTerrainInfo({
+      field, rows, cx, cz, dens, px, py, positions, normals, ao,
+      sampler: createLineSampler(field, rows, plan),
+      floaterFree: stats.floaters === 0,
+    });
+    infoMs = performance.now() - t0;
+  }
+  return { positions, normals, ao, indices, removed: Int32Array.from(removedList), stats, info, infoMs };
 }

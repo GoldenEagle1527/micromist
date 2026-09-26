@@ -133,6 +133,30 @@
   font-variant-numeric: tabular-nums;
 }
 
+.dm-spawn-legend {
+  position: absolute;
+  top: 3.4rem;
+  right: 0.6rem;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 0.4rem 0.55rem;
+  font-size: 0.66rem;
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  background: rgb(0 20 35 / 0.6);
+  border-left: 2px solid #62f3ff;
+}
+.dm-spawn-legend span {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.dm-spawn-legend i {
+  width: 8px;
+  height: 8px;
+  transform: rotate(45deg);
+}
+
 .dm-loading {
   position: absolute;
   inset: 0;
