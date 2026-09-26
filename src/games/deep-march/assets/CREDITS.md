@@ -14,8 +14,3 @@ Attribution is not required but is given here anyway.
 - Resized to 1024² (desktop) and 512² (low-spec), encoded as WebP.
 - `*_albedo_*`: diffuse colour × (0.5 + 0.5·AO), so the ambient occlusion is baked in.
 - `*_nrm_*`: R,G = OpenGL tangent-space normal XY (Z is rebuilt in the shader); B = roughness.
-
-## Code references
-- `terrain/erosion.ts` — droplet hydraulic erosion adapted to the 3D density field from
-  [Sebastian Lague — Hydraulic-Erosion](https://github.com/SebLague/Hydraulic-Erosion)
-  (© 2019 Sebastian Lague, [MIT License](https://github.com/SebLague/Hydraulic-Erosion/blob/master/LICENSE)).

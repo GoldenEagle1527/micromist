@@ -59,29 +59,6 @@ export type TerrainSettings = {
   erosionAmplitude: number;
 
   /**
-   * Hydraulic erosion (droplets on the rock surface, see erosion.ts; after
-   * SebLague/Hydraulic-Erosion). hydroDroplets per column (0 = off).
-   * Lengths in lattice cells; hydroMaxCarve / hydroMaxDeposit in density units
-   * per lattice point; hydroBand = taper width (cells) toward column seams.
-   */
-  hydroDroplets: number;
-  hydroLifetime: number;
-  hydroRadius: number;
-  hydroInertia: number;
-  hydroCapacity: number;
-  hydroMinCapacity: number;
-  hydroErodeSpeed: number;
-  hydroDepositSpeed: number;
-  hydroEvaporate: number;
-  hydroGravity: number;
-  hydroInitialSpeed: number;
-  /** Surfaces whose normal.y is below this are walls: droplets fall off. */
-  hydroMinUp: number;
-  hydroMaxCarve: number;
-  hydroMaxDeposit: number;
-  hydroBand: number;
-
-  /**
    * Extension (not in the reference scene): rock ceiling. Above
    * ceilingHeight (± ceilingUndulation across xz) density rises by
    * ceilingSlope per unit (C1 ramp over ceilingRamp) so the ocean is a vast cave.
@@ -134,22 +111,6 @@ export const TERRAIN: TerrainSettings = {
   erosionFrequency: 0.55,
   erosionAmplitude: 0.7,
 
-  hydroDroplets: 1100,
-  hydroLifetime: 40,
-  hydroRadius: 1.8,
-  hydroInertia: 0.1,
-  hydroCapacity: 8,
-  hydroMinCapacity: 0.01,
-  hydroErodeSpeed: 0.5,
-  hydroDepositSpeed: 0.3,
-  hydroEvaporate: 0.02,
-  hydroGravity: 4,
-  hydroInitialSpeed: 1,
-  hydroMinUp: 0.2,
-  hydroMaxCarve: 3.5,
-  hydroMaxDeposit: 1.5,
-  hydroBand: 4,
-
   ceilingHeight: 14,
   ceilingSlope: 4,
   ceilingRamp: 2,
@@ -167,7 +128,7 @@ export function isLowSpecDevice(): boolean {
 
 /** Lighter preset: coarser voxels (≈0.6× triangles) and a shorter view distance. */
 export function terrainForDevice(lowSpec = isLowSpecDevice()): TerrainSettings {
-  return lowSpec ? { ...TERRAIN, numPointsPerAxis: 22, viewDistance: 34, hydroDroplets: 550 } : TERRAIN;
+  return lowSpec ? { ...TERRAIN, numPointsPerAxis: 22, viewDistance: 34 } : TERRAIN;
 }
 
 /** Underwater look. Fog colour == camera background from the reference scene (sRGB). */

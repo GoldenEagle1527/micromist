@@ -70,7 +70,6 @@ uniform vec3 uCeilingTint;
 varying vec3 vWPos;
 varying vec3 vWNrm;
 varying float vAO;
-varying vec2 vEro;
 
 float dmHash(vec3 p) {
   p = fract(p * 0.3183099 + vec3(0.1, 0.2, 0.3));
@@ -156,15 +155,6 @@ const MAP_FRAGMENT = /* glsl */ `
   float gravelMask = smoothstep(0.42, 0.62, nA + (1.0 - floorW) * 0.15 - (wp.y - 2.0) * 0.015);
   // moss / algae on gently sloped, lit rock and ledges, patchy
   float mossMask = smoothstep(0.45, 0.7, nB * 0.7 + nA * 0.3 + up * 0.35) * (1.0 - ceilW);
-  // hydraulic erosion (per-vertex, world units): fresh sediment settles as fine
-  // sand in hollows; scoured gullies are bare, darker rock with no moss
-  float sedCover = smoothstep(0.08, 0.5, vEro.x + (nB - 0.5) * 0.1) * smoothstep(-0.2, 0.3, up);
-  float scour = smoothstep(0.35, 0.9, vEro.y + (nA - 0.5) * 0.1) * (1.0 - sedCover);
-  floorW = max(floorW * (1.0 - 0.9 * scour), sedCover);           // rills cut through the sand
-  ceilW *= 1.0 - sedCover;
-  wallW = max(0.0, 1.0 - floorW - ceilW);
-  gravelMask *= 1.0 - sedCover;
-  mossMask *= 1.0 - scour;
   float wSand = floorW * (1.0 - gravelMask);
   float wGravel = floorW * gravelMask;
   float wMoss = wallW * mossMask;
@@ -214,8 +204,6 @@ const MAP_FRAGMENT = /* glsl */ `
   albedo *= mix(0.72, 1.12, dmFbm(wp * 0.035 + 71.0));           // macro variation
   albedo *= mix(vec3(1.0), vec3(0.86, 0.95, 0.9), smoothstep(0.4, 0.8, nA) * floorW); // silt tint
   albedo *= mix(0.8, 1.0, smoothstep(-8.0, 6.0, wp.y));          // deeper = darker sediment
-  albedo *= mix(1.0, 0.62, scour);                                // scoured gully floors
-  albedo *= mix(1.0, 1.12, sedCover);                             // pale fresh sediment
   diffuseColor.rgb *= albedo;
 
   // ---- normals (whiteout triplanar) + roughness --------------------------
@@ -279,11 +267,11 @@ export function createSeabedMaterial(opts: SeabedOptions): SeabedMaterial {
     shader.vertexShader = shader.vertexShader
       .replace(
         "#include <common>",
-        "#include <common>\nattribute float ao;\nattribute vec2 ero;\nvarying vec3 vWPos;\nvarying vec3 vWNrm;\nvarying float vAO;\nvarying vec2 vEro;",
+        "#include <common>\nattribute float ao;\nvarying vec3 vWPos;\nvarying vec3 vWNrm;\nvarying float vAO;",
       )
       .replace(
         "#include <project_vertex>",
-        "#include <project_vertex>\n  vWPos = (modelMatrix * vec4(transformed, 1.0)).xyz;\n  vWNrm = normalize(mat3(modelMatrix) * objectNormal);\n  vAO = ao;\n  vEro = ero;",
+        "#include <project_vertex>\n  vWPos = (modelMatrix * vec4(transformed, 1.0)).xyz;\n  vWNrm = normalize(mat3(modelMatrix) * objectNormal);\n  vAO = ao;",
       );
     shader.fragmentShader = shader.fragmentShader
       .replace("#include <common>", "#include <common>\n" + DECLS)

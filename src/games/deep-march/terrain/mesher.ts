@@ -32,7 +32,6 @@
  * raw lattice rows (no extra noise evaluations).
  */
 import { SMOOTH_W, type DensityField } from "./density";
-import { erodeGrid, erosionSeed } from "./erosion";
 import { CORNER_OFFSETS, EDGE_CORNER_A, EDGE_CORNER_B, TRI_TABLE } from "./tables";
 
 export type ColumnStats = {
@@ -44,11 +43,6 @@ export type ColumnStats = {
   /** Lattice points visited by component searches (incl. lazily sampled). */
   searched: number;
   noiseSamples: number;
-  /** Hydraulic erosion: droplets simulated / steps / islands removed / ms. */
-  droplets: number;
-  dropletSteps: number;
-  erosionIslands: number;
-  erosionMs: number;
 };
 
 export type ColumnMeshData = {
@@ -56,15 +50,9 @@ export type ColumnMeshData = {
   normals: Float32Array;
   /** Per-vertex ambient occlusion (1 = open water, 0 = fully enclosed). */
   ao: Float32Array;
-  /** Per-vertex erosion: (deposited sediment, carved depth) in world units. */
-  ero: Float32Array;
   indices: Uint16Array | Uint32Array;
   /** Removed (floating) lattice points owned by this column: (i, j, k) triplets, j relative to gjMin. */
   removed: Int32Array;
-  /** Quantised erosion delta for owned points, rows erosionJ0..erosionJ1 (see ErosionStore). */
-  erosion: Int8Array;
-  erosionJ0: number;
-  erosionJ1: number;
   stats: ColumnStats;
 };
 
@@ -140,8 +128,6 @@ export function generateColumnMesh(
   floaterMargin: number,
   /** Debug/test: receives global (gi, gj, gk) of every removed point in the padded grid. */
   debugRemoved?: number[],
-  /** Debug/test: receives every final padded-grid density (global lattice coords). */
-  debugDens?: (gi: number, gj: number, gk: number, v: number) => void,
 ): ColumnMeshData {
   const s = field.settings;
   const iso = s.isoLevel;
@@ -161,17 +147,7 @@ export function generateColumnMesh(
   const pz = n + 2;
   const plane = px * py; // index = (k * py + j) * px + i   (padded coords)
   const size = plane * pz;
-  const stats: ColumnStats = {
-    floaters: 0,
-    floaterPoints: 0,
-    ambiguous: 0,
-    searched: 0,
-    noiseSamples: 0,
-    droplets: 0,
-    dropletSteps: 0,
-    erosionIslands: 0,
-    erosionMs: 0,
-  };
+  const stats: ColumnStats = { floaters: 0, floaterPoints: 0, ambiguous: 0, searched: 0, noiseSamples: 0 };
 
   // Row classification: 0 = sample, 1 = always water, 2 = always solid (hard).
   // rowFill: value written into skipped rows (a bound, so its side of iso is right).
@@ -415,121 +391,6 @@ export function generateColumnMesh(
     }
   }
 
-  // --- 2b. hydraulic erosion (see erosion.ts) ------------------------------
-  // Mask: 0 on the boundary lattice planes and their neighbours (so every
-  // column sees the un-eroded field on shared seam points), ramping to 1 over
-  // hydroBand cells; 0 on hard / always-water rows and on removed floaters.
-  let sediment: Float32Array | null = null;
-  let carved: Float32Array | null = null;
-  let erosion = new Int8Array(0);
-  let erosionJ0 = 0;
-  let erosionJ1 = -1;
-  if (s.hydroDroplets > 0) {
-    const te = performance.now();
-    const taper = new Float32Array(Math.max(px, pz));
-    for (let i = 0; i < taper.length; i++) {
-      const u = i - 1;
-      const t = Math.min(1, Math.max(0, (Math.min(u, n - 1 - u) - 1) / s.hydroBand));
-      taper[i] = t * t * (3 - 2 * t);
-    }
-    let rowLo = py;
-    let rowHi = -1;
-    for (let j = 0; j < py; j++) if (rowKind[j] === 0) {
-      rowLo = Math.min(rowLo, j);
-      rowHi = Math.max(rowHi, j);
-    }
-    const mask = new Float32Array(size);
-    for (let k = 0; k < pz; k++)
-      for (let j = 0; j < py; j++) {
-        if (rowKind[j] !== 0) continue;
-        const row = (k * py + j) * px;
-        for (let i = 0; i < px; i++) if (state[row + i] !== REMOVED) mask[row + i] = taper[i] * taper[k];
-      }
-    if (rowHi > rowLo) {
-      const r = erodeGrid({ dens, px, py, pz, iso }, mask, rowLo, rowHi, s, erosionSeed(field.seed, cx, cz), s.hydroDroplets);
-      sediment = r.sediment;
-      carved = r.carved;
-      // material cue must agree on shared seam-plane vertices: zero it there
-      for (let k = 0; k < pz; k++)
-        for (let j = 0; j < py; j++)
-          for (let i = 0; i < px; i++) {
-            const u = i - 1, w = k - 1;
-            if (u > 0 && u < n - 1 && w > 0 && w < n - 1) continue;
-            const o = (k * py + j) * px + i;
-            sediment[o] = 0;
-            carved[o] = 0;
-          }
-      stats.droplets = r.droplets;
-      stats.dropletSteps = r.steps;
-
-      // Islands cut loose by carving: solid not connected (26-conn) to a hard
-      // row or to the untouched seam band. They lie strictly inside the column
-      // (the band is unchanged), so removing them is a purely local decision.
-      const reach = new Uint8Array(size);
-      sp_ = 0;
-      for (let o = 0; o < size; o++) {
-        if (dens[o] >= iso && mask[o] === 0) {
-          reach[o] = 1;
-          stack[sp_++] = o;
-        }
-      }
-      while (sp_ > 0) {
-        const idx = stack[--sp_];
-        const i = idx % px;
-        const j = ((idx - i) / px) % py;
-        const k = Math.floor(idx / plane);
-        for (let q = 0; q < NEIGHBOURS.length; q += 3) {
-          const ii = i + NEIGHBOURS[q], jj = j + NEIGHBOURS[q + 1], kk = k + NEIGHBOURS[q + 2];
-          if (ii < 0 || jj < 0 || kk < 0 || ii >= px || jj >= py || kk >= pz) continue;
-          const nidx = (kk * py + jj) * px + ii;
-          if (reach[nidx] || dens[nidx] < iso) continue;
-          reach[nidx] = 1;
-          stack[sp_++] = nidx;
-        }
-      }
-      for (let k = 0; k < pz; k++)
-        for (let j = 0; j < py; j++)
-          for (let i = 0; i < px; i++) {
-            const idx = (k * py + j) * px + i;
-            if (reach[idx] || dens[idx] < iso) continue;
-            dens[idx] = iso - 1;
-            stats.erosionIslands++;
-            const ui = i - 1, uj = j - 1, uk = k - 1;
-            if (debugRemoved) debugRemoved.push(gi0 + ui, gjMin + uj, gk0 + uk);
-            if (ui >= 0 && uk >= 0 && ui <= n - 2 && uk <= n - 2 && uj >= 0 && uj < ny) removedList.push(ui, uj, uk);
-          }
-
-      // Owned-point copy of the quantised delta for collision (row-cropped).
-      const m = n - 1;
-      for (let uj = 0; uj < ny; uj++) {
-        let any = false;
-        for (let uk = 0; uk < m && !any; uk++) {
-          const row = ((uk + 1) * py + (uj + 1)) * px + 1;
-          for (let ui = 0; ui < m; ui++) if (r.delta[row + ui] !== 0) { any = true; break; }
-        }
-        if (any) {
-          if (erosionJ1 < 0) erosionJ0 = uj;
-          erosionJ1 = uj;
-        }
-      }
-      if (erosionJ1 >= 0) {
-        erosion = new Int8Array((erosionJ1 - erosionJ0 + 1) * m * m);
-        for (let uj = erosionJ0; uj <= erosionJ1; uj++)
-          for (let uk = 0; uk < m; uk++) {
-            const row = ((uk + 1) * py + (uj + 1)) * px + 1;
-            const out = ((uj - erosionJ0) * m + uk) * m;
-            for (let ui = 0; ui < m; ui++) erosion[out + ui] = r.delta[row + ui];
-          }
-      }
-    }
-    stats.erosionMs = performance.now() - te;
-  }
-  if (debugDens) {
-    for (let k = 0; k < pz; k++)
-      for (let j = 1; j < py - 1; j++)
-        for (let i = 0; i < px; i++) debugDens(gi0 + i - 1, gjMin + j - 1, gk0 + k - 1, dens[(k * py + j) * px + i]);
-  }
-
   // --- 3. gradient normals + marching cubes ----------------------------------
   // The field is continuous, so a plain central difference on the grid works.
   const gradAt = (i: number, j: number, k: number, out: Float32Array, o: number) => {
@@ -550,7 +411,6 @@ export function generateColumnMesh(
   let vcount = 0;
   let icount = 0;
   const tri = new Int32Array(3);
-  const eroList: number[] = [];
 
   for (let k = 0; k < n - 1; k++) {
     for (let j = 0; j < ny - 1; j++) {
@@ -609,14 +469,6 @@ export function generateColumnMesh(
               scratchNrm[o] = nx;
               scratchNrm[o + 1] = nyv;
               scratchNrm[o + 2] = nz;
-              if (sediment && carved) {
-                const pa = ((ak + 1) * py + (aj + 1)) * px + (ai + 1);
-                const pb = ((cornerK[b] + 1) * py + (cornerJ[b] + 1)) * px + (cornerI[b] + 1);
-                eroList.push(
-                  (sediment[pa] + (sediment[pb] - sediment[pa]) * f) * sp,
-                  (carved[pa] + (carved[pb] - carved[pa]) * f) * sp,
-                );
-              } else eroList.push(0, 0);
             }
             tri[e] = vi;
           }
@@ -657,6 +509,5 @@ export function generateColumnMesh(
     }
     ao[v] = 1 - occ;
   }
-  const ero = Float32Array.from(eroList);
-  return { positions, normals, ao, ero, indices, removed: Int32Array.from(removedList), erosion, erosionJ0, erosionJ1, stats };
+  return { positions, normals, ao, indices, removed: Int32Array.from(removedList), stats };
 }
