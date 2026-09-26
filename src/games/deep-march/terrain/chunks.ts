@@ -402,8 +402,10 @@ export class ChunkManager {
       geo.setAttribute("normal", new THREE.BufferAttribute(r.normals, 3));
       geo.setAttribute("ao", new THREE.BufferAttribute(r.ao, 1));
       geo.setIndex(new THREE.BufferAttribute(r.indices, 1));
-      this.setNodeBox(e);
-      geo.boundingBox = this.box.clone();
+      // Tight bounds from the actual vertices (worker-computed): full-height column boxes
+      // (~240 m tall) let about half of the drawn triangles through the frustum test off-screen.
+      const bb = r.bounds;
+      geo.boundingBox = new THREE.Box3(new THREE.Vector3(bb[0], bb[1], bb[2]), new THREE.Vector3(bb[3], bb[4], bb[5]));
       geo.boundingSphere = geo.boundingBox.getBoundingSphere(new THREE.Sphere());
       let mesh = this.meshPool.pop();
       if (mesh) mesh.geometry = geo;
