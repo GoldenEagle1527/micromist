@@ -80,6 +80,12 @@ export type TerrainSettings = {
   /** Vertical smoothing kernel: 3 = [1 2 1]/4 (crisper), 5 = [1 4 6 4 1]/16 (rounder). */
   smoothTaps: number;
 
+  /**
+   * Fine ridged octaves (index ≥ fineOctaveFrom) are scaled by fineOctaveGain: their
+   * 1–3 m cells read as dense pock-marks ("acne") on large rock faces. 1 = off.
+   */
+  fineOctaveFrom: number;
+  fineOctaveGain: number;
   /** Higher-frequency erosion detail (plain simplex, ±amplitude). */
   erosionFrequency: number;
   erosionAmplitude: number;
@@ -143,7 +149,9 @@ export const TERRAIN: TerrainSettings = {
   smoothCells: 1,
   smoothTaps: 5,
 
-  erosionFrequency: 0.55,
+  fineOctaveFrom: 5, // octaves 5+ (≈ 4.6 m wavelength and finer)
+  fineOctaveGain: 0.45, // shallower small cells: no pock-marked "acne" on big faces / floors
+  erosionFrequency: 0.3, // was 0.55: erosion creases ~2× larger and sparser, still angular
   erosionAmplitude: 0.9,
   erosionRidge: 0.5,
 
