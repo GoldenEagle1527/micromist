@@ -14,10 +14,11 @@ import { REGION_COLORS, REGION_COUNT, REGION_KEYS, createRegionSample, MACRO } f
 import { ENV_KINDS, SURFACE_TYPES } from "../src/games/deep-march/terrain/terrainInfo";
 import { mulberry32 } from "../src/games/deep-march/terrain/noise";
 import { DiverController } from "../src/games/deep-march/scene/diver";
+import { findSpawn, type SpawnSpot } from "../src/games/deep-march/terrain/spawn";
 
 const TERRAIN = process.env.LOWSPEC ? terrainForDevice(true) : DESKTOP;
 const SEEDS = (process.env.SEEDS ?? "1,7,12345").split(",").map(Number);
-const MAP = process.env.MAP ?? "/workspace/deep-march-shots/regions-map.png";
+const MAP = process.env.MAP ?? "/workspace/deep-march-shots/fix-regions-map.png";
 const iso = TERRAIN.isoLevel;
 let failures = 0;
 const check = (name: string, ok: boolean, info: string) => {
@@ -33,9 +34,10 @@ const colOf = (x: number) => Math.round(x / TERRAIN.boundsSize);
 const acc = REGION_KEYS.map(() => ({
   ms: 0, cols: 0, tris: 0, floaters: 0, water: 0, cells: 0,
   env: new Array(ENV_KINDS.length).fill(0), surf: new Array(SURFACE_TYPES.length).fill(0),
-  runs: 0, thin05: 0, thin10: 0, scans: 0,
+  runs: 0, thin05: 0, thin10: 0, scans: 0, lowCells: 0, lowCanyon: 0,
 }));
 const patchAll: number[] = [];
+const mapPanels: { field: DensityField; spawn: SpawnSpot; seed: number }[] = [];
 
 /** Nearest region cores (edge ≥ minEdge) to a point, one per region. */
 function cores(f: DensityField, x0: number, z0: number, minEdge: number): ([number, number] | null)[] {
@@ -98,34 +100,52 @@ for (const seed of SEEDS) {
     console.log(`  patches (2000×2000 u, interior): ${sizes.length}, equivalent diameter mean ${mean.toFixed(0)} u, median ${sizes[sizes.length >> 1].toFixed(0)} u, ≥ 80 u ${pct(big, sizes.length)} of patches / ${(areaBig * 100).toFixed(1)}% of area`);
     check("most patches ≥ 80 u across", big / sizes.length >= 0.8 && areaBig >= 0.97, `${pct(big, sizes.length)} of patches`);
     // blend band width perpendicular to the border: from a border point (dominant ≈ 0.5)
-    // walk along ± the weight gradient until the dominant weight reaches 0.99 on each side
+    // walk along ± the weight gradient until the dominant weight reaches 0.99 on each side.
+    // "two-region" = points where exactly two regions have weight (a plain border);
+    // "all" also starts at triple junctions (where a straight walk is not perpendicular).
     const rnd = mulberry32(seed);
     const dom = (x: number, z: number) => field.regions.sample(x, z, rs).dominant;
-    const widths: number[] = [];
-    for (let t = 0; t < 40000 && widths.length < 300; t++) {
+    const widths: number[] = [], widths2: number[] = [];
+    for (let t = 0; t < 80000 && (widths.length < 300 || widths2.length < 300); t++) {
       const x = (rnd() - 0.5) * 1600, z = (rnd() - 0.5) * 1600;
       const d0 = dom(x, z);
       if (d0 > 0.56) continue;
+      const two = d0 >= 0.5 && Array.from(rs.w).filter((w) => w > 0.01).length === 2;
       const gx = dom(x + 0.5, z) - dom(x - 0.5, z), gz = dom(x, z + 0.5) - dom(x, z - 0.5);
       const gl = Math.hypot(gx, gz);
       if (gl < 1e-6) continue;
       let a = 0, b = 0;
       while (a < 80 && dom(x + (gx / gl) * a, z + (gz / gl) * a) < 0.99) a += 0.25;
       while (b < 80 && dom(x - (gx / gl) * b, z - (gz / gl) * b) < 0.99) b += 0.25;
-      if (a < 80 && b < 80) widths.push(a + b);
+      if (a < 80 && b < 80) {
+        if (widths.length < 300) widths.push(a + b);
+        if (two && widths2.length < 300) widths2.push(a + b);
+      }
     }
-    widths.sort((a, b) => a - b);
-    const wMed = widths[widths.length >> 1], wMean = widths.reduce((a, b) => a + b, 0) / widths.length;
-    console.log(`  blend band (perpendicular, dominant < 0.99): median ${wMed.toFixed(1)} u, mean ${wMean.toFixed(1)} u, p10 ${widths[Math.floor(widths.length * 0.1)].toFixed(1)}, p90 ${widths[Math.floor(widths.length * 0.9)].toFixed(1)} (${widths.length} border points; MACRO.band ${MACRO.band})`);
-    check("blend band ≈ 15–20 u", wMed >= 13 && wMed <= 21, `median ${wMed.toFixed(1)} u`);
+    const q = (w: number[], p: number) => [...w].sort((u, v) => u - v)[Math.floor(w.length * p)];
+    console.log(`  blend band (perpendicular, dominant < 0.99): two-region borders median ${q(widths2, 0.5).toFixed(1)} u, p10 ${q(widths2, 0.1).toFixed(1)}, p90 ${q(widths2, 0.9).toFixed(1)} · all border points incl. junctions median ${q(widths, 0.5).toFixed(1)}, p90 ${q(widths, 0.9).toFixed(1)} (MACRO.band ${MACRO.band})`);
+    check("blend band ≈ 15–20 u (median), ≤ 25 u at p90 across plain borders, ≤ 36 u p90 incl. junctions", q(widths2, 0.5) >= 13 && q(widths2, 0.5) <= 21 && q(widths2, 0.9) <= 25 && q(widths, 0.9) <= 36,
+      `median ${q(widths2, 0.5).toFixed(1)} u, p90 ${q(widths2, 0.9).toFixed(1)} u / ${q(widths, 0.9).toFixed(1)} u`);
   }
 
-  // ---------- 2. region map PNG (first seed) ----------
-  const spawn = field.regions.spawnPoint();
-  const sr = field.regions.sample(spawn.x, spawn.z, rs);
-  console.log(`  spawn (${spawn.x.toFixed(1)}, ${spawn.z.toFixed(1)}): ${REGION_KEYS[sr.id]} weight ${sr.dominant.toFixed(2)} edge ${sr.edge.toFixed(0)} u`);
-  check("spawn inside reef forest core", sr.id === 1 && sr.dominant >= 0.99, `${REGION_KEYS[sr.id]} ${sr.dominant.toFixed(2)}`);
-  if (seed === SEEDS[0]) writeMap(field, spawn, MAP);
+  // ---------- 2. spawn (seeded region, open water with clearance) ----------
+  const sp0 = findSpawn(field);
+  const spawn = { x: sp0.x, z: sp0.z };
+  {
+    const sr = field.regions.sample(sp0.x, sp0.z, rs);
+    let clear = true;
+    for (let i = 0; i < 200 && clear; i++) {
+      const a = i * 2.39996, b = Math.acos(1 - (2 * (i + 0.5)) / 200);
+      clear = field.sample(sp0.x + 1.5 * Math.sin(b) * Math.cos(a), sp0.y + 1.5 * Math.cos(b), sp0.z + 1.5 * Math.sin(b) * Math.sin(a)) < iso;
+    }
+    const again = findSpawn(createDensityField(seed, TERRAIN));
+    console.log(`  spawn (${sp0.x.toFixed(1)}, ${sp0.y.toFixed(1)}, ${sp0.z.toFixed(1)}) yaw ${((sp0.yaw * 180) / Math.PI).toFixed(0)}°: ${REGION_KEYS[sp0.region]} (seeded ${REGION_KEYS[field.regions.spawnRegion()]}) weight ${sr.w[sp0.region].toFixed(2)} edge ${sr.edge.toFixed(0)} u · clearance ${sp0.clearance} u · ${sp0.exits}/8 open sides`);
+    check("spawn in the seeded region's core, in open water with clearance (1.5 u sphere clear, ≥ 2 exits)",
+      sp0.region === field.regions.spawnRegion() && sr.w[sp0.region] >= 0.99 && clear && sp0.clearance >= 1.8 && sp0.exits >= 2,
+      `${REGION_KEYS[sp0.region]} w ${sr.w[sp0.region].toFixed(2)}, sphere ${clear ? "clear" : "HITS ROCK"}`);
+    check("spawn deterministic (fresh field → same spot)", again.x === sp0.x && again.y === sp0.y && again.z === sp0.z && again.yaw === sp0.yaw, `${again.x.toFixed(2)},${again.y.toFixed(2)},${again.z.toFixed(2)}`);
+    mapPanels.push({ field, spawn: sp0, seed });
+  }
 
   // ---------- 3. determinism ----------
   {
@@ -152,6 +172,8 @@ for (const seed of SEEDS) {
 
   // ---------- 4. per-region columns: cost, classes, thin sheets, collision ----------
   const c = cores(field, spawn.x, spawn.z, 30);
+  // JIT / cache warm-up (untimed) so the first region measured is not penalised
+  for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) generateColumnMesh(field, colOf(spawn.x) + dx + 40, colOf(spawn.z) + dz, rows, TERRAIN.floaterMargin);
   for (let r = 0; r < REGION_COUNT; r++) {
     const p = c[r];
     if (!p) { console.log(`  (no ${REGION_KEYS[r]} core within 600 u)`); continue; }
@@ -174,6 +196,7 @@ for (const seed of SEEDS) {
         if (y > 14) continue;
         A.cells++;
         if (info.env[i]) { A.water++; A.env[info.env[i]]++; }
+        if (info.env[i] && y <= 0) { A.lowCells++; if (info.env[i] === 7) A.lowCanyon++; } // canyon belt: inside the trenches
       }
       for (let i = 0; i < info.spawn.count; i++) if (info.spawn.region[i] === r && info.spawn.regionW[i] >= 230) A.surf[info.spawn.type[i]]++;
     }
@@ -349,45 +372,66 @@ for (let r = 0; r < REGION_COUNT; r++) {
 }
 const E = (r: number, k: string) => acc[r].env[ENV_KINDS.indexOf(k as never)] / Math.max(1, acc[r].water);
 check("sand plains: mostly open water + flat seabed", E(0, "open") + E(0, "flat") >= 0.7, `${((E(0, "open") + E(0, "flat")) * 100).toFixed(0)}%`);
-check("canyon belt: canyon + cliff + slope present", E(2, "canyon") + E(2, "cliff") > 0.08, `canyon ${(E(2, "canyon") * 100).toFixed(0)}% cliff ${(E(2, "cliff") * 100).toFixed(0)}%`);
-check("cave warren: cave/overhang dominate", E(3, "cave") + E(3, "overhang") >= 0.5 && E(3, "cave") > E(1, "cave"), `cave ${(E(3, "cave") * 100).toFixed(0)}% overhang ${(E(3, "overhang") * 100).toFixed(0)}%`);
+const lowCan = acc[2].lowCanyon / Math.max(1, acc[2].lowCells);
+check("canyon belt: trenches read as canyon (≥ 8% of all water, ≥ 50% of water cells below the rim y ≤ 0)", E(2, "canyon") >= 0.08 && lowCan >= 0.5, `canyon ${(E(2, "canyon") * 100).toFixed(0)}% of water, ${(lowCan * 100).toFixed(0)}% inside trenches · cliff ${(E(2, "cliff") * 100).toFixed(0)}%`);
+check("cave warren: tunnels read as cave (cave ≥ 40%, more than overhang)", E(3, "cave") >= 0.4 && E(3, "cave") > E(3, "overhang"), `cave ${(E(3, "cave") * 100).toFixed(0)}% overhang ${(E(3, "overhang") * 100).toFixed(0)}%`);
 check("cave warren: little open water", acc[3].water / Math.max(1, acc[3].cells) < acc[1].water / Math.max(1, acc[1].cells), `water ${pct(acc[3].water, acc[3].cells)} vs reef ${pct(acc[1].water, acc[1].cells)}`);
 check("deep trench: mostly open water", E(5, "open") >= 0.5, `${(E(5, "open") * 100).toFixed(0)}%`);
+// spawn regions over many seeds: every region reachable, roughly uniform
+{
+  const cnt = new Array(REGION_COUNT).fill(0);
+  let bad = 0, msMax = 0;
+  const N = Number(process.env.SPAWN_SEEDS ?? 60);
+  for (let sd = 1; sd <= N; sd++) {
+    const f = createDensityField(sd, TERRAIN);
+    const t0 = performance.now();
+    const sp = findSpawn(f);
+    msMax = Math.max(msMax, performance.now() - t0);
+    cnt[sp.region]++;
+    if (sp.region !== f.regions.spawnRegion() || f.sample(sp.x, sp.y, sp.z) >= iso || sp.clearance < 1.8) bad++;
+  }
+  console.log(`spawn regions over seeds 1…${N}: ` + REGION_KEYS.map((k, i) => `${k} ${cnt[i]}`).join(" · ") + ` · slowest search ${msMax.toFixed(0)} ms`);
+  check("spawn: all 6 regions occur, every spawn in its seeded region with clearance", cnt.every((v) => v > 0) && bad === 0, `${bad} bad`);
+}
+writeMap(mapPanels, MAP);
 const thinWorst = Math.max(...acc.map((A) => A.thin05 / Math.max(1, A.scans)));
 check("thin sheets (< 0.5 u) stay rare in every region", thinWorst < 0.15, `worst ${(thinWorst * 100).toFixed(1)} per 100 scans`);
 console.log(failures ? `${failures} FAILED` : "all checks passed");
 process.exit(failures ? 1 : 0);
 
 // ---------- PNG map ----------
-function writeMap(f: DensityField, spawn: { x: number; z: number }, path: string) {
-  const S = 1000; // 1 px = 1 unit, centred on the origin, north (−z) up
-  const px = Buffer.alloc((S * 3 + 1) * S);
+/** One 1000 × 1000-unit panel per seed (1 px = 1 u, centred on the origin, north up), side by side. */
+function writeMap(panels: { field: DensityField; spawn: SpawnSpot; seed: number }[], path: string) {
+  const S = 1000, G = 12;
+  const Wd = panels.length * S + (panels.length - 1) * G;
+  const row = Wd * 3 + 1;
+  const px = Buffer.alloc(row * S, 255);
   const rgb = REGION_COLORS.map((c) => [1, 3, 5].map((o) => parseInt(c.slice(o, o + 2), 16)));
   const rsm = createRegionSample();
-  for (let y = 0; y < S; y++) {
-    px[y * (S * 3 + 1)] = 0;
-    for (let x = 0; x < S; x++) {
+  const put = (x: number, y: number, c: number[]) => { if (x < 0 || y < 0 || x >= Wd || y >= S) return; const o = y * row + 1 + x * 3; px[o] = c[0]; px[o + 1] = c[1]; px[o + 2] = c[2]; };
+  for (let y = 0; y < S; y++) px[y * row] = 0;
+  panels.forEach(({ field: f, spawn }, pi) => {
+    const X0 = pi * (S + G);
+    for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
       const r = f.regions.sample(x - S / 2, y - S / 2, rsm);
-      let R = 0, G = 0, B = 0;
-      for (let q = 0; q < REGION_COUNT; q++) { R += r.w[q] * rgb[q][0]; G += r.w[q] * rgb[q][1]; B += r.w[q] * rgb[q][2]; }
+      let R = 0, Gc = 0, B = 0;
+      for (let q = 0; q < REGION_COUNT; q++) { R += r.w[q] * rgb[q][0]; Gc += r.w[q] * rgb[q][1]; B += r.w[q] * rgb[q][2]; }
       const shade = r.dominant < 0.55 ? 0.55 : 1; // border line
-      const o = y * (S * 3 + 1) + 1 + x * 3;
       const grid = (x - S / 2) % 100 === 0 || (y - S / 2) % 100 === 0 ? 0.85 : 1;
-      px[o] = R * shade * grid; px[o + 1] = G * shade * grid; px[o + 2] = B * shade * grid;
+      put(X0 + x, y, [R * shade * grid, Gc * shade * grid, B * shade * grid]);
     }
-  }
-  // spawn marker: white ring + cross; origin: small black cross
-  const put = (x: number, y: number, c: number[]) => { if (x < 0 || y < 0 || x >= S || y >= S) return; const o = y * (S * 3 + 1) + 1 + x * 3; px[o] = c[0]; px[o + 1] = c[1]; px[o + 2] = c[2]; };
-  const sx = Math.round(spawn.x + S / 2), sy = Math.round(spawn.z + S / 2);
-  for (let a = 0; a < 360; a++) for (const rr of [9, 10, 11]) put(Math.round(sx + Math.cos((a * Math.PI) / 180) * rr), Math.round(sy + Math.sin((a * Math.PI) / 180) * rr), [255, 255, 255]);
-  for (let d = -14; d <= 14; d++) for (const w of [-1, 0, 1]) { put(sx + d, sy + w, [255, 255, 255]); put(sx + w, sy + d, [255, 255, 255]); }
-  for (let d = -6; d <= 6; d++) { put(S / 2 + d, S / 2, [0, 0, 0]); put(S / 2, S / 2 + d, [0, 0, 0]); }
+    // spawn: white ring + cross with a black outline; origin: small black cross
+    const sx = X0 + Math.round(spawn.x + S / 2), sy = Math.round(spawn.z + S / 2);
+    for (let a = 0; a < 720; a++) for (const [rr, c] of [[8, 0], [9, 255], [10, 255], [11, 255], [12, 0]] as const) put(Math.round(sx + Math.cos((a * Math.PI) / 360) * rr), Math.round(sy + Math.sin((a * Math.PI) / 360) * rr), [c, c, c]);
+    for (let d = -16; d <= 16; d++) for (const w of [-1, 0, 1]) { put(sx + d, sy + w, [255, 255, 255]); put(sx + w, sy + d, [255, 255, 255]); }
+    for (let d = -6; d <= 6; d++) { put(X0 + S / 2 + d, S / 2, [0, 0, 0]); put(X0 + S / 2, S / 2 + d, [0, 0, 0]); }
+  });
   const crcT = new Uint32Array(256).map((_, k) => { let c = k; for (let i = 0; i < 8; i++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; return c >>> 0; });
   const crc = (b: Buffer) => { let c = 0xffffffff; for (const v of b) c = crcT[(c ^ v) & 255] ^ (c >>> 8); return (c ^ 0xffffffff) >>> 0; };
   const chunk = (type: string, data: Buffer) => { const len = Buffer.alloc(4); len.writeUInt32BE(data.length); const td = Buffer.concat([Buffer.from(type), data]); const c = Buffer.alloc(4); c.writeUInt32BE(crc(td)); return Buffer.concat([len, td, c]); };
   const ihdr = Buffer.alloc(13);
-  ihdr.writeUInt32BE(S, 0); ihdr.writeUInt32BE(S, 4); ihdr[8] = 8; ihdr[9] = 2; ihdr[10] = 0; ihdr[11] = 0; ihdr[12] = 0;
+  ihdr.writeUInt32BE(Wd, 0); ihdr.writeUInt32BE(S, 4); ihdr[8] = 8; ihdr[9] = 2; ihdr[10] = 0; ihdr[11] = 0; ihdr[12] = 0;
   writeFileSync(path, Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk("IHDR", ihdr), chunk("IDAT", deflateSync(px)), chunk("IEND", Buffer.alloc(0))]));
-  console.log(`  region map → ${path} (1000 × 1000 u around the origin, 1 px = 1 u, north up, grid 100 u, white = spawn)`);
+  console.log(`region map → ${path} (seeds ${panels.map((p) => `${p.seed}: ${REGION_KEYS[p.spawn.region]} spawn`).join(", ")}; 1000 × 1000 u per panel, 1 px = 1 u, north up, grid 100 u, white ring = spawn)`);
 }
 void ALL_REGIONS_MASK;

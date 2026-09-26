@@ -1,11 +1,12 @@
 /** Deep March scene: renderer, underwater look, chunked terrain, first-person diver loop. */
 import * as THREE from "three";
-import { SEA_COLORS, isLowSpecDevice, terrainForDevice } from "../terrain/config";
+import { SEA_COLORS, TERRAIN, isLowSpecDevice, terrainForDevice } from "../terrain/config";
 import { createDensityField } from "../terrain/density";
 import { ChunkManager } from "../terrain/chunks";
 import type { EnvironmentKind, SurfaceType } from "../terrain/terrainInfo";
 import { REGION_KEYS, createRegionSample, type RegionKey } from "../terrain/regions";
 import { SpawnDebugView } from "./spawnDebug";
+import { findSpawn } from "../terrain/spawn";
 import { InputController, type PanelInput } from "./input";
 import { MarineSnow } from "./particles";
 import { createSeabedMaterial } from "./seabedMaterial";
@@ -169,10 +170,11 @@ export function createDeepMarch(host: HTMLElement, opts: DeepMarchOptions): Deep
     spawnDebug.setVisible(!spawnDebug.visible);
   };
   window.addEventListener("keydown", onDebugKey);
-  // Spawn at the core of the reef-forest region nearest the origin (in water: diver.spawn
-  // picks the tallest water gap around that point).
-  const spawnAt = field.regions.spawnPoint();
-  diver.spawn(spawnAt.x, spawnAt.z);
+  // Spawn in a seeded region (uniform over the 6), at an open-water spot with clearance
+  // near that region's core, facing the longest sightline (terrain/spawn.ts).
+  // Always searched on the desktop-preset field so a seed spawns at the same spot on every device.
+  const spawnAt = findSpawn(lowSpec ? createDensityField(opts.seed, TERRAIN) : field);
+  diver.spawnAt(spawnAt.x, spawnAt.y, spawnAt.z, spawnAt.yaw);
   // Optional viewpoint for sharing / screenshots: ?at=x,y,z,yawDeg,pitchDeg.
   const at = new URLSearchParams(window.location.search).get("at");
   if (at) {

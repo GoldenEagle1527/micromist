@@ -31,8 +31,24 @@ export type RegionParams = {
   ceilingUndulation: number;
   /** Sand: elongated low dunes added to H. */
   dunes?: { amp: number; freqX: number; freqZ: number; swell: number };
-  /** Sand: sparse boulders near the floor (3D blobs where noise > threshold). */
-  boulders?: { amp: number; freq: number; threshold: number; soft: number; top: number; fade: number };
+  /**
+   * Sand: sparse rounded boulders — at most one per `cell`² (probability `chance`),
+   * each a y-rotated ellipsoid (radius rMin…rMax, height ratio flatMin…flatMax ≤ 1.2)
+   * sunk `sink`·ry into the sand, roughened by the erosion octave (`bump`), and
+   * merged with the floor by a smooth max (fillet `k`). `gain` = density per unit.
+   */
+  boulders?: {
+    cell: number;
+    chance: number;
+    rMin: number;
+    rMax: number;
+    flatMin: number;
+    flatMax: number;
+    sink: number;
+    bump: number;
+    gain: number;
+    k: number;
+  };
   /**
    * Canyon: H = top ± topVar − depth·trench(u), trench from 1D-ish stretched noise
    * along a per-site axis; |n| < floorHalf → flat floor, wall over wallRun (noise units).
@@ -101,7 +117,7 @@ export const REGION_PARAMS: readonly RegionParams[] = [
     erosionAmplitude: 0.3,
     warpStrength: 1.6,
     dunes: { amp: 0.7, freqX: 0.05, freqZ: 0.018, swell: 1.1 },
-    boulders: { amp: 11, freq: 0.085, threshold: 0.45, soft: 0.22, top: 0.5, fade: 4 },
+    boulders: { cell: 17, chance: 0.45, rMin: 1.5, rMax: 4.4, flatMin: 0.85, flatMax: 1.15, sink: 0.15, bump: 0.9, gain: 1.8, k: 0.5 },
   },
   // 1 reef forest — the previous terrain (pillars and arches at varied heights)
   { ...BASE },
@@ -113,7 +129,7 @@ export const REGION_PARAMS: readonly RegionParams[] = [
     layerAmplitude: 0,
     erosionAmplitude: 1.1,
     warpStrength: 1.8,
-    canyon: { top: 10, topVar: 1.6, depth: 11.5, across: 1 / 36, along: 1 / 190, floorHalf: 0.07, wallRun: 0.1, branch: 0.8, jag: 2.2 },
+    canyon: { top: 10, topVar: 1.6, depth: 11.5, across: 1 / 36, along: 1 / 190, floorHalf: 0.045, wallRun: 0.08, branch: 0.8, jag: 2.2 },
   },
   // 3 cave warren — solid rock with connected tunnels and chambers
   {
