@@ -399,11 +399,15 @@ export function createSeabedMaterial(opts: SeabedOptions): SeabedMaterial {
         /* glsl */ `#include <emissivemap_fragment>
   {
     // caustics from the surface above: on up-facing surfaces, fading with distance
+    // (skipped entirely where it can't show: beyond 30 m, deep water, down-facing, lights off)
     float camDist = length(vWPos - cameraPosition);
     float facing = pow(clamp(dmWorldNormal.y, 0.0, 1.0), 1.5);
-    float c = dmCaustics(vWPos.xz * 0.42, uTime * 0.9);
     float fade = (1.0 - smoothstep(10.0, 30.0, camDist)) * smoothstep(-10.0 * uWS, 4.0 * uWS, vWPos.y);
-    totalEmissiveRadiance += diffuseColor.rgb * uCausticColor * c * facing * fade * mix(0.4, 1.0, vAO) * uEnvLight;
+    float k = facing * fade * uEnvLight;
+    if (k > 0.0) {
+      float c = dmCaustics(vWPos.xz * 0.42, uTime * 0.9);
+      totalEmissiveRadiance += diffuseColor.rgb * uCausticColor * c * k * mix(0.4, 1.0, vAO);
+    }
   }`,
       )
       .replace(
