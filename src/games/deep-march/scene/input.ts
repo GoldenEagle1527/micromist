@@ -1,13 +1,13 @@
 /**
  * Diver input: keyboard (WASD / arrows, Space, Shift, sprint = double-tap W /
- * Ctrl / R), mouse-look via pointer lock (desktop, panel off), drag-look on
+ * Ctrl / R; lights: F on/off, L cycle, 1-3 mode), mouse-look via pointer lock (desktop, panel off), drag-look on
  * touch, plus analog state pushed in by the sci-fi control panel.
  */
 import type { DiverInput } from "./diver";
 import { screenDelta } from "../viewRotation";
 
 const HANDLED = new Set([
-  "KeyW", "KeyA", "KeyS", "KeyD", "KeyR", "KeyF",
+  "KeyW", "KeyA", "KeyS", "KeyD", "KeyR", "KeyF", "KeyL", "Digit1", "Digit2", "Digit3",
   "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight",
   "ShiftLeft", "ShiftRight", "Space", "ControlLeft", "ControlRight",
 ]);
@@ -23,6 +23,10 @@ export type InputOptions = {
   invertY: boolean;
   onLockChange?: (locked: boolean) => void;
   onLampToggle?: () => void;
+  /** L: next light mode. */
+  onLightCycle?: () => void;
+  /** 1 / 2 / 3: light mode by index. */
+  onLightSelect?: (index: number) => void;
 };
 
 export type PanelInput = {
@@ -76,6 +80,14 @@ export class InputController {
     e.preventDefault();
     if (e.code === "KeyF") {
       if (!e.repeat) this.opts.onLampToggle?.();
+      return;
+    }
+    if (e.code === "KeyL") {
+      if (!e.repeat) this.opts.onLightCycle?.();
+      return;
+    }
+    if (e.code.startsWith("Digit")) {
+      if (!e.repeat) this.opts.onLightSelect?.(Number(e.code.slice(5)) - 1);
       return;
     }
     const isForward = e.code === "KeyW" || e.code === "ArrowUp";

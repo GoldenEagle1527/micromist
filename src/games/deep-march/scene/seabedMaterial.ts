@@ -18,6 +18,7 @@
  *   (world.ts) draws the same water colour.
  */
 import * as THREE from "three";
+import { BEAM_DECLS, BEAM_LIGHT, BEAM_OPAQUE, type BeamUniforms } from "./highBeam";
 
 import sandAlb1024 from "../assets/sand_albedo_1024.webp?url";
 import sandNrm1024 from "../assets/sand_nrm_1024.webp?url";
@@ -92,12 +93,16 @@ export type SeabedOptions = {
   /** World scale (terrain shapes are this much larger than the base design). */
   worldScale: number;
   anisotropy: number;
+  /** High-beam (fog-light) uniforms, see highBeam.ts. */
+  beam: BeamUniforms;
   /** Called when all textures finished loading (or failed). */
   onReady?: () => void;
 };
 
 export type SeabedMaterial = {
   material: THREE.MeshStandardMaterial;
+  /** Live per-unit absorption (scaled by night vision). */
+  absorb: THREE.Vector3;
   update: (time: number) => void;
   dispose: () => void;
 };
@@ -306,6 +311,7 @@ export function createSeabedMaterial(opts: SeabedOptions): SeabedMaterial {
     uCeilingTint: { value: new THREE.Color(0.55, 0.58, 0.64) },
     uWS: { value: opts.worldScale },
     ...opts.water,
+    ...opts.beam,
   };
 
   const material = new THREE.MeshStandardMaterial({ roughness: 1, metalness: 0 });
@@ -323,7 +329,7 @@ export function createSeabedMaterial(opts: SeabedOptions): SeabedMaterial {
         "#include <project_vertex>\n  vWPos = (modelMatrix * vec4(transformed, 1.0)).xyz;\n  vWNrm = normalize(mat3(modelMatrix) * objectNormal);\n  vAO = ao;",
       );
     shader.fragmentShader = shader.fragmentShader
-      .replace("#include <common>", "#include <common>\n" + DECLS + WATER_GLSL)
+      .replace("#include <common>", "#include <common>\n" + DECLS + WATER_GLSL + BEAM_DECLS)
       .replace("#include <map_fragment>", MAP_FRAGMENT)
       .replace("#include <roughnessmap_fragment>", "float roughnessFactor = clamp(mix(0.55, 1.0, dmRough), 0.3, 1.0);")
       .replace(
@@ -349,7 +355,8 @@ export function createSeabedMaterial(opts: SeabedOptions): SeabedMaterial {
     float occ = clamp(vAO, 0.0, 1.0);
     reflectedLight.indirectDiffuse *= occ * occ;
     reflectedLight.directDiffuse *= mix(0.55, 1.0, occ);
-  }`,
+  }
+${BEAM_LIGHT}`,
       )
       .replace(
         "#include <opaque_fragment>",
@@ -365,7 +372,7 @@ export function createSeabedMaterial(opts: SeabedOptions): SeabedMaterial {
     // away, so masses emerge as faint shadows, darken into silhouettes, then resolve
     float sil = mix(uSil, 1.0, smoothstep(uFar * 0.22, uFar * 0.95, dist));
     outgoingLight = mix(outgoingLight, water * sil, haze);
-    outgoingLight = mix(outgoingLight, water, smoothstep(uFar * 0.8, uFar, dist));
+${BEAM_OPAQUE}    outgoingLight = mix(outgoingLight, water, smoothstep(uFar * 0.8, uFar, dist));
   }
   #include <opaque_fragment>`,
       );
@@ -374,6 +381,7 @@ export function createSeabedMaterial(opts: SeabedOptions): SeabedMaterial {
 
   return {
     material,
+    absorb: uniforms.uAbsorb.value,
     update: (time) => {
       uniforms.uTime.value = time;
     },

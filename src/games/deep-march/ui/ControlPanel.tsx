@@ -49,9 +49,10 @@ export function ControlPanel({
     [game],
   );
   const onToggle = useCallback(
-    (id: "swim" | "lamp") => {
+    (id: "swim" | "lamp" | "mode") => {
       if (!game) return;
       if (id === "swim") game.toggleSwimLatch();
+      else if (id === "mode") game.cycleLight();
       else game.toggleLamp();
       force((n) => n + 1);
     },
@@ -88,8 +89,10 @@ export function ControlPanel({
           <LookPad onLook={game.addLook} />
           <MoveDial input={game.panelInput} swimming={swimming} label={labels.dialMove} swimLabel={labels.stateSwim} />
           <ActionFan
-            labels={{ up: labels.btnUp, down: labels.btnDown, swim: labels.btnSwim, lamp: labels.btnLamp }}
+            labels={{ up: labels.btnUp, down: labels.btnDown, swim: labels.btnSwim, lamp: labels.btnLamp, mode: labels.lightModes[tel?.light.mode ?? "beam"] }}
             lampOn={tel?.lamp ?? true}
+            lampLocked={tel?.light.locked ?? false}
+            lightMode={tel?.light.mode ?? "beam"}
             swimLatch={tel?.swimLatch ?? false}
             swimming={swimming}
             stateLabel={swimming ? labels.stateSwim : labels.stateHover}

@@ -6,7 +6,7 @@ import { seedFromString } from "./terrain/noise";
 import { createDeepMarch, type DeepMarchHandle, type HudLabels } from "./scene/world";
 import type { DeepMarchDict } from "./i18n";
 import { isTouchDevice, loadSettings, panelEnabled, randomSeed, saveSettings } from "./settings";
-import { ControlPanel } from "./ui/ControlPanel";
+import { ControlPanel, type PanelLabels } from "./ui/ControlPanel";
 import { viewRotation, type Rotation } from "./viewRotation";
 
 /** Best effort: fullscreen + landscape lock (Android Chrome). Rejections are expected elsewhere (iOS). */
@@ -56,6 +56,37 @@ function hudLabels(dm: DeepMarchDict): HudLabels {
     regionEdge: dm.regionEdge,
     loading: dm.hudLoading,
     lockPrompt: dm.lockPrompt,
+  };
+}
+
+function panelLabels(dm: DeepMarchDict): PanelLabels {
+  return {
+    depth: dm.hudDepth,
+    speed: dm.hudSpeed,
+    heading: dm.hudHeading,
+    stateSwim: dm.stateSwim,
+    stateHover: dm.stateHover,
+    contactFloor: dm.hudGrounded,
+    contactCeiling: dm.hudCeiling,
+    contactWall: dm.hudScrape,
+    terrainTitle: dm.hudTerrain,
+    terrain: dm.terrainKinds,
+    regionTitle: dm.hudRegion,
+    regions: dm.regionNames,
+    battery: dm.hudBattery,
+    lightOff: dm.lightOff,
+    lightModes: dm.lightModes,
+    batteryEmpty: dm.batteryEmpty,
+    batteryCharging: dm.batteryCharging,
+    btnUp: dm.btnUp,
+    btnDown: dm.btnDown,
+    btnSwim: dm.btnSwim,
+    btnLamp: dm.btnLamp,
+    dialMove: dm.dialMove,
+    showPanel: dm.showPanel,
+    hidePanel: dm.hidePanel,
+    exit: dm.exit,
+    flip: dm.flip,
   };
 }
 
@@ -250,29 +281,7 @@ export function DeepMarchGame() {
               onTogglePanel={togglePanel}
               onExit={back}
               onFlip={rot !== 0 ? () => setFlip((f) => !f) : undefined}
-              labels={{
-                depth: dm.hudDepth,
-                speed: dm.hudSpeed,
-                heading: dm.hudHeading,
-                stateSwim: dm.stateSwim,
-                stateHover: dm.stateHover,
-                contactFloor: dm.hudGrounded,
-                contactCeiling: dm.hudCeiling,
-                contactWall: dm.hudScrape,
-                terrainTitle: dm.hudTerrain,
-                terrain: dm.terrainKinds,
-                regionTitle: dm.hudRegion,
-                regions: dm.regionNames,
-                btnUp: dm.btnUp,
-                btnDown: dm.btnDown,
-                btnSwim: dm.btnSwim,
-                btnLamp: dm.btnLamp,
-                dialMove: dm.dialMove,
-                showPanel: dm.showPanel,
-                hidePanel: dm.hidePanel,
-                exit: dm.exit,
-                flip: dm.flip,
-              }}
+              labels={panelLabels(dm)}
             />
           </div>
         </div>
@@ -295,29 +304,7 @@ export function DeepMarchGame() {
           game={game}
           panelOn={panelOn}
           onTogglePanel={togglePanel}
-          labels={{
-            depth: dm.hudDepth,
-            speed: dm.hudSpeed,
-            heading: dm.hudHeading,
-            stateSwim: dm.stateSwim,
-            stateHover: dm.stateHover,
-            contactFloor: dm.hudGrounded,
-            contactCeiling: dm.hudCeiling,
-            contactWall: dm.hudScrape,
-                terrainTitle: dm.hudTerrain,
-                terrain: dm.terrainKinds,
-                regionTitle: dm.hudRegion,
-                regions: dm.regionNames,
-            btnUp: dm.btnUp,
-            btnDown: dm.btnDown,
-            btnSwim: dm.btnSwim,
-            btnLamp: dm.btnLamp,
-            dialMove: dm.dialMove,
-            showPanel: dm.showPanel,
-            hidePanel: dm.hidePanel,
-            exit: dm.exit,
-            flip: dm.flip,
-          }}
+          labels={panelLabels(dm)}
         />
       </div>
     </div>

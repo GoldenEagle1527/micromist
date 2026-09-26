@@ -4,8 +4,9 @@ import type { Telemetry } from "../scene/world";
 import type { EnvironmentKind } from "../terrain/terrainInfo";
 import { REGION_COLORS, REGION_KEYS, type RegionKey } from "../terrain/regions";
 import { arcPath, polar } from "./geom";
+import { BatteryGauge, type BatteryLabels } from "./BatteryGauge";
 
-export type ReadoutLabels = {
+export type ReadoutLabels = BatteryLabels & {
   depth: string;
   speed: string;
   heading: string;
@@ -125,6 +126,7 @@ export function Readout({ tel, labels }: { tel: Telemetry | null; labels: Readou
             <span style={{ top: `${pitchPct}%` }} />
           </div>
         </div>
+        <BatteryGauge tel={tel} labels={labels} />
         {tel.region ? (
           <div className="dm-region" data-region={tel.region} title={labels.regionTitle}>
             <i style={{ background: REGION_COLORS[REGION_KEYS.indexOf(tel.region)] }} />
