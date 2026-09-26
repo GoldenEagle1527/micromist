@@ -24,7 +24,7 @@
 import * as THREE from "three";
 import { baseTerrain } from "./config";
 import { createDensityField, type DensityField } from "./density";
-import { columnRows, generateColumnMesh, latticeSpacing, lodCoord, lodField, type ColumnRows } from "./mesher";
+import { columnRows, generateColumnMesh, latticeSpacing, lodCoord, type ColumnRows } from "./mesher";
 import type { MesherRequest, MesherResponse } from "./protocol";
 import { TerrainInfoStore } from "./terrainInfo";
 
@@ -332,9 +332,8 @@ export class ChunkManager {
       const full = generateColumnMesh(this.base, e.cx, e.cz, columnRows(this.base), this.base.settings.floaterMargin, undefined, true);
       m = { ...full, positions: new Float32Array(0), normals: new Float32Array(0), ao: new Float32Array(0), indices: new Uint16Array(0), removed: new Int32Array(0) };
     } else {
-      const f = lodField(this.field, e.lod);
-      const rows = e.lod === 0 ? this.rows : columnRows(f, e.lod);
-      m = generateColumnMesh(f, e.cx, e.cz, rows, this.field.settings.floaterMargin * (1 << e.lod), undefined, false, undefined, e.lod);
+      const rows = e.lod === 0 ? this.rows : columnRows(this.field, e.lod);
+      m = generateColumnMesh(this.field, e.cx, e.cz, rows, this.field.settings.floaterMargin * (1 << e.lod), undefined, false, undefined, e.lod);
     }
     return { type: e.kind === "info" ? "info" : "column", id: e.id, ...m, ms: performance.now() - t1 };
   }
