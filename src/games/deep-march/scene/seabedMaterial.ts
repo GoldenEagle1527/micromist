@@ -102,12 +102,20 @@ export type SeabedOptions = {
   onReady?: () => void;
 };
 
+export type LodFadeMaterial = { material: THREE.Material; fade: THREE.Vector2 };
+
 export type SeabedMaterial = {
   material: THREE.MeshStandardMaterial;
   /** Live per-unit absorption (scaled by night vision). */
   absorb: THREE.Vector3;
   /** Scales surface-borne light that isn't from a light object (caustics); 0 = total darkness. */
   envLight: { value: number };
+  /**
+   * A new LOD-crossfade variant of the material (same look and program family,
+   * screen-door dither by its own `fade`: x = progress 0..1, y = +1 fading in /
+   * −1 fading out). See chunks.ts.
+   */
+  fadeMaterial: () => LodFadeMaterial;
   update: (time: number) => void;
   dispose: () => void;
 };
@@ -396,11 +404,8 @@ export function createSeabedMaterial(opts: SeabedOptions): SeabedMaterial {
     uEnvLight: { value: 1 },
   };
 
-  const material = new THREE.MeshStandardMaterial({ roughness: 1, metalness: 0 });
-  material.fog = false; // own water model (see header)
-  material.defines = opts.lowSpec ? { DM_LOW_SPEC: "" } : {};
-  material.onBeforeCompile = (shader) => {
-    Object.assign(shader.uniforms, uniforms);
+  const patch = (shader: THREE.WebGLProgramParametersWithUniforms, extra: Record<string, THREE.IUniform>) => {
+    Object.assign(shader.uniforms, uniforms, extra);
     shader.vertexShader = shader.vertexShader
       .replace(
         "#include <common>",
@@ -462,20 +467,55 @@ ${PL_LIGHT}`,
 ${BEAM_OPAQUE}    outgoingLight = mix(outgoingLight, water, smoothstep(uFar * 0.8, uFar, dist));
   }
   #include <opaque_fragment>`,
+      )
+      .replace(
+        "#include <dithering_fragment>",
+        /* glsl */ `#include <dithering_fragment>
+#ifdef DM_LOD_FADE
+  {
+    // LOD crossfade (screen-door): the incoming column keeps the pixels whose
+    // threshold is below the progress, the outgoing one exactly the others, so
+    // every pixel shows one of the two. Decided after shading, so the screen-space
+    // derivatives above stay defined for every pixel of the quad.
+    float d = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));
+    if (uLodFade.y > 0.0 ? d >= uLodFade.x : d < uLodFade.x) discard;
+  }
+#endif`,
       );
+    if (extra.uLodFade) shader.fragmentShader = shader.fragmentShader.replace("#include <common>", "#include <common>\nuniform vec2 uLodFade;");
   };
-  material.customProgramCacheKey = () => `deep-march-seabed-${opts.lowSpec ? "lo" : "hi"}`;
+  const make = (fade: { value: THREE.Vector2 } | null) => {
+    const m = new THREE.MeshStandardMaterial({ roughness: 1, metalness: 0 });
+    m.fog = false; // own water model (see header)
+    m.defines = { ...(opts.lowSpec ? { DM_LOW_SPEC: "" } : {}), ...(fade ? { DM_LOD_FADE: "" } : {}) };
+    m.onBeforeCompile = (shader) => patch(shader, fade ? { uLodFade: fade } : {});
+    // Fade variants share one program (their own uLodFade is uploaded when the
+    // renderer switches material); the base material has no discard at all, so
+    // the resting terrain keeps early depth testing.
+    const key = `deep-march-seabed-${opts.lowSpec ? "lo" : "hi"}${fade ? "-fade" : ""}`;
+    m.customProgramCacheKey = () => key;
+    return m;
+  };
+  const material = make(null);
+  const fades: THREE.MeshStandardMaterial[] = [];
 
   return {
     material,
     absorb: uniforms.uAbsorb.value,
     envLight: uniforms.uEnvLight,
+    fadeMaterial: () => {
+      const fade = { value: new THREE.Vector2(0, 1) };
+      const m = make(fade);
+      fades.push(m);
+      return { material: m, fade: fade.value };
+    },
     update: (time) => {
       uniforms.uTime.value = time;
     },
     dispose: () => {
       textures.forEach((t) => t.dispose());
       material.dispose();
+      fades.forEach((m) => m.dispose());
     },
   };
 }

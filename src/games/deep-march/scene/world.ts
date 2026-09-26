@@ -114,7 +114,9 @@ export function createDeepMarch(host: HTMLElement, opts: DeepMarchOptions): Deep
   loading.textContent = opts.labels.loading;
   overlay.appendChild(loading);
 
-  const terrain = terrainForDevice(lowSpec);
+  // ?lodNear=<units> overrides the full-resolution ring radius (LOD comparisons / debugging)
+  const lodNearParam = Number(new URLSearchParams(window.location.search).get("lodNear"));
+  const terrain = lodNearParam > 0 ? { ...terrainForDevice(lowSpec), lodNear: lodNearParam } : terrainForDevice(lowSpec);
 
   // Underwater look for a vast world: the reference water colour (0, .168, .453) is the
   // horizon of an open-water gradient (brighter toward the surface, black below) drawn
@@ -191,7 +193,12 @@ void main() {
   const baseHaze = water.uHaze.value;
 
   const field = createDensityField(opts.seed, terrain);
-  const chunks = new ChunkManager(scene, field, opts.seed, terrainMat, lowSpec);
+  const chunks = new ChunkManager(scene, field, opts.seed, terrainMat, lowSpec, seabed.fadeMaterial);
+  {
+    // compile the LOD-crossfade program up front: no shader-compile hitch at the first swap
+    const warm = new THREE.Mesh(new THREE.BufferGeometry(), seabed.fadeMaterial().material);
+    renderer.compileAsync(warm, camera, scene).catch(() => {}).finally(() => warm.geometry.dispose());
+  }
 
   const diver = new DiverController(field, (x, y, z) => chunks.isRemoved(x, y, z));
   // HUD terrain chip: lookup in the generation-time class grid (no probing), with
@@ -344,6 +351,7 @@ void main() {
       if (diver.lastTicks > 0) input.consumePulse();
     } else if (texturesReady && chunks.nearReady(diver.position, 14)) {
       ready = true;
+      chunks.progressive = true;
       loading.classList.add("done");
       updatePrompt();
     }

@@ -9,9 +9,17 @@
  *   of the viewer (neighbouring leaves are usually one level apart); coarse
  *   columns carry skirts that hide the small cracks along a level change;
  * - a node that leaves the set stays drawn until the nodes replacing it are ready
- *   (no holes while refining / coarsening);
- * - meshes are built by a Web Worker pool (nearest + in-frustum first) and
- *   uploaded under a per-frame budget; main-thread fallback if workers fail.
+ *   (no holes while refining / coarsening); the swap is then a short screen-door
+ *   crossfade (LOD_FADE_S, seabedMaterial fadeMaterial) instead of a one-frame pop:
+ *   replacement meshes stay hidden until the whole footprint is ready, then they
+ *   dither in while the old ones dither out on the complementary pixels;
+ * - refinement is progressive where terrain is already drawn: a column splits only
+ *   once it is drawn and settled, so a swap is always one column ↔ its 4 children;
+ * - the split distance and the build order use the viewer's position predicted
+ *   LOOKAHEAD_S ahead along its smoothed velocity (min of both distances), so at
+ *   swimming speed the fine rings are built ahead of the diver, in-view first;
+ * - meshes are built by a Web Worker pool and uploaded under a per-frame budget;
+ *   main-thread fallback if workers fail.
  *
  * Level-0 columns report which lattice points they removed as floating rock;
  * `isRemoved()` lets collision ignore exactly what the renderer dropped (the diver
@@ -26,6 +34,7 @@ import { baseTerrain } from "./config";
 import { createDensityField, type DensityField } from "./density";
 import { columnRows, generateColumnMesh, latticeSpacing, lodCoord, type ColumnRows } from "./mesher";
 import type { MesherRequest, MesherResponse } from "./protocol";
+import type { LodFadeMaterial } from "../scene/seabedMaterial";
 import { TerrainInfoStore } from "./terrainInfo";
 
 type NodeState = "queued" | "pending" | "ready";
@@ -46,6 +55,12 @@ type Node = {
   removed: Set<number> | null;
   /** Still part of the wanted set (else drawn only until its replacement is ready). */
   wanted: boolean;
+  /** Mesh ready but hidden until the meshes it replaces can crossfade with it. */
+  awaitFade: boolean;
+  /** Crossfade in progress: +1 fading in, −1 fading out, 0 none. */
+  fade: number;
+  fadeStart: number;
+  fadeMat: LodFadeMaterial | null;
 };
 
 type Slot = { worker: Worker; inFlight: number; alive: boolean };
@@ -72,6 +87,14 @@ export type ChunkStats = {
 const MAX_IN_FLIGHT_PER_WORKER = 1;
 const UPLOAD_BUDGET_MS = 4;
 const MAIN_THREAD_BUDGET_MS = 8;
+/**
+ * LOD crossfade duration (s): long enough to read as a dissolve rather than a pop,
+ * short enough not to hold up the next refinement step (a column splits only once
+ * it has settled, see wantedSet).
+ */
+const LOD_FADE_S = 0.5;
+/** How far ahead (s of travel) the LOD split / build order looks. */
+const LOOKAHEAD_S = 1.5;
 
 const meshKey = (lod: number, cx: number, cz: number) => `${lod}:${cx}:${cz}`;
 const infoKey = (cx: number, cz: number) => `i:${cx}:${cz}`;
@@ -103,14 +126,30 @@ export class ChunkManager {
   private readonly lodMsCount: number[];
   private infoMsTotal = 0;
   private infoMsCount = 0;
+  private readonly fadeFactory: (() => LodFadeMaterial) | null;
+  private readonly fadePool: LodFadeMaterial[] = [];
+  private readonly fading = new Set<Node>();
+  private clock = 0;
+  private readonly lastViewer = new THREE.Vector3();
+  private hasLast = false;
+  /** Smoothed viewer velocity (units/s) and the look-ahead point it gives. */
+  private readonly vel = new THREE.Vector3();
+  private readonly ahead = new THREE.Vector3();
   /** Generation-time terrain classification near the viewer (base-scale columns, world-unit queries). */
   readonly terrain: TerrainInfoStore;
   private floaters = 0;
   private disposed = false;
+  /**
+   * Refine one level at a time where terrain is already drawn (see wantedSet).
+   * Off while the loading screen is up, so the start area builds straight to full
+   * resolution; world.ts turns it on once the dive starts.
+   */
+  progressive = false;
 
   /** lowSpec: at most 2 mesher workers (leaves the main thread / GPU driver room on phones). */
-  constructor(scene: THREE.Scene, field: DensityField, seed: number, material: THREE.Material, lowSpec = false) {
+  constructor(scene: THREE.Scene, field: DensityField, seed: number, material: THREE.Material, lowSpec = false, fadeMaterial?: () => LodFadeMaterial) {
     this.scene = scene;
+    this.fadeFactory = fadeMaterial ?? null;
     this.field = field;
     this.material = material;
     this.rows = columnRows(field);
@@ -208,7 +247,21 @@ export class ChunkManager {
     this.projScreen.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
     this.frustum.setFromProjectionMatrix(this.projScreen);
 
-    const viewerKey = `${Math.round(viewer.x / b)},${Math.round(viewer.z / b)}`;
+    this.clock += dt;
+    // smoothed horizontal velocity → look-ahead point (teleports / respawns ignored)
+    if (this.hasLast && dt > 0) {
+      const vx = (viewer.x - this.lastViewer.x) / dt, vz = (viewer.z - this.lastViewer.z) / dt;
+      const k = 1 - Math.exp(-dt / 0.35);
+      if (Math.hypot(vx, vz) < 200) {
+        this.vel.x += (vx - this.vel.x) * k;
+        this.vel.z += (vz - this.vel.z) * k;
+      }
+    }
+    this.lastViewer.copy(viewer);
+    this.hasLast = true;
+    this.ahead.set(viewer.x + this.vel.x * LOOKAHEAD_S, viewer.y, viewer.z + this.vel.z * LOOKAHEAD_S);
+
+    const viewerKey = `${Math.round(viewer.x / b)},${Math.round(viewer.z / b)},${Math.round(this.ahead.x / b)},${Math.round(this.ahead.z / b)}`;
     this.resortTimer -= dt;
     if (viewerKey !== this.lastViewerKey || this.resortTimer <= 0) {
       this.lastViewerKey = viewerKey;
@@ -217,6 +270,12 @@ export class ChunkManager {
     }
     this.dispatch();
     this.applyResults();
+    this.stepFades();
+  }
+
+  /** Distance used for LOD splits and build order: to the viewer or to where it will be shortly. */
+  private sqrDstAhead(viewer: THREE.Vector3, x0: number, z0: number, size: number): number {
+    return Math.min(this.sqrDstRect(viewer, x0, z0, size), this.sqrDstRect(this.ahead, x0, z0, size));
   }
 
   /** Leaves of the LOD quadtree around the viewer + base info columns in range. */
@@ -226,22 +285,32 @@ export class ChunkManager {
     const top = this.levels - 1;
     const topSize = s.boundsSize * (1 << top);
     const view2 = s.viewDistance * s.viewDistance;
-    const visit = (lod: number, cx: number, cz: number) => {
+    // Progressive refinement: where something is already drawn (`covered`), a node
+    // only splits once it is itself drawn and settled, so every swap replaces a
+    // column by its 4 children (or back) in one crossfade. Without this, when
+    // streaming lagged at swimming speed, fine columns right ahead waited hidden
+    // behind a 160 m level-4 column until its whole footprint was rebuilt, and the
+    // diver swam through the coarsest mesh. Where nothing is drawn yet (start,
+    // teleport) the tree splits straight to the target level.
+    const visit = (lod: number, cx: number, cz: number, covered: boolean) => {
       const [x0, z0] = this.origin("mesh", lod, cx, cz);
       const size = s.boundsSize * (1 << lod);
       const d2 = this.sqrDstRect(viewer, x0, z0, size);
       if (d2 > view2) return;
-      const split = lod > 0 && d2 < (s.lodNear * (1 << (lod - 1))) ** 2;
+      const key = meshKey(lod, cx, cz);
+      const node = this.nodes.get(key);
+      const settled = this.settled(node);
+      const split = lod > 0 && this.sqrDstAhead(viewer, x0, z0, size) < (s.lodNear * (1 << (lod - 1))) ** 2 && (!this.progressive || !covered || settled);
       if (!split) {
-        out.set(meshKey(lod, cx, cz), { kind: "mesh", lod, cx, cz });
+        out.set(key, { kind: "mesh", lod, cx, cz });
         return;
       }
-      for (let dz = 0; dz <= 1; dz++) for (let dx = 0; dx <= 1; dx++) visit(lod - 1, cx * 2 + dx, cz * 2 + dz);
+      for (let dz = 0; dz <= 1; dz++) for (let dx = 0; dx <= 1; dx++) visit(lod - 1, cx * 2 + dx, cz * 2 + dz, covered || this.drawn(node));
     };
     const h = s.boundsSize / 2;
     const tx0 = Math.floor((viewer.x + h - s.viewDistance) / topSize), tx1 = Math.floor((viewer.x + h + s.viewDistance) / topSize);
     const tz0 = Math.floor((viewer.z + h - s.viewDistance) / topSize), tz1 = Math.floor((viewer.z + h + s.viewDistance) / topSize);
-    for (let cz = tz0; cz <= tz1; cz++) for (let cx = tx0; cx <= tx1; cx++) visit(top, cx, cz);
+    for (let cz = tz0; cz <= tz1; cz++) for (let cx = tx0; cx <= tx1; cx++) visit(top, cx, cz, false);
     // base-scale classification columns
     const bs = s.boundsSize * s.worldScale;
     const r = s.infoRadius;
@@ -254,6 +323,16 @@ export class ChunkManager {
     return out;
   }
 
+  /** Drawn on its own: built, not waiting to crossfade in, not mid-crossfade. */
+  private settled(n: Node | undefined): boolean {
+    return !!n && n.state === "ready" && !n.awaitFade && n.fade === 0;
+  }
+
+  /** On screen (possibly mid-crossfade), or built empty. */
+  private drawn(n: Node | undefined): boolean {
+    return !!n && n.state === "ready" && !n.awaitFade && (!n.mesh || n.mesh.visible);
+  }
+
   /** Node b's footprint contains node a's (both mesh nodes). */
   private static contains(b: Node, a: Node): boolean {
     if (b.lod <= a.lod) return b.lod === a.lod && b.cx === a.cx && b.cz === a.cz;
@@ -263,10 +342,24 @@ export class ChunkManager {
 
   private refreshSet(viewer: THREE.Vector3) {
     const want = this.wantedSet(viewer);
-    for (const n of this.nodes.values()) n.wanted = want.has(n.key);
+    for (const n of this.nodes.values()) {
+      n.wanted = want.has(n.key);
+      // wanted again while dissolving away: hide it and let retire() fade it back
+      // in against whatever had started replacing it
+      if (n.wanted && n.fade < 0) {
+        this.endFade(n);
+        if (n.mesh) {
+          n.mesh.visible = false;
+          n.awaitFade = true;
+        }
+      }
+    }
     for (const [key, w] of want) {
       if (this.nodes.has(key)) continue;
-      const node: Node = { key, kind: w.kind, lod: w.lod, cx: w.cx, cz: w.cz, state: "queued", id: 0, mesh: null, priority: 0, worker: -1, removed: null, wanted: true };
+      const node: Node = {
+        key, kind: w.kind, lod: w.lod, cx: w.cx, cz: w.cz, state: "queued", id: 0, mesh: null, priority: 0, worker: -1, removed: null, wanted: true,
+        awaitFade: false, fade: 0, fadeStart: 0, fadeMat: null,
+      };
       this.nodes.set(key, node);
       this.queue.push(node);
     }
@@ -274,7 +367,8 @@ export class ChunkManager {
 
     this.queue = this.queue.filter((e) => e.state === "queued" && this.nodes.get(e.key) === e);
     for (const e of this.queue) {
-      const d = Math.sqrt(this.sqrDst(viewer, e));
+      const [x0, z0] = this.origin(e.kind, e.lod, e.cx, e.cz);
+      const d = Math.sqrt(this.sqrDstAhead(viewer, x0, z0, this.size(e)));
       this.setNodeBox(e);
       const inView = this.frustum.intersectsBox(this.box);
       // near first; coarse rings early too (cheap, they give the far silhouettes)
@@ -284,7 +378,14 @@ export class ChunkManager {
     this.queue.sort((a, b) => b.priority - a.priority);
   }
 
-  /** Drop unwanted nodes once whatever replaces their footprint is ready. */
+  private static overlaps(a: Node, b: Node): boolean {
+    return ChunkManager.contains(a, b) || ChunkManager.contains(b, a);
+  }
+
+  /**
+   * Drop unwanted nodes once whatever replaces their footprint is ready: crossfade
+   * them out against the (hidden until now) replacement meshes.
+   */
   private retire() {
     const wantedMesh: Node[] = [];
     for (const n of this.nodes.values()) if (n.wanted && n.kind === "mesh") wantedMesh.push(n);
@@ -294,21 +395,93 @@ export class ChunkManager {
         this.recycle(n);
         continue;
       }
+      if (n.fade < 0) continue; // already dissolving
       let covered = true;
       let overlap = false;
       for (const w of wantedMesh) {
-        if (!ChunkManager.contains(w, n) && !ChunkManager.contains(n, w)) continue;
+        if (!ChunkManager.overlaps(w, n)) continue;
         overlap = true;
         if (w.state !== "ready") {
           covered = false;
           break;
         }
       }
-      if (covered || !overlap) this.recycle(n);
+      if (!overlap) this.recycle(n);
+      else if (covered) {
+        const incoming = wantedMesh.filter((w) => w.awaitFade && ChunkManager.overlaps(w, n));
+        if (!this.fadeFactory || !n.mesh.visible) {
+          this.recycle(n);
+          for (const w of incoming) this.reveal(w);
+          continue;
+        }
+        this.startFade(n, -1);
+        for (const w of incoming) this.startFade(w, 1);
+      }
+    }
+    // replacements whose predecessors went away without a fade: just show them
+    for (const w of wantedMesh) {
+      if (!w.awaitFade) continue;
+      let blocked = false;
+      for (const n of this.nodes.values()) {
+        if (!n.wanted && n.kind === "mesh" && n.mesh && n.mesh.visible && n.fade >= 0 && ChunkManager.overlaps(n, w)) {
+          blocked = true;
+          break;
+        }
+      }
+      if (!blocked) this.reveal(w);
+    }
+  }
+
+  /** A mesh-carrying node that isn't drawn yet because an old mesh still covers its footprint. */
+  private hasVisibleOverlap(e: Node): boolean {
+    for (const n of this.nodes.values()) {
+      if (n !== e && !n.wanted && n.kind === "mesh" && n.mesh && n.mesh.visible && ChunkManager.overlaps(n, e)) return true;
+    }
+    return false;
+  }
+
+  private reveal(w: Node) {
+    w.awaitFade = false;
+    if (w.mesh) w.mesh.visible = true;
+  }
+
+  private startFade(n: Node, dir: number) {
+    if (!n.mesh || !this.fadeFactory) return;
+    n.awaitFade = false;
+    if (!n.fadeMat) n.fadeMat = this.fadePool.pop() ?? this.fadeFactory();
+    n.fade = dir;
+    n.fadeStart = this.clock;
+    n.fadeMat.fade.set(0, dir);
+    n.mesh.material = n.fadeMat.material;
+    n.mesh.visible = true;
+    this.fading.add(n);
+  }
+
+  private endFade(n: Node) {
+    this.fading.delete(n);
+    n.fade = 0;
+    if (n.mesh) n.mesh.material = this.material;
+    if (n.fadeMat) {
+      this.fadePool.push(n.fadeMat);
+      n.fadeMat = null;
+    }
+  }
+
+  private stepFades() {
+    for (const n of [...this.fading]) {
+      const f = Math.min(1, (this.clock - n.fadeStart) / LOD_FADE_S);
+      if (f < 1) {
+        n.fadeMat!.fade.x = f;
+        continue;
+      }
+      if (n.fade < 0) this.recycle(n);
+      else this.endFade(n);
     }
   }
 
   private recycle(node: Node) {
+    if (node.fade !== 0 || node.fadeMat) this.endFade(node);
+    node.awaitFade = false;
     this.nodes.delete(node.key);
     if (node.state === "pending") this.byId.delete(node.id);
     node.state = "queued";
@@ -318,6 +491,8 @@ export class ChunkManager {
       this.lodTris[node.lod] -= (node.mesh.geometry.index?.count ?? 0) / 3;
       node.mesh.geometry.dispose();
       this.group.remove(node.mesh);
+      node.mesh.visible = true;
+      node.mesh.material = this.material;
       this.meshPool.push(node.mesh);
       node.mesh = null;
     }
@@ -418,6 +593,12 @@ export class ChunkManager {
       }
       mesh.name = `column L${e.lod} ${e.cx},${e.cz}`;
       e.mesh = mesh;
+      // an old mesh still covers this footprint: stay hidden until the whole
+      // replacement is ready, then crossfade (retire)
+      if (this.fadeFactory && this.hasVisibleOverlap(e)) {
+        mesh.visible = false;
+        e.awaitFade = true;
+      }
       this.group.add(mesh);
       this.lodTris[e.lod] += r.indices.length / 3;
     }
