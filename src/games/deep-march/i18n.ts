@@ -1,4 +1,5 @@
 import type { EnvironmentKind, SurfaceType } from "./terrain/terrainInfo";
+import type { RegionKey } from "./terrain/regions";
 
 export type DeepMarchDict = {
   setupTitle: string;
@@ -28,6 +29,12 @@ export type DeepMarchDict = {
   /** Debug spawn-candidate overlay. */
   spawnDebugTitle: string;
   surfaceTypes: Record<SurfaceType, string>;
+  /** Debug region panel. */
+  regionDebugTitle: string;
+  regionEdge: string;
+  /** HUD region chip. */
+  hudRegion: string;
+  regionNames: Record<RegionKey, string>;
   hudLoading: string;
   hudGrounded: string;
   hudCeiling: string;
@@ -90,6 +97,17 @@ export const deepMarchEn: DeepMarchDict = {
     crevice: "crevice",
     ridge: "ridge",
     "cave-floor": "cave-floor",
+  },
+  regionDebugTitle: "Regions",
+  regionEdge: "edge",
+  hudRegion: "Region",
+  regionNames: {
+    sand: "Sand Plains",
+    reef: "Reef Forest",
+    canyon: "Canyon Belt",
+    cave: "Cave Warren",
+    terrace: "Cliff Terraces",
+    trench: "Deep Trench",
   },
   hudLoading: "Generating seabed…",
   hudGrounded: "Touching bottom",
@@ -161,6 +179,17 @@ export const deepMarchZh: DeepMarchDict = {
     crevice: "缝隙",
     ridge: "脊",
     "cave-floor": "洞底",
+  },
+  regionDebugTitle: "区域",
+  regionEdge: "距边界",
+  hudRegion: "区域",
+  regionNames: {
+    sand: "沙原",
+    reef: "礁石林",
+    canyon: "峡谷带",
+    cave: "洞穴群",
+    terrace: "峭壁台地",
+    trench: "深沟",
   },
   hudLoading: "正在生成海床…",
   hudGrounded: "触底",

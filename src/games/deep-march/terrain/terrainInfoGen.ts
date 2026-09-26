@@ -7,8 +7,9 @@
  * line scans, horizontal ones from ≤ 3-cell grid scans with linear refinement.
  */
 import type { DensityField } from "./density";
-import { latticeCoord, latticeSpacing, type ColumnRows, type RowPlan } from "./mesher";
-import { ENV, ENV_T, SURF, hash01, regionAt, type ChunkTerrainInfo } from "./terrainInfo";
+import { columnRegionMask, columnRowPlan, latticeCoord, latticeSpacing, type ColumnRows } from "./mesher";
+import { ENV, ENV_T, SURF, hash01, type ChunkTerrainInfo } from "./terrainInfo";
+import { createRegionSample } from "./regions";
 
 /** 8 horizontal directions (dx, dz): +x, +x+z, +z, −x+z, −x, −x−z, −z, +x−z. */
 const DIRS = [1, 0, 1, 1, 0, 1, -1, 1, -1, 0, -1, -1, 0, -1, 1, -1];
@@ -18,26 +19,35 @@ export type LineSampler = (gi: number, gk: number, out: Float32Array) => void;
 /**
  * Final density along the full-height lattice line (gi, gk), rows gjMin … gjMax,
  * computed exactly like the owning column's mesher does (same raw sample
- * coordinates, same smoothing order, same Float32 rounding) — before floater removal.
+ * coordinates, same row plan of the owning column's region mask, same smoothing
+ * order, same Float32 rounding) — before floater removal.
  */
-export function createLineSampler(field: DensityField, rows: ColumnRows, plan: RowPlan): LineSampler {
+export function createLineSampler(field: DensityField, rows: ColumnRows): LineSampler {
   const s = field.settings;
   const n = s.numPointsPerAxis;
   const sp = latticeSpacing(field);
   const y0 = latticeCoord(rows.gjMin, field);
-  const { py, rowSkip, rowFill } = plan;
-  const ny = py - 2;
   const K = s.smoothCells;
   const SW = field.smoothWeights;
   const half = (SW.length - 1) / 2;
   const R = half * K;
-  const rawNeed = new Uint8Array(py + 2 * R);
-  for (let j = 0; j < py; j++) if (!rowSkip[j]) for (let d = 0; d <= 2 * R; d++) rawNeed[j + d] = 1;
-  const raw = new Float32Array(py + 2 * R);
   const fill = new Float32Array(1);
+  let raw = new Float32Array(0);
+  const needCache = new Map<number, Uint8Array>();
   return (gi, gk, out) => {
     const oi = Math.floor(gi / (n - 1)) * (n - 1);
     const ok = Math.floor(gk / (n - 1)) * (n - 1);
+    const mask = columnRegionMask(field, oi / (n - 1), ok / (n - 1));
+    const plan = columnRowPlan(field, rows, mask);
+    const { py, rowSkip, rowFill } = plan;
+    const ny = py - 2;
+    let rawNeed = needCache.get(mask);
+    if (!rawNeed) {
+      rawNeed = new Uint8Array(py + 2 * R);
+      for (let j = 0; j < py; j++) if (!rowSkip[j]) for (let d = 0; d <= 2 * R; d++) rawNeed[j + d] = 1;
+      needCache.set(mask, rawNeed);
+    }
+    if (raw.length < py + 2 * R) raw = new Float32Array(py + 2 * R);
     const wx = latticeCoord(oi, field) + (gi - oi) * sp;
     const wz = latticeCoord(ok, field) + (gk - ok) * sp;
     for (let r = 0; r < py + 2 * R; r++) if (rawNeed[r]) raw[r] = field.sampleRaw(wx, y0 + (r - R - 1) * sp, wz);
@@ -316,6 +326,9 @@ export function buildColumnTerrainInfo(inp: ColumnInfoInput): ChunkTerrainInfo {
   const sFlags = new Uint8Array(count);
   const sCurv = new Int8Array(count);
   const sRegion = new Uint8Array(count);
+  const sRegionW = new Uint8Array(count);
+  const sRegionEdge = new Uint8Array(count);
+  const rs = createRegionSample();
   const cellOf = (wx: number, wy: number, wz: number) => {
     const ix = Math.min(nx - 1, Math.max(0, Math.round((wx + h) / sp / S) - ci0));
     const iz = Math.min(nz - 1, Math.max(0, Math.round((wz + h) / sp / S) - ck0));
@@ -372,7 +385,10 @@ export function buildColumnTerrainInfo(inp: ColumnInfoInput): ChunkTerrainInfo {
     sExp[o] = Math.round(exposure * 255);
     sFlags[o] = sheltered ? 1 : 0;
     sCurv[o] = Math.max(-127, Math.min(127, Math.round(curv * 127)));
-    sRegion[o] = regionAt(seed, x, z);
+    field.regions.sample(x, z, rs);
+    sRegion[o] = rs.id;
+    sRegionW[o] = Math.round(rs.dominant * 255);
+    sRegionEdge[o] = Math.round(rs.edge);
   }
 
   /** Floor 1–2 cells aside (4 axis directions) lies ≥ ledgeDrop below y. */
@@ -393,9 +409,25 @@ export function buildColumnTerrainInfo(inp: ColumnInfoInput): ChunkTerrainInfo {
     return false;
   }
 
+  // ---- (c) macro region per class-cell column ----
+  const regionId = new Uint8Array(nx * nz);
+  const regionW = new Uint8Array(nx * nz);
+  const regionEdge = new Uint8Array(nx * nz);
+  for (let iz = 0; iz < nz; iz++) {
+    for (let ix = 0; ix < nx; ix++) {
+      field.regions.sample(-h + (ci0 + ix) * S * sp, -h + (ck0 + iz) * S * sp, rs);
+      regionId[iz * nx + ix] = rs.id;
+      regionW[iz * nx + ix] = Math.round(rs.dominant * 255);
+      regionEdge[iz * nx + ix] = Math.round(rs.edge);
+    }
+  }
+
   return {
     cx, cz, stride: S, spacing: C, ci0, cj0, ck0, nx, ny, nz,
-    env, up: up8, down: down8, side: side8, sides,
-    spawn: { count, pos: sPos, nrm: sNrm, type: sType, env: sEnv, exposure: sExp, flags: sFlags, curv: sCurv, region: sRegion },
+    env, up: up8, down: down8, side: side8, sides, regionId, regionW, regionEdge,
+    spawn: {
+      count, pos: sPos, nrm: sNrm, type: sType, env: sEnv, exposure: sExp, flags: sFlags, curv: sCurv,
+      region: sRegion, regionW: sRegionW, regionEdge: sRegionEdge,
+    },
   };
 }

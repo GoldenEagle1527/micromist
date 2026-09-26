@@ -31,7 +31,7 @@
  * field.bounds) skip noise, and the field's vertical smoothing is assembled from
  * raw lattice rows (no extra noise evaluations).
  */
-import type { DensityField } from "./density";
+import { ALL_REGIONS_MASK, type DensityField } from "./density";
 import { CORNER_OFFSETS, EDGE_CORNER_A, EDGE_CORNER_B, TRI_TABLE } from "./tables";
 import { buildColumnTerrainInfo, createLineSampler } from "./terrainInfoGen";
 import type { ChunkTerrainInfo } from "./terrainInfo";
@@ -69,9 +69,37 @@ export type ColumnMeshData = {
  */
 export type RowPlan = { py: number; rowKind: Uint8Array; rowFill: Float64Array; rowSkip: Uint8Array };
 
-const planCache = new WeakMap<DensityField, RowPlan>();
-export function columnRowPlan(field: DensityField, rows: ColumnRows): RowPlan {
-  const cached = planCache.get(field);
+const planCache = new WeakMap<DensityField, Map<number, RowPlan>>();
+const maskCache = new WeakMap<DensityField, Map<string, number>>();
+
+/**
+ * Regions (bitmask) that can have non-zero weight anywhere a column's job reads
+ * the field: its padded footprint plus the floater-search window. The column's
+ * row plan uses only these regions' bounds, so rows that are always rock / water
+ * *here* are skipped even though another region (e.g. the deep trench) needs them.
+ */
+export function columnRegionMask(field: DensityField, cx: number, cz: number): number {
+  let m = maskCache.get(field);
+  if (!m) maskCache.set(field, (m = new Map()));
+  const key = `${cx},${cz}`;
+  const hit = m.get(key);
+  if (hit !== undefined) return hit;
+  const s = field.settings;
+  const n = s.numPointsPerAxis;
+  const sp = latticeSpacing(field);
+  const Mi = Math.max(1, Math.ceil(s.floaterMargin / sp)) + 2;
+  const x0 = latticeCoord(cx * (n - 1) - 1 - Mi, field), x1 = latticeCoord(cx * (n - 1) + n + Mi, field);
+  const z0 = latticeCoord(cz * (n - 1) - 1 - Mi, field), z1 = latticeCoord(cz * (n - 1) + n + Mi, field);
+  const mask = field.regions.maskInRect(x0, z0, x1, z1);
+  if (m.size > 20000) m.clear();
+  m.set(key, mask);
+  return mask;
+}
+
+export function columnRowPlan(field: DensityField, rows: ColumnRows, mask = ALL_REGIONS_MASK): RowPlan {
+  let byMask = planCache.get(field);
+  if (!byMask) planCache.set(field, (byMask = new Map()));
+  const cached = byMask.get(mask);
   if (cached && cached.py === rows.gjMax - rows.gjMin + 3) return cached;
   const iso = field.settings.isoLevel;
   const sp = latticeSpacing(field);
@@ -81,7 +109,7 @@ export function columnRowPlan(field: DensityField, rows: ColumnRows): RowPlan {
   const rowKind = new Uint8Array(py);
   const bnd = new Float64Array(2);
   for (let j = 0; j < py; j++) {
-    field.bounds(y0 + (j - 1) * sp, bnd);
+    field.boundsForMask(mask, y0 + (j - 1) * sp, bnd);
     if (bnd[1] < iso) {
       rowKind[j] = 1;
       rowFill[j] = bnd[1];
@@ -105,7 +133,7 @@ export function columnRowPlan(field: DensityField, rows: ColumnRows): RowPlan {
     rowSkip[j] = ok ? 1 : 0;
   }
   const plan = { py, rowKind, rowFill, rowSkip };
-  planCache.set(field, plan);
+  byMask.set(mask, plan);
   return plan;
 }
 
@@ -183,6 +211,8 @@ export function generateColumnMesh(
   debugRemoved?: number[],
   /** Also build the terrain classification (ChunkTerrainInfo). Default true. */
   withInfo = true,
+  /** Debug/test: final padded density grid after floater removal (index (k·py + j)·px + i, padding 1). */
+  debugGrid?: (dens: Float32Array, px: number, py: number, pz: number) => void,
 ): ColumnMeshData {
   const s = field.settings;
   const iso = s.isoLevel;
@@ -206,7 +236,9 @@ export function generateColumnMesh(
 
   // Row classification: 0 = sample, 1 = always water, 2 = always solid (hard).
   // rowFill: value written into skipped rows (a bound, so its side of iso is right).
-  const plan = columnRowPlan(field, rows);
+  // The window mask covers floaterMargin = settings.floaterMargin; a larger margin falls back to all regions.
+  const mask = floaterMargin <= s.floaterMargin ? columnRegionMask(field, cx, cz) : ALL_REGIONS_MASK;
+  const plan = columnRowPlan(field, rows, mask);
   const { rowFill, rowKind, rowSkip } = plan;
 
   // field.sample is a vertical binomial blur of sampleRaw with taps K rows
@@ -224,12 +256,15 @@ export function generateColumnMesh(
   const state = new Uint8Array(size);
   for (let k = 0; k < pz; k++) {
     const wz = z0 + (k - 1) * sp;
-    for (let r = 0; r < py + 2 * R; r++) {
-      if (!rawNeed[r]) continue;
-      const wy = y0 + (r - R - 1) * sp;
-      const o = r * px;
-      for (let i = 0; i < px; i++) raw[o + i] = field.sampleRaw(x0 + (i - 1) * sp, wy, wz);
-      stats.noiseSamples += px;
+    // x/z outer, y inner: consecutive samples share (x, z), so the field's
+    // per-(x, z) region context is computed once per lattice line.
+    for (let i = 0; i < px; i++) {
+      const wx = x0 + (i - 1) * sp;
+      for (let r = 0; r < py + 2 * R; r++) {
+        if (!rawNeed[r]) continue;
+        raw[r * px + i] = field.sampleRaw(wx, y0 + (r - R - 1) * sp, wz);
+        stats.noiseSamples++;
+      }
     }
     for (let j = 0; j < py; j++) {
       const row = (k * py + j) * px;
@@ -253,12 +288,15 @@ export function generateColumnMesh(
   let sp_ = 0;
   for (let j = 0; j < py; j++) {
     if (rowKind[j] !== 2) continue;
+    // Rows whose neighbours are hard too are all rock: mark them without
+    // flooding (the flood from boundary hard rows reaches everything else).
+    const seed = !(j > 0 && rowKind[j - 1] === 2 && j + 1 < py && rowKind[j + 1] === 2);
     for (let k = 0; k < pz; k++) {
       for (let i = 0; i < px; i++) {
         const idx = (k * py + j) * px + i;
         if (state[idx] === SOLID) {
           state[idx] = KEEP;
-          stack[sp_++] = idx;
+          if (seed) stack[sp_++] = idx;
         }
       }
     }
@@ -422,6 +460,8 @@ export function generateColumnMesh(
     }
   }
 
+  if (debugGrid) debugGrid(dens, px, py, pz);
+
   // --- 3. gradient normals + marching cubes ----------------------------------
   // The field is continuous, so a plain central difference on the grid works.
   const gradAt = (i: number, j: number, k: number, out: Float32Array, o: number) => {
@@ -533,8 +573,9 @@ export function generateColumnMesh(
     let occ = 0;
     for (let q = 0; q < AO_STEPS.length; q++) {
       const t = AO_STEPS[q];
-      // Unsmoothed field: AO is a heuristic, and this keeps it at 1 noise eval per tap.
-      const d = field.sampleRaw(positions[o] + normals[o] * t, positions[o + 1] + normals[o + 1] * t, positions[o + 2] + normals[o + 2] * t);
+      // Unsmoothed field with lattice-snapped region context: AO is a heuristic,
+      // and this keeps it at 1 noise eval per tap.
+      const d = field.sampleRawCoarse(positions[o] + normals[o] * t, positions[o + 1] + normals[o + 1] * t, positions[o + 2] + normals[o + 2] * t);
       const expected = g * t; // iso - d on a plane
       occ += AO_WEIGHTS[q] * Math.min(1, Math.max(0, 1 - (iso - d) / expected));
     }
@@ -546,7 +587,7 @@ export function generateColumnMesh(
     const t0 = performance.now();
     info = buildColumnTerrainInfo({
       field, rows, cx, cz, dens, px, py, positions, normals, ao,
-      sampler: createLineSampler(field, rows, plan),
+      sampler: createLineSampler(field, rows),
       floaterFree: stats.floaters === 0,
     });
     infoMs = performance.now() - t0;

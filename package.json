@@ -16,6 +16,7 @@
     "check": "tsc -b --pretty false",
     "typecheck": "tsc -b --pretty false",
     "test:terrain-info": "esbuild scripts/deep-march-terrain-info-test.ts --bundle --platform=node --outfile=node_modules/.cache/dm-terrain-info-test.cjs --log-level=warning && node node_modules/.cache/dm-terrain-info-test.cjs",
+    "test:regions": "esbuild scripts/deep-march-regions-test.ts --bundle --platform=node --outfile=node_modules/.cache/dm-regions-test.cjs --log-level=warning && node node_modules/.cache/dm-regions-test.cjs",
     "cf-typegen": "wrangler types --include-runtime false",
     "deploy:staging": "npm run build && node scripts/patch-staging-wrangler.mjs && wrangler deploy"
   },
