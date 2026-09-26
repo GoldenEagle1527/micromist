@@ -59,7 +59,7 @@ export type RegionSample = {
   id: number;
   /** Weight of the dominant region (1 = region core, 0.5 = on the border). */
   dominant: number;
-  /** Approximate distance (units) to the nearest border with another region (≥ 0; capped at 255). */
+  /** Approximate distance (units) to the nearest border with another region (≥ 0; capped at 255 base units). */
   edge: number;
   /** Per-site data of the blending sites (for site-specific shapes, e.g. canyon axis). */
   sites: number;
@@ -338,4 +338,25 @@ export function createRegionField(seed: number): RegionField {
   const f: RegionField = { seed, sample, regionAt, maskInRect, coresOf, spawnRegion };
   fieldCache.set(seed, f);
   return f;
+}
+
+/**
+ * The same regions in world coordinates of a world scaled by S (density.ts
+ * worldScale): positions are divided by S on the way in, distances multiplied
+ * on the way out (edge, cores).
+ */
+export function scaleRegionField(base: RegionField, S: number): RegionField {
+  const inv = 1 / S;
+  return {
+    seed: base.seed,
+    sample: (x, z, out) => {
+      base.sample(x * inv, z * inv, out);
+      out.edge *= S;
+      return out;
+    },
+    regionAt: (x, z) => base.regionAt(x * inv, z * inv),
+    maskInRect: (x0, z0, x1, z1) => base.maskInRect(x0 * inv, z0 * inv, x1 * inv, z1 * inv),
+    coresOf: (r, max) => base.coresOf(r, max).map((c) => ({ x: c.x * S, z: c.z * S, edge: c.edge * S })),
+    spawnRegion: base.spawnRegion,
+  };
 }

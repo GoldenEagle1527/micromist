@@ -25,6 +25,12 @@
  * thinner than the kernel vanish and shelf rims come out blunt. h is a whole
  * number of lattice cells so the mesher computes `final` exactly from its raw rows.
  *
+ * World scale (settings.worldScale = S): the public samplers evaluate everything
+ * above at p / S and return iso + S·(value − iso), so the world is S× larger in
+ * every direction with unchanged density gradients; octaves beyond the reference 8
+ * restore the fine detail at the diver's scale. The vertical smoothing and the
+ * lattice stay in world units.
+ *
  * Bounds: each region's D_r has analytic per-y bounds; since raw is a convex
  * combination, [min_r lo_r, max_r hi_r] over the regions present is a valid
  * bound. `bounds(y)` uses all regions (global, for the column height);
@@ -33,13 +39,13 @@
 import type { TerrainSettings } from "./config";
 import { createSimplex3, mulberry32 } from "./noise";
 import { REGION_PARAMS, type RegionParams } from "./regionParams";
-import { REGION, REGION_COUNT, createRegionField, createRegionSample, type RegionField } from "./regions";
+import { REGION, REGION_COUNT, createRegionField, createRegionSample, scaleRegionField, type RegionField } from "./regions";
 
 export type DensityField = {
   settings: TerrainSettings;
   /** World seed the field was built from (for deterministic per-position hashing). */
   seed: number;
-  /** Macro regions driving the field (pure function of seed + x, z). */
+  /** Macro regions driving the field (pure function of seed + x, z; world coordinates). */
   regions: RegionField;
   /** Full density at a world position (vertically smoothed; this is the terrain). */
   sample: (x: number, y: number, z: number) => number;
@@ -59,6 +65,8 @@ export type DensityField = {
   bounds: (y: number, out: Float64Array) => void;
   /** Conservative [min, max] of sample over every (x, z) whose non-zero regions are within `mask`. */
   boundsForMask: (mask: number, y: number, out: Float64Array) => void;
+  /** Same for sampleRaw (no vertical smoothing; used by the coarse LOD meshes). */
+  rawBoundsForMask: (mask: number, y: number, out: Float64Array) => void;
   /** Gradient pointing toward solid (central difference; the field is continuous). */
   gradient: (x: number, y: number, z: number, out: Float64Array, h?: number) => void;
 };
@@ -105,18 +113,27 @@ export function createDensityField(seed: number, s: TerrainSettings, params: rea
   const snoise = createSimplex3(seed);
   // Reference: System.Random(seed) → per-octave offsets in ±1000.
   const rand = mulberry32(seed);
-  const offs = new Float64Array(s.octaves * 3);
-  for (let i = 0; i < offs.length; i++) offs[i] = (rand() * 2 - 1) * 1000;
+  const offs = new Float64Array(Math.max(8, s.octaves) * 3);
+  for (let i = 0; i < 24; i++) offs[i] = (rand() * 2 - 1) * 1000;
   // Extra offsets for the warp / layering / erosion fields (drawn after the
   // reference offsets so the ridged octaves keep their original placement).
   const ex = new Float64Array(8 * 3);
   for (let i = 0; i < ex.length; i++) ex[i] = (rand() * 2 - 1) * 1000;
+  // Octaves beyond the reference 8 (fine detail of the scaled world) draw after those.
+  for (let i = 24; i < offs.length; i++) offs[i] = (rand() * 2 - 1) * 1000;
   // Region-term offsets (separate stream: the reference offsets above are unchanged).
   const rrand = mulberry32(seed ^ 0x3c6ef372);
   const ro = new Float64Array(32);
   for (let i = 0; i < ro.length; i++) ro[i] = (rrand() * 2 - 1) * 1000;
   const [ox, oy, oz] = s.offset;
-  const regions = createRegionField(seed);
+  // World scale: the whole field is evaluated at p / S ("base" coordinates) and its
+  // values are stretched around iso by S, so every shape is S× larger while density
+  // gradients (normals, AO, collision, thin-sheet smoothing) keep their magnitude.
+  const S = s.worldScale;
+  const invS = 1 / S;
+  const iso = s.isoLevel;
+  const baseRegions = createRegionField(seed);
+  const regions = S === 1 ? baseRegions : scaleRegionField(baseRegions, S);
 
   const fw = s.warpFrequency;
   const Wv = s.warpVertical;
@@ -298,7 +315,7 @@ export function createDensityField(seed: number, s: TerrainSettings, params: rea
     lastZ = z;
     lastSlot = slot;
     if (cX[slot] === x && cZ[slot] === z) return slot;
-    regions.sample(x, z, rs);
+    baseRegions.sample(x, z, rs);
     hsum.fill(0);
     for (let i = 0; i < rs.sites; i++) {
       const r = rs.siteRegion[i];
@@ -349,8 +366,22 @@ export function createDensityField(seed: number, s: TerrainSettings, params: rea
   const latSp = s.boundsSize / (s.numPointsPerAxis - 1);
   const latH = s.boundsSize / 2;
   const snap = (v: number) => -latH + Math.round((v + latH) / latSp) * latSp;
-  const sampleRawCoarse = (x: number, y: number, z: number) => evalRaw(ctx(snap(x), snap(z)), x, y, z);
-  const sampleRaw = (x: number, y: number, z: number) => evalRaw(ctx(x, z), x, y, z);
+  // Public samplers take world coordinates; evalRaw / ctx work in base coordinates (p / S;
+  // S is a power of two, so the division is exact and the per-(x, z) cache keys stay exact).
+  const sampleRawCoarse =
+    S === 1
+      ? (x: number, y: number, z: number) => evalRaw(ctx(snap(x), snap(z)), x, y, z)
+      : (x: number, y: number, z: number) => {
+          const bx = snap(x) * invS, bz = snap(z) * invS;
+          return iso + S * (evalRaw(ctx(bx, bz), x * invS, y * invS, z * invS) - iso);
+        };
+  const sampleRaw =
+    S === 1
+      ? (x: number, y: number, z: number) => evalRaw(ctx(x, z), x, y, z)
+      : (x: number, y: number, z: number) => {
+          const bx = x * invS, bz = z * invS;
+          return iso + S * (evalRaw(ctx(bx, bz), bx, y * invS, bz) - iso);
+        };
   const evalRaw = (slot: number, x: number, y: number, z: number): number => {
     const W = cWarp[slot];
     // --- domain warp ---
@@ -486,9 +517,9 @@ export function createDensityField(seed: number, s: TerrainSettings, params: rea
       if (!(mask & (1 << r))) continue;
       let lo = 0, hi = 0;
       for (let i = 0; i < SW.length; i++) {
-        regionRawBounds(r, y + (i - half) * hs, tb);
-        lo += SW[i] * tb[0];
-        hi += SW[i] * tb[1];
+        regionRawBounds(r, (y + (i - half) * hs) * invS, tb);
+        lo += SW[i] * (iso + S * (tb[0] - iso));
+        hi += SW[i] * (iso + S * (tb[1] - iso));
       }
       if (lo < LO) LO = lo;
       if (hi > HI) HI = hi;
@@ -497,6 +528,18 @@ export function createDensityField(seed: number, s: TerrainSettings, params: rea
     out[1] = HI;
   };
   const bounds = (y: number, out: Float64Array) => boundsForMask(ALL_REGIONS_MASK, y, out);
+  const rawBoundsForMask = (mask: number, y: number, out: Float64Array) => {
+    let LO = Infinity, HI = -Infinity;
+    for (let r = 0; r < R6; r++) {
+      if (!(mask & (1 << r))) continue;
+      regionRawBounds(r, y * invS, tb);
+      const lo = iso + S * (tb[0] - iso), hi = iso + S * (tb[1] - iso);
+      if (lo < LO) LO = lo;
+      if (hi > HI) HI = hi;
+    }
+    out[0] = LO;
+    out[1] = HI;
+  };
 
   const gradient = (x: number, y: number, z: number, out: Float64Array, h = 0.1) => {
     const inv = 1 / (2 * h);
@@ -505,5 +548,5 @@ export function createDensityField(seed: number, s: TerrainSettings, params: rea
     out[2] = (sample(x, y, z + h) - sample(x, y, z - h)) * inv;
   };
 
-  return { settings: s, seed, regions, sample, sampleRaw, sampleRawCoarse, smoothStep, smoothWeights: SW, bounds, boundsForMask, gradient };
+  return { settings: s, seed, regions, sample, sampleRaw, sampleRawCoarse, smoothStep, smoothWeights: SW, bounds, boundsForMask, rawBoundsForMask, gradient };
 }

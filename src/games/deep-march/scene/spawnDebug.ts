@@ -109,11 +109,11 @@ export class SpawnDebugView {
     this.regionLine.style.borderColor = REGION_COLORS[r.id];
     const ctx = this.mapCtx;
     if (!ctx) return;
-    if (!this.mapImage || Math.hypot(x - this.mapX, z - this.mapZ) > 6) {
+    if (!this.mapImage || Math.hypot(x - this.mapX, z - this.mapZ) > 6 * this.store.scale) {
       this.mapX = x;
       this.mapZ = z;
       const img = this.mapImage ?? ctx.createImageData(MAP_PX, MAP_PX);
-      const k = (2 * MAP_RANGE) / MAP_PX;
+      const k = (2 * MAP_RANGE * this.store.scale) / MAP_PX; // map range scales with the world
       for (let py = 0; py < MAP_PX; py++) {
         for (let px = 0; px < MAP_PX; px++) {
           const s = this.regions.sample(x + (px + 0.5 - MAP_PX / 2) * k, z + (py + 0.5 - MAP_PX / 2) * k, this.rs);
@@ -183,8 +183,9 @@ export class SpawnDebugView {
     this.store.forEachSpawn((info, k) => {
       const p = info.spawn.pos;
       const s = info.spawn.nrm;
+      const W = this.store.scale; // stored in base units
       // lift a little off the surface along the normal so markers aren't buried
-      m.makeTranslation(p[k * 3] + (s[k * 3] / 127) * 0.08, p[k * 3 + 1] + (s[k * 3 + 1] / 127) * 0.08, p[k * 3 + 2] + (s[k * 3 + 2] / 127) * 0.08);
+      m.makeTranslation(p[k * 3] * W + (s[k * 3] / 127) * 0.3, p[k * 3 + 1] * W + (s[k * 3 + 1] / 127) * 0.3, p[k * 3 + 2] * W + (s[k * 3 + 2] / 127) * 0.3);
       this.mesh!.setMatrixAt(i, m);
       this.mesh!.setColorAt(i, this.colors[info.spawn.type[k]]);
       i++;

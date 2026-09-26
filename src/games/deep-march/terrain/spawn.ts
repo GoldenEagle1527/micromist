@@ -5,15 +5,19 @@
  *
  * Search (pure function of the density field):
  *   1. cores of the spawn region nearest the origin (regions.coresOf), up to 4;
- *   2. columns at the core and on rings of 7 / 14 / 21 units (region weight ≥ 0.99);
- *   3. vertical scan of each column (0.5 u) → water runs; candidate eye height a
- *      little above the run's floor (cave warren: the middle of the run — a chamber);
+ *   2. columns at the core and on rings of 7 / 14 / 21 base units (× worldScale;
+ *      region weight ≥ 0.99);
+ *   3. vertical scan of each column (0.5 u) over the whole water band → water runs;
+ *      candidate eye height a little above the run's floor (up to 2.6 base units)
+ *      (cave warren: the middle of the run — a chamber);
  *   4. clearance probe: 26 rays (cube directions), rock distance up to 8 u:
  *        clearance = min reach, openness = mean reach, exits = horizontal rays
  *        reaching ≥ 6 u (a tunnel dead end has ≤ 1);
  *      accepted when clearance ≥ 1.8, exits ≥ 2 and openness ≥ 3.5; best score
  *      wins, the search stops at the first core with an accepted spot;
- *   5. yaw faces the longest horizontal sightline (16 directions, capped at 30 u,
+ *   Clearance / exits are diver-scale (world units), everything else scales with
+ *   the world.
+ *   5. yaw faces the longest horizontal sightline (16 directions, capped at 30 base u,
  *      ties broken toward the farthest seabed 15° below the horizon).
  * Falls back to the next region if a region has no acceptable spot (never seen
  * in tests), and finally to the most open probed point.
@@ -38,6 +42,7 @@ export function findSpawn(field: DensityField): SpawnSpot {
   const hit = cache.get(field);
   if (hit) return hit;
   const iso = field.settings.isoLevel;
+  const W = field.settings.worldScale;
   const solid = (x: number, y: number, z: number) => field.sample(x, y, z) >= iso;
   const rs = createRegionSample();
   const reach = (x: number, y: number, z: number, dx: number, dy: number, dz: number, max: number, step: number) => {
@@ -64,23 +69,24 @@ export function findSpawn(field: DensityField): SpawnSpot {
         const nDir = ring === 0 ? 1 : 8;
         for (let a = 0; a < nDir; a++) {
           const ang = (a / nDir) * Math.PI * 2;
-          const x = core.x + Math.cos(ang) * ring * 7, z = core.z + Math.sin(ang) * ring * 7;
+          const x = core.x + Math.cos(ang) * ring * 7 * W, z = core.z + Math.sin(ang) * ring * 7 * W;
           field.regions.sample(x, z, rs);
           if (rs.w[region] < 0.99) continue;
           // water runs of this column
           let runStart = NaN;
-          for (let y = -32; y <= 24; y += 0.5) {
+          const yTop = 24 * W;
+          for (let y = -32 * W; y <= yTop; y += 0.5) {
             const water = !solid(x, y, z);
             if (water && Number.isNaN(runStart)) runStart = y;
-            if ((!water || y >= 24) && !Number.isNaN(runStart)) {
+            if ((!water || y >= yTop) && !Number.isNaN(runStart)) {
               const gap = y - runStart;
               runStart = NaN;
               if (gap < 3.6) continue;
-              const cy = region === REGION.CAVE ? y - gap / 2 : y - gap + Math.min(gap / 2, 2.6);
+              const cy = region === REGION.CAVE ? y - gap / 2 : y - gap + Math.min(gap / 2, 2.6 * W);
               const p = probe(x, cy, z);
               const ok = p.clearance >= 1.8 && p.exits >= 2 && p.openness >= 3.5;
               // canyon belt: prefer the trench floor over the plateau top
-              const low = region === REGION.CANYON ? -0.6 * cy : 0;
+              const low = region === REGION.CANYON ? (-0.6 * cy) / W : 0;
               const score = Math.min(p.clearance, 4) * 3 + p.openness + p.exits * 0.5 + low + (ok ? 100 : 0);
               const spot = { x, y: cy, z, yaw: 0, region, clearance: p.clearance, exits: p.exits };
               if (score > bestScore) {
@@ -99,7 +105,7 @@ export function findSpawn(field: DensityField): SpawnSpot {
       if (best && bestScore >= 100) return finish(best);
     }
   }
-  return finish(fallback ?? { x: 0, y: 5, z: 0, yaw: 0, region: start, clearance: 0, exits: 0 });
+  return finish(fallback ?? { x: 0, y: 5 * W, z: 0, yaw: 0, region: start, clearance: 0, exits: 0 });
 
   function finish(s: SpawnSpot): SpawnSpot {
     // face the longest horizontal sightline: forward = (−sin yaw, 0, −cos yaw)
@@ -108,7 +114,7 @@ export function findSpawn(field: DensityField): SpawnSpot {
       const yaw = (a / 16) * Math.PI * 2;
       const fx = -Math.sin(yaw), fz = -Math.cos(yaw);
       // long open sightline, preferring one that still shows the seabed / walls ahead
-      const r = Math.min(30, reach(s.x, s.y, s.z, fx, 0, fz, 40, 1)) + 0.3 * reach(s.x, s.y, s.z, fx * 0.966, -0.259, fz * 0.966, 40, 1);
+      const r = Math.min(30 * W, reach(s.x, s.y, s.z, fx, 0, fz, 40 * W, W)) + 0.3 * reach(s.x, s.y, s.z, fx * 0.966, -0.259, fz * 0.966, 40 * W, W);
       if (r > bestR + 1e-9) {
         bestR = r;
         bestYaw = yaw;

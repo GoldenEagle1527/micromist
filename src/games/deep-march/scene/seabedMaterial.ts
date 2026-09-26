@@ -8,8 +8,14 @@
  * - Material weights from slope (up-facing → sand/gravel, steep → rock/moss,
  *   overhangs → dark cave rock), height and world-space noise; macro colour
  *   variation + a second, rotated sampling scale on rock to hide tiling.
- * - Per-vertex AO attribute (from the mesher), animated caustics from above,
- *   blue-green absorption with distance before the regular fog.
+ * - Per-vertex AO attribute (from the mesher), animated caustics from above.
+ * - Water for a vast scale (replaces three's fog): blue-green absorption over the
+ *   first tens of units, then in-scattering haze toward a *darker* version of the
+ *   water colour behind the surface (WATER_GLSL: bright above, black below), so
+ *   distant masses read as dark silhouettes that resolve as the diver approaches;
+ *   in the last stretch before the view distance everything fades into the open
+ *   water colour itself (no popping at the LOD edge). The background dome
+ *   (world.ts) draws the same water colour.
  */
 import * as THREE from "three";
 
@@ -45,8 +51,46 @@ const URLS = {
   },
 } as const;
 
+/** Shared water / haze uniforms (terrain material + background dome). Colours are linear. */
+export type WaterUniforms = {
+  uWaterTop: { value: THREE.Color };
+  uWaterHorizon: { value: THREE.Color };
+  uWaterBottom: { value: THREE.Color };
+  /** In-scattering density per unit (haze = 1 − exp(−d·uHaze)). */
+  uHaze: { value: number };
+  /** Silhouette brightness relative to the open water behind (≤ 1). */
+  uSil: { value: number };
+  /** View distance: fade into the open water over the last 28 %. */
+  uFar: { value: number };
+};
+
+/** Open-water colour seen along a view direction (bright toward the surface, black below). */
+export const WATER_GLSL = /* glsl */ `
+uniform vec3 uWaterTop; uniform vec3 uWaterHorizon; uniform vec3 uWaterBottom;
+uniform float uHaze; uniform float uSil; uniform float uFar;
+vec3 dmWater(vec3 dir) {
+  float y = dir.y;
+  return y >= 0.0 ? mix(uWaterHorizon, uWaterTop, pow(y, 0.8)) : mix(uWaterHorizon, uWaterBottom, pow(-y, 0.55));
+}
+`;
+
+export function createWaterUniforms(horizon: THREE.Color, far: number): WaterUniforms {
+  return {
+    uWaterTop: { value: horizon.clone().multiplyScalar(2.1) },
+    uWaterHorizon: { value: horizon.clone() },
+    uWaterBottom: { value: horizon.clone().multiplyScalar(0.06) },
+    uHaze: { value: 0.016 },
+    uSil: { value: 0.38 },
+    uFar: { value: far },
+  };
+}
+
 export type SeabedOptions = {
   lowSpec: boolean;
+  /** Shared water uniforms (createWaterUniforms). */
+  water: WaterUniforms;
+  /** World scale (terrain shapes are this much larger than the base design). */
+  worldScale: number;
   anisotropy: number;
   /** Called when all textures finished loading (or failed). */
   onReady?: () => void;
@@ -59,6 +103,7 @@ export type SeabedMaterial = {
 };
 
 const DECLS = /* glsl */ `
+uniform float uWS;
 uniform sampler2D tSandA; uniform sampler2D tSandN;
 uniform sampler2D tGravelA; uniform sampler2D tGravelN;
 uniform sampler2D tRockA; uniform sampler2D tRockN;
@@ -152,7 +197,7 @@ const MAP_FRAGMENT = /* glsl */ `
   float ceilW = smoothstep(-0.25, -0.65, up);
   float wallW = max(0.0, 1.0 - floorW - ceilW);
   // gravel collects in low spots and near walls, sand on open flats
-  float gravelMask = smoothstep(0.42, 0.62, nA + (1.0 - floorW) * 0.15 - (wp.y - 2.0) * 0.015);
+  float gravelMask = smoothstep(0.42, 0.62, nA + (1.0 - floorW) * 0.15 - (wp.y / uWS - 2.0) * 0.015);
   // moss / algae on gently sloped, lit rock and ledges, patchy
   float mossMask = smoothstep(0.45, 0.7, nB * 0.7 + nA * 0.3 + up * 0.35) * (1.0 - ceilW);
   float wSand = floorW * (1.0 - gravelMask);
@@ -201,9 +246,10 @@ const MAP_FRAGMENT = /* glsl */ `
   float luma = dot(albedo, vec3(0.299, 0.587, 0.114));
   albedo = mix(vec3(luma), albedo, 0.72);                       // desaturate a bit
   albedo *= mix(vec3(1.0), uCeilingTint, ceilW);                 // dark cave ceiling
-  albedo *= mix(0.72, 1.12, dmFbm(wp * 0.035 + 71.0));           // macro variation
+  albedo *= mix(0.72, 1.12, dmFbm(wp * (0.035 / uWS) + 71.0));   // macro variation (scales with the world)
+  albedo *= mix(0.85, 1.08, dmFbm(wp * 0.05 + 13.0));            // and at the diver's scale
   albedo *= mix(vec3(1.0), vec3(0.86, 0.95, 0.9), smoothstep(0.4, 0.8, nA) * floorW); // silt tint
-  albedo *= mix(0.8, 1.0, smoothstep(-8.0, 6.0, wp.y));          // deeper = darker sediment
+  albedo *= mix(0.62, 1.0, smoothstep(-24.0 * uWS, 6.0 * uWS, wp.y)); // deeper = darker sediment
   diffuseColor.rgb *= albedo;
 
   // ---- normals (whiteout triplanar) + roughness --------------------------
@@ -255,12 +301,15 @@ export function createSeabedMaterial(opts: SeabedOptions): SeabedMaterial {
     tMossN: { value: load(urls.moss[1], false) },
     uTime: { value: 0 },
     // per-unit absorption (red goes first) — close surfaces keep true colour
-    uAbsorb: { value: new THREE.Vector3(0.075, 0.03, 0.018) },
+    uAbsorb: { value: new THREE.Vector3(0.06, 0.024, 0.014) },
     uCausticColor: { value: new THREE.Color(0.55, 0.85, 0.95).multiplyScalar(0.55) },
     uCeilingTint: { value: new THREE.Color(0.55, 0.58, 0.64) },
+    uWS: { value: opts.worldScale },
+    ...opts.water,
   };
 
   const material = new THREE.MeshStandardMaterial({ roughness: 1, metalness: 0 });
+  material.fog = false; // own water model (see header)
   material.defines = opts.lowSpec ? { DM_LOW_SPEC: "" } : {};
   material.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, uniforms);
@@ -274,7 +323,7 @@ export function createSeabedMaterial(opts: SeabedOptions): SeabedMaterial {
         "#include <project_vertex>\n  vWPos = (modelMatrix * vec4(transformed, 1.0)).xyz;\n  vWNrm = normalize(mat3(modelMatrix) * objectNormal);\n  vAO = ao;",
       );
     shader.fragmentShader = shader.fragmentShader
-      .replace("#include <common>", "#include <common>\n" + DECLS)
+      .replace("#include <common>", "#include <common>\n" + DECLS + WATER_GLSL)
       .replace("#include <map_fragment>", MAP_FRAGMENT)
       .replace("#include <roughnessmap_fragment>", "float roughnessFactor = clamp(mix(0.55, 1.0, dmRough), 0.3, 1.0);")
       .replace(
@@ -289,7 +338,7 @@ export function createSeabedMaterial(opts: SeabedOptions): SeabedMaterial {
     float camDist = length(vWPos - cameraPosition);
     float facing = pow(clamp(dmWorldNormal.y, 0.0, 1.0), 1.5);
     float c = dmCaustics(vWPos.xz * 0.42, uTime * 0.9);
-    float fade = (1.0 - smoothstep(10.0, 30.0, camDist)) * smoothstep(-10.0, 4.0, vWPos.y);
+    float fade = (1.0 - smoothstep(10.0, 30.0, camDist)) * smoothstep(-10.0 * uWS, 4.0 * uWS, vWPos.y);
     totalEmissiveRadiance += diffuseColor.rgb * uCausticColor * c * facing * fade * mix(0.4, 1.0, vAO);
   }`,
       )
@@ -303,12 +352,22 @@ export function createSeabedMaterial(opts: SeabedOptions): SeabedMaterial {
   }`,
       )
       .replace(
-        "#include <fog_fragment>",
+        "#include <opaque_fragment>",
         /* glsl */ `{
-    float dist = length(vWPos - cameraPosition);
-    gl_FragColor.rgb *= exp(-uAbsorb * dist);
+    vec3 dv = vWPos - cameraPosition;
+    float dist = length(dv);
+    vec3 dir = dv / max(dist, 1e-4);
+    vec3 water = dmWater(dir);
+    // absorption (red first) over the near range, then haze toward the silhouette tone
+    outgoingLight *= exp(-uAbsorb * min(dist, 28.0));
+    float haze = 1.0 - exp(-dist * uHaze);
+    // silhouette tone: darkest in the middle distance, lifting toward the open water far
+    // away, so masses emerge as faint shadows, darken into silhouettes, then resolve
+    float sil = mix(uSil, 1.0, smoothstep(uFar * 0.22, uFar * 0.95, dist));
+    outgoingLight = mix(outgoingLight, water * sil, haze);
+    outgoingLight = mix(outgoingLight, water, smoothstep(uFar * 0.8, uFar, dist));
   }
-  #include <fog_fragment>`,
+  #include <opaque_fragment>`,
       );
   };
   material.customProgramCacheKey = () => `deep-march-seabed-${opts.lowSpec ? "lo" : "hi"}`;
