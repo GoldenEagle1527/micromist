@@ -692,6 +692,39 @@ export function generateColumnMesh(
     }
   }
 
+  // --- 3b. fine-field normals on coarse levels ---------------------------------
+  // A coarse lattice's central differences only see the field at its own spacing:
+  // normals (and so the shader's floor / wall / moss split, triplanar weights and
+  // AO) came out different per level, and surfaces visibly changed material when a
+  // column swapped level. Re-derive them from the same field level 0 sees, at a
+  // step of level 0's spacing (coarser for the far rings, whose vertices are too
+  // sparse to carry that detail without speckle), so all levels shade alike.
+  if (lod > 0) {
+    const eps = Math.max(latticeSpacing(field), sp / 4);
+    const inv = 1 / eps;
+    const raw = field.sampleRaw;
+    for (let v = 0; v < vcount; v++) {
+      const o = v * 3;
+      const x = scratchPos[o], y = scratchPos[o + 1], z = scratchPos[o + 2];
+      // forward differences (4 evaluations instead of 6; the half-step offset is
+      // far below what shading can show)
+      const c = raw(x, y, z);
+      const gx = (raw(x + eps, y, z) - c) * inv;
+      const gy = (raw(x, y + eps, z) - c) * inv;
+      const gz = (raw(x, y, z + eps) - c) * inv;
+      const len = Math.hypot(gx, gy, gz);
+      if (!(len > 1e-6)) continue; // keep the lattice normal
+      // guard: never flip against the lattice normal (sub-cell features the coarse
+      // surface doesn't have would shade it inside out)
+      const dot = -(gx * scratchNrm[o] + gy * scratchNrm[o + 1] + gz * scratchNrm[o + 2]) / len;
+      if (dot < 0.2) continue;
+      scratchGrad[v] = len;
+      scratchNrm[o] = -gx / len;
+      scratchNrm[o + 1] = -gy / len;
+      scratchNrm[o + 2] = -gz / len;
+    }
+  }
+
   // --- 4. skirts --------------------------------------------------------------
   // Columns of different LOD levels do not share seam vertices, so tiny cracks can
   // open along a level change. Every triangle edge lying in a column side plane
