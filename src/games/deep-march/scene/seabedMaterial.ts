@@ -79,7 +79,7 @@ export function createWaterUniforms(horizon: THREE.Color, far: number): WaterUni
     uWaterTop: { value: horizon.clone().multiplyScalar(2.1) },
     uWaterHorizon: { value: horizon.clone() },
     uWaterBottom: { value: horizon.clone().multiplyScalar(0.06) },
-    uHaze: { value: 0.016 },
+    uHaze: { value: 0.012 },
     uSil: { value: 0.38 },
     uFar: { value: far },
   };

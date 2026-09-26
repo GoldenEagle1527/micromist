@@ -101,6 +101,8 @@ export function createDeepMarch(host: HTMLElement, opts: DeepMarchOptions): Deep
   // by a background dome; the terrain hazes toward a darker tone of the same colour, so
   // far masses loom as silhouettes and resolve as the diver closes in (seabedMaterial.ts).
   const fogColor = new THREE.Color().setRGB(SEA_COLORS.fog[0], SEA_COLORS.fog[1], SEA_COLORS.fog[2], THREE.SRGBColorSpace);
+  // darker overall so the head lamp carries the scene in a vast ocean
+  fogColor.multiplyScalar(0.42);
   const baseFog = fogColor.clone();
   let lastDeep = -1;
   const scene = new THREE.Scene();
@@ -138,9 +140,9 @@ void main() {
 
   // Down-welling light: teal sky fill from above, very dark from below,
   // plus a blue-green filtered "sun" from the surface.
-  const ambient = new THREE.HemisphereLight(0x3f86a6, 0x0a1426, 0.95);
+  const ambient = new THREE.HemisphereLight(0x3f86a6, 0x0a1426, 0.38);
   scene.add(ambient);
-  const sun = new THREE.DirectionalLight(new THREE.Color(0.55, 0.85, 1.0), 1.05);
+  const sun = new THREE.DirectionalLight(new THREE.Color(0.55, 0.85, 1.0), 0.4);
   sun.position.set(0.25, 1, 0.15);
   scene.add(sun);
 
@@ -219,7 +221,7 @@ void main() {
   }
   // First person: the camera is the diver's eyes; the head lamp rides just above them.
   const BASE_FOV = 70;
-  const lamp = new THREE.SpotLight(new THREE.Color(1, 0.95, 0.85), 8, 40, THREE.MathUtils.degToRad(30), 0.75, 1.3);
+  const lamp = new THREE.SpotLight(new THREE.Color(1, 0.95, 0.85), 26, 150, THREE.MathUtils.degToRad(32), 0.7, 1.1);
   // Source sits a little behind the eyes so a wall at arm's length doesn't blow out.
   lamp.position.set(0.04, 0.06, 0.35);
   lamp.target.position.set(0, -0.1, -5);
@@ -334,8 +336,8 @@ void main() {
       water.uWaterHorizon.value.copy(baseWater.horizon).multiplyScalar(1 - 0.72 * deep);
       water.uWaterTop.value.copy(baseWater.top).multiplyScalar(1 - 0.6 * deep);
       water.uWaterBottom.value.copy(baseWater.bottom).multiplyScalar(1 - 0.85 * deep);
-      ambient.intensity = 0.95 * (1 - 0.6 * deep);
-      sun.intensity = 1.05 * (1 - 0.75 * deep);
+      ambient.intensity = 0.38 * (1 - 0.6 * deep);
+      sun.intensity = 0.4 * (1 - 0.75 * deep);
     }
 
     hudTimer -= dt;
