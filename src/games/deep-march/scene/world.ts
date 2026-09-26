@@ -87,7 +87,8 @@ export function createDeepMarch(host: HTMLElement, opts: DeepMarchOptions): Deep
   const deviceRatio = window.devicePixelRatio || 1;
   const maxRatio = Math.min(deviceRatio, lowSpec ? 1.25 : 1.75);
   const pacer = new FramePacer({
-    maxFps: 60,
+    // phones / low-spec: 30 fps (half the GPU work and heat); desktop 60
+    maxFps: lowSpec ? 30 : 60,
     maxRatio,
     minRatio: Math.min(maxRatio, lowSpec ? 0.75 : 1.25),
     fixed: dprParam > 0 ? Math.min(dprParam, 3) : undefined,

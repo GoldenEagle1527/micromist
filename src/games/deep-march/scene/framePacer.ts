@@ -1,6 +1,6 @@
 /**
  * Frame pacing for the render loop:
- *  - caps rendering at `maxFps` (drift-corrected, so 120/144 Hz displays average 60);
+ *  - caps rendering at `maxFps` (drift-corrected: 60 on desktop, 30 on low-spec / mobile);
  *  - adaptive resolution: lowers the pixel ratio in steps when rendered frames can't
  *    hold the cap, raises it again once they hold it steadily (with a growing
  *    cooldown so it doesn't oscillate). A fixed ratio (?dpr=) disables adaptation.
