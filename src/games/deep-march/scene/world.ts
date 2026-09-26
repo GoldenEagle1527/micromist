@@ -11,6 +11,9 @@ import { InputController, type PanelInput } from "./input";
 import { MarineSnow } from "./particles";
 import { WATER_GLSL, createSeabedMaterial, createWaterUniforms } from "./seabedMaterial";
 import { DiverController, type DiverState } from "./diver";
+import { LampRig } from "./lampRig";
+import { NightVision } from "./nightVision";
+import { SURVIVAL_TUNING, createSurvival, type LightMode, type LightState } from "../survival";
 
 export type HudLabels = {
   chunks: string;
@@ -47,6 +50,8 @@ export type Telemetry = {
   /** Macro region under the diver (switches once the new region dominates, no flicker on borders). */
   region: RegionKey | null;
   lamp: boolean;
+  light: LightState;
+  battery: { value: number; capacity: number; ratio: number; rate: number; low: boolean };
   swimLatch: boolean;
   ready: boolean;
   /** Simulated ticks so far (20/s of sim time). */
@@ -65,6 +70,8 @@ export type DeepMarchHandle = {
   setLabels: (labels: HudLabels) => void;
   addLook: (dxPx: number, dyPx: number, touch: boolean) => void;
   toggleLamp: () => boolean;
+  /** Next available light mode (turns the light on). */
+  cycleLight: () => LightMode;
   toggleSwimLatch: () => boolean;
   telemetry: () => Telemetry;
 };
@@ -137,6 +144,11 @@ void main() {
   scene.add(dome);
 
   const camera = new THREE.PerspectiveCamera(70, 1, 0.05, terrain.viewDistance + 40);
+  // Survival layer (battery, gear, light modes) and the scene side of the lights.
+  const survival = createSurvival();
+  const lights = survival.lights;
+  const rig = new LampRig(camera);
+  const nightVision = new NightVision(renderer);
 
   // Down-welling light: teal sky fill from above, very dark from below,
   // plus a blue-green filtered "sun" from the surface.
@@ -151,12 +163,15 @@ void main() {
     lowSpec,
     water,
     worldScale: terrain.worldScale,
+    beam: rig.beam,
     anisotropy: Math.min(8, renderer.capabilities.getMaxAnisotropy()),
     onReady: () => {
       texturesReady = true;
     },
   });
   const terrainMat = seabed.material;
+  const baseAbsorb = seabed.absorb.clone();
+  const baseHaze = water.uHaze.value;
 
   const field = createDensityField(opts.seed, terrain);
   const chunks = new ChunkManager(scene, field, opts.seed, terrainMat);
@@ -219,15 +234,9 @@ void main() {
       diver.setView(((v[3] ?? 0) * Math.PI) / 180, ((v[4] ?? 0) * Math.PI) / 180);
     }
   }
-  // First person: the camera is the diver's eyes; the head lamp rides just above them.
+  // First person: the camera is the diver's eyes; the head lamp (LampRig) rides just above them.
   const BASE_FOV = 70;
-  const lamp = new THREE.SpotLight(new THREE.Color(1, 0.95, 0.85), 26, 150, THREE.MathUtils.degToRad(32), 0.7, 1.1);
-  // Source sits a little behind the eyes so a wall at arm's length doesn't blow out.
-  lamp.position.set(0.04, 0.06, 0.35);
-  lamp.target.position.set(0, -0.1, -5);
-  camera.add(lamp, lamp.target);
   scene.add(camera);
-  let lampOn = true;
 
   let fovMod = 1;
   let swimBlend = 0;
@@ -259,15 +268,21 @@ void main() {
   const snow = new MarineSnow(900, opts.seed);
   scene.add(snow.points);
 
-  const toggleLamp = () => {
-    lampOn = !lampOn;
-    lamp.visible = lampOn;
-    return lampOn;
-  };
+  // Optional start mode for screenshots: ?light=beam|high|night|off.
+  const lightParam = new URLSearchParams(window.location.search).get("light");
+  if (lightParam === "off") lights.setOn(false);
+  else if (lightParam === "beam" || lightParam === "high" || lightParam === "night") lights.select(lightParam);
+  const toggleLamp = () => lights.toggle();
+  const cycleLight = () => lights.cycle();
   const input = new InputController(renderer.domElement, {
     sensitivity: opts.sensitivity,
     invertY: opts.invertY,
     onLampToggle: toggleLamp,
+    onLightCycle: cycleLight,
+    onLightSelect: (i) => {
+      const m = lights.available()[i];
+      if (m) lights.select(m);
+    },
     onLockChange: () => updatePrompt(),
   });
   input.panelMode = opts.panel;
@@ -280,6 +295,8 @@ void main() {
     const w = Math.max(1, host.clientWidth);
     const h = Math.max(1, host.clientHeight);
     renderer.setSize(w, h, false);
+    const pr = renderer.getPixelRatio();
+    nightVision.setSize(Math.floor(w * pr), Math.floor(h * pr));
     camera.aspect = w / h;
     camera.updateProjectionMatrix();
   };
@@ -312,21 +329,15 @@ void main() {
       updatePrompt();
     }
     syncCamera(dt);
+    if (ready) survival.tick(dt);
+    camera.updateMatrixWorld();
+    rig.update(dt, lights.state(), !ready);
     chunks.update(diver.position, camera, dt);
     spawnDebug.update();
     snow.update(camera.position, dt);
     seabed.update(now / 1000);
 
-    renderer.render(scene, camera);
-
-    fpsFrames++;
-    fpsTime += rawDt; // real time, not the clamped sim step
-    if (fpsTime >= 0.5) {
-      fps = fpsFrames / fpsTime;
-      fpsFrames = 0;
-      fpsTime = 0;
-    }
-    // Deeper water is darker (toward the abyss): water, haze and light fade below y ≈ −8 base units.
+    // Lighting: depth-driven base (deeper = darker) × light-mode boosts (night vision, high beam).
     const W = terrain.worldScale;
     const deep = THREE.MathUtils.smoothstep(-camera.position.y, 8 * W, 26 * W);
     if (Math.abs(deep - lastDeep) > 0.002) {
@@ -336,10 +347,22 @@ void main() {
       water.uWaterHorizon.value.copy(baseWater.horizon).multiplyScalar(1 - 0.72 * deep);
       water.uWaterTop.value.copy(baseWater.top).multiplyScalar(1 - 0.6 * deep);
       water.uWaterBottom.value.copy(baseWater.bottom).multiplyScalar(1 - 0.85 * deep);
-      ambient.intensity = 0.38 * (1 - 0.6 * deep);
-      sun.intensity = 0.4 * (1 - 0.75 * deep);
     }
+    const env = rig.env;
+    ambient.intensity = 0.38 * (1 - 0.6 * deep) * env.ambient;
+    sun.intensity = 0.4 * (1 - 0.75 * deep) * env.sun;
+    water.uHaze.value = baseHaze * env.haze;
+    seabed.absorb.copy(baseAbsorb).multiplyScalar(env.absorb);
 
+    nightVision.render(scene, camera, rig.night, now / 1000);
+
+    fpsFrames++;
+    fpsTime += rawDt; // real time, not the clamped sim step
+    if (fpsTime >= 0.5) {
+      fps = fpsFrames / fpsTime;
+      fpsFrames = 0;
+      fpsTime = 0;
+    }
     hudTimer -= dt;
     if (hudTimer <= 0) {
       updateTerrainKind(0.25 - hudTimer);
@@ -368,6 +391,7 @@ void main() {
     },
     addLook: (dx, dy, touch) => input.addLookPx(dx, dy, touch),
     toggleLamp,
+    cycleLight,
     toggleSwimLatch: () => {
       input.panel.swimLatch = !input.panel.swimLatch;
       return input.panel.swimLatch;
@@ -381,7 +405,12 @@ void main() {
       contact: diver.contact,
       terrain: terrainKind,
       region: regionId >= 0 ? REGION_KEYS[regionId] : null,
-      lamp: lampOn,
+      lamp: lights.state().on,
+      light: lights.state(),
+      battery: (() => {
+        const b = survival.resources.view("battery");
+        return { value: b.value, capacity: b.capacity, ratio: b.ratio, rate: b.rate, low: b.ratio <= SURVIVAL_TUNING.battery.lowFraction };
+      })(),
       swimLatch: input.panel.swimLatch,
       ready,
       ticks: diver.totalTicks,
@@ -397,7 +426,9 @@ void main() {
       spawnDebug.dispose();
       chunks.dispose();
       snow.dispose();
-      lamp.dispose();
+      rig.dispose();
+      nightVision.dispose();
+      survival.dispose();
       seabed.dispose();
       dome.geometry.dispose();
       (dome.material as THREE.Material).dispose();

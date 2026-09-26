@@ -1,10 +1,14 @@
 /**
  * Bottom-right fan-shaped button cluster: annular sectors along a quarter arc
- * around the corner — Down / Up (hold), Swim (toggle latch), Lamp (toggle).
+ * around the corner — Down / Up (hold), Swim (toggle latch), Lamp (on/off),
+ * Mode (cycle beam / high beam / night vision; icon + label show the current mode).
  */
 import { useRef, useState, type PointerEvent as RPointerEvent, type ReactNode } from "react";
 import { arcPath, polar, sectorPath, ticksPath } from "./geom";
-import { IconDown, IconLamp, IconSwim, IconUp } from "./icons";
+import type { LightMode } from "../survival";
+import { IconBeam, IconDown, IconHighBeam, IconLamp, IconNightVision, IconSwim, IconUp } from "./icons";
+
+const MODE_ICON: Record<LightMode, ReactNode> = { beam: <IconBeam />, high: <IconHighBeam />, night: <IconNightVision /> };
 
 const VB = 240;
 const OX = VB;
@@ -17,7 +21,7 @@ const A1 = 360;
 const GAP = 1.6;
 
 type Btn = {
-  id: "down" | "up" | "swim" | "lamp";
+  id: "down" | "up" | "swim" | "lamp" | "mode";
   label: string;
   icon: ReactNode;
   kind: "hold" | "toggle";
@@ -27,6 +31,8 @@ type Btn = {
 export function ActionFan({
   labels,
   lampOn,
+  lampLocked,
+  lightMode,
   swimLatch,
   swimming,
   stateLabel,
@@ -34,14 +40,17 @@ export function ActionFan({
   onHold,
   onToggle,
 }: {
-  labels: { up: string; down: string; swim: string; lamp: string };
+  labels: { up: string; down: string; swim: string; lamp: string; mode: string };
   lampOn: boolean;
+  /** Battery flat: lamp can't switch on. */
+  lampLocked: boolean;
+  lightMode: LightMode;
   swimLatch: boolean;
   swimming: boolean;
   stateLabel: string;
   speed: number;
   onHold: (id: "up" | "down", on: boolean) => void;
-  onToggle: (id: "swim" | "lamp") => void;
+  onToggle: (id: "swim" | "lamp" | "mode") => void;
 }) {
   const [held, setHeld] = useState<{ up: boolean; down: boolean }>({ up: false, down: false });
   const owners = useRef(new Map<number, "up" | "down">());
@@ -51,6 +60,7 @@ export function ActionFan({
     { id: "up", label: labels.up, icon: <IconUp />, kind: "hold", on: held.up },
     { id: "swim", label: labels.swim, icon: <IconSwim />, kind: "toggle", on: swimLatch || swimming },
     { id: "lamp", label: labels.lamp, icon: <IconLamp />, kind: "toggle", on: lampOn },
+    { id: "mode", label: labels.mode, icon: MODE_ICON[lightMode], kind: "toggle", on: lampOn },
   ];
   const seg = (A1 - A0) / buttons.length;
 
@@ -58,7 +68,7 @@ export function ActionFan({
     e.preventDefault();
     e.stopPropagation();
     if (b.kind === "toggle") {
-      onToggle(b.id as "swim" | "lamp");
+      onToggle(b.id as "swim" | "lamp" | "mode");
       return;
     }
     const id = b.id as "up" | "down";
@@ -100,7 +110,8 @@ export function ActionFan({
         return (
           <g
             key={b.id}
-            className={`dm-fan-btn dm-fan-${b.id}${b.on ? " on" : ""}`}
+            className={`dm-fan-btn dm-fan-${b.id}${b.on ? " on" : ""}${lampLocked && (b.id === "lamp" || b.id === "mode") ? " locked" : ""}`}
+            data-mode={b.id === "mode" ? lightMode : undefined}
             onPointerDown={down(b)}
             onPointerUp={up}
             onPointerCancel={up}

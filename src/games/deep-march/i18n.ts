@@ -1,5 +1,6 @@
 import type { EnvironmentKind, SurfaceType } from "./terrain/terrainInfo";
 import type { RegionKey } from "./terrain/regions";
+import type { LightMode } from "./survival";
 
 export type DeepMarchDict = {
   setupTitle: string;
@@ -48,6 +49,12 @@ export type DeepMarchDict = {
   btnDown: string;
   btnSwim: string;
   btnLamp: string;
+  /** Survival HUD: battery + light modes. */
+  hudBattery: string;
+  lightOff: string;
+  lightModes: Record<LightMode, string>;
+  batteryEmpty: string;
+  batteryCharging: string;
   dialMove: string;
   showPanel: string;
   hidePanel: string;
@@ -73,10 +80,11 @@ export const deepMarchEn: DeepMarchDict = {
     "Mouse — look (click the view to capture the mouse, Esc releases)",
     "WASD / arrows — move along your heading · Space — swim up · Shift — sink",
     "Double-tap W, or hold W and press Ctrl / R — swim fast toward where you look",
-    "Release W to stop swimming · F — head lamp",
-    "Touch panel: left dial moves (push to the outer SWIM arc to swim), right fan = up / down / swim / lamp, drag elsewhere to look",
+    "Release W to stop swimming · F — lights on / off · L — next light mode · 1 / 2 / 3 — beam / high beam / night vision",
+    "Lights run on the battery (beam drains least, night vision most); it slowly recharges while the lights are off",
+    "Touch panel: left dial moves (push to the outer SWIM arc to swim), right fan = up / down / swim / lamp / light mode, drag elsewhere to look",
   ],
-  hint: "Click to look · WASD move · double-tap W swim · Space/Shift up/down · F lamp",
+  hint: "Click to look · WASD move · double-tap W swim · Space/Shift up/down · F lights · L mode",
   hintPanel: "Left dial moves · right fan acts · drag the view to look",
   stageAria: "Deep March underwater view",
   hudDepth: "Depth",
@@ -131,6 +139,11 @@ export const deepMarchEn: DeepMarchDict = {
   btnDown: "DOWN",
   btnSwim: "SWIM",
   btnLamp: "LAMP",
+  hudBattery: "Battery",
+  lightOff: "LIGHTS OFF",
+  lightModes: { beam: "BEAM", high: "HIGH BEAM", night: "NIGHT VIS" },
+  batteryEmpty: "Battery flat — lights offline",
+  batteryCharging: "Recharging…",
   dialMove: "Move",
   showPanel: "Show control panel",
   hidePanel: "Hide control panel",
@@ -155,10 +168,11 @@ export const deepMarchZh: DeepMarchDict = {
     "鼠标 — 转动视角（点击画面锁定鼠标，Esc 释放）",
     "WASD / 方向键 — 沿朝向移动 · 空格 — 上浮 · Shift — 下沉",
     "双击 W，或按住 W 再按 Ctrl / R — 朝视线方向快速游泳",
-    "松开 W 停止游泳 · F — 头灯",
-    "触屏面板：左侧摇盘移动（推到外圈「游泳」弧区即游泳），右侧扇形按钮为上浮 / 下沉 / 游泳 / 头灯，拖动其余画面转动视角",
+    "松开 W 停止游泳 · F — 开关灯光 · L — 切换灯光模式 · 1 / 2 / 3 — 光束 / 远光 / 夜视",
+    "灯光消耗电池（光束最省电，夜视最耗电）；关灯时电池会缓慢回充",
+    "触屏面板：左侧摇盘移动（推到外圈「游泳」弧区即游泳），右侧扇形按钮为上浮 / 下沉 / 游泳 / 头灯 / 灯光模式，拖动其余画面转动视角",
   ],
-  hint: "点击画面转视角 · WASD 移动 · 双击 W 游泳 · 空格/Shift 上浮/下沉 · F 头灯",
+  hint: "点击画面转视角 · WASD 移动 · 双击 W 游泳 · 空格/Shift 上浮/下沉 · F 灯光 · L 模式",
   hintPanel: "左摇盘移动 · 右扇形按钮操作 · 拖动画面转视角",
   stageAria: "深潜水下画面",
   hudDepth: "深度",
@@ -213,6 +227,11 @@ export const deepMarchZh: DeepMarchDict = {
   btnDown: "下沉",
   btnSwim: "游泳",
   btnLamp: "头灯",
+  hudBattery: "电池",
+  lightOff: "灯光关闭",
+  lightModes: { beam: "光束", high: "远光", night: "夜视" },
+  batteryEmpty: "电量耗尽 · 灯光离线",
+  batteryCharging: "回充中…",
   dialMove: "移动",
   showPanel: "显示操控面板",
   hidePanel: "隐藏操控面板",
