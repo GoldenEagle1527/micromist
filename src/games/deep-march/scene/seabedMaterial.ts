@@ -149,6 +149,17 @@ vec3 dmUnpack(vec4 t) {
   return vec3(xy, sqrt(clamp(1.0 - dot(xy, xy), 0.0, 1.0)));
 }
 vec2 dmRot(vec2 uv) { return mat2(0.8, -0.6, 0.6, 0.8) * uv; }
+// Explicit-gradient fetch (see MAP_FRAGMENT): uv·s with derivatives d·s.
+#define DM_TG(t, uv, s, dx, dy) textureGrad(t, (uv) * (s), (dx) * (s), (dy) * (s))
+// Rock albedo with the rotated second scale mixed in by m (fetches skipped at m = 0 / 1).
+vec3 dmRockA(vec2 uv, vec2 dx, vec2 dy, float m) {
+  const float S = 1.0 / 5.5;
+  const float SR = S * 0.43;
+  vec3 a = vec3(0.0), b = vec3(0.0);
+  if (m < 1.0) a = textureGrad(tRockA, uv * S, dx * S, dy * S).rgb;
+  if (m > 0.0) b = textureGrad(tRockA, dmRot(uv) * SR + 0.37, dmRot(dx) * SR, dmRot(dy) * SR).rgb;
+  return mix(a, b, m);
+}
 
 vec2 dmHash2(vec2 p) {
   p = vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)));
@@ -198,6 +209,10 @@ const MAP_FRAGMENT = /* glsl */ `
   vec3 bn = wn;
   vec3 bw = pow(abs(bn), vec3(4.0));
   bw /= (bw.x + bw.y + bw.z);
+  // Negligible projection axes drop to exactly 0 (continuous remap + renormalise)
+  // so their texture fetches can be skipped below.
+  bw = max(bw - 0.02, 0.0);
+  bw /= (bw.x + bw.y + bw.z);
   vec3 axisSign = vec3(bn.x < 0.0 ? -1.0 : 1.0, bn.y < 0.0 ? -1.0 : 1.0, bn.z < 0.0 ? -1.0 : 1.0);
 
   // ---- material weights -------------------------------------------------
@@ -220,53 +235,88 @@ const MAP_FRAGMENT = /* glsl */ `
   vec2 uvX = vec2(wp.z * axisSign.x, wp.y);
   vec2 uvY = vec2(wp.x * axisSign.y, wp.z);
   vec2 uvZ = vec2(-wp.x * axisSign.z, wp.y);
+  // Screen-space UV derivatives taken here, in uniform control flow: the fetches
+  // below sit in branches (skipped layers / axes), where implicit derivatives would
+  // be undefined and pick wrong mips along branch borders (thin seams).
+  vec2 gXx = dFdx(uvX), gXy = dFdy(uvX);
+  vec2 gYx = dFdx(uvY), gYy = dFdy(uvY);
+  vec2 gZx = dFdx(uvZ), gZy = dFdy(uvZ);
   const float SAND_S = 1.0 / 3.2;
   const float GRAVEL_S = 1.0 / 2.2;
   const float ROCK_S = 1.0 / 5.5;
   const float MOSS_S = 1.0 / 4.0;
-
-  // sand + gravel: floors only → top projection
-  vec4 sA = texture2D(tSandA, uvY * SAND_S);
-  vec4 sN = texture2D(tSandN, uvY * SAND_S);
-  vec4 gA = texture2D(tGravelA, uvY * GRAVEL_S);
-  vec4 gN = texture2D(tGravelN, uvY * GRAVEL_S);
-  // rock + moss: full triplanar
-  vec4 rAx = texture2D(tRockA, uvX * ROCK_S), rAy = texture2D(tRockA, uvY * ROCK_S), rAz = texture2D(tRockA, uvZ * ROCK_S);
-  vec4 rNx = texture2D(tRockN, uvX * ROCK_S), rNy = texture2D(tRockN, uvY * ROCK_S), rNz = texture2D(tRockN, uvZ * ROCK_S);
-  vec4 mAx = texture2D(tMossA, uvX * MOSS_S), mAy = texture2D(tMossA, uvY * MOSS_S), mAz = texture2D(tMossA, uvZ * MOSS_S);
-  vec4 mNx = texture2D(tMossN, uvX * MOSS_S), mNy = texture2D(tMossN, uvY * MOSS_S), mNz = texture2D(tMossN, uvZ * MOSS_S);
+  const float ROT_S = ROCK_S * 0.43;
 #ifndef DM_LOW_SPEC
   // second, rotated scale on rock albedo, blended by noise, to break repetition
   float rMix = smoothstep(0.35, 0.65, dmNoise(wp * 0.11 + 5.0));
-  rAx = mix(rAx, texture2D(tRockA, dmRot(uvX) * ROCK_S * 0.43 + 0.37), rMix);
-  rAy = mix(rAy, texture2D(tRockA, dmRot(uvY) * ROCK_S * 0.43 + 0.37), rMix);
-  rAz = mix(rAz, texture2D(tRockA, dmRot(uvZ) * ROCK_S * 0.43 + 0.37), rMix);
+#else
+  float rMix = 0.0;
 #endif
 
-  // ---- albedo -------------------------------------------------------------
+  // ---- albedo + packed normals, only for layers / axes that contribute -----
   float sideRM = wRock + wMoss + 1e-4;
-  // sand/gravel exist only on the Y projection; their share of X/Z goes to rock/moss
-  vec3 aY = sA.rgb * vec3(0.5, 0.49, 0.44) * wSand + gA.rgb * wGravel + rAy.rgb * wRock + mAy.rgb * wMoss;
-  vec3 aX = (rAx.rgb * wRock + mAx.rgb * wMoss) / sideRM;
-  vec3 aZ = (rAz.rgb * wRock + mAz.rgb * wMoss) / sideRM;
   float wSum = wSand + wGravel + wRock + wMoss;
-  aY /= wSum;
+  vec3 aX = vec3(0.0), aY = vec3(0.0), aZ = vec3(0.0);
+  vec4 nX4 = vec4(0.0), nY4 = vec4(0.0), nZ4 = vec4(0.0);
+  // sand + gravel: floors only → top projection; sand/gravel exist only on the Y
+  // projection, their share of X/Z goes to rock/moss
+  if (bw.y > 0.0) {
+    if (wSand > 0.0) {
+      aY += DM_TG(tSandA, uvY, SAND_S, gYx, gYy).rgb * vec3(0.5, 0.49, 0.44) * wSand;
+      nY4 += DM_TG(tSandN, uvY, SAND_S, gYx, gYy) * wSand;
+    }
+    if (wGravel > 0.0) {
+      aY += DM_TG(tGravelA, uvY, GRAVEL_S, gYx, gYy).rgb * wGravel;
+      nY4 += DM_TG(tGravelN, uvY, GRAVEL_S, gYx, gYy) * wGravel;
+    }
+    if (wRock > 0.0) {
+      aY += dmRockA(uvY, gYx, gYy, rMix) * wRock;
+      nY4 += DM_TG(tRockN, uvY, ROCK_S, gYx, gYy) * wRock;
+    }
+    if (wMoss > 0.0) {
+      aY += DM_TG(tMossA, uvY, MOSS_S, gYx, gYy).rgb * wMoss;
+      nY4 += DM_TG(tMossN, uvY, MOSS_S, gYx, gYy) * wMoss;
+    }
+    aY /= wSum;
+    nY4 /= wSum;
+  }
+  if (bw.x > 0.0) {
+    if (wRock > 0.0) {
+      aX += dmRockA(uvX, gXx, gXy, rMix) * wRock;
+      nX4 += DM_TG(tRockN, uvX, ROCK_S, gXx, gXy) * wRock;
+    }
+    if (wMoss > 0.0) {
+      aX += DM_TG(tMossA, uvX, MOSS_S, gXx, gXy).rgb * wMoss;
+      nX4 += DM_TG(tMossN, uvX, MOSS_S, gXx, gXy) * wMoss;
+    }
+    aX /= sideRM;
+    nX4 /= sideRM;
+  }
+  if (bw.z > 0.0) {
+    if (wRock > 0.0) {
+      aZ += dmRockA(uvZ, gZx, gZy, rMix) * wRock;
+      nZ4 += DM_TG(tRockN, uvZ, ROCK_S, gZx, gZy) * wRock;
+    }
+    if (wMoss > 0.0) {
+      aZ += DM_TG(tMossA, uvZ, MOSS_S, gZx, gZy).rgb * wMoss;
+      nZ4 += DM_TG(tMossN, uvZ, MOSS_S, gZx, gZy) * wMoss;
+    }
+    aZ /= sideRM;
+    nZ4 /= sideRM;
+  }
   vec3 albedo = aX * bw.x + aY * bw.y + aZ * bw.z;
 
   // tone the photo sets toward a cohesive underwater palette
   float luma = dot(albedo, vec3(0.299, 0.587, 0.114));
   albedo = mix(vec3(luma), albedo, 0.72);                       // desaturate a bit
   albedo *= mix(vec3(1.0), uCeilingTint, ceilW);                 // dark cave ceiling
-  albedo *= mix(0.72, 1.12, dmFbm(wp * (0.035 / uWS) + 71.0));   // macro variation (scales with the world)
-  albedo *= mix(0.85, 1.08, dmFbm(wp * 0.05 + 13.0));            // and at the diver's scale
+  albedo *= mix(0.72, 1.12, dmFbm(wp * (0.035 / uWS) + 71.0));  // macro variation (scales with the world)
+  albedo *= mix(0.85, 1.08, dmFbm(wp * 0.05 + 13.0));           // and at the diver's scale
   albedo *= mix(vec3(1.0), vec3(0.86, 0.95, 0.9), smoothstep(0.4, 0.8, nA) * floorW); // silt tint
   albedo *= mix(0.62, 1.0, smoothstep(-24.0 * uWS, 6.0 * uWS, wp.y)); // deeper = darker sediment
   diffuseColor.rgb *= albedo;
 
   // ---- normals (whiteout triplanar) + roughness --------------------------
-  vec4 nY4 = (sN * wSand + gN * wGravel + rNy * wRock + mNy * wMoss) / wSum;
-  vec4 nX4 = (rNx * wRock + mNx * wMoss) / sideRM;
-  vec4 nZ4 = (rNz * wRock + mNz * wMoss) / sideRM;
   vec3 tnX = dmUnpack(nX4);
   vec3 tnY = dmUnpack(nY4);
   vec3 tnZ = dmUnpack(nZ4);
