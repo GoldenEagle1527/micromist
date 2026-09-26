@@ -3,7 +3,8 @@ import { createPortal } from "react-dom";
 import "./deep-march.css";
 import { useLocale } from "../../i18n";
 import { seedFromString } from "./terrain/noise";
-import { createDeepMarch, type DeepMarchHandle } from "./scene/world";
+import { createDeepMarch, type DeepMarchHandle, type HudLabels } from "./scene/world";
+import type { DeepMarchDict } from "./i18n";
 import { isTouchDevice, loadSettings, panelEnabled, randomSeed, saveSettings } from "./settings";
 import { ControlPanel } from "./ui/ControlPanel";
 import { viewRotation, type Rotation } from "./viewRotation";
@@ -41,6 +42,20 @@ function viewportSize() {
 
 type Screen = "setup" | "playing";
 
+function hudLabels(dm: DeepMarchDict): HudLabels {
+  return {
+    chunks: dm.hudChunks,
+    floaters: dm.hudFloaters,
+    tris: dm.hudTris,
+    mainThread: dm.hudMainThread,
+    classify: dm.hudClassify,
+    spawnDebugTitle: dm.spawnDebugTitle,
+    surfaceTypes: dm.surfaceTypes,
+    loading: dm.hudLoading,
+    lockPrompt: dm.lockPrompt,
+  };
+}
+
 export function DeepMarchGame() {
   const { t } = useLocale();
   const dm = t.deepMarch;
@@ -71,11 +86,7 @@ export function DeepMarchGame() {
       sensitivity,
       invertY,
       panel: panelOn,
-      labels: {
-        chunks: dm.hudChunks,
-        loading: dm.hudLoading,
-        lockPrompt: dm.lockPrompt,
-      },
+      labels: hudLabels(dm),
     });
     setGame(g);
     return () => {
@@ -85,6 +96,11 @@ export function DeepMarchGame() {
     // Settings/labels are read once per dive; the panel toggle is pushed via setPanelMode.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [screen]);
+
+  // Language switches mid-dive: push the new strings into the canvas overlay / debug legend.
+  useEffect(() => {
+    game?.setLabels(hudLabels(dm));
+  }, [game, dm]);
 
   // Immersive landscape play on touch devices; portrait falls back to a CSS-rotated play area.
   const immersive = touch && screen === "playing";

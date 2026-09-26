@@ -1,4 +1,4 @@
-import type { EnvironmentKind } from "./terrain/terrainInfo";
+import type { EnvironmentKind, SurfaceType } from "./terrain/terrainInfo";
 
 export type DeepMarchDict = {
   setupTitle: string;
@@ -20,6 +20,14 @@ export type DeepMarchDict = {
   hudSpeed: string;
   hudHeading: string;
   hudChunks: string;
+  /** Debug stat-line words (numbers stay as they are). */
+  hudFloaters: string;
+  hudTris: string;
+  hudMainThread: string;
+  hudClassify: string;
+  /** Debug spawn-candidate overlay. */
+  spawnDebugTitle: string;
+  surfaceTypes: Record<SurfaceType, string>;
   hudLoading: string;
   hudGrounded: string;
   hudCeiling: string;
@@ -68,6 +76,21 @@ export const deepMarchEn: DeepMarchDict = {
   hudSpeed: "Speed",
   hudHeading: "Heading",
   hudChunks: "chunks",
+  hudFloaters: "float",
+  hudTris: "tri",
+  hudMainThread: "main",
+  hudClassify: "cls",
+  spawnDebugTitle: "Spawn points (B)",
+  surfaceTypes: {
+    "floor-flat": "floor-flat",
+    "floor-slope": "floor-slope",
+    wall: "wall",
+    ceiling: "ceiling",
+    "ledge-top": "ledge-top",
+    crevice: "crevice",
+    ridge: "ridge",
+    "cave-floor": "cave-floor",
+  },
   hudLoading: "Generating seabed…",
   hudGrounded: "Touching bottom",
   hudCeiling: "Touching ceiling",
@@ -124,6 +147,21 @@ export const deepMarchZh: DeepMarchDict = {
   hudSpeed: "速度",
   hudHeading: "航向",
   hudChunks: "区块",
+  hudFloaters: "浮岩",
+  hudTris: "三角",
+  hudMainThread: "主线程",
+  hudClassify: "分类",
+  spawnDebugTitle: "刷新点（B）",
+  surfaceTypes: {
+    "floor-flat": "平地",
+    "floor-slope": "缓坡",
+    wall: "岩壁",
+    ceiling: "洞顶",
+    "ledge-top": "岩架顶",
+    crevice: "缝隙",
+    ridge: "脊",
+    "cave-floor": "洞底",
+  },
   hudLoading: "正在生成海床…",
   hudGrounded: "触底",
   hudCeiling: "触顶",

@@ -3,7 +3,7 @@ import * as THREE from "three";
 import { SEA_COLORS, isLowSpecDevice, terrainForDevice } from "../terrain/config";
 import { createDensityField } from "../terrain/density";
 import { ChunkManager } from "../terrain/chunks";
-import type { EnvironmentKind } from "../terrain/terrainInfo";
+import type { EnvironmentKind, SurfaceType } from "../terrain/terrainInfo";
 import { SpawnDebugView } from "./spawnDebug";
 import { InputController, type PanelInput } from "./input";
 import { MarineSnow } from "./particles";
@@ -12,6 +12,12 @@ import { DiverController, type DiverState } from "./diver";
 
 export type HudLabels = {
   chunks: string;
+  floaters: string;
+  tris: string;
+  mainThread: string;
+  classify: string;
+  spawnDebugTitle: string;
+  surfaceTypes: Record<SurfaceType, string>;
   loading: string;
   lockPrompt: string;
 };
@@ -48,6 +54,8 @@ export type DeepMarchHandle = {
   /** Analog state from the on-screen panel. */
   panelInput: PanelInput;
   setPanelMode: (on: boolean) => void;
+  /** Push new UI strings (language change) to the canvas overlay and debug legend. */
+  setLabels: (labels: HudLabels) => void;
   addLook: (dxPx: number, dyPx: number, touch: boolean) => void;
   toggleLamp: () => boolean;
   toggleSwimLatch: () => boolean;
@@ -136,7 +144,8 @@ export function createDeepMarch(host: HTMLElement, opts: DeepMarchOptions): Deep
     if (terrainHold >= TERRAIN_HOLD) terrainKind = k;
   };
   // Debug: spawn-candidate markers (B, or ?debugSpawns=1); off in normal play.
-  const spawnDebug = new SpawnDebugView(scene, chunks.terrain, overlay);
+  let labels = opts.labels;
+  const spawnDebug = new SpawnDebugView(scene, chunks.terrain, overlay, labels);
   if (new URLSearchParams(window.location.search).get("debugSpawns") === "1") spawnDebug.setVisible(true);
   const onDebugKey = (ev: KeyboardEvent) => {
     if (ev.code !== "KeyB" || ev.repeat) return;
@@ -268,7 +277,7 @@ export function createDeepMarch(host: HTMLElement, opts: DeepMarchOptions): Deep
       updateTerrainKind(0.25 - hudTimer);
       hudTimer = 0.25;
       const st = chunks.stats();
-      stats.textContent = `${fps.toFixed(0)} fps · ${opts.labels.chunks} ${st.meshes}/${st.active} · −${st.floaters} float · q${st.queued}+${st.pending} · ${(st.triangles / 1000).toFixed(0)}k tri · ${st.workers ? `${st.workers}w` : "main"} ${st.avgMs.toFixed(1)}ms (cls ${st.avgInfoMs.toFixed(1)})`;
+      stats.textContent = `${fps.toFixed(0)} fps · ${labels.chunks} ${st.meshes}/${st.active} · −${st.floaters} ${labels.floaters} · q${st.queued}+${st.pending} · ${(st.triangles / 1000).toFixed(0)}k ${labels.tris} · ${st.workers ? `${st.workers}w` : labels.mainThread} ${st.avgMs.toFixed(1)}ms (${labels.classify} ${st.avgInfoMs.toFixed(1)})`;
     }
   };
   raf = requestAnimationFrame(frame);
@@ -279,6 +288,13 @@ export function createDeepMarch(host: HTMLElement, opts: DeepMarchOptions): Deep
       input.panelMode = on;
       if (on) input.releaseLock();
       updatePrompt();
+    },
+    setLabels: (next) => {
+      labels = next;
+      lockPrompt.textContent = next.lockPrompt;
+      loading.textContent = next.loading;
+      spawnDebug.setLabels(next);
+      hudTimer = 0;
     },
     addLook: (dx, dy, touch) => input.addLookPx(dx, dy, touch),
     toggleLamp,
