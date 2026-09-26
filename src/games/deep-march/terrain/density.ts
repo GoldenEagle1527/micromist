@@ -152,7 +152,7 @@ export function createDensityField(seed: number, s: TerrainSettings, params: rea
   // Ridged-noise maximum: each octave's v = (1 − √(n² + r²))² · weight ≤ (1 − r)² (weight ≤ 1),
   // so noise ≤ (1 − r)² · Σ amplitudes — a tight, exact bound (r = ridgeSoftness).
   let ampSum = 0;
-  for (let j = 0, a = 1; j < s.octaves; j++, a *= s.persistence) ampSum += a;
+  for (let j = 0, a = 1; j < s.octaves; j++, a *= s.persistence) ampSum += j >= s.fineOctaveFrom ? a * s.fineOctaveGain : a;
   const noiseMax = (1 - s.ridgeSoftness) ** 2 * ampSum;
 
   // Terrace step heights per level (seeded; levels −4 … 11 → index level + 4).
@@ -456,7 +456,7 @@ export function createDensityField(seed: number, s: TerrainSettings, params: rea
       let v = Math.max(0, 1 - Math.sqrt(nn * nn + rs2));
       v = v * v * weight;
       weight = Math.max(Math.min(v * s.weightMultiplier, 1), 0);
-      noise += v * amplitude;
+      noise += j >= s.fineOctaveFrom ? v * amplitude * s.fineOctaveGain : v * amplitude;
       if (weight === 0) break;
       amplitude *= s.persistence;
       frequency *= s.lacunarity;
