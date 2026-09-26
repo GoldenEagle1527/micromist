@@ -46,6 +46,14 @@ export type TerrainSettings = {
   /** Vertical warp as a fraction of warpStrength. */
   warpVertical: number;
 
+  /**
+   * Water-worn rounding. ridgeSoftness rounds the ridged-noise crest (|n| →
+   * √(n² + r²)); smoothCells is the tap spacing, in lattice cells, of the
+   * vertical binomial smoothing that removes paper-thin shelves.
+   */
+  ridgeSoftness: number;
+  smoothCells: number;
+
   /** Higher-frequency erosion detail (plain simplex, ±amplitude). */
   erosionFrequency: number;
   erosionAmplitude: number;
@@ -79,7 +87,7 @@ export const TERRAIN: TerrainSettings = {
   persistence: 0.54,
   noiseScale: 2.71,
   noiseWeight: 11.24,
-  floorOffset: 1,
+  floorOffset: -3,
   weightMultiplier: 10,
   hardFloorHeight: -7,
   hardFloorWeight: 5,
@@ -97,8 +105,11 @@ export const TERRAIN: TerrainSettings = {
   warpStrength: 2.4,
   warpVertical: 0.4,
 
+  ridgeSoftness: 0.3,
+  smoothCells: 1,
+
   erosionFrequency: 0.55,
-  erosionAmplitude: 1.1,
+  erosionAmplitude: 0.7,
 
   ceilingHeight: 14,
   ceilingSlope: 4,

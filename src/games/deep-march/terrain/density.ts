@@ -3,13 +3,20 @@
  * field is continuous everywhere (no straight shelves / flat plates):
  *
  *   p'    = p + warp(p)                         low-frequency 3D domain warp
- *   final = −(y + floorOffset)
- *         + ridged(p') · noiseWeight            reference multi-octave ridged noise
+ *   raw   = −(y + floorOffset)
+ *         + ridged(p') · noiseWeight            reference multi-octave ridged noise with a
+ *                                               rounded crest (|n| → √(n² + r²))
  *         + layerBias + layer(p')               soft layering: two sine harmonics whose
  *                                               phase and band height vary with xz
  *         + erosion(p')                         one higher-frequency detail octave
  *         + floorWeight · smoothstep(...)       undulating hard floor (xz-varying height)
  *         + ceilingSlope · ramp(y − ceilH(xz))  undulating rock ceiling (C1 ramp)
+ *   final = Σ w_i · raw(x, y + (i − 2)·h, z)    vertical binomial [1 4 6 4 1]/16 smoothing
+ *
+ * The rounded crest and the vertical smoothing make the rock water-worn: the
+ * ridged cusp produced paper-thin sheets with knife rims; now sheets thinner
+ * than the kernel vanish and shelf rims come out blunt. h is a whole number of
+ * lattice cells so the mesher computes `final` exactly from its raw rows.
  *
  * The reference sawtooth terrace `(y % 5.08) · 1.06` and the step hard floor
  * made density jump in y, which produced perfectly horizontal edges; both are
@@ -22,8 +29,12 @@ import { createSimplex3, mulberry32 } from "./noise";
 
 export type DensityField = {
   settings: TerrainSettings;
-  /** Full density at a world position. */
+  /** Full density at a world position (vertically smoothed; this is the terrain). */
   sample: (x: number, y: number, z: number) => number;
+  /** Unsmoothed density (the 5 taps of `sample` are rawSample at y + (i − 2)·smoothStep). */
+  sampleRaw: (x: number, y: number, z: number) => number;
+  /** Vertical tap spacing of the smoothing kernel (a whole number of lattice cells). */
+  smoothStep: number;
   /** Conservative [min, max] of sample(x, y, z) over all x, z. */
   bounds: (y: number, out: Float64Array) => void;
   /** Gradient pointing toward solid (central difference; the field is continuous). */
@@ -31,6 +42,8 @@ export type DensityField = {
 };
 
 const TAU = Math.PI * 2;
+/** Binomial smoothing weights (sum 1). */
+export const SMOOTH_W = [1 / 16, 4 / 16, 6 / 16, 4 / 16, 1 / 16];
 
 /** C1 ramp: 0 for u ≤ 0, quadratic over [0, b], then linear with slope 1. */
 function ramp(u: number, b: number): number {
@@ -74,7 +87,8 @@ export function createDensityField(seed: number, s: TerrainSettings): DensityFie
   for (let j = 0, a = 1; j < s.octaves; j++, a *= s.persistence) ampSum += a;
   const noiseMax = ampSum * s.noiseWeight;
 
-  const sample = (x: number, y: number, z: number): number => {
+  const rs2 = s.ridgeSoftness * s.ridgeSoftness;
+  const sampleRaw = (x: number, y: number, z: number): number => {
     // --- domain warp ---
     const wx = x + W * snoise(x * fw + ex[0], y * fw + ex[1], z * fw + ex[2]);
     const wy = y + Wy * snoise(x * fw + ex[3], y * fw + ex[4], z * fw + ex[5]);
@@ -91,7 +105,9 @@ export function createDensityField(seed: number, s: TerrainSettings): DensityFie
         wy * frequency + offs[j * 3 + 1] + oy,
         wz * frequency + offs[j * 3 + 2] + oz,
       );
-      let v = 1 - Math.abs(n);
+      // Smooth |n| ≈ √(n² + r²): rounded crest instead of the ridged cusp (which
+      // made knife rims); away from the crest the value is unchanged.
+      let v = Math.max(0, 1 - Math.sqrt(n * n + rs2));
       v = v * v * weight;
       weight = Math.max(Math.min(v * s.weightMultiplier, 1), 0);
       noise += v * amplitude;
@@ -129,11 +145,38 @@ export function createDensityField(seed: number, s: TerrainSettings): DensityFie
     );
   };
 
-  const bounds = (y: number, out: Float64Array) => {
+  const rawBounds = (y: number, out: Float64Array) => {
     const b = -(y + s.floorOffset) + s.layerBias;
     // floor term decreases with (y − fh): min at the lowest floor, max at the highest
     out[0] = b - layerMax - E + floorTerm(y, s.hardFloorHeight - U) + ceilTerm(y, s.ceilingHeight + Uc);
     out[1] = b + noiseMax + layerMax + E + floorTerm(y, s.hardFloorHeight + U) + ceilTerm(y, s.ceilingHeight - Uc);
+  };
+
+  // --- vertical smoothing: binomial [1 4 6 4 1]/16 with taps smoothStep apart ---
+  // A sheet thinner than ~the kernel width loses its peak and vanishes; thicker
+  // shelves keep their shape but their rims turn blunt/rounded. Taps sit on
+  // lattice rows (smoothStep = k · spacing), so the mesher evaluates this exactly
+  // from its sampled rows at no extra noise cost.
+  const smoothStep = (s.boundsSize / (s.numPointsPerAxis - 1)) * s.smoothCells;
+  const hs = smoothStep;
+  const sample = (x: number, y: number, z: number): number =>
+    (sampleRaw(x, y - 2 * hs, z) +
+      4 * sampleRaw(x, y - hs, z) +
+      6 * sampleRaw(x, y, z) +
+      4 * sampleRaw(x, y + hs, z) +
+      sampleRaw(x, y + 2 * hs, z)) /
+    16;
+  const tb = new Float64Array(2);
+  const bounds = (y: number, out: Float64Array) => {
+    let lo = 0, hi = 0;
+    for (let i = 0; i < 5; i++) {
+      rawBounds(y + (i - 2) * hs, tb);
+      const w = SMOOTH_W[i];
+      lo += w * tb[0];
+      hi += w * tb[1];
+    }
+    out[0] = lo;
+    out[1] = hi;
   };
 
   const gradient = (x: number, y: number, z: number, out: Float64Array, h = 0.1) => {
@@ -143,5 +186,5 @@ export function createDensityField(seed: number, s: TerrainSettings): DensityFie
     out[2] = (sample(x, y, z + h) - sample(x, y, z - h)) * inv;
   };
 
-  return { settings: s, sample, bounds, gradient };
+  return { settings: s, sample, sampleRaw, smoothStep, bounds, gradient };
 }
