@@ -132,14 +132,25 @@ float dmHash(vec3 p) {
   p *= 17.0;
   return fract(p.x * p.y * p.z * (p.x + p.y + p.z));
 }
+// Value noise on dmHash lattice values. dmHash's first steps (fract(p / π + c) · 17)
+// act per axis, so the 8 corners share only two values per axis (i, i + 1): computed
+// once here with the same arithmetic, the result is identical to hashing each corner.
 float dmNoise(vec3 x) {
   vec3 i = floor(x);
   vec3 f = fract(x);
   f = f * f * (3.0 - 2.0 * f);
-  return mix(mix(mix(dmHash(i + vec3(0, 0, 0)), dmHash(i + vec3(1, 0, 0)), f.x),
-                 mix(dmHash(i + vec3(0, 1, 0)), dmHash(i + vec3(1, 1, 0)), f.x), f.y),
-             mix(mix(dmHash(i + vec3(0, 0, 1)), dmHash(i + vec3(1, 0, 1)), f.x),
-                 mix(dmHash(i + vec3(0, 1, 1)), dmHash(i + vec3(1, 1, 1)), f.x), f.y), f.z);
+  vec3 a = fract(i * 0.3183099 + vec3(0.1, 0.2, 0.3)) * 17.0;
+  vec3 b = fract((i + 1.0) * 0.3183099 + vec3(0.1, 0.2, 0.3)) * 17.0;
+  // dmHash = fract(x·y·z·(x + y + z)), same operation order
+  float p00 = a.x * a.y, p10 = b.x * a.y, p01 = a.x * b.y, p11 = b.x * b.y;
+  float s00 = a.x + a.y, s10 = b.x + a.y, s01 = a.x + b.y, s11 = b.x + b.y;
+  return mix(mix(mix(fract(p00 * a.z * (s00 + a.z)), fract(p10 * a.z * (s10 + a.z)), f.x),
+                 mix(fract(p01 * a.z * (s01 + a.z)), fract(p11 * a.z * (s11 + a.z)), f.x), f.y),
+             mix(mix(fract(p00 * b.z * (s00 + b.z)), fract(p10 * b.z * (s10 + b.z)), f.x),
+                 mix(fract(p01 * b.z * (s01 + b.z)), fract(p11 * b.z * (s11 + b.z)), f.x), f.y), f.z);
+}
+float dmFbm(vec3 p) {
+  return 0.55 * dmNoise(p) + 0.3 * dmNoise(p * 2.03 + 11.7) + 0.15 * dmNoise(p * 4.1 + 3.1);
 }
 vec3 dmUnpack(vec4 t) {
   vec2 xy = t.xy * 2.0 - 1.0;
@@ -157,10 +168,6 @@ vec3 dmRockA(vec2 uv, vec2 dx, vec2 dy, float m) {
   if (m > 0.0) b = textureGrad(tRockA, dmRot(uv) * SR + 0.37, dmRot(dx) * SR, dmRot(dy) * SR).rgb;
   return mix(a, b, m);
 }
-// Tiling noise texture (period 8 lattice units): r = 3-octave fBm, g = one value-noise octave.
-uniform highp sampler3D tDmNoise;
-float dmFbmT(vec3 p) { return texture(tDmNoise, p * 0.125).r; }
-float dmNoiseT(vec3 p) { return texture(tDmNoise, p * 0.125).g; }
 
 vec2 dmHash2(vec2 p) {
   p = vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)));
@@ -218,8 +225,8 @@ const MAP_FRAGMENT = /* glsl */ `
 
   // ---- material weights -------------------------------------------------
   float up = wn.y;
-  float nA = dmFbmT(wp * 0.07);          // large patches
-  float nB = dmFbmT(wp * 0.23 + 31.0);   // medium breakup
+  float nA = dmFbm(wp * 0.07);          // large patches
+  float nB = dmFbm(wp * 0.23 + 31.0);   // medium breakup
   float floorW = smoothstep(0.45, 0.8, up + (nB - 0.5) * 0.25);
   float ceilW = smoothstep(-0.25, -0.65, up);
   float wallW = max(0.0, 1.0 - floorW - ceilW);
@@ -249,7 +256,9 @@ const MAP_FRAGMENT = /* glsl */ `
   const float ROT_S = ROCK_S * 0.43;
 #ifndef DM_LOW_SPEC
   // second, rotated scale on rock albedo, blended by noise, to break repetition
-  float rMix = smoothstep(0.35, 0.65, dmNoiseT(wp * 0.11 + 5.0));
+  // only rock uses it (plain math, no derivatives: safe to branch)
+  float rMix = 0.0;
+  if (wRock > 0.0) rMix = smoothstep(0.35, 0.65, dmNoise(wp * 0.11 + 5.0));
 #else
   float rMix = 0.0;
 #endif
@@ -311,8 +320,8 @@ const MAP_FRAGMENT = /* glsl */ `
   float luma = dot(albedo, vec3(0.299, 0.587, 0.114));
   albedo = mix(vec3(luma), albedo, 0.72);                       // desaturate a bit
   albedo *= mix(vec3(1.0), uCeilingTint, ceilW);                 // dark cave ceiling
-  albedo *= mix(0.72, 1.12, dmFbmT(wp * (0.035 / uWS) + 71.0));  // macro variation (scales with the world)
-  albedo *= mix(0.85, 1.08, dmFbmT(wp * 0.05 + 13.0));           // and at the diver's scale
+  albedo *= mix(0.72, 1.12, dmFbm(wp * (0.035 / uWS) + 71.0));  // macro variation (scales with the world)
+  albedo *= mix(0.85, 1.08, dmFbm(wp * 0.05 + 13.0));           // and at the diver's scale
   albedo *= mix(vec3(1.0), vec3(0.86, 0.95, 0.9), smoothstep(0.4, 0.8, nA) * floorW); // silt tint
   albedo *= mix(0.62, 1.0, smoothstep(-24.0 * uWS, 6.0 * uWS, wp.y)); // deeper = darker sediment
   diffuseColor.rgb *= albedo;
@@ -330,59 +339,6 @@ const MAP_FRAGMENT = /* glsl */ `
   vec3 dmWorldNormal = normalize(tnX.zyx * bw.x + tnY.xzy * bw.y + tnZ.xyz * bw.z);
   float dmRough = nX4.b * bw.x + nY4.b * bw.y + nZ4.b * bw.z;
 `;
-
-/**
- * 64³ tiling noise volume replacing per-pixel hash noise in the material weights
- * (one filtered fetch instead of ~24 hashes per fBm). Period: 8 lattice units.
- * r = 3-octave value-noise fBm (0.55 / 0.3 / 0.15, lacunarity 2), g = one octave.
- */
-const NOISE_RES = 64;
-const NOISE_PERIOD = 8;
-function createNoiseTexture(): THREE.Data3DTexture {
-  let seed = 0x2f6b1d3 >>> 0;
-  const rand = () => ((seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0) / 4294967296);
-  const lattice = (period: number) => Float32Array.from({ length: period ** 3 }, rand);
-  const octaves = [NOISE_PERIOD, NOISE_PERIOD * 2, NOISE_PERIOD * 4].map((p) => ({ p, v: lattice(p) }));
-  const single = { p: NOISE_PERIOD, v: lattice(NOISE_PERIOD) };
-  const sstep = (t: number) => t * t * (3 - 2 * t);
-  const valueNoise = (o: { p: number; v: Float32Array }, x: number, y: number, z: number) => {
-    const P = o.p;
-    const ix = Math.floor(x), iy = Math.floor(y), iz = Math.floor(z);
-    const fx = sstep(x - ix), fy = sstep(y - iy), fz = sstep(z - iz);
-    const at = (a: number, b: number, c: number) => o.v[((((iz + c) % P) + P) % P) * P * P + ((((iy + b) % P) + P) % P) * P + ((((ix + a) % P) + P) % P)];
-    const l = (a: number, b: number, t: number) => a + (b - a) * t;
-    return l(
-      l(l(at(0, 0, 0), at(1, 0, 0), fx), l(at(0, 1, 0), at(1, 1, 0), fx), fy),
-      l(l(at(0, 0, 1), at(1, 0, 1), fx), l(at(0, 1, 1), at(1, 1, 1), fx), fy),
-      fz,
-    );
-  };
-  const N = NOISE_RES;
-  const data = new Uint8Array(N * N * N * 2);
-  const k = NOISE_PERIOD / N;
-  for (let z = 0; z < N; z++)
-    for (let y = 0; y < N; y++)
-      for (let x = 0; x < N; x++) {
-        const px = (x + 0.5) * k, py = (y + 0.5) * k, pz = (z + 0.5) * k;
-        const f =
-          0.55 * valueNoise(octaves[0], px, py, pz) +
-          0.3 * valueNoise(octaves[1], px * 2, py * 2, pz * 2) +
-          0.15 * valueNoise(octaves[2], px * 4, py * 4, pz * 4);
-        const o = ((z * N + y) * N + x) * 2;
-        data[o] = Math.round(f * 255);
-        data[o + 1] = Math.round(valueNoise(single, px, py, pz) * 255);
-      }
-  const tex = new THREE.Data3DTexture(data, N, N, N);
-  tex.format = THREE.RGFormat;
-  tex.type = THREE.UnsignedByteType;
-  tex.wrapS = tex.wrapT = tex.wrapR = THREE.RepeatWrapping;
-  tex.magFilter = THREE.LinearFilter;
-  tex.minFilter = THREE.LinearMipmapLinearFilter;
-  tex.generateMipmaps = true;
-  tex.unpackAlignment = 1;
-  tex.needsUpdate = true;
-  return tex;
-}
 
 export function createSeabedMaterial(opts: SeabedOptions): SeabedMaterial {
   const size = opts.lowSpec ? 512 : 1024;
@@ -405,7 +361,6 @@ export function createSeabedMaterial(opts: SeabedOptions): SeabedMaterial {
     return t;
   };
 
-  const noiseTex = createNoiseTexture();
   const uniforms = {
     tSandA: { value: load(urls.sand[0], true) },
     tSandN: { value: load(urls.sand[1], false) },
@@ -425,7 +380,6 @@ export function createSeabedMaterial(opts: SeabedOptions): SeabedMaterial {
     ...opts.beam,
     ...opts.particleLights,
     uEnvLight: { value: 1 },
-    tDmNoise: { value: noiseTex },
   };
 
   const material = new THREE.MeshStandardMaterial({ roughness: 1, metalness: 0 });
@@ -507,7 +461,6 @@ ${BEAM_OPAQUE}    outgoingLight = mix(outgoingLight, water, smoothstep(uFar * 0.
     },
     dispose: () => {
       textures.forEach((t) => t.dispose());
-      noiseTex.dispose();
       material.dispose();
     },
   };
