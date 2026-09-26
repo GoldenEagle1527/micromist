@@ -19,6 +19,8 @@ export type MesherResponse = {
   normals: Float32Array;
   ao: Float32Array;
   indices: Uint16Array | Uint32Array;
+  /** Tight mesh AABB (min xyz, max xyz) — frustum culling. */
+  bounds: Float32Array;
   /** Removed floating lattice points owned by the column: (i, j, k) triplets. */
   removed: Int32Array;
   stats: ColumnStats;

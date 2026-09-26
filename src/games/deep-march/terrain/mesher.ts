@@ -53,6 +53,8 @@ export type ColumnMeshData = {
   /** Per-vertex ambient occlusion (1 = open water, 0 = fully enclosed). */
   ao: Float32Array;
   indices: Uint16Array | Uint32Array;
+  /** Tight AABB of `positions` (incl. skirts): minX, minY, minZ, maxX, maxY, maxZ (empty mesh: zeros). */
+  bounds: Float32Array;
   /** Removed (floating) lattice points owned by this column: (i, j, k) triplets, j relative to gjMin. */
   removed: Int32Array;
   stats: ColumnStats;
@@ -674,5 +676,16 @@ export function generateColumnMesh(
     });
     infoMs = performance.now() - t0;
   }
-  return { positions, normals, ao, indices, removed: Int32Array.from(removedList), stats, info, infoMs };
+  const bounds = new Float32Array(6);
+  if (vcount > 0) {
+    bounds.set([Infinity, Infinity, Infinity, -Infinity, -Infinity, -Infinity]);
+    for (let o = 0; o < positions.length; o += 3) {
+      for (let a = 0; a < 3; a++) {
+        const v = positions[o + a];
+        if (v < bounds[a]) bounds[a] = v;
+        if (v > bounds[a + 3]) bounds[a + 3] = v;
+      }
+    }
+  }
+  return { positions, normals, ao, indices, bounds, removed: Int32Array.from(removedList), stats, info, infoMs };
 }
