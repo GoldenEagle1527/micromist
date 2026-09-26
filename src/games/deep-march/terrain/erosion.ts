@@ -154,10 +154,8 @@ export function erodeGrid(
       sediment[o] += amount * w;
       const m = mask[o];
       if (m <= 0) continue;
-      // caps scale with the mask too, or many droplets would saturate the
-      // taper and leave a lattice-aligned step at the seam band
       let dd = amount * w * m * gl;
-      if (dF[o] + dd > maxDep * m) dd = Math.max(0, maxDep * m - dF[o]);
+      if (dF[o] + dd > maxDep) dd = Math.max(0, maxDep - dF[o]);
       dF[o] += dd;
       dens[o] += dd;
     }
@@ -243,8 +241,11 @@ export function erodeGrid(
           sed += amt * bW[q];
           const m = mask[o];
           if (m <= 0) continue;
+          // keep a minimum thickness: never thin rock that is < ~3 cells deep below
+          // and never cut into rock above the droplet (overhangs / cave roofs)
+          if (dens[o] >= iso - 0.5 && (bDy[q] > 0 || (jj >= 3 && (dens[o - 2 * px] < iso || dens[o - 3 * px] < iso)))) continue;
           let dd = amt * bW[q] * m * gl;
-          if (dF[o] - dd < -maxCarve * m) dd = Math.max(0, dF[o] + maxCarve * m);
+          if (dF[o] - dd < -maxCarve) dd = Math.max(0, dF[o] + maxCarve);
           dF[o] -= dd;
           dens[o] -= dd;
         }
@@ -254,47 +255,6 @@ export function erodeGrid(
       x = qx;
       y = qy;
       z = qz;
-    }
-  }
-
-  // Smooth the accumulated change (separable [1 2 1]/4, two passes per axis):
-  // Seb's single-cell deposits and the small brush leave node-level spikes
-  // that marching cubes turns into lattice-aligned pits. Re-masked afterwards,
-  // so the seam band stays exactly zero.
-  let j0 = py, j1 = -1;
-  for (let o = 0; o < size; o++) if (dF[o] !== 0) {
-    const j = Math.floor(o / px) % py;
-    if (j < j0) j0 = j;
-    if (j > j1) j1 = j;
-  }
-  if (j1 >= 0) {
-    j0 = Math.max(1, j0 - 2);
-    j1 = Math.min(py - 2, j1 + 2);
-    const tmp = new Float32Array(size);
-    const blur = (src: Float32Array, dst: Float32Array, step: number, axis: number) => {
-      for (let k = 1; k < pz - 1; k++)
-        for (let j = j0; j <= j1; j++) {
-          const row = (k * py + j) * px;
-          for (let i = 1; i < px - 1; i++) {
-            const o = row + i;
-            // clamp at the grid edge along the blurred axis
-            const edge = axis === 1 ? j === j0 || j === j1 : false;
-            dst[o] = edge ? src[o] : 0.25 * src[o - step] + 0.5 * src[o] + 0.25 * src[o + step];
-          }
-        }
-    };
-    const dS = new Float32Array(dF);
-    for (let pass = 0; pass < 2; pass++) {
-      blur(dS, tmp, 1, 0);
-      blur(tmp, dS, px * py, 2);
-      blur(dS, tmp, px, 1);
-      dS.set(tmp);
-    }
-    for (let o = 0; o < size; o++) {
-      const v = dS[o] * mask[o];
-      if (v === dF[o]) continue;
-      dens[o] += v - dF[o];
-      dF[o] = v;
     }
   }
 
