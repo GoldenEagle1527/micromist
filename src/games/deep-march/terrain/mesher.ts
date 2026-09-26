@@ -9,8 +9,9 @@
  * cx*(n-1) .. cx*(n-1)+n-1, so neighbouring columns share their seam points.
  *
  * Vertically a column spans lattice rows gjMin..gjMax, where both end rows are
- * "hard": base(y) > isoLevel, i.e. solid for any noise value (below the hard
- * floor at y≈-7 and above the ceiling at y≈25.5). Those rows anchor the rock.
+ * "hard": the density's lower bound at that height exceeds isoLevel, i.e. solid
+ * everywhere (below the undulating hard floor, above the rock ceiling). Those
+ * rows anchor the rock.
  *
  * Floating rock removal (26-connectivity on solid lattice points):
  *  1. flood from hard rows inside the padded column → anchored;
@@ -26,7 +27,8 @@
  *     component as long as it fits inside each column's window.
  *
  * Other differences from the reference: gradient normals from the padded grid,
- * shared per-edge vertices (indexed), rows provably above/below iso skip noise.
+ * shared per-edge vertices (indexed), rows provably above/below iso (from
+ * field.bounds) skip noise.
  */
 import type { DensityField } from "./density";
 import { CORNER_OFFSETS, EDGE_CORNER_A, EDGE_CORNER_B, TRI_TABLE } from "./tables";
@@ -89,7 +91,11 @@ export function latticeCoord(g: number, field: DensityField): number {
 /** Vertical lattice span of every column (same for all columns of a field). */
 export function columnRows(field: DensityField): ColumnRows {
   const iso = field.settings.isoLevel;
-  const hard = (gj: number) => field.base(latticeCoord(gj, field)) > iso;
+  const b = new Float64Array(2);
+  const hard = (gj: number) => {
+    field.bounds(latticeCoord(gj, field), b);
+    return b[0] > iso;
+  };
   const run = 80; // rows that must all be hard beyond the boundary row
   const allHard = (from: number, dir: number) => {
     for (let i = 0; i < run; i++) if (!hard(from + dir * i)) return false;
@@ -143,12 +149,22 @@ export function generateColumnMesh(
   const stats: ColumnStats = { floaters: 0, floaterPoints: 0, ambiguous: 0, searched: 0, noiseSamples: 0 };
 
   // Row classification: 0 = sample, 1 = always water, 2 = always solid (hard).
-  const rowBase = new Float64Array(py);
+  // rowFill: value written into skipped rows (a bound, so its side of iso is right).
+  const rowFill = new Float64Array(py);
   const rowKind = new Uint8Array(py);
+  const bnd = new Float64Array(2);
   for (let j = 0; j < py; j++) {
-    const b = field.base(y0 + (j - 1) * sp);
-    rowBase[j] = b;
-    rowKind[j] = b + field.noiseMax < iso ? 1 : b > iso ? 2 : 0;
+    field.bounds(y0 + (j - 1) * sp, bnd);
+    if (bnd[1] < iso) {
+      rowKind[j] = 1;
+      rowFill[j] = bnd[1];
+    } else if (bnd[0] > iso) {
+      rowKind[j] = 2;
+      rowFill[j] = bnd[0];
+    } else {
+      rowKind[j] = 0;
+      rowFill[j] = iso;
+    }
   }
   const rowSkip = new Uint8Array(py);
   for (let j = 0; j < py; j++) {
@@ -170,8 +186,8 @@ export function generateColumnMesh(
       const wy = y0 + (j - 1) * sp;
       const row = (k * py + j) * px;
       if (rowSkip[j]) {
-        dens.fill(rowBase[j], row, row + px);
-        state.fill(rowBase[j] >= iso ? SOLID : WATER, row, row + px);
+        dens.fill(rowFill[j], row, row + px);
+        state.fill(rowKind[j] === 2 ? SOLID : WATER, row, row + px);
         continue;
       }
       for (let i = 0; i < px; i++) {
@@ -358,15 +374,12 @@ export function generateColumnMesh(
   }
 
   // --- 3. gradient normals + marching cubes ----------------------------------
-  // Smooth gradient: the terracing term jumps at terrace boundaries, so the
-  // y difference is taken on (density - base) and base's smooth slope added back.
-  const rowSlope = new Float32Array(py);
-  for (let j = 0; j < py; j++) rowSlope[j] = field.baseSlope(y0 + (j - 1) * sp);
+  // The field is continuous, so a plain central difference on the grid works.
   const gradAt = (i: number, j: number, k: number, out: Float32Array, o: number) => {
     const pi = ((k + 1) * py + (j + 1)) * px + (i + 1);
     const inv = 1 / (2 * sp);
     out[o] = (dens[pi + 1] - dens[pi - 1]) * inv;
-    out[o + 1] = (dens[pi + px] - rowBase[j + 2] - (dens[pi - px] - rowBase[j])) * inv + rowSlope[j + 1];
+    out[o + 1] = (dens[pi + px] - dens[pi - px]) * inv;
     out[o + 2] = (dens[pi + plane] - dens[pi - plane]) * inv;
   };
   const ga = new Float32Array(3);
@@ -459,37 +472,6 @@ export function generateColumnMesh(
   const positions = scratchPos.slice(0, vcount * 3);
   const normals = scratchNrm.slice(0, vcount * 3);
   const indices = vcount <= 65535 ? Uint16Array.from(scratchIdx.subarray(0, icount)) : scratchIdx.slice(0, icount);
-  // Where the smooth gradient disagrees with the actual surface (terrace steps
-  // are real faces of the discontinuous field), fall back to the area-weighted
-  // face normal so lighting / material matches the geometry.
-  const faceN = new Float32Array(vcount * 3);
-  for (let t = 0; t < icount; t += 3) {
-    const a = scratchIdx[t] * 3, b = scratchIdx[t + 1] * 3, c = scratchIdx[t + 2] * 3;
-    const ux = positions[b] - positions[a], uy = positions[b + 1] - positions[a + 1], uz = positions[b + 2] - positions[a + 2];
-    const vx = positions[c] - positions[a], vy = positions[c + 1] - positions[a + 1], vz = positions[c + 2] - positions[a + 2];
-    const fx = uy * vz - uz * vy, fy = uz * vx - ux * vz, fz = ux * vy - uy * vx;
-    for (const q of [a, b, c]) {
-      faceN[q] += fx;
-      faceN[q + 1] += fy;
-      faceN[q + 2] += fz;
-    }
-  }
-  for (let v = 0; v < vcount; v++) {
-    const o = v * 3;
-    const len = Math.hypot(faceN[o], faceN[o + 1], faceN[o + 2]);
-    if (len < 1e-9) continue;
-    const fx = faceN[o] / len, fy = faceN[o + 1] / len, fz = faceN[o + 2] / len;
-    const d = fx * normals[o] + fy * normals[o + 1] + fz * normals[o + 2];
-    if (d < 0.5) {
-      const w = d <= 0 ? 1 : 1 - d / 0.5;
-      const nx = normals[o] * (1 - w) + fx * w, ny = normals[o + 1] * (1 - w) + fy * w, nz = normals[o + 2] * (1 - w) + fz * w;
-      const l2 = Math.hypot(nx, ny, nz) || 1;
-      normals[o] = nx / l2;
-      normals[o + 1] = ny / l2;
-      normals[o + 2] = nz / l2;
-    }
-  }
-
   // Ambient occlusion: compare the density a short way out along the normal
   // with what a flat surface (same gradient) would give. Concave spots — cave
   // corners, crevices, under overhangs — stay denser → darker.
