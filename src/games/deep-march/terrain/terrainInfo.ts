@@ -47,8 +47,8 @@
  *    ceiling     normal.y < −0.45
  *    cave-floor  floor-ish (normal.y ≥ 0.45) facing a cave cell
  *    crevice     concave (curv ≥ 0.12: neighbours within 1 u sit above the tangent plane)
- *    ledge-top   normal.y ≥ 0.6 and the floor 1–2 cells aside drops ≥ 1.5
- *    ridge       convex (curv ≤ −0.12)
+ *    ledge-top   normal.y ≥ 0.6 and the floor 1–2 cells aside drops ≥ 2
+ *    ridge       convex (curv ≤ −0.12) and normal.y ≥ 0.2
  *    floor-flat  normal.y ≥ 0.8     floor-slope  ≥ 0.45     wall  otherwise
  *  exposure = share of the 8 horizontal directions + up that are open from the
  *  cell in front; sheltered = exposure < 0.45, env cave/overhang, or AO < 0.4.
@@ -97,7 +97,9 @@ export const ENV_T = {
   curvRadius: 1,
   concave: 0.12,
   convex: -0.12,
-  ledgeDrop: 1.5,
+  ledgeDrop: 2,
+  /** Convex points only count as ridge when facing up-ish (convex vertical faces stay walls). */
+  ridgeMinNy: 0.2,
   shelteredExposure: 0.45,
   shelteredAo: 0.4,
 } as const;
