@@ -23,6 +23,8 @@ import type { DensityField } from "../terrain/density";
 export const DIVER = {
   /** World units per Minecraft block. */
   blockSize: 1.25,
+  /** Overall movement speed multiplier (scales every displacement; dynamics unchanged). */
+  speedScale: 3,
   tickRate: 20,
   moveAccel: 0.02,
   inputScale: 0.98,
@@ -93,7 +95,7 @@ export class DiverController {
 
   /** Speed in world units per second. */
   get speed(): number {
-    return this.velocity.length() * DIVER.blockSize * DIVER.tickRate;
+    return this.velocity.length() * DIVER.blockSize * DIVER.speedScale * DIVER.tickRate;
   }
 
   /** Mouse/touch look, in radians. */
@@ -185,10 +187,10 @@ export class DiverController {
     // --- move with collisions (sub-stepped) ---
     const alongBefore = v.dot(this.forward);
     this.tickHeadOn = 0;
-    const dist = v.length() * D.blockSize;
+    const dist = v.length() * D.blockSize * D.speedScale;
     const n = Math.max(1, Math.ceil(dist / 0.07));
     for (let i = 0; i < n; i++) {
-      this.position.addScaledVector(v, D.blockSize / n);
+      this.position.addScaledVector(v, (D.blockSize * D.speedScale) / n);
       this.resolveCollisions();
     }
     // Extension: a hard head-on hit that stops the swimmer ends the swim.
