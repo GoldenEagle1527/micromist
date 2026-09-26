@@ -21,37 +21,7 @@ import * as THREE from "three";
 import { BEAM_DECLS, BEAM_LIGHT, BEAM_OPAQUE, type BeamUniforms } from "./highBeam";
 import { PL_DECLS, PL_LIGHT, type ParticleLightUniforms } from "./particleLight";
 
-import sandAlb1024 from "../assets/sand_albedo_1024.webp?url";
-import sandNrm1024 from "../assets/sand_nrm_1024.webp?url";
-import gravelAlb1024 from "../assets/gravel_albedo_1024.webp?url";
-import gravelNrm1024 from "../assets/gravel_nrm_1024.webp?url";
-import rockAlb1024 from "../assets/rock_albedo_1024.webp?url";
-import rockNrm1024 from "../assets/rock_nrm_1024.webp?url";
-import mossAlb1024 from "../assets/moss_albedo_1024.webp?url";
-import mossNrm1024 from "../assets/moss_nrm_1024.webp?url";
-import sandAlb512 from "../assets/sand_albedo_512.webp?url";
-import sandNrm512 from "../assets/sand_nrm_512.webp?url";
-import gravelAlb512 from "../assets/gravel_albedo_512.webp?url";
-import gravelNrm512 from "../assets/gravel_nrm_512.webp?url";
-import rockAlb512 from "../assets/rock_albedo_512.webp?url";
-import rockNrm512 from "../assets/rock_nrm_512.webp?url";
-import mossAlb512 from "../assets/moss_albedo_512.webp?url";
-import mossNrm512 from "../assets/moss_nrm_512.webp?url";
-
-const URLS = {
-  1024: {
-    sand: [sandAlb1024, sandNrm1024],
-    gravel: [gravelAlb1024, gravelNrm1024],
-    rock: [rockAlb1024, rockNrm1024],
-    moss: [mossAlb1024, mossNrm1024],
-  },
-  512: {
-    sand: [sandAlb512, sandNrm512],
-    gravel: [gravelAlb512, gravelNrm512],
-    rock: [rockAlb512, rockNrm512],
-    moss: [mossAlb512, mossNrm512],
-  },
-} as const;
+import { loadSeabedTextures } from "./seabedTextures";
 
 /** Shared water / haze uniforms (terrain material + background dome). Colours are linear. */
 export type WaterUniforms = {
@@ -88,6 +58,8 @@ export function createWaterUniforms(horizon: THREE.Color, far: number): WaterUni
 }
 
 export type SeabedOptions = {
+  /** For KTX2 transcoder format detection. */
+  renderer: THREE.WebGLRenderer;
   lowSpec: boolean;
   /** Shared water uniforms (createWaterUniforms). */
   water: WaterUniforms;
@@ -363,35 +335,10 @@ const MAP_FRAGMENT = /* glsl */ `
 `;
 
 export function createSeabedMaterial(opts: SeabedOptions): SeabedMaterial {
-  const size = opts.lowSpec ? 512 : 1024;
-  const urls = URLS[size];
-  const loader = new THREE.TextureLoader();
-  const textures: THREE.Texture[] = [];
-  let pending = 8;
-  const done = () => {
-    pending--;
-    if (pending === 0) opts.onReady?.();
-  };
-  const load = (url: string, srgb: boolean) => {
-    const t = loader.load(url, done, undefined, done);
-    t.wrapS = t.wrapT = THREE.RepeatWrapping;
-    t.colorSpace = srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace;
-    t.anisotropy = opts.anisotropy;
-    t.generateMipmaps = true;
-    t.minFilter = THREE.LinearMipmapLinearFilter;
-    textures.push(t);
-    return t;
-  };
+  const tex = loadSeabedTextures(opts.renderer, opts.lowSpec ? 512 : 1024, opts.anisotropy, () => opts.onReady?.());
 
   const uniforms = {
-    tSandA: { value: load(urls.sand[0], true) },
-    tSandN: { value: load(urls.sand[1], false) },
-    tGravelA: { value: load(urls.gravel[0], true) },
-    tGravelN: { value: load(urls.gravel[1], false) },
-    tRockA: { value: load(urls.rock[0], true) },
-    tRockN: { value: load(urls.rock[1], false) },
-    tMossA: { value: load(urls.moss[0], true) },
-    tMossN: { value: load(urls.moss[1], false) },
+    ...tex.uniforms,
     uTime: { value: 0 },
     // per-unit absorption (red goes first) — close surfaces keep true colour
     uAbsorb: { value: new THREE.Vector3(0.06, 0.024, 0.014) },
@@ -513,7 +460,7 @@ ${BEAM_OPAQUE}    outgoingLight = mix(outgoingLight, water, smoothstep(uFar * 0.
       uniforms.uTime.value = time;
     },
     dispose: () => {
-      textures.forEach((t) => t.dispose());
+      tex.dispose();
       material.dispose();
       fades.forEach((m) => m.dispose());
     },

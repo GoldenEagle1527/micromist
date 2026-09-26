@@ -180,6 +180,7 @@ void main() {
 
   let texturesReady = false;
   const seabed = createSeabedMaterial({
+    renderer,
     lowSpec,
     water,
     worldScale: terrain.worldScale,
