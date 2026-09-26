@@ -25,9 +25,10 @@ export class NightVision {
 
   private readonly renderer: THREE.WebGLRenderer;
 
-  constructor(renderer: THREE.WebGLRenderer) {
+  /** @param samples MSAA samples of the scene target (0 on low-spec devices). */
+  constructor(renderer: THREE.WebGLRenderer, samples = 4) {
     this.renderer = renderer;
-    this.target = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: 4, depthBuffer: true });
+    this.target = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples, depthBuffer: true });
     this.material = new THREE.ShaderMaterial({
       uniforms: {
         tScene: { value: this.target.texture },
