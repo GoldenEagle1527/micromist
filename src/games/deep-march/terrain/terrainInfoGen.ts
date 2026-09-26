@@ -359,7 +359,7 @@ export function buildColumnTerrainInfo(inp: ColumnInfoInput): ChunkTerrainInfo {
     else if (floorish && e === ENV.CAVE) type = SURF.CAVE_FLOOR;
     else if (curvRaw >= ENV_T.concave) type = SURF.CREVICE;
     else if (nY >= 0.6 && ledge(x, y, z)) type = SURF.LEDGE_TOP;
-    else if (curvRaw <= ENV_T.convex) type = SURF.RIDGE;
+    else if (curvRaw <= ENV_T.convex && nY >= ENV_T.ridgeMinNy) type = SURF.RIDGE;
     else type = nY >= 0.8 ? SURF.FLOOR_FLAT : floorish ? SURF.FLOOR_SLOPE : SURF.WALL;
     sPos[o * 3] = x;
     sPos[o * 3 + 1] = y;
