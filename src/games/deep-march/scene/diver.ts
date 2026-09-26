@@ -23,8 +23,13 @@ import type { DensityField } from "../terrain/density";
 export const DIVER = {
   /** World units per Minecraft block. */
   blockSize: 1.25,
-  /** Overall movement speed multiplier (scales every displacement; dynamics unchanged). */
-  speedScale: 3,
+  /**
+   * Overall movement speed multiplier (scales every displacement; dynamics unchanged).
+   * 2.25 (≈ 9.8 m/s full swim, was 3 ≈ 13 m/s): at 13 m/s the 4 mesher workers
+   * can't rebuild the full-resolution ring ahead fast enough, so the diver keeps
+   * swimming into coarse columns that swap in right in front of the lamp.
+   */
+  speedScale: 2.25,
   tickRate: 20,
   moveAccel: 0.02,
   inputScale: 0.98,
