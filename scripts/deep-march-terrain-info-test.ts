@@ -8,7 +8,7 @@ import { TERRAIN as DESKTOP, terrainForDevice } from "../src/games/deep-march/te
 
 const TERRAIN = process.env.LOWSPEC ? terrainForDevice(true) : DESKTOP;
 import { createDensityField, type DensityField } from "../src/games/deep-march/terrain/density";
-import { columnRowPlan, columnRows, generateColumnMesh, type ColumnMeshData } from "../src/games/deep-march/terrain/mesher";
+import { columnRows, generateColumnMesh, type ColumnMeshData } from "../src/games/deep-march/terrain/mesher";
 import { buildColumnTerrainInfo, createLineSampler } from "../src/games/deep-march/terrain/terrainInfoGen";
 import {
   ENV, ENV_KINDS, ENV_T, SURFACE_TYPES, TerrainInfoStore, type ChunkTerrainInfo,
@@ -73,13 +73,12 @@ for (const seed of SEEDS) {
   // --- seam agreement ---
   // (1) own cells vs a reference that reads every line from the shared sampler
   //     (= exactly what neighbours see in their ring): differences only from floater removal.
-  const plan = columnRowPlan(field, rows);
   let refSame = 0, refCells = 0, edgeSame = 0, edgeCells = 0, cleanDiff = 0, cleanCols = 0;
   for (const [key, m] of out) {
     const [cx, cz] = key.split(",").map(Number);
     const ref = buildColumnTerrainInfo({
       field, rows, cx, cz, dens: new Float32Array(0), px: 0, py: 0,
-      positions: m.positions, normals: m.normals, ao: m.ao, sampler: createLineSampler(field, rows, plan), ownFromSampler: true,
+      positions: m.positions, normals: m.normals, ao: m.ao, sampler: createLineSampler(field, rows), ownFromSampler: true,
     });
     const a = m.info!;
     const clean = m.stats.floaters === 0;
@@ -185,9 +184,10 @@ for (const seed of SEEDS) {
     for (const [x, y, z] of pickCells(code, 25)) {
       const e = store.getEnvAt(x, y, z);
       if (!e) continue;
-      const u = march(field, x, y, z, 0, 1, 0, 20), d = march(field, x, y, z, 0, -1, 0, 20);
+      const u = march(field, x, y, z, 0, 1, 0, 64), d = march(field, x, y, z, 0, -1, 0, 64);
       distN++;
       if (Math.abs(Math.min(u, 63) - Math.min(e.up, 63)) < 0.3 && Math.abs(Math.min(d, 63) - Math.min(e.down, 63)) < 0.3) distOk++;
+      else if (process.env.DBG) console.log("    dist-miss", x.toFixed(2), y.toFixed(2), z.toFixed(2), "brute", u.toFixed(2), d.toFixed(2), "stored", e.up, e.down);
     }
   }
   check("stored up/down distances match brute force (±0.3)", distOk / Math.max(1, distN) >= 0.95, pct(distOk, distN));

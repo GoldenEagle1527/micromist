@@ -2,6 +2,7 @@
 import type { ReactNode } from "react";
 import type { Telemetry } from "../scene/world";
 import type { EnvironmentKind } from "../terrain/terrainInfo";
+import { REGION_COLORS, REGION_KEYS, type RegionKey } from "../terrain/regions";
 import { arcPath, polar } from "./geom";
 
 export type ReadoutLabels = {
@@ -15,6 +16,8 @@ export type ReadoutLabels = {
   contactWall: string;
   terrainTitle: string;
   terrain: Record<EnvironmentKind, string>;
+  regionTitle: string;
+  regions: Record<RegionKey, string>;
 };
 
 /** 16×10 line glyphs per terrain kind (diver = the dot where relevant). */
@@ -122,6 +125,13 @@ export function Readout({ tel, labels }: { tel: Telemetry | null; labels: Readou
             <span style={{ top: `${pitchPct}%` }} />
           </div>
         </div>
+        {tel.region ? (
+          <div className="dm-region" data-region={tel.region} title={labels.regionTitle}>
+            <i style={{ background: REGION_COLORS[REGION_KEYS.indexOf(tel.region)] }} />
+            <small>{labels.regionTitle}</small>
+            <span>{labels.regions[tel.region]}</span>
+          </div>
+        ) : null}
         {tel.terrain ? (
           <div className="dm-terrain" data-kind={tel.terrain} title={labels.terrainTitle}>
             <svg viewBox="0 0 16 10" aria-hidden="true">

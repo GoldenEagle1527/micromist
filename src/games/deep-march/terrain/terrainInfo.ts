@@ -29,9 +29,15 @@
  *      appears exactly once). Struct-of-arrays, `count` entries:
  *        pos (x,y,z) · nrm (×127, points into water) · type SurfaceCode ·
  *        env (EnvCode of the water in front) · exposure (0…255) ·
- *        flags (bit 0 sheltered) · curv (−127 concave … 127 convex) · region
- *  (c) Biome region — `regionAt(seed, x, z)`: seeded jittered-Voronoi cells
- *      (~56 units) → id 0 … REGION_COUNT−1. Future biome = region × env / surface.
+ *        flags (bit 0 sheltered) · curv (−127 concave … 127 convex) ·
+ *        region (macro region id) · regionW (dominant weight ×255) · regionEdge (units to border, cap 255)
+ *  (c) Macro terrain region (regions.ts) — the region layout that also drives
+ *      the density parameters: sand / reef / canyon / cave / terrace / trench,
+ *      ~80–150-unit areas with ~18-unit blend bands. Region is a function of
+ *      (x, z) only, so it is stored per class-cell column (nx · nz, index
+ *      iz · nx + ix): regionId · regionW (dominant weight ×255, 255 = core,
+ *      ~128 = on a border) · regionEdge (distance to the nearest border, units,
+ *      cap 255). Future biome = region × env / surface type.
  *
  * ── Classes ────────────────────────────────────────────────────────────────
  *  EnvCode (water cells; thresholds in ENV_T):
@@ -55,12 +61,17 @@
  *
  * ── Main-thread API (TerrainInfoStore, kept by ChunkManager as `terrain`) ──
  *    getEnvAt(x, y, z)                → EnvSample | null (null = column not generated yet)
+ *    getRegionAt(x, z)                → RegionInfo (pure; works without loaded columns)
  *    getSpawnCandidates(bounds, filter?) → SpawnCandidate[]
  *    forEachSpawn(fn)                 visit all loaded candidates without allocating arrays
  *  e.g. corals:  getSpawnCandidates(b, c => c.type === "floor-flat" && !c.sheltered)
  *       shells:  … c.type === "crevice" || c.type === "cave-floor"
  *       lurkers: … c.type === "ceiling" && c.env === "cave"
  */
+
+import { REGION_COUNT, REGION_KEYS, createRegionField, createRegionSample, type RegionField, type RegionKey } from "./regions";
+
+export { REGION_COUNT, REGION_KEYS };
 
 // ───────────────────────── codes ─────────────────────────
 
@@ -124,6 +135,10 @@ export type ChunkTerrainInfo = {
   down: Uint8Array;
   side: Uint8Array;
   sides: Uint8Array;
+  /** Macro region per class-cell column (nx · nz, index iz · nx + ix). */
+  regionId: Uint8Array;
+  regionW: Uint8Array;
+  regionEdge: Uint8Array;
   spawn: {
     count: number;
     pos: Float32Array;
@@ -134,13 +149,18 @@ export type ChunkTerrainInfo = {
     flags: Uint8Array;
     curv: Int8Array;
     region: Uint8Array;
+    regionW: Uint8Array;
+    regionEdge: Uint8Array;
   };
 };
 
 /** Buffers to list as transferables when posting a ChunkTerrainInfo. */
 export function terrainInfoTransfers(info: ChunkTerrainInfo): ArrayBuffer[] {
   const s = info.spawn;
-  return [info.env, info.up, info.down, info.side, info.sides, s.pos, s.nrm, s.type, s.env, s.exposure, s.flags, s.curv, s.region].map(
+  return [
+    info.env, info.up, info.down, info.side, info.sides, info.regionId, info.regionW, info.regionEdge,
+    s.pos, s.nrm, s.type, s.env, s.exposure, s.flags, s.curv, s.region, s.regionW, s.regionEdge,
+  ].map(
     (a) => a.buffer as ArrayBuffer,
   );
 }
@@ -153,7 +173,11 @@ export type EnvSample = {
   down: number;
   side: number;
   sides: number;
+  /** Macro region id (see regions.ts), its dominant weight (0.5 … 1) and distance to the nearest border. */
   region: number;
+  regionKey: RegionKey;
+  regionWeight: number;
+  regionEdge: number;
   /** World position of the class cell that answered. */
   x: number;
   y: number;
@@ -174,6 +198,9 @@ export type SpawnCandidate = {
   curvature: number;
   depth: number;
   region: number;
+  regionKey: RegionKey;
+  regionWeight: number;
+  regionEdge: number;
   /** Column and index (stable id per seed/preset: `${cx},${cz}#${index}`). */
   cx: number;
   cz: number;
@@ -195,29 +222,6 @@ export function hash4(seed: number, a: number, b: number, c: number, d = 0): num
 }
 export const hash01 = (seed: number, a: number, b: number, c: number, d = 0) => hash4(seed, a, b, c, d) / 4294967296;
 
-export const REGION_SIZE = 56;
-export const REGION_COUNT = 6;
-/** Large-scale biome region id at (x, z): nearest seeded jittered cell point. */
-export function regionAt(seed: number, x: number, z: number): number {
-  const gx = Math.floor(x / REGION_SIZE);
-  const gz = Math.floor(z / REGION_SIZE);
-  let best = Infinity;
-  let id = 0;
-  for (let dz = -1; dz <= 1; dz++) {
-    for (let dx = -1; dx <= 1; dx++) {
-      const cx = gx + dx, cz = gz + dz;
-      const px = (cx + 0.1 + 0.8 * hash01(seed, cx, cz, 11)) * REGION_SIZE;
-      const pz = (cz + 0.1 + 0.8 * hash01(seed, cx, cz, 12)) * REGION_SIZE;
-      const d = (px - x) * (px - x) + (pz - z) * (pz - z);
-      if (d < best) {
-        best = d;
-        id = hash4(seed, cx, cz, 13) % REGION_COUNT;
-      }
-    }
-  }
-  return id;
-}
-
 const q4 = (v: number) => (v >= 255 ? Infinity : v / 4);
 
 // ───────────────────────── main-thread store ─────────────────────────
@@ -228,6 +232,17 @@ export type TerrainGeometry = {
   numPointsPerAxis: number;
 };
 
+export type RegionInfo = {
+  id: number;
+  key: RegionKey;
+  /** Weight per region id (sum 1). */
+  weights: number[];
+  /** Weight of the dominant region (1 = core, ≈ 0.5 = on a border). */
+  dominant: number;
+  /** Approximate distance to the nearest border with another region (units, ≤ 255). */
+  edge: number;
+};
+
 export type Bounds = { minX: number; minY?: number; minZ: number; maxX: number; maxY?: number; maxZ: number };
 
 /** Holds every loaded column's ChunkTerrainInfo and answers queries. */
@@ -235,12 +250,21 @@ export class TerrainInfoStore {
   private readonly cols = new Map<string, ChunkTerrainInfo>();
   private readonly g: TerrainGeometry;
   private readonly sp: number;
+  private readonly regions: RegionField;
+  private readonly rs = createRegionSample();
   /** Bumped whenever a column is added or removed. */
   version = 0;
 
   constructor(g: TerrainGeometry) {
     this.g = g;
     this.sp = g.boundsSize / (g.numPointsPerAxis - 1);
+    this.regions = createRegionField(g.seed);
+  }
+
+  /** Macro region at (x, z) with blend weights (pure function of seed + position). */
+  getRegionAt(x: number, z: number): RegionInfo {
+    const r = this.regions.sample(x, z, this.rs);
+    return { id: r.id, key: REGION_KEYS[r.id], weights: Array.from(r.w), dominant: r.dominant, edge: r.edge };
   }
 
   set(info: ChunkTerrainInfo) {
@@ -300,6 +324,7 @@ export class TerrainInfoStore {
     const iy = Math.floor(best / info.nx) % info.ny;
     const iz = Math.floor(best / (info.nx * info.ny));
     const code = info.env[best];
+    const rc = iz * info.nx + ix;
     const wx = -h + (info.ci0 + ix) * S * sp;
     const wz = -h + (info.ck0 + iz) * S * sp;
     return {
@@ -309,7 +334,10 @@ export class TerrainInfoStore {
       down: q4(info.down[best]),
       side: q4(info.side[best]),
       sides: info.sides[best],
-      region: regionAt(this.g.seed, wx, wz),
+      region: info.regionId[rc],
+      regionKey: REGION_KEYS[info.regionId[rc]],
+      regionWeight: info.regionW[rc] / 255,
+      regionEdge: info.regionEdge[rc],
       x: wx,
       y: -h + (info.cj0 + iy) * S * sp,
       z: wz,
@@ -333,6 +361,9 @@ export class TerrainInfoStore {
       curvature: s.curv[i] / 127,
       depth: 100 - s.pos[i * 3 + 1],
       region: s.region[i],
+      regionKey: REGION_KEYS[s.region[i]],
+      regionWeight: s.regionW[i] / 255,
+      regionEdge: s.regionEdge[i],
       cx: info.cx,
       cz: info.cz,
       index: i,

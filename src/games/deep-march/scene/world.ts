@@ -4,6 +4,7 @@ import { SEA_COLORS, isLowSpecDevice, terrainForDevice } from "../terrain/config
 import { createDensityField } from "../terrain/density";
 import { ChunkManager } from "../terrain/chunks";
 import type { EnvironmentKind, SurfaceType } from "../terrain/terrainInfo";
+import { REGION_KEYS, createRegionSample, type RegionKey } from "../terrain/regions";
 import { SpawnDebugView } from "./spawnDebug";
 import { InputController, type PanelInput } from "./input";
 import { MarineSnow } from "./particles";
@@ -18,6 +19,9 @@ export type HudLabels = {
   classify: string;
   spawnDebugTitle: string;
   surfaceTypes: Record<SurfaceType, string>;
+  regionDebugTitle: string;
+  regionNames: Record<RegionKey, string>;
+  regionEdge: string;
   loading: string;
   lockPrompt: string;
 };
@@ -39,6 +43,8 @@ export type Telemetry = {
   contact: "floor" | "ceiling" | "wall" | null;
   /** Stable terrain classification around the diver (null until first evaluation). */
   terrain: EnvironmentKind | null;
+  /** Macro region under the diver (switches once the new region dominates, no flicker on borders). */
+  region: RegionKey | null;
   lamp: boolean;
   swimLatch: boolean;
   ready: boolean;
@@ -91,6 +97,8 @@ export function createDeepMarch(host: HTMLElement, opts: DeepMarchOptions): Deep
 
   // Underwater look — reference: fog == camera background (0, .168, .453), linear fog to viewDistance * .81.
   const fogColor = new THREE.Color().setRGB(SEA_COLORS.fog[0], SEA_COLORS.fog[1], SEA_COLORS.fog[2], THREE.SRGBColorSpace);
+  const baseFog = fogColor.clone();
+  let lastDeep = 0;
   const scene = new THREE.Scene();
   scene.background = fogColor;
   scene.fog = new THREE.Fog(fogColor, 1.5, terrain.viewDistance * SEA_COLORS.fogDstMultiplier);
@@ -145,7 +153,14 @@ export function createDeepMarch(host: HTMLElement, opts: DeepMarchOptions): Deep
   };
   // Debug: spawn-candidate markers (B, or ?debugSpawns=1); off in normal play.
   let labels = opts.labels;
-  const spawnDebug = new SpawnDebugView(scene, chunks.terrain, overlay, labels);
+  const spawnDebug = new SpawnDebugView(scene, chunks.terrain, field.regions, overlay, labels);
+  // HUD region chip: dominant macro region with hysteresis (switch at ≥ 60 % weight).
+  const regionSample = createRegionSample();
+  let regionId = -1;
+  const updateRegion = () => {
+    const r = field.regions.sample(diver.position.x, diver.position.z, regionSample);
+    if (regionId < 0 || (r.id !== regionId && r.w[r.id] >= 0.6)) regionId = r.id;
+  };
   if (new URLSearchParams(window.location.search).get("debugSpawns") === "1") spawnDebug.setVisible(true);
   const onDebugKey = (ev: KeyboardEvent) => {
     if (ev.code !== "KeyB" || ev.repeat) return;
@@ -154,7 +169,10 @@ export function createDeepMarch(host: HTMLElement, opts: DeepMarchOptions): Deep
     spawnDebug.setVisible(!spawnDebug.visible);
   };
   window.addEventListener("keydown", onDebugKey);
-  diver.spawn(0, 0);
+  // Spawn at the core of the reef-forest region nearest the origin (in water: diver.spawn
+  // picks the tallest water gap around that point).
+  const spawnAt = field.regions.spawnPoint();
+  diver.spawn(spawnAt.x, spawnAt.z);
   // Optional viewpoint for sharing / screenshots: ?at=x,y,z,yawDeg,pitchDeg.
   const at = new URLSearchParams(window.location.search).get("at");
   if (at) {
@@ -272,9 +290,21 @@ export function createDeepMarch(host: HTMLElement, opts: DeepMarchOptions): Deep
       fpsFrames = 0;
       fpsTime = 0;
     }
+    // Deeper water is darker (deep trench): fog and light fade below y ≈ −8.
+    const deep = THREE.MathUtils.smoothstep(-camera.position.y, 8, 22);
+    if (Math.abs(deep - lastDeep) > 0.002) {
+      lastDeep = deep;
+      fogColor.copy(baseFog).multiplyScalar(1 - 0.62 * deep);
+      (scene.fog as THREE.Fog).color.copy(fogColor);
+      ambient.intensity = 0.95 * (1 - 0.55 * deep);
+      sun.intensity = 1.05 * (1 - 0.7 * deep);
+    }
+
     hudTimer -= dt;
     if (hudTimer <= 0) {
       updateTerrainKind(0.25 - hudTimer);
+      updateRegion();
+      spawnDebug.updateDiver(diver.position.x, diver.position.z, -diver.yaw);
       hudTimer = 0.25;
       const st = chunks.stats();
       stats.textContent = `${fps.toFixed(0)} fps · ${labels.chunks} ${st.meshes}/${st.active} · −${st.floaters} ${labels.floaters} · q${st.queued}+${st.pending} · ${(st.triangles / 1000).toFixed(0)}k ${labels.tris} · ${st.workers ? `${st.workers}w` : labels.mainThread} ${st.avgMs.toFixed(1)}ms (${labels.classify} ${st.avgInfoMs.toFixed(1)})`;
@@ -310,6 +340,7 @@ export function createDeepMarch(host: HTMLElement, opts: DeepMarchOptions): Deep
       state: diver.state,
       contact: diver.contact,
       terrain: terrainKind,
+      region: regionId >= 0 ? REGION_KEYS[regionId] : null,
       lamp: lampOn,
       swimLatch: input.panel.swimLatch,
       ready,

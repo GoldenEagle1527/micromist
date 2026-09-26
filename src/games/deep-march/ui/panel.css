@@ -169,6 +169,34 @@
   background: var(--hud);
   box-shadow: 0 0 4px var(--hud);
 }
+.dm-region {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  padding: 2px 10px 2px 8px;
+  width: max-content;
+  max-width: 100%;
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  white-space: nowrap;
+  color: #fff6e0;
+  border-left: 2px solid var(--hud);
+  background: linear-gradient(90deg, rgb(0 40 60 / 0.55), rgb(0 40 60 / 0.08));
+  text-shadow: 0 0 6px rgb(98 243 255 / 0.6);
+}
+.dm-region i {
+  width: 7px;
+  height: 7px;
+  flex: none;
+  transform: rotate(45deg);
+  box-shadow: 0 0 5px currentColor;
+}
+.dm-region small {
+  font-size: 9px;
+  opacity: 0.6;
+  letter-spacing: 0.14em;
+}
 .dm-terrain {
   display: flex;
   align-items: center;
@@ -424,9 +452,13 @@
   .dm-readout-depth {
     font-size: 18px;
   }
-  .dm-terrain {
+  .dm-terrain,
+  .dm-region {
     font-size: 10px;
     padding: 1px 8px 1px 6px;
+  }
+  .dm-region small {
+    display: none;
   }
 }
 
