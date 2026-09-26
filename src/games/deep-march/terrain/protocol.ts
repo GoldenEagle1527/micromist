@@ -12,9 +12,13 @@ export type MesherResponse = {
   positions: Float32Array;
   normals: Float32Array;
   ao: Float32Array;
+  ero: Float32Array;
   indices: Uint16Array | Uint32Array;
   /** Removed floating lattice points owned by the column: (i, j, k) triplets. */
   removed: Int32Array;
+  erosion: Int8Array;
+  erosionJ0: number;
+  erosionJ1: number;
   stats: ColumnStats;
   ms: number;
 };
