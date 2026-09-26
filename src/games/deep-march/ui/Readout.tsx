@@ -1,6 +1,7 @@
 /** Compact holographic readout: heading compass arc (top centre) + depth/state block (top left). */
 import type { ReactNode } from "react";
 import type { Telemetry } from "../scene/world";
+import type { EnvironmentKind } from "../terrain/classify";
 import { arcPath, polar } from "./geom";
 
 export type ReadoutLabels = {
@@ -12,6 +13,20 @@ export type ReadoutLabels = {
   contactFloor: string;
   contactCeiling: string;
   contactWall: string;
+  terrainTitle: string;
+  terrain: Record<EnvironmentKind, string>;
+};
+
+/** 16×10 line glyphs per terrain kind (diver = the dot where relevant). */
+const TERRAIN_GLYPH: Record<EnvironmentKind, string> = {
+  open: "M 1 4 Q 4.5 1 8 4 T 15 4 M 1 8 Q 4.5 5 8 8 T 15 8",
+  flat: "M 1 8.5 L 15 8.5 M 3 6.5 L 4 6.5 M 8 6.5 L 9 6.5 M 12 6.5 L 13 6.5",
+  slope: "M 1 9 L 15 2 M 1 9 L 15 9",
+  cliff: "M 4 1 L 4 9 L 15 9 M 4 1 L 1 1",
+  cave: "M 1 9 L 1 5 Q 1 1 8 1 Q 15 1 15 5 L 15 9 Z",
+  overhang: "M 1 1.5 L 15 1.5 L 15 9 M 9 9 L 15 9 M 1 1.5 L 1 3.5",
+  canyon: "M 2 1 L 5 9 L 11 9 L 14 1",
+  ridge: "M 1 9 L 8 1.5 L 15 9",
 };
 
 const CARDINAL: Record<number, string> = { 0: "N", 45: "NE", 90: "E", 135: "SE", 180: "S", 225: "SW", 270: "W", 315: "NW" };
@@ -107,6 +122,14 @@ export function Readout({ tel, labels }: { tel: Telemetry | null; labels: Readou
             <span style={{ top: `${pitchPct}%` }} />
           </div>
         </div>
+        {tel.terrain ? (
+          <div className="dm-terrain" data-kind={tel.terrain} title={labels.terrainTitle}>
+            <svg viewBox="0 0 16 10" aria-hidden="true">
+              <path d={TERRAIN_GLYPH[tel.terrain]} />
+            </svg>
+            <span>{labels.terrain[tel.terrain]}</span>
+          </div>
+        ) : null}
         {contact ? <div className="dm-readout-warn">⚠ {contact}</div> : null}
       </div>
     </>

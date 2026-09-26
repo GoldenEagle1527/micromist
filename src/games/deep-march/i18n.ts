@@ -1,3 +1,5 @@
+import type { EnvironmentKind } from "./terrain/classify";
+
 export type DeepMarchDict = {
   setupTitle: string;
   setupHint: string;
@@ -22,6 +24,8 @@ export type DeepMarchDict = {
   hudGrounded: string;
   hudCeiling: string;
   hudScrape: string;
+  hudTerrain: string;
+  terrainKinds: Record<EnvironmentKind, string>;
   lockPrompt: string;
   stateSwim: string;
   stateHover: string;
@@ -68,6 +72,17 @@ export const deepMarchEn: DeepMarchDict = {
   hudGrounded: "Touching bottom",
   hudCeiling: "Touching ceiling",
   hudScrape: "Brushing rock",
+  hudTerrain: "Terrain",
+  terrainKinds: {
+    open: "Open water",
+    flat: "Flat seabed",
+    slope: "Slope",
+    cliff: "Cliff",
+    cave: "Cave",
+    overhang: "Overhang",
+    canyon: "Canyon",
+    ridge: "Ridge / peak",
+  },
   lockPrompt: "Click to look around · Esc releases the mouse",
   stateSwim: "SWIM",
   stateHover: "HOVER",
@@ -113,6 +128,17 @@ export const deepMarchZh: DeepMarchDict = {
   hudGrounded: "触底",
   hudCeiling: "触顶",
   hudScrape: "擦碰岩壁",
+  hudTerrain: "地形",
+  terrainKinds: {
+    open: "开阔水域",
+    flat: "海床平地",
+    slope: "斜坡",
+    cliff: "峭壁",
+    cave: "洞穴",
+    overhang: "岩檐/拱下",
+    canyon: "峡谷/沟槽",
+    ridge: "山脊/峰顶",
+  },
   lockPrompt: "点击画面转动视角 · Esc 释放鼠标",
   stateSwim: "游泳",
   stateHover: "悬浮",

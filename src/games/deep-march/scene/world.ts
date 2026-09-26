@@ -3,6 +3,7 @@ import * as THREE from "three";
 import { SEA_COLORS, isLowSpecDevice, terrainForDevice } from "../terrain/config";
 import { createDensityField } from "../terrain/density";
 import { ChunkManager } from "../terrain/chunks";
+import { EnvironmentTracker, createTerrainProbe, type EnvironmentKind } from "../terrain/classify";
 import { InputController, type PanelInput } from "./input";
 import { MarineSnow } from "./particles";
 import { createSeabedMaterial } from "./seabedMaterial";
@@ -29,6 +30,8 @@ export type Telemetry = {
   speed: number;
   state: DiverState;
   contact: "floor" | "ceiling" | "wall" | null;
+  /** Stable terrain classification around the diver (null until first evaluation). */
+  terrain: EnvironmentKind | null;
   lamp: boolean;
   swimLatch: boolean;
   ready: boolean;
@@ -106,7 +109,10 @@ export function createDeepMarch(host: HTMLElement, opts: DeepMarchOptions): Deep
   const field = createDensityField(opts.seed, terrain);
   const chunks = new ChunkManager(scene, field, opts.seed, terrainMat);
 
-  const diver = new DiverController(field, (x, y, z) => chunks.isRemoved(x, y, z));
+  const isRemoved = (x: number, y: number, z: number) => chunks.isRemoved(x, y, z);
+  const diver = new DiverController(field, isRemoved);
+  // Terrain type around the diver: same rock as collision, time-sliced ~4 Hz with hysteresis.
+  const envTracker = new EnvironmentTracker(createTerrainProbe(field, isRemoved));
   diver.spawn(0, 0);
   // Optional viewpoint for sharing / screenshots: ?at=x,y,z,yawDeg,pitchDeg.
   const at = new URLSearchParams(window.location.search).get("at");
@@ -205,6 +211,7 @@ export function createDeepMarch(host: HTMLElement, opts: DeepMarchOptions): Deep
     if (ready) {
       diver.update(dt, input.move());
       if (diver.lastTicks > 0) input.consumePulse();
+      envTracker.update(diver.position.x, diver.position.y, diver.position.z, dt);
     } else if (texturesReady && chunks.nearReady(diver.position, 14)) {
       ready = true;
       loading.classList.add("done");
@@ -228,7 +235,7 @@ export function createDeepMarch(host: HTMLElement, opts: DeepMarchOptions): Deep
     if (hudTimer <= 0) {
       hudTimer = 0.25;
       const st = chunks.stats();
-      stats.textContent = `${fps.toFixed(0)} fps · ${opts.labels.chunks} ${st.meshes}/${st.active} · −${st.floaters} float · q${st.queued}+${st.pending} · ${(st.triangles / 1000).toFixed(0)}k tri · ${st.workers ? `${st.workers}w` : "main"} ${st.avgMs.toFixed(1)}ms`;
+      stats.textContent = `${fps.toFixed(0)} fps · ${opts.labels.chunks} ${st.meshes}/${st.active} · −${st.floaters} float · q${st.queued}+${st.pending} · ${(st.triangles / 1000).toFixed(0)}k tri · ${st.workers ? `${st.workers}w` : "main"} ${st.avgMs.toFixed(1)}ms · env ${envTracker.lastCostMs.toFixed(1)}ms`;
     }
   };
   raf = requestAnimationFrame(frame);
@@ -253,6 +260,7 @@ export function createDeepMarch(host: HTMLElement, opts: DeepMarchOptions): Deep
       speed: diver.speed,
       state: diver.state,
       contact: diver.contact,
+      terrain: envTracker.kind,
       lamp: lampOn,
       swimLatch: input.panel.swimLatch,
       ready,
