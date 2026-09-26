@@ -160,6 +160,20 @@ vec2 dmRot(vec2 uv) { return mat2(0.8, -0.6, 0.6, 0.8) * uv; }
 // Explicit-gradient fetch (see MAP_FRAGMENT): uv·s with derivatives d·s.
 #define DM_TG(t, uv, s, dx, dy) textureGrad(t, (uv) * (s), (dx) * (s), (dy) * (s))
 // Rock albedo with the rotated second scale mixed in by m (fetches skipped at m = 0 / 1).
+// Rock normal with the same rotated second scale as dmRockA (anti-tiling: the base
+// normal map alone repeats every 5.5 units, visible as a grid on big lit faces).
+// The rotated sample's tangent xy is rotated back into the base UV frame.
+vec4 dmRockN(vec2 uv, vec2 dx, vec2 dy, float m) {
+  const float S = 1.0 / 5.5;
+  const float SR = S * 0.43;
+  vec4 a = vec4(0.0), b = vec4(0.0);
+  if (m < 1.0) a = textureGrad(tRockN, uv * S, dx * S, dy * S);
+  if (m > 0.0) {
+    b = textureGrad(tRockN, dmRot(uv) * SR + 0.37, dmRot(dx) * SR, dmRot(dy) * SR);
+    b.xy = (transpose(mat2(0.8, -0.6, 0.6, 0.8)) * (b.xy * 2.0 - 1.0)) * 0.5 + 0.5;
+  }
+  return mix(a, b, m);
+}
 vec3 dmRockA(vec2 uv, vec2 dx, vec2 dy, float m) {
   const float S = 1.0 / 5.5;
   const float SR = S * 0.43;
@@ -281,7 +295,7 @@ const MAP_FRAGMENT = /* glsl */ `
     }
     if (wRock > 0.0) {
       aY += dmRockA(uvY, gYx, gYy, rMix) * wRock;
-      nY4 += DM_TG(tRockN, uvY, ROCK_S, gYx, gYy) * wRock;
+      nY4 += dmRockN(uvY, gYx, gYy, rMix) * wRock;
     }
     if (wMoss > 0.0) {
       aY += DM_TG(tMossA, uvY, MOSS_S, gYx, gYy).rgb * wMoss;
@@ -293,7 +307,7 @@ const MAP_FRAGMENT = /* glsl */ `
   if (bw.x > 0.0) {
     if (wRock > 0.0) {
       aX += dmRockA(uvX, gXx, gXy, rMix) * wRock;
-      nX4 += DM_TG(tRockN, uvX, ROCK_S, gXx, gXy) * wRock;
+      nX4 += dmRockN(uvX, gXx, gXy, rMix) * wRock;
     }
     if (wMoss > 0.0) {
       aX += DM_TG(tMossA, uvX, MOSS_S, gXx, gXy).rgb * wMoss;
@@ -305,7 +319,7 @@ const MAP_FRAGMENT = /* glsl */ `
   if (bw.z > 0.0) {
     if (wRock > 0.0) {
       aZ += dmRockA(uvZ, gZx, gZy, rMix) * wRock;
-      nZ4 += DM_TG(tRockN, uvZ, ROCK_S, gZx, gZy) * wRock;
+      nZ4 += dmRockN(uvZ, gZx, gZy, rMix) * wRock;
     }
     if (wMoss > 0.0) {
       aZ += DM_TG(tMossA, uvZ, MOSS_S, gZx, gZy).rgb * wMoss;
