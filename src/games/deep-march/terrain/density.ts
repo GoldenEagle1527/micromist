@@ -31,10 +31,12 @@ export type DensityField = {
   settings: TerrainSettings;
   /** Full density at a world position (vertically smoothed; this is the terrain). */
   sample: (x: number, y: number, z: number) => number;
-  /** Unsmoothed density (the 5 taps of `sample` are rawSample at y + (i − 2)·smoothStep). */
+  /** Unsmoothed density; sample = Σ smoothWeights[i] · sampleRaw(x, y + (i − h)·smoothStep, z), h = (len − 1)/2. */
   sampleRaw: (x: number, y: number, z: number) => number;
   /** Vertical tap spacing of the smoothing kernel (a whole number of lattice cells). */
   smoothStep: number;
+  /** Binomial vertical smoothing weights (odd length, sum 1). */
+  smoothWeights: number[];
   /** Conservative [min, max] of sample(x, y, z) over all x, z. */
   bounds: (y: number, out: Float64Array) => void;
   /** Gradient pointing toward solid (central difference; the field is continuous). */
@@ -42,8 +44,12 @@ export type DensityField = {
 };
 
 const TAU = Math.PI * 2;
-/** Binomial smoothing weights (sum 1). */
-export const SMOOTH_W = [1 / 16, 4 / 16, 6 / 16, 4 / 16, 1 / 16];
+/** Binomial smoothing weights (sum 1) for 1, 3 or 5 taps. */
+export function smoothWeights(taps: number): number[] {
+  if (taps >= 5) return [1 / 16, 4 / 16, 6 / 16, 4 / 16, 1 / 16];
+  if (taps >= 3) return [1 / 4, 2 / 4, 1 / 4];
+  return [1];
+}
 
 /** C1 ramp: 0 for u ≤ 0, quadratic over [0, b], then linear with slope 1. */
 function ramp(u: number, b: number): number {
@@ -128,7 +134,10 @@ export function createDensityField(seed: number, s: TerrainSettings): DensityFie
 
     // --- erosion detail ---
     const es = s.erosionFrequency;
-    const erosion = s.erosionAmplitude * snoise(wx * es + ex[15], wy * es + ex[16], wz * es + ex[17]);
+    // plain simplex blended toward a ridged variant (1 − 2|n|): its creases give
+    // angular facet edges / crisper rock (both in [−1, 1], so bounds are unchanged)
+    const en = snoise(wx * es + ex[15], wy * es + ex[16], wz * es + ex[17]);
+    const erosion = s.erosionAmplitude * (en + s.erosionRidge * (1 - 2 * Math.abs(en) - en));
 
     // --- undulating hard floor / ceiling ---
     const fh = s.hardFloorHeight + s.floorUndulation * na;
@@ -152,28 +161,27 @@ export function createDensityField(seed: number, s: TerrainSettings): DensityFie
     out[1] = b + noiseMax + layerMax + E + floorTerm(y, s.hardFloorHeight + U) + ceilTerm(y, s.ceilingHeight - Uc);
   };
 
-  // --- vertical smoothing: binomial [1 4 6 4 1]/16 with taps smoothStep apart ---
+  // --- vertical smoothing: binomial ([1 2 1]/4 or [1 4 6 4 1]/16), taps smoothStep apart ---
   // A sheet thinner than ~the kernel width loses its peak and vanishes; thicker
-  // shelves keep their shape but their rims turn blunt/rounded. Taps sit on
-  // lattice rows (smoothStep = k · spacing), so the mesher evaluates this exactly
-  // from its sampled rows at no extra noise cost.
+  // shelves keep their shape but their rims get blunter (wider kernel = rounder).
+  // Taps sit on lattice rows (smoothStep = k · spacing), so the mesher evaluates
+  // this exactly from its sampled rows at no extra noise cost.
   const smoothStep = (s.boundsSize / (s.numPointsPerAxis - 1)) * s.smoothCells;
+  const SW = smoothWeights(s.smoothTaps);
+  const half = (SW.length - 1) / 2;
   const hs = smoothStep;
-  const sample = (x: number, y: number, z: number): number =>
-    (sampleRaw(x, y - 2 * hs, z) +
-      4 * sampleRaw(x, y - hs, z) +
-      6 * sampleRaw(x, y, z) +
-      4 * sampleRaw(x, y + hs, z) +
-      sampleRaw(x, y + 2 * hs, z)) /
-    16;
+  const sample = (x: number, y: number, z: number): number => {
+    let v = 0;
+    for (let i = 0; i < SW.length; i++) v += SW[i] * sampleRaw(x, y + (i - half) * hs, z);
+    return v;
+  };
   const tb = new Float64Array(2);
   const bounds = (y: number, out: Float64Array) => {
     let lo = 0, hi = 0;
-    for (let i = 0; i < 5; i++) {
-      rawBounds(y + (i - 2) * hs, tb);
-      const w = SMOOTH_W[i];
-      lo += w * tb[0];
-      hi += w * tb[1];
+    for (let i = 0; i < SW.length; i++) {
+      rawBounds(y + (i - half) * hs, tb);
+      lo += SW[i] * tb[0];
+      hi += SW[i] * tb[1];
     }
     out[0] = lo;
     out[1] = hi;
@@ -186,5 +194,5 @@ export function createDensityField(seed: number, s: TerrainSettings): DensityFie
     out[2] = (sample(x, y, z + h) - sample(x, y, z - h)) * inv;
   };
 
-  return { settings: s, sample, sampleRaw, smoothStep, bounds, gradient };
+  return { settings: s, sample, sampleRaw, smoothStep, smoothWeights: SW, bounds, gradient };
 }
