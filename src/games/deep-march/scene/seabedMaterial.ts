@@ -131,7 +131,7 @@ float dmCaustics(vec2 p, float t) {
 
 const MAP_FRAGMENT = /* glsl */ `
   vec3 wp = vWPos;
-  // geometric (flat) normal: terrace steps are real geometry, and the smooth
+  // geometric (flat) normal: on thin / high-frequency features the grid
   // field normal can disagree there → use the facet for projection weights
   vec3 geoN = normalize(cross(dFdx(wp), dFdy(wp)));
   if (dot(geoN, cameraPosition - wp) < 0.0) geoN = -geoN;

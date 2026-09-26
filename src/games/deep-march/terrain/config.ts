@@ -19,18 +19,46 @@ export type TerrainSettings = {
   noiseWeight: number;
   floorOffset: number;
   weightMultiplier: number;
+  /** Hard floor: density += weight below ~height, blended over ±blend (smooth, no step). */
   hardFloorHeight: number;
   hardFloorWeight: number;
-  /** shaderParams.xy: terracing `(y % x) * y` */
-  terraceHeight: number;
-  terraceWeight: number;
+  hardFloorBlend: number;
+  /** Amplitude of the xz variation of the hard floor height. */
+  floorUndulation: number;
 
   /**
-   * Extension (not in the reference scene): rock ceiling. Above `ceilingHeight`
-   * density rises by `ceilingSlope` per unit so the ocean becomes a vast cave.
+   * Soft layering replacing the reference sawtooth terrace `(y % 5.08) · 1.06`:
+   * layerBias (= the sawtooth's mean, keeps overall openness) + two sine
+   * harmonics of amplitude layerAmplitude, band height layerHeight varied by
+   * ±layerHeightVariation and phase-shifted by up to layerPhaseVariation units across xz.
+   */
+  layerBias: number;
+  layerAmplitude: number;
+  layerHeight: number;
+  layerHeightVariation: number;
+  layerPhaseVariation: number;
+  /** Frequency of the xz fields driving layering / floor / ceiling undulation. */
+  undulationFrequency: number;
+
+  /** Low-frequency 3D domain warp of the sample position. */
+  warpFrequency: number;
+  warpStrength: number;
+  /** Vertical warp as a fraction of warpStrength. */
+  warpVertical: number;
+
+  /** Higher-frequency erosion detail (plain simplex, ±amplitude). */
+  erosionFrequency: number;
+  erosionAmplitude: number;
+
+  /**
+   * Extension (not in the reference scene): rock ceiling. Above
+   * ceilingHeight (± ceilingUndulation across xz) density rises by
+   * ceilingSlope per unit (C1 ramp over ceilingRamp) so the ocean is a vast cave.
    */
   ceilingHeight: number;
   ceilingSlope: number;
+  ceilingRamp: number;
+  ceilingUndulation: number;
 
   /**
    * Floating-rock removal search window (units beyond the column footprint).
@@ -55,11 +83,27 @@ export const TERRAIN: TerrainSettings = {
   weightMultiplier: 10,
   hardFloorHeight: -7,
   hardFloorWeight: 5,
-  terraceHeight: 5.08,
-  terraceWeight: 1.06,
+  hardFloorBlend: 1.5,
+  floorUndulation: 2.5,
+
+  layerBias: 2.69,
+  layerAmplitude: 1.1,
+  layerHeight: 5.08,
+  layerHeightVariation: 0.3,
+  layerPhaseVariation: 2.5,
+  undulationFrequency: 0.045,
+
+  warpFrequency: 0.035,
+  warpStrength: 2.4,
+  warpVertical: 0.4,
+
+  erosionFrequency: 0.55,
+  erosionAmplitude: 1.1,
 
   ceilingHeight: 14,
-  ceilingSlope: 3,
+  ceilingSlope: 4,
+  ceilingRamp: 2,
+  ceilingUndulation: 3,
 
   floaterMargin: 12,
 };

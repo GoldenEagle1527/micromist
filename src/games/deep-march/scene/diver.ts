@@ -224,7 +224,7 @@ export class DiverController {
   /**
    * Distance t ∈ [0, r] along unit dir (dx,dy,dz) from p to the first rock, or -1
    * if the probe end is still water. Bisection, so it also works across the
-   * density's y-discontinuities (terrace steps are real mesh faces).
+   * field's thin, high-frequency features.
    */
   private probe(dx: number, dy: number, dz: number, r: number): number {
     const f = this.field;
@@ -267,7 +267,7 @@ export class DiverController {
         // Inside rock: linear estimate along the smooth normal.
         push = Math.min(r + (d - iso) / Math.max(len, 1e-3), 1.5);
       } else {
-        // Probe toward the nearest surface and straight down / up (terrace steps).
+        // Probe toward the nearest surface and straight down / up (thin ledges).
         const probes: [number, number, number][] = [[-nx, -ny, -nz], [0, -1, 0], [0, 1, 0]];
         for (const [dx, dy, dz] of probes) {
           const t = this.probe(dx, dy, dz, r);
