@@ -13,6 +13,7 @@ import { WATER_GLSL, createSeabedMaterial, createWaterUniforms } from "./seabedM
 import { DiverController, type DiverState } from "./diver";
 import { LampRig } from "./lampRig";
 import { NightVision } from "./nightVision";
+import { FramePacer } from "./framePacer";
 import { createParticleLightUniforms } from "./particleLight";
 import { SURVIVAL_TUNING, createSurvival, type LightMode, type LightState } from "../survival";
 
@@ -78,8 +79,20 @@ export type DeepMarchHandle = {
 };
 
 export function createDeepMarch(host: HTMLElement, opts: DeepMarchOptions): DeepMarchHandle {
-  const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.75));
+  // Desktop keeps MSAA and a pixel ratio floating 1.25–1.75; low-spec (touch / ≤ 4 cores)
+  // drops MSAA and stays ≤ 1.25. ?dpr=<n> pins the ratio (screenshots / debugging).
+  const lowSpec = isLowSpecDevice();
+  const renderer = new THREE.WebGLRenderer({ antialias: !lowSpec, powerPreference: "high-performance" });
+  const dprParam = Number(new URLSearchParams(window.location.search).get("dpr"));
+  const deviceRatio = window.devicePixelRatio || 1;
+  const maxRatio = Math.min(deviceRatio, lowSpec ? 1.25 : 1.75);
+  const pacer = new FramePacer({
+    maxFps: 60,
+    maxRatio,
+    minRatio: Math.min(maxRatio, lowSpec ? 0.75 : 1.25),
+    fixed: dprParam > 0 ? Math.min(dprParam, 3) : undefined,
+  });
+  renderer.setPixelRatio(pacer.ratio);
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.15;
@@ -101,7 +114,6 @@ export function createDeepMarch(host: HTMLElement, opts: DeepMarchOptions): Deep
   loading.textContent = opts.labels.loading;
   overlay.appendChild(loading);
 
-  const lowSpec = isLowSpecDevice();
   const terrain = terrainForDevice(lowSpec);
 
   // Underwater look for a vast world: the reference water colour (0, .168, .453) is the
@@ -150,7 +162,7 @@ void main() {
   const survival = createSurvival();
   const lights = survival.lights;
   const rig = new LampRig(camera);
-  const nightVision = new NightVision(renderer);
+  const nightVision = new NightVision(renderer, lowSpec ? 0 : 4);
   const particleLights = createParticleLightUniforms();
   const camForward = new THREE.Vector3();
 
@@ -319,6 +331,8 @@ void main() {
 
   const frame = (now: number) => {
     raf = requestAnimationFrame(frame);
+    // 60 fps cap (120/144 Hz displays would otherwise render 2–2.4× the frames)
+    if (!pacer.shouldRender(now)) return;
     const rawDt = (now - last) / 1000;
     const dt = Math.min(0.05, rawDt);
     last = now;
@@ -365,6 +379,10 @@ void main() {
     seabed.absorb.copy(baseAbsorb).multiplyScalar(env.absorb);
 
     nightVision.render(scene, camera, rig.night, now / 1000);
+    if (pacer.frameDone(performance.now())) {
+      renderer.setPixelRatio(pacer.ratio);
+      resize();
+    }
 
     fpsFrames++;
     fpsTime += rawDt; // real time, not the clamped sim step
@@ -380,10 +398,20 @@ void main() {
       spawnDebug.updateDiver(diver.position.x, diver.position.z, -diver.yaw);
       hudTimer = 0.25;
       const st = chunks.stats();
-      stats.textContent = `${fps.toFixed(0)} fps · ${labels.chunks} ${st.meshes}/${st.active} (LOD ${st.lodMeshes.join("/")}) · −${st.floaters} ${labels.floaters} · q${st.queued}+${st.pending} · ${(st.triangles / 1000).toFixed(0)}k ${labels.tris} · ${st.workers ? `${st.workers}w` : labels.mainThread} ${st.avgMs.toFixed(1)}ms (${labels.classify} ${st.avgInfoMs.toFixed(1)})`;
+      stats.textContent = `${fps.toFixed(0)} fps ×${pacer.ratio.toFixed(2)} · ${labels.chunks} ${st.meshes}/${st.active} (LOD ${st.lodMeshes.join("/")}) · −${st.floaters} ${labels.floaters} · q${st.queued}+${st.pending} · ${(st.triangles / 1000).toFixed(0)}k ${labels.tris} · ${st.workers ? `${st.workers}w` : labels.mainThread} ${st.avgMs.toFixed(1)}ms (${labels.classify} ${st.avgInfoMs.toFixed(1)})`;
     }
   };
   raf = requestAnimationFrame(frame);
+  // Nothing to draw while the tab is hidden (rAF mostly stops anyway; this also
+  // halts terrain streaming and resets the pacing history on return).
+  const onVisibility = () => {
+    cancelAnimationFrame(raf);
+    if (document.hidden) return;
+    last = performance.now();
+    pacer.reset(last);
+    raf = requestAnimationFrame(frame);
+  };
+  document.addEventListener("visibilitychange", onVisibility);
 
   return {
     panelInput: input.panel,
@@ -430,6 +458,7 @@ void main() {
     }),
     destroy: () => {
       cancelAnimationFrame(raf);
+      document.removeEventListener("visibilitychange", onVisibility);
       ro.disconnect();
       input.dispose();
       window.removeEventListener("keydown", onDebugKey);
