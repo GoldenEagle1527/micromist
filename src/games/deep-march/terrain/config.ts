@@ -53,10 +53,14 @@ export type TerrainSettings = {
    */
   ridgeSoftness: number;
   smoothCells: number;
+  /** Vertical smoothing kernel: 3 = [1 2 1]/4 (crisper), 5 = [1 4 6 4 1]/16 (rounder). */
+  smoothTaps: number;
 
   /** Higher-frequency erosion detail (plain simplex, ±amplitude). */
   erosionFrequency: number;
   erosionAmplitude: number;
+  /** 0 = plain simplex detail, 1 = ridged (1 − 2|n|) detail with angular creases. */
+  erosionRidge: number;
 
   /**
    * Extension (not in the reference scene): rock ceiling. Above
@@ -87,7 +91,7 @@ export const TERRAIN: TerrainSettings = {
   persistence: 0.54,
   noiseScale: 2.71,
   noiseWeight: 11.24,
-  floorOffset: -3,
+  floorOffset: -0.3,
   weightMultiplier: 10,
   hardFloorHeight: -7,
   hardFloorWeight: 5,
@@ -105,11 +109,13 @@ export const TERRAIN: TerrainSettings = {
   warpStrength: 2.4,
   warpVertical: 0.4,
 
-  ridgeSoftness: 0.3,
+  ridgeSoftness: 0.15,
   smoothCells: 1,
+  smoothTaps: 5,
 
   erosionFrequency: 0.55,
-  erosionAmplitude: 0.7,
+  erosionAmplitude: 0.9,
+  erosionRidge: 0.5,
 
   ceilingHeight: 14,
   ceilingSlope: 4,

@@ -31,7 +31,7 @@
  * field.bounds) skip noise, and the field's vertical smoothing is assembled from
  * raw lattice rows (no extra noise evaluations).
  */
-import { SMOOTH_W, type DensityField } from "./density";
+import type { DensityField } from "./density";
 import { CORNER_OFFSETS, EDGE_CORNER_A, EDGE_CORNER_B, TRI_TABLE } from "./tables";
 
 export type ColumnStats = {
@@ -181,13 +181,14 @@ export function generateColumnMesh(
 
   // field.sample is a vertical binomial blur of sampleRaw with taps K rows
   // apart, so the blurred value of every sampled row is assembled exactly from
-  // raw rows j − 2K … j + 2K (each raw row evaluated once).
+  // raw rows j − half·K … j + half·K (each raw row evaluated once).
   const K = s.smoothCells;
-  const R = 2 * K; // raw-row padding on each side
+  const SW = field.smoothWeights;
+  const half = (SW.length - 1) / 2;
+  const R = half * K; // raw-row padding on each side
   const rawNeed = new Uint8Array(py + 2 * R);
   for (let j = 0; j < py; j++) if (!rowSkip[j]) for (let d = 0; d <= 2 * R; d++) rawNeed[j + d] = 1;
   const raw = new Float32Array((py + 2 * R) * px);
-  const w0 = SMOOTH_W[0], w1 = SMOOTH_W[1], w2 = SMOOTH_W[2];
 
   const dens = new Float32Array(size);
   const state = new Uint8Array(size);
@@ -208,9 +209,9 @@ export function generateColumnMesh(
         continue;
       }
       const c = (j + R) * px;
-      const a2 = c - R * px, a1 = c - K * px, b1 = c + K * px, b2 = c + R * px;
       for (let i = 0; i < px; i++) {
-        const v = w0 * (raw[a2 + i] + raw[b2 + i]) + w1 * (raw[a1 + i] + raw[b1 + i]) + w2 * raw[c + i];
+        let v = 0;
+        for (let t = 0; t < SW.length; t++) v += SW[t] * raw[c + (t - half) * K * px + i];
         dens[row + i] = v;
         state[row + i] = v >= iso ? SOLID : WATER;
       }
