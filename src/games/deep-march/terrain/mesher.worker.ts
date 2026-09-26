@@ -1,4 +1,6 @@
-/// Module worker: builds full-height marching-cubes column meshes off the main thread.
+/// Module worker: builds full-height marching-cubes column meshes (any LOD) and
+/// base-scale terrain classification off the main thread.
+import { baseTerrain } from "./config";
 import { createDensityField, type DensityField } from "./density";
 import { columnRows, generateColumnMesh, type ColumnRows } from "./mesher";
 import type { MesherRequest, MesherResponse } from "./protocol";
@@ -11,21 +13,31 @@ type WorkerScope = {
 
 const ctx = self as unknown as WorkerScope;
 let field: DensityField | null = null;
-let rows: ColumnRows | null = null;
+let base: DensityField | null = null;
+let baseRows: ColumnRows | null = null;
+const rowsByLod: ColumnRows[] = [];
 
 ctx.onmessage = (ev) => {
   const msg = ev.data;
   if (msg.type === "init") {
     field = createDensityField(msg.seed, msg.settings);
-    rows = columnRows(field);
+    base = msg.settings.worldScale === 1 ? field : createDensityField(msg.seed, baseTerrain(msg.settings));
+    baseRows = columnRows(base);
+    rowsByLod.length = 0;
     return;
   }
-  if (msg.type === "column" && field && rows) {
-    const t0 = performance.now();
-    const m = generateColumnMesh(field, msg.cx, msg.cz, rows, field.settings.floaterMargin);
-    const res: MesherResponse = { type: "column", id: msg.id, ...m, ms: performance.now() - t0 };
-    const transfer: Transferable[] = [m.positions.buffer, m.normals.buffer, m.ao.buffer, m.indices.buffer, m.removed.buffer];
-    if (m.info) transfer.push(...terrainInfoTransfers(m.info));
-    ctx.postMessage(res, transfer);
+  if (!field || !base || !baseRows) return;
+  const t0 = performance.now();
+  let m: ReturnType<typeof generateColumnMesh>;
+  if (msg.type === "column") {
+    const rows = (rowsByLod[msg.lod] ??= columnRows(field, msg.lod));
+    m = generateColumnMesh(field, msg.cx, msg.cz, rows, field.settings.floaterMargin * (1 << msg.lod), undefined, false, undefined, msg.lod);
+  } else {
+    const full = generateColumnMesh(base, msg.cx, msg.cz, baseRows, base.settings.floaterMargin, undefined, true);
+    m = { ...full, positions: new Float32Array(0), normals: new Float32Array(0), ao: new Float32Array(0), indices: new Uint16Array(0), removed: new Int32Array(0) };
   }
+  const res: MesherResponse = { type: msg.type, id: msg.id, ...m, ms: performance.now() - t0 };
+  const transfer: Transferable[] = [m.positions.buffer, m.normals.buffer, m.ao.buffer, m.indices.buffer, m.removed.buffer];
+  if (m.info) transfer.push(...terrainInfoTransfers(m.info));
+  ctx.postMessage(res, transfer);
 };

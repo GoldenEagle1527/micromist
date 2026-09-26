@@ -6,6 +6,11 @@
  * depends on the player; the same seed gives the same data (per device preset:
  * the low-spec lattice is coarser, so values differ slightly between presets).
  *
+ * World scale: the rendered world is the base field magnified by
+ * `worldScale` (config.ts). Classification runs on the base field (all unit
+ * figures below are base units); a store built with `scale` takes world
+ * coordinates in its queries and returns world positions / distances.
+ *
  * ── Data per column (ChunkTerrainInfo) ─────────────────────────────────────
  *  (a) Class grid — water classification on a sub-lattice every `stride`
  *      lattice points (≈ 1 unit: stride 3 × 0.345 on desktop, 2 × 0.476 on
@@ -249,6 +254,11 @@ export type TerrainGeometry = {
   seed: number;
   boundsSize: number;
   numPointsPerAxis: number;
+  /**
+   * World scale S: the stored columns are base-scale (world / S) classifications;
+   * queries take and return world coordinates / distances. Default 1.
+   */
+  scale?: number;
 };
 
 export type RegionInfo = {
@@ -273,17 +283,20 @@ export class TerrainInfoStore {
   private readonly rs = createRegionSample();
   /** Bumped whenever a column is added or removed. */
   version = 0;
+  /** World scale (stored data is in base units = world / scale). */
+  readonly scale: number;
 
   constructor(g: TerrainGeometry) {
     this.g = g;
+    this.scale = g.scale ?? 1;
     this.sp = g.boundsSize / (g.numPointsPerAxis - 1);
     this.regions = createRegionField(g.seed);
   }
 
   /** Macro region at (x, z) with blend weights (pure function of seed + position). */
   getRegionAt(x: number, z: number): RegionInfo {
-    const r = this.regions.sample(x, z, this.rs);
-    return { id: r.id, key: REGION_KEYS[r.id], weights: Array.from(r.w), dominant: r.dominant, edge: r.edge };
+    const r = this.regions.sample(x / this.scale, z / this.scale, this.rs);
+    return { id: r.id, key: REGION_KEYS[r.id], weights: Array.from(r.w), dominant: r.dominant, edge: r.edge * this.scale };
   }
 
   set(info: ChunkTerrainInfo) {
@@ -309,7 +322,9 @@ export class TerrainInfoStore {
   }
 
   /** Class of the water around (x, y, z): nearest class cell; if that is rock, the nearest water cell around it. */
-  getEnvAt(x: number, y: number, z: number): EnvSample | null {
+  getEnvAt(wx0: number, wy0: number, wz0: number): EnvSample | null {
+    const W = this.scale;
+    const x = wx0 / W, y = wy0 / W, z = wz0 / W;
     const h = this.g.boundsSize / 2;
     const sp = this.sp;
     // Stride is the same for every column; take it from any loaded one.
@@ -349,27 +364,28 @@ export class TerrainInfoStore {
     return {
       kind: ENV_KINDS[code] as EnvironmentKind,
       code,
-      up: q4(info.up[best]),
-      down: q4(info.down[best]),
-      side: q4(info.side[best]),
+      up: q4(info.up[best]) * W,
+      down: q4(info.down[best]) * W,
+      side: q4(info.side[best]) * W,
       sides: info.sides[best],
       region: info.regionId[rc],
       regionKey: REGION_KEYS[info.regionId[rc]],
       regionWeight: info.regionW[rc] / 255,
-      regionEdge: info.regionEdge[rc],
-      x: wx,
-      y: -h + (info.cj0 + iy) * S * sp,
-      z: wz,
+      regionEdge: info.regionEdge[rc] * W,
+      x: wx * W,
+      y: (-h + (info.cj0 + iy) * S * sp) * W,
+      z: wz * W,
     };
   }
 
   /** Decode candidate `i` of a column. */
   spawnAt(info: ChunkTerrainInfo, i: number): SpawnCandidate {
     const s = info.spawn;
+    const W = this.scale;
     return {
-      x: s.pos[i * 3],
-      y: s.pos[i * 3 + 1],
-      z: s.pos[i * 3 + 2],
+      x: s.pos[i * 3] * W,
+      y: s.pos[i * 3 + 1] * W,
+      z: s.pos[i * 3 + 2] * W,
       nx: s.nrm[i * 3] / 127,
       ny: s.nrm[i * 3 + 1] / 127,
       nz: s.nrm[i * 3 + 2] / 127,
@@ -378,11 +394,11 @@ export class TerrainInfoStore {
       exposure: s.exposure[i] / 255,
       sheltered: (s.flags[i] & 1) !== 0,
       curvature: s.curv[i] / 127,
-      depth: 100 - s.pos[i * 3 + 1],
+      depth: 100 - s.pos[i * 3 + 1] * W,
       region: s.region[i],
       regionKey: REGION_KEYS[s.region[i]],
       regionWeight: s.regionW[i] / 255,
-      regionEdge: s.regionEdge[i],
+      regionEdge: s.regionEdge[i] * W,
       cx: info.cx,
       cz: info.cz,
       index: i,
@@ -390,7 +406,13 @@ export class TerrainInfoStore {
   }
 
   /** All loaded candidates inside bounds (y limits optional), optionally filtered. */
-  getSpawnCandidates(b: Bounds, filter?: (c: SpawnCandidate) => boolean): SpawnCandidate[] {
+  getSpawnCandidates(wb: Bounds, filter?: (c: SpawnCandidate) => boolean): SpawnCandidate[] {
+    const W = this.scale;
+    const b: Bounds = {
+      minX: wb.minX / W, maxX: wb.maxX / W, minZ: wb.minZ / W, maxZ: wb.maxZ / W,
+      minY: wb.minY === undefined ? undefined : wb.minY / W,
+      maxY: wb.maxY === undefined ? undefined : wb.maxY / W,
+    };
     const out: SpawnCandidate[] = [];
     const size = this.g.boundsSize;
     for (const info of this.cols.values()) {
@@ -408,7 +430,7 @@ export class TerrainInfoStore {
     return out;
   }
 
-  /** Visit every loaded candidate (column, index) without decoding. */
+  /** Visit every loaded candidate (column, index) without decoding (positions in base units: × scale for world). */
   forEachSpawn(fn: (info: ChunkTerrainInfo, i: number) => void) {
     for (const info of this.cols.values()) for (let i = 0; i < info.spawn.count; i++) fn(info, i);
   }

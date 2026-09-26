@@ -4,9 +4,10 @@
  * brute-force sanity checks and the generation-cost delta.
  * Run: npm run test:terrain-info   (env SEEDS=1,7,12345 AREA=2 → (2·AREA+1)² columns, LOWSPEC=1)
  */
-import { TERRAIN as DESKTOP, terrainForDevice } from "../src/games/deep-march/terrain/config";
+import { TERRAIN as DESKTOP, baseTerrain, terrainForDevice } from "../src/games/deep-march/terrain/config";
 
-const TERRAIN = process.env.LOWSPEC ? terrainForDevice(true) : DESKTOP;
+// terrain info is classified on the unscaled base field (worldScale 1); the store rescales queries.
+const TERRAIN = baseTerrain(process.env.LOWSPEC ? terrainForDevice(true) : DESKTOP);
 import { createDensityField, type DensityField } from "../src/games/deep-march/terrain/density";
 import { columnRows, generateColumnMesh, type ColumnMeshData } from "../src/games/deep-march/terrain/mesher";
 import { buildColumnTerrainInfo, createLineSampler } from "../src/games/deep-march/terrain/terrainInfoGen";

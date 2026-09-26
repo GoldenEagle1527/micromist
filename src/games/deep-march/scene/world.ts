@@ -9,7 +9,7 @@ import { SpawnDebugView } from "./spawnDebug";
 import { findSpawn } from "../terrain/spawn";
 import { InputController, type PanelInput } from "./input";
 import { MarineSnow } from "./particles";
-import { createSeabedMaterial } from "./seabedMaterial";
+import { WATER_GLSL, createSeabedMaterial, createWaterUniforms } from "./seabedMaterial";
 import { DiverController, type DiverState } from "./diver";
 
 export type HudLabels = {
@@ -96,15 +96,45 @@ export function createDeepMarch(host: HTMLElement, opts: DeepMarchOptions): Deep
   const lowSpec = isLowSpecDevice();
   const terrain = terrainForDevice(lowSpec);
 
-  // Underwater look — reference: fog == camera background (0, .168, .453), linear fog to viewDistance * .81.
+  // Underwater look for a vast world: the reference water colour (0, .168, .453) is the
+  // horizon of an open-water gradient (brighter toward the surface, black below) drawn
+  // by a background dome; the terrain hazes toward a darker tone of the same colour, so
+  // far masses loom as silhouettes and resolve as the diver closes in (seabedMaterial.ts).
   const fogColor = new THREE.Color().setRGB(SEA_COLORS.fog[0], SEA_COLORS.fog[1], SEA_COLORS.fog[2], THREE.SRGBColorSpace);
   const baseFog = fogColor.clone();
-  let lastDeep = 0;
+  let lastDeep = -1;
   const scene = new THREE.Scene();
-  scene.background = fogColor;
-  scene.fog = new THREE.Fog(fogColor, 1.5, terrain.viewDistance * SEA_COLORS.fogDstMultiplier);
+  scene.background = null;
+  // three's fog now only tints the marine snow near the camera
+  scene.fog = new THREE.Fog(fogColor, 1.5, 34);
+  const water = createWaterUniforms(baseFog, terrain.viewDistance);
+  const baseWater = { top: water.uWaterTop.value.clone(), horizon: water.uWaterHorizon.value.clone(), bottom: water.uWaterBottom.value.clone() };
+  const dome = new THREE.Mesh(
+    new THREE.SphereGeometry(1, 32, 16),
+    new THREE.ShaderMaterial({
+      uniforms: water,
+      vertexShader: /* glsl */ `varying vec3 vDir;
+void main() {
+  vDir = position;
+  gl_Position = projectionMatrix * vec4(mat3(viewMatrix) * position, 1.0);
+}`,
+      fragmentShader: /* glsl */ `${WATER_GLSL}
+varying vec3 vDir;
+void main() {
+  gl_FragColor = vec4(dmWater(normalize(vDir)), 1.0);
+  #include <tonemapping_fragment>
+  #include <colorspace_fragment>
+}`,
+      side: THREE.BackSide,
+      depthWrite: false,
+      depthTest: false,
+    }),
+  );
+  dome.frustumCulled = false;
+  dome.renderOrder = -1000;
+  scene.add(dome);
 
-  const camera = new THREE.PerspectiveCamera(70, 1, 0.05, terrain.viewDistance + 12);
+  const camera = new THREE.PerspectiveCamera(70, 1, 0.05, terrain.viewDistance + 40);
 
   // Down-welling light: teal sky fill from above, very dark from below,
   // plus a blue-green filtered "sun" from the surface.
@@ -117,6 +147,8 @@ export function createDeepMarch(host: HTMLElement, opts: DeepMarchOptions): Deep
   let texturesReady = false;
   const seabed = createSeabedMaterial({
     lowSpec,
+    water,
+    worldScale: terrain.worldScale,
     anisotropy: Math.min(8, renderer.capabilities.getMaxAnisotropy()),
     onReady: () => {
       texturesReady = true;
@@ -292,14 +324,18 @@ export function createDeepMarch(host: HTMLElement, opts: DeepMarchOptions): Deep
       fpsFrames = 0;
       fpsTime = 0;
     }
-    // Deeper water is darker (deep trench): fog and light fade below y ≈ −8.
-    const deep = THREE.MathUtils.smoothstep(-camera.position.y, 8, 22);
+    // Deeper water is darker (toward the abyss): water, haze and light fade below y ≈ −8 base units.
+    const W = terrain.worldScale;
+    const deep = THREE.MathUtils.smoothstep(-camera.position.y, 8 * W, 26 * W);
     if (Math.abs(deep - lastDeep) > 0.002) {
       lastDeep = deep;
-      fogColor.copy(baseFog).multiplyScalar(1 - 0.62 * deep);
+      fogColor.copy(baseFog).multiplyScalar(1 - 0.7 * deep);
       (scene.fog as THREE.Fog).color.copy(fogColor);
-      ambient.intensity = 0.95 * (1 - 0.55 * deep);
-      sun.intensity = 1.05 * (1 - 0.7 * deep);
+      water.uWaterHorizon.value.copy(baseWater.horizon).multiplyScalar(1 - 0.72 * deep);
+      water.uWaterTop.value.copy(baseWater.top).multiplyScalar(1 - 0.6 * deep);
+      water.uWaterBottom.value.copy(baseWater.bottom).multiplyScalar(1 - 0.85 * deep);
+      ambient.intensity = 0.95 * (1 - 0.6 * deep);
+      sun.intensity = 1.05 * (1 - 0.75 * deep);
     }
 
     hudTimer -= dt;
@@ -309,7 +345,7 @@ export function createDeepMarch(host: HTMLElement, opts: DeepMarchOptions): Deep
       spawnDebug.updateDiver(diver.position.x, diver.position.z, -diver.yaw);
       hudTimer = 0.25;
       const st = chunks.stats();
-      stats.textContent = `${fps.toFixed(0)} fps · ${labels.chunks} ${st.meshes}/${st.active} · −${st.floaters} ${labels.floaters} · q${st.queued}+${st.pending} · ${(st.triangles / 1000).toFixed(0)}k ${labels.tris} · ${st.workers ? `${st.workers}w` : labels.mainThread} ${st.avgMs.toFixed(1)}ms (${labels.classify} ${st.avgInfoMs.toFixed(1)})`;
+      stats.textContent = `${fps.toFixed(0)} fps · ${labels.chunks} ${st.meshes}/${st.active} (LOD ${st.lodMeshes.join("/")}) · −${st.floaters} ${labels.floaters} · q${st.queued}+${st.pending} · ${(st.triangles / 1000).toFixed(0)}k ${labels.tris} · ${st.workers ? `${st.workers}w` : labels.mainThread} ${st.avgMs.toFixed(1)}ms (${labels.classify} ${st.avgInfoMs.toFixed(1)})`;
     }
   };
   raf = requestAnimationFrame(frame);
@@ -361,6 +397,8 @@ export function createDeepMarch(host: HTMLElement, opts: DeepMarchOptions): Deep
       snow.dispose();
       lamp.dispose();
       seabed.dispose();
+      dome.geometry.dispose();
+      (dome.material as THREE.Material).dispose();
       renderer.dispose();
       renderer.domElement.remove();
       overlay.remove();

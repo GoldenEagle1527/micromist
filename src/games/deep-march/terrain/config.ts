@@ -5,11 +5,28 @@
 export type TerrainSettings = {
   /** Mesh generator */
   isoLevel: number;
+  /**
+   * World scale S (power of two): the density field is evaluated at p / S (see
+   * density.ts), so every terrain shape, region and height is S× the base design
+   * while the lattice, the diver and the vertical smoothing stay in world units.
+   */
+  worldScale: number;
   boundsSize: number;
   numPointsPerAxis: number;
   /** Added inside the noise lookup (MeshGenerator.offset). */
   offset: [number, number, number];
+  /** Far edge of the terrain (units): coarse LOD columns reach this far; the haze ends here. */
   viewDistance: number;
+  /**
+   * Distance LOD (chunks.ts): level L columns are boundsSize·2^L wide with the same
+   * lattice point count (spacing × 2^L). A level-L node splits into its four
+   * level-(L−1) children while its footprint is within lodNear·2^(L−1) of the viewer,
+   * so full resolution reaches lodNear and each coarser ring is twice as far / coarse.
+   */
+  lodLevels: number;
+  lodNear: number;
+  /** Terrain classification (base-scale columns) is built within this distance of the viewer. */
+  infoRadius: number;
 
   /** NoiseDensity */
   octaves: number;
@@ -81,12 +98,16 @@ export type TerrainSettings = {
 
 export const TERRAIN: TerrainSettings = {
   isoLevel: 8,
+  worldScale: 4,
   boundsSize: 10,
   numPointsPerAxis: 30,
   offset: [-0.64, 0, 0],
-  viewDistance: 42,
+  viewDistance: 420,
+  lodLevels: 5,
+  lodNear: 20,
+  infoRadius: 22,
 
-  octaves: 8,
+  octaves: 10, // reference 8 + log2(worldScale): fine detail at the diver's scale
   lacunarity: 2,
   persistence: 0.54,
   noiseScale: 2.71,
@@ -122,7 +143,7 @@ export const TERRAIN: TerrainSettings = {
   ceilingRamp: 2,
   ceilingUndulation: 3,
 
-  floaterMargin: 12,
+  floaterMargin: 24,
 };
 
 /** Touch / low-core devices get the light preset (coarser voxels, 512px textures). */
@@ -132,9 +153,18 @@ export function isLowSpecDevice(): boolean {
   return coarse || cores <= 4;
 }
 
-/** Lighter preset: coarser voxels (≈0.6× triangles) and a shorter view distance. */
+/** Lighter preset: coarser voxels (≈0.6× triangles), fewer LOD rings, a shorter view distance. */
 export function terrainForDevice(lowSpec = isLowSpecDevice()): TerrainSettings {
-  return lowSpec ? { ...TERRAIN, numPointsPerAxis: 22, viewDistance: 34 } : TERRAIN;
+  return lowSpec ? { ...TERRAIN, numPointsPerAxis: 22, viewDistance: 230, lodLevels: 4, lodNear: 18, infoRadius: 14 } : TERRAIN;
+}
+
+/**
+ * Base-scale settings (worldScale 1, the reference 8 octaves): the terrain
+ * classification runs on this field — the world field at p / S — so its
+ * class thresholds and scan reach keep their meaning at every world scale.
+ */
+export function baseTerrain(s: TerrainSettings): TerrainSettings {
+  return { ...s, worldScale: 1, octaves: Math.max(1, s.octaves - Math.round(Math.log2(s.worldScale))), floaterMargin: 12 };
 }
 
 /** Underwater look. Fog colour == camera background from the reference scene (sRGB). */

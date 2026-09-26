@@ -315,17 +315,18 @@ export class DiverController {
   spawn(x0: number, z0: number) {
     const f = this.field;
     const iso = f.settings.isoLevel;
-    let best = { score: -1, x: x0, y: 5, z: z0 };
+    const W = f.settings.worldScale;
+    let best = { score: -1, x: x0, y: 5 * W, z: z0 };
     for (let ring = 0; ring < 6 && best.score < 6; ring++) {
       const candidates = ring === 0 ? [[0, 0]] : [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, -1], [1, -1], [-1, 1]];
       for (const [dx, dz] of candidates) {
-        const x = x0 + dx * ring * 12;
-        const z = z0 + dz * ring * 12;
+        const x = x0 + dx * ring * 12 * W;
+        const z = z0 + dz * ring * 12 * W;
         let start = NaN;
-        for (let y = -16; y <= 30; y += 0.5) {
+        for (let y = -16 * W; y <= 30 * W; y += 0.5) {
           const water = f.sample(x, y, z) < iso;
           if (water && Number.isNaN(start)) start = y;
-          if ((!water || y >= 30) && !Number.isNaN(start)) {
+          if ((!water || y >= 30 * W) && !Number.isNaN(start)) {
             const gap = y - start;
             if (gap > best.score) best = { score: gap, x, y: start + gap * 0.5, z };
             start = NaN;

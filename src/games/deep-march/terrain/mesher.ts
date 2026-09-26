@@ -78,38 +78,41 @@ const maskCache = new WeakMap<DensityField, Map<string, number>>();
  * row plan uses only these regions' bounds, so rows that are always rock / water
  * *here* are skipped even though another region (e.g. the deep trench) needs them.
  */
-export function columnRegionMask(field: DensityField, cx: number, cz: number): number {
+export function columnRegionMask(field: DensityField, cx: number, cz: number, lod = 0): number {
   let m = maskCache.get(field);
   if (!m) maskCache.set(field, (m = new Map()));
-  const key = `${cx},${cz}`;
+  const key = `${lod},${cx},${cz}`;
   const hit = m.get(key);
   if (hit !== undefined) return hit;
   const s = field.settings;
   const n = s.numPointsPerAxis;
-  const sp = latticeSpacing(field);
-  const Mi = Math.max(1, Math.ceil(s.floaterMargin / sp)) + 2;
-  const x0 = latticeCoord(cx * (n - 1) - 1 - Mi, field), x1 = latticeCoord(cx * (n - 1) + n + Mi, field);
-  const z0 = latticeCoord(cz * (n - 1) - 1 - Mi, field), z1 = latticeCoord(cz * (n - 1) + n + Mi, field);
+  // floater window: the same number of lattice cells at every LOD
+  const Mi = Math.max(1, Math.ceil(s.floaterMargin / latticeSpacing(field))) + 2;
+  const x0 = lodCoord(cx * (n - 1) - 1 - Mi, field, lod), x1 = lodCoord(cx * (n - 1) + n + Mi, field, lod);
+  const z0 = lodCoord(cz * (n - 1) - 1 - Mi, field, lod), z1 = lodCoord(cz * (n - 1) + n + Mi, field, lod);
   const mask = field.regions.maskInRect(x0, z0, x1, z1);
   if (m.size > 20000) m.clear();
   m.set(key, mask);
   return mask;
 }
 
-export function columnRowPlan(field: DensityField, rows: ColumnRows, mask = ALL_REGIONS_MASK): RowPlan {
+export function columnRowPlan(field: DensityField, rows: ColumnRows, mask = ALL_REGIONS_MASK, lod = 0): RowPlan {
   let byMask = planCache.get(field);
   if (!byMask) planCache.set(field, (byMask = new Map()));
-  const cached = byMask.get(mask);
+  const cacheKey = mask * 16 + lod;
+  const cached = byMask.get(cacheKey);
   if (cached && cached.py === rows.gjMax - rows.gjMin + 3) return cached;
   const iso = field.settings.isoLevel;
-  const sp = latticeSpacing(field);
-  const y0 = latticeCoord(rows.gjMin, field);
+  const sp = lodSpacing(field, lod);
+  const y0 = lodCoord(rows.gjMin, field, lod);
+  // LOD > 0 meshes the unsmoothed field (see generateColumnMesh)
+  const boundsOf = lod > 0 ? field.rawBoundsForMask : field.boundsForMask;
   const py = rows.gjMax - rows.gjMin + 3;
   const rowFill = new Float64Array(py);
   const rowKind = new Uint8Array(py);
   const bnd = new Float64Array(2);
   for (let j = 0; j < py; j++) {
-    field.boundsForMask(mask, y0 + (j - 1) * sp, bnd);
+    boundsOf(mask, y0 + (j - 1) * sp, bnd);
     if (bnd[1] < iso) {
       rowKind[j] = 1;
       rowFill[j] = bnd[1];
@@ -133,7 +136,7 @@ export function columnRowPlan(field: DensityField, rows: ColumnRows, mask = ALL_
     rowSkip[j] = ok ? 1 : 0;
   }
   const plan = { py, rowKind, rowFill, rowSkip };
-  byMask.set(mask, plan);
+  byMask.set(cacheKey, plan);
   return plan;
 }
 
@@ -145,6 +148,8 @@ let scratchPos = new Float32Array(1 << 16);
 let scratchNrm = new Float32Array(1 << 16);
 let scratchIdx = new Uint32Array(1 << 16);
 let scratchGrad = new Float32Array(1 << 15);
+/** Per vertex: bitmask of the column side planes its lattice edge lies in (skirts). */
+let scratchSide = new Uint8Array(1 << 15);
 
 function ensureScratch(n: number) {
   if (scratchPos.length >= n) return;
@@ -159,6 +164,9 @@ function ensureScratch(n: number) {
   const g = new Float32Array(len / 3 + 1);
   g.set(scratchGrad.subarray(0, Math.min(scratchGrad.length, g.length)));
   scratchGrad = g;
+  const sd = new Uint8Array(len / 3 + 1);
+  sd.set(scratchSide.subarray(0, Math.min(scratchSide.length, sd.length)));
+  scratchSide = sd;
 }
 
 export function latticeSpacing(field: DensityField): number {
@@ -170,15 +178,29 @@ export function latticeCoord(g: number, field: DensityField): number {
   return -field.settings.boundsSize / 2 + g * latticeSpacing(field);
 }
 
-/** Vertical lattice span of every column (same for all columns of a field). */
-export function columnRows(field: DensityField): ColumnRows {
+/**
+ * LOD lattices: level L has spacing latticeSpacing · 2^L and the same origin, so its
+ * points are a subset of the level-0 lattice and a level-L column (cx, cz) covers
+ * exactly level-0 columns cx·2^L … cx·2^L + 2^L − 1 (quadtree-aligned).
+ */
+export function lodSpacing(field: DensityField, lod: number): number {
+  return latticeSpacing(field) * (1 << lod);
+}
+
+export function lodCoord(g: number, field: DensityField, lod: number): number {
+  return -field.settings.boundsSize / 2 + g * lodSpacing(field, lod);
+}
+
+/** Vertical lattice span of every column of a LOD level (same for all columns of a field). */
+export function columnRows(field: DensityField, lod = 0): ColumnRows {
   const iso = field.settings.isoLevel;
   const b = new Float64Array(2);
   const hard = (gj: number) => {
-    field.bounds(latticeCoord(gj, field), b);
+    if (lod > 0) field.rawBoundsForMask(ALL_REGIONS_MASK, lodCoord(gj, field, lod), b);
+    else field.bounds(latticeCoord(gj, field), b);
     return b[0] > iso;
   };
-  const run = 80; // rows that must all be hard beyond the boundary row
+  const run = Math.max(8, 80 >> lod); // rows that must all be hard beyond the boundary row
   const allHard = (from: number, dir: number) => {
     for (let i = 0; i < run; i++) if (!hard(from + dir * i)) return false;
     return true;
@@ -213,18 +235,28 @@ export function generateColumnMesh(
   withInfo = true,
   /** Debug/test: final padded density grid after floater removal (index (k·py + j)·px + i, padding 1). */
   debugGrid?: (dens: Float32Array, px: number, py: number, pz: number) => void,
+  /**
+   * LOD level: lattice spacing × 2^lod, `rows` / (cx, cz) on that level's lattice
+   * (columnRows(field, lod)). Levels > 0 mesh the unsmoothed field (the smoothing
+   * kernel is finer than their cells), skip the terrain info, and add skirts.
+   */
+  lod = 0,
+  /** Add skirt quads along the column sides (for LOD transitions). Default: lod > 0. */
+  skirts = lod > 0,
 ): ColumnMeshData {
   const s = field.settings;
   const iso = s.isoLevel;
   const n = s.numPointsPerAxis;
-  const sp = latticeSpacing(field);
+  const sp = lodSpacing(field, lod);
+  const lc = (g: number) => lodCoord(g, field, lod);
   const { gjMin, gjMax } = rows;
   const ny = gjMax - gjMin + 1;
   const gi0 = cx * (n - 1);
   const gk0 = cz * (n - 1);
-  const x0 = latticeCoord(gi0, field);
-  const y0 = latticeCoord(gjMin, field);
-  const z0 = latticeCoord(gk0, field);
+  const x0 = lc(gi0);
+  const y0 = lc(gjMin);
+  const z0 = lc(gk0);
+  if (lod > 0) withInfo = false;
 
   // Padded grid: one extra lattice point on every side.
   const px = n + 2;
@@ -237,15 +269,15 @@ export function generateColumnMesh(
   // Row classification: 0 = sample, 1 = always water, 2 = always solid (hard).
   // rowFill: value written into skipped rows (a bound, so its side of iso is right).
   // The window mask covers floaterMargin = settings.floaterMargin; a larger margin falls back to all regions.
-  const mask = floaterMargin <= s.floaterMargin ? columnRegionMask(field, cx, cz) : ALL_REGIONS_MASK;
-  const plan = columnRowPlan(field, rows, mask);
+  const mask = floaterMargin <= s.floaterMargin * (1 << lod) ? columnRegionMask(field, cx, cz, lod) : ALL_REGIONS_MASK;
+  const plan = columnRowPlan(field, rows, mask, lod);
   const { rowFill, rowKind, rowSkip } = plan;
 
   // field.sample is a vertical binomial blur of sampleRaw with taps K rows
   // apart, so the blurred value of every sampled row is assembled exactly from
   // raw rows j − half·K … j + half·K (each raw row evaluated once).
-  const K = s.smoothCells;
-  const SW = field.smoothWeights;
+  const K = lod > 0 ? 1 : s.smoothCells;
+  const SW = lod > 0 ? [1] : field.smoothWeights;
   const half = (SW.length - 1) / 2;
   const R = half * K; // raw-row padding on each side
   const rawNeed = new Uint8Array(py + 2 * R);
@@ -335,7 +367,8 @@ export function generateColumnMesh(
       if (rowKind[ly] === 2) v = true;
       else if (rowKind[ly] === 1) v = false;
       else {
-        v = field.sample(latticeCoord(wx0 + lx, field), y0 + (ly - 1) * sp, latticeCoord(wz0 + lz, field)) >= iso;
+        const ox = lc(wx0 + lx), oy = y0 + (ly - 1) * sp, oz = lc(wz0 + lz);
+        v = (lod > 0 ? field.sampleRaw(ox, oy, oz) : field.sample(ox, oy, oz)) >= iso;
         stats.noiseSamples++;
       }
       outsideSolid.set(key, v);
@@ -540,6 +573,10 @@ export function generateColumnMesh(
               scratchNrm[o] = nx;
               scratchNrm[o + 1] = nyv;
               scratchNrm[o + 2] = nz;
+              const bi = cornerI[b], bk = cornerK[b];
+              scratchSide[vi] =
+                (ai === 0 && bi === 0 ? 1 : 0) | (ai === n - 1 && bi === n - 1 ? 2 : 0) |
+                (ak === 0 && bk === 0 ? 4 : 0) | (ak === n - 1 && bk === n - 1 ? 8 : 0);
             }
             tri[e] = vi;
           }
@@ -558,6 +595,49 @@ export function generateColumnMesh(
     }
   }
 
+  // --- 4. skirts --------------------------------------------------------------
+  // Columns of different LOD levels do not share seam vertices, so tiny cracks can
+  // open along a level change. Every triangle edge lying in a column side plane
+  // gets a skirt quad hanging from it into the rock (along −normal, 2 cells deep,
+  // both windings): invisible inside rock where neighbours match, it fills the
+  // crack where they don't. Skirt vertices come after the surface vertices.
+  const surfaceVerts = vcount;
+  const skirtSrcList: number[] = [];
+  if (skirts) {
+    const depth = 2 * sp;
+    const skirtOf = new Int32Array(surfaceVerts).fill(-1);
+    const skirtVert = (v: number) => {
+      let q = skirtOf[v];
+      if (q >= 0) return q;
+      q = vcount++;
+      ensureScratch(vcount * 3);
+      skirtOf[v] = q;
+      const o = v * 3, oq = q * 3;
+      for (let a = 0; a < 3; a++) {
+        scratchPos[oq + a] = scratchPos[o + a] - scratchNrm[o + a] * depth;
+        scratchNrm[oq + a] = scratchNrm[o + a];
+      }
+      scratchSide[q] = 0;
+      skirtSrcList.push(v);
+      return q;
+    };
+    const triCount = icount;
+    for (let t = 0; t < triCount; t += 3) {
+      for (let e = 0; e < 3; e++) {
+        const u = scratchIdx[t + e], v = scratchIdx[t + ((e + 1) % 3)];
+        if (u >= surfaceVerts || v >= surfaceVerts || !(scratchSide[u] & scratchSide[v])) continue;
+        const us = skirtVert(u), vs = skirtVert(v);
+        if (scratchIdx.length < icount + 12) {
+          const q = new Uint32Array(scratchIdx.length * 2);
+          q.set(scratchIdx);
+          scratchIdx = q;
+        }
+        scratchIdx.set([u, v, vs, u, vs, us, v, u, us, v, us, vs], icount);
+        icount += 12;
+      }
+    }
+  }
+
   const positions = scratchPos.slice(0, vcount * 3);
   const normals = scratchNrm.slice(0, vcount * 3);
   const indices = vcount <= 65535 ? Uint16Array.from(scratchIdx.subarray(0, icount)) : scratchIdx.slice(0, icount);
@@ -567,7 +647,8 @@ export function generateColumnMesh(
   const ao = new Float32Array(vcount);
   const AO_STEPS = [0.8, 2.2];
   const AO_WEIGHTS = [0.55, 0.45];
-  for (let v = 0; v < vcount; v++) {
+  const skirtSrc = skirtSrcList;
+  for (let v = 0; v < surfaceVerts; v++) {
     const o = v * 3;
     const g = Math.max(0.3, scratchGrad[v]);
     let occ = 0;
@@ -581,6 +662,7 @@ export function generateColumnMesh(
     }
     ao[v] = 1 - occ;
   }
+  for (let q = surfaceVerts; q < vcount; q++) ao[q] = ao[skirtSrc[q - surfaceVerts]];
   let info: ChunkTerrainInfo | null = null;
   let infoMs = 0;
   if (withInfo) {
