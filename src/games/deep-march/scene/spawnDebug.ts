@@ -2,6 +2,7 @@
  * Debug view of generation-time spawn candidates: small coloured markers by
  * surface type (instanced, one draw call) plus a DOM legend. Off by default;
  * toggled with B on desktop or enabled by ?debugSpawns=1. Never used in normal play.
+ * Legend strings come from the game i18n (setLabels on language change).
  */
 import * as THREE from "three";
 import { SURFACE_TYPES, type SurfaceType, type TerrainInfoStore } from "../terrain/terrainInfo";
@@ -17,6 +18,8 @@ export const SURFACE_COLORS: Record<SurfaceType, string> = {
   "cave-floor": "#8a5cff",
 };
 
+export type SpawnDebugLabels = { spawnDebugTitle: string; surfaceTypes: Record<SurfaceType, string> };
+
 export class SpawnDebugView {
   private mesh: THREE.InstancedMesh | null = null;
   private readonly geo = new THREE.OctahedronGeometry(0.11, 0);
@@ -28,16 +31,27 @@ export class SpawnDebugView {
   private readonly colors = SURFACE_TYPES.map((t) => new THREE.Color(SURFACE_COLORS[t]));
   visible = false;
 
-  constructor(scene: THREE.Scene, store: TerrainInfoStore, overlay: HTMLElement) {
+  constructor(scene: THREE.Scene, store: TerrainInfoStore, overlay: HTMLElement, labels: SpawnDebugLabels) {
     this.scene = scene;
     this.store = store;
     this.legend = document.createElement("div");
     this.legend.className = "dm-spawn-legend";
-    this.legend.innerHTML =
-      `<b>spawn candidates (B)</b>` +
-      SURFACE_TYPES.map((t) => `<span><i style="background:${SURFACE_COLORS[t]}"></i>${t}</span>`).join("");
     this.legend.style.display = "none";
+    this.setLabels(labels);
     overlay.appendChild(this.legend);
+  }
+
+  setLabels(labels: SpawnDebugLabels) {
+    const title = document.createElement("b");
+    title.textContent = labels.spawnDebugTitle;
+    const rows = SURFACE_TYPES.map((t) => {
+      const row = document.createElement("span");
+      const sw = document.createElement("i");
+      sw.style.background = SURFACE_COLORS[t];
+      row.append(sw, labels.surfaceTypes[t]);
+      return row;
+    });
+    this.legend.replaceChildren(title, ...rows);
   }
 
   setVisible(on: boolean) {

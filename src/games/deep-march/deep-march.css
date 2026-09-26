@@ -151,6 +151,21 @@
   align-items: center;
   gap: 5px;
 }
+/* short (mobile landscape) stages: two-column, smaller legend */
+@media (max-height: 520px), (max-width: 520px) {
+  .dm-spawn-legend {
+    top: 3.1rem;
+    display: grid;
+    grid-template-columns: auto auto;
+    column-gap: 0.6rem;
+    row-gap: 1px;
+    padding: 0.3rem 0.45rem;
+    font-size: 0.58rem;
+  }
+  .dm-spawn-legend b {
+    grid-column: 1 / -1;
+  }
+}
 .dm-spawn-legend i {
   width: 8px;
   height: 8px;
