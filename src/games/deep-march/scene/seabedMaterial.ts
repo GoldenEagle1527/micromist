@@ -19,6 +19,7 @@
  */
 import * as THREE from "three";
 import { BEAM_DECLS, BEAM_LIGHT, BEAM_OPAQUE, type BeamUniforms } from "./highBeam";
+import { PL_DECLS, PL_LIGHT, type ParticleLightUniforms } from "./particleLight";
 
 import sandAlb1024 from "../assets/sand_albedo_1024.webp?url";
 import sandNrm1024 from "../assets/sand_nrm_1024.webp?url";
@@ -95,6 +96,8 @@ export type SeabedOptions = {
   anisotropy: number;
   /** High-beam (fog-light) uniforms, see highBeam.ts. */
   beam: BeamUniforms;
+  /** Fluorescent-plankton point lights, see particleLight.ts. */
+  particleLights: ParticleLightUniforms;
   /** Called when all textures finished loading (or failed). */
   onReady?: () => void;
 };
@@ -103,6 +106,8 @@ export type SeabedMaterial = {
   material: THREE.MeshStandardMaterial;
   /** Live per-unit absorption (scaled by night vision). */
   absorb: THREE.Vector3;
+  /** Scales surface-borne light that isn't from a light object (caustics); 0 = total darkness. */
+  envLight: { value: number };
   update: (time: number) => void;
   dispose: () => void;
 };
@@ -117,6 +122,7 @@ uniform float uTime;
 uniform vec3 uAbsorb;
 uniform vec3 uCausticColor;
 uniform vec3 uCeilingTint;
+uniform float uEnvLight;
 varying vec3 vWPos;
 varying vec3 vWNrm;
 varying float vAO;
@@ -312,6 +318,8 @@ export function createSeabedMaterial(opts: SeabedOptions): SeabedMaterial {
     uWS: { value: opts.worldScale },
     ...opts.water,
     ...opts.beam,
+    ...opts.particleLights,
+    uEnvLight: { value: 1 },
   };
 
   const material = new THREE.MeshStandardMaterial({ roughness: 1, metalness: 0 });
@@ -329,7 +337,7 @@ export function createSeabedMaterial(opts: SeabedOptions): SeabedMaterial {
         "#include <project_vertex>\n  vWPos = (modelMatrix * vec4(transformed, 1.0)).xyz;\n  vWNrm = normalize(mat3(modelMatrix) * objectNormal);\n  vAO = ao;",
       );
     shader.fragmentShader = shader.fragmentShader
-      .replace("#include <common>", "#include <common>\n" + DECLS + WATER_GLSL + BEAM_DECLS)
+      .replace("#include <common>", "#include <common>\n" + DECLS + WATER_GLSL + BEAM_DECLS + PL_DECLS)
       .replace("#include <map_fragment>", MAP_FRAGMENT)
       .replace("#include <roughnessmap_fragment>", "float roughnessFactor = clamp(mix(0.55, 1.0, dmRough), 0.3, 1.0);")
       .replace(
@@ -345,7 +353,7 @@ export function createSeabedMaterial(opts: SeabedOptions): SeabedMaterial {
     float facing = pow(clamp(dmWorldNormal.y, 0.0, 1.0), 1.5);
     float c = dmCaustics(vWPos.xz * 0.42, uTime * 0.9);
     float fade = (1.0 - smoothstep(10.0, 30.0, camDist)) * smoothstep(-10.0 * uWS, 4.0 * uWS, vWPos.y);
-    totalEmissiveRadiance += diffuseColor.rgb * uCausticColor * c * facing * fade * mix(0.4, 1.0, vAO);
+    totalEmissiveRadiance += diffuseColor.rgb * uCausticColor * c * facing * fade * mix(0.4, 1.0, vAO) * uEnvLight;
   }`,
       )
       .replace(
@@ -356,7 +364,8 @@ export function createSeabedMaterial(opts: SeabedOptions): SeabedMaterial {
     reflectedLight.indirectDiffuse *= occ * occ;
     reflectedLight.directDiffuse *= mix(0.55, 1.0, occ);
   }
-${BEAM_LIGHT}`,
+${BEAM_LIGHT}
+${PL_LIGHT}`,
       )
       .replace(
         "#include <opaque_fragment>",
@@ -382,6 +391,7 @@ ${BEAM_OPAQUE}    outgoingLight = mix(outgoingLight, water, smoothstep(uFar * 0.
   return {
     material,
     absorb: uniforms.uAbsorb.value,
+    envLight: uniforms.uEnvLight,
     update: (time) => {
       uniforms.uTime.value = time;
     },

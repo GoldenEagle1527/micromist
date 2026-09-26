@@ -4,6 +4,7 @@
  * they fade toward the box edge so wrapping never pops.
  */
 import * as THREE from "three";
+import { PARTICLE_LIGHT, type ParticleLightUniforms } from "./particleLight";
 
 export class MarineSnow {
   readonly points: THREE.Points;
@@ -11,7 +12,10 @@ export class MarineSnow {
   private readonly pos: Float32Array;
   private readonly size = 24;
   private readonly material: THREE.ShaderMaterial;
+  private readonly seeds: Float32Array;
   private t = 0;
+  private readonly candIdx: number[] = [];
+  private readonly candD2: Float32Array;
 
   constructor(count = 900, seed = 1) {
     let s = seed >>> 0 || 1;
@@ -26,6 +30,8 @@ export class MarineSnow {
       attr[i * 3 + 1] = 0.6 + r * r * 1.8; // mostly small, a few large
       attr[i * 3 + 2] = rand();
     }
+    this.seeds = attr;
+    this.candD2 = new Float32Array(count);
     const geo = new THREE.BufferGeometry();
     geo.setAttribute("position", new THREE.BufferAttribute(this.pos, 3));
     geo.setAttribute("aSeed", new THREE.BufferAttribute(attr, 3));
@@ -88,6 +94,45 @@ void main() {
       this.pos[i + 2] = center.z + ((((bz - center.z) % S) + S) % S) - h;
     }
     (this.points.geometry.getAttribute("position") as THREE.BufferAttribute).needsUpdate = true;
+  }
+
+  /**
+   * Upload the nearest glowing specks (in front of / around the camera) as point
+   * lights for the seabed (particleLight.ts). Intensity follows the same pulse and
+   * size as the sprite, so rock glows in step with the speck above it.
+   */
+  fillLights(cam: THREE.Vector3, forward: THREE.Vector3, out: ParticleLightUniforms) {
+    const n = this.seeds.length / 3;
+    const max2 = PARTICLE_LIGHT.maxDist * PARTICLE_LIGHT.maxDist;
+    const idx = this.candIdx;
+    idx.length = 0;
+    for (let i = 0; i < n; i++) {
+      const dx = this.pos[i * 3] - cam.x;
+      const dy = this.pos[i * 3 + 1] - cam.y;
+      const dz = this.pos[i * 3 + 2] - cam.z;
+      const d2 = dx * dx + dy * dy + dz * dz;
+      if (d2 > max2) continue;
+      // behind the diver only counts when very close (its glow can still reach visible rock)
+      const ahead = dx * forward.x + dy * forward.y + dz * forward.z;
+      if (ahead < -PARTICLE_LIGHT.radius * 1.5) continue;
+      this.candD2[i] = d2;
+      idx.push(i);
+    }
+    idx.sort((a, b) => this.candD2[a] - this.candD2[b]);
+    const k = Math.min(PARTICLE_LIGHT.count, idx.length);
+    const a = out.uPL.value;
+    for (let j = 0; j < k; j++) {
+      const i = idx[j];
+      const phase = this.seeds[i * 3];
+      const size = this.seeds[i * 3 + 1];
+      const hue = this.seeds[i * 3 + 2];
+      const pulse = 0.55 + 0.45 * Math.sin(this.t * (0.8 + hue * 1.2) + phase);
+      a[j * 4] = this.pos[i * 3];
+      a[j * 4 + 1] = this.pos[i * 3 + 1];
+      a[j * 4 + 2] = this.pos[i * 3 + 2];
+      a[j * 4 + 3] = pulse * (size / 1.2);
+    }
+    out.uPLCount.value = k;
   }
 
   dispose() {

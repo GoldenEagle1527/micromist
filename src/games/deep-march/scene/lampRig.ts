@@ -3,7 +3,9 @@
  *  - beam: the classic head-lamp SpotLight (bright centre, falls off with distance);
  *  - high: the shader-side fog-light cone (highBeam.ts), uniform with distance;
  *  - night: night-vision strength for the post pass (nightVision.ts) plus
- *    environment boosts (ambient up, haze/absorption down) and a dim IR illuminator.
+ *    its own additive fill light (haze/absorption down) and a dim IR illuminator;
+ *  - off: total darkness — ambient, sun, caustics and water/haze colour fade to 0,
+ *    leaving only the fluorescent plankton (particleLight.ts).
  * Mode changes cross-fade quickly. world.ts hosts it and applies `env`.
  */
 import * as THREE from "three";
@@ -13,18 +15,31 @@ import { createBeamUniforms, type BeamUniforms } from "./highBeam";
 export const LAMP_TUNING = {
   spot: { intensity: 26, distance: 150, angleDeg: 32, penumbra: 0.7, decay: 1.1 },
   high: { gain: 1.15, range: 280, outerDeg: 48, innerDeg: 18, hazeCut: 0.75, globalHaze: 0.85 },
-  night: { ambient: 7, sun: 3, haze: 0.22, absorb: 0.35, irSpot: 0.3 },
+  /** Night vision: additive hemisphere / sun fill (the base environment is dark without a lamp). */
+  night: { ambient: 2.4, sun: 1.0, water: 1, haze: 0.22, absorb: 0.35, irSpot: 0.3 },
   /** Cross-fade speed (1/s). */
   fade: 14,
 };
 
-/** Multipliers world.ts applies on top of its depth-driven lighting. */
-export type LampEnv = { ambient: number; sun: number; haze: number; absorb: number };
+/**
+ * What world.ts applies on top of its depth-driven lighting:
+ * ambient/sun = base × mul + add; water scales the open-water / haze colour and
+ * caustics (0 = black); haze / absorb scale their densities.
+ */
+export type LampEnv = {
+  ambientMul: number;
+  ambientAdd: number;
+  sunMul: number;
+  sunAdd: number;
+  water: number;
+  haze: number;
+  absorb: number;
+};
 
 export class LampRig {
   readonly spot: THREE.SpotLight;
   readonly beam: BeamUniforms = createBeamUniforms();
-  readonly env: LampEnv = { ambient: 1, sun: 1, haze: 1, absorb: 1 };
+  readonly env: LampEnv = { ambientMul: 1, ambientAdd: 0, sunMul: 1, sunAdd: 0, water: 1, haze: 1, absorb: 1 };
   private readonly level: Record<LightMode, number> = { beam: 0, high: 0, night: 0 };
   private readonly tmp = new THREE.Vector3();
 
@@ -58,7 +73,7 @@ export class LampRig {
     const T = LAMP_TUNING;
 
     this.spot.intensity = T.spot.intensity * (beam + night * T.night.irSpot);
-    this.spot.visible = this.spot.intensity > 0.01;
+    // stays "visible" at 0: toggling light visibility would recompile every lit shader
 
     this.beam.uBeamGain.value = T.high.gain * high;
     if (high > 0) {
@@ -68,8 +83,13 @@ export class LampRig {
     }
 
     const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
-    this.env.ambient = lerp(1, T.night.ambient, night);
-    this.env.sun = lerp(1, T.night.sun, night);
+    // beam / high keep the natural environment; off and night vision drop it
+    const lamp = Math.min(1, beam + high);
+    this.env.ambientMul = lamp;
+    this.env.sunMul = lamp;
+    this.env.ambientAdd = T.night.ambient * night;
+    this.env.sunAdd = T.night.sun * night;
+    this.env.water = Math.min(1, lamp + T.night.water * night);
     this.env.haze = lerp(1, T.high.globalHaze, high) * lerp(1, T.night.haze, night);
     this.env.absorb = lerp(1, T.night.absorb, night);
   }
