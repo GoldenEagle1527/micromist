@@ -191,7 +191,7 @@ void main() {
   const baseHaze = water.uHaze.value;
 
   const field = createDensityField(opts.seed, terrain);
-  const chunks = new ChunkManager(scene, field, opts.seed, terrainMat);
+  const chunks = new ChunkManager(scene, field, opts.seed, terrainMat, lowSpec);
 
   const diver = new DiverController(field, (x, y, z) => chunks.isRemoved(x, y, z));
   // HUD terrain chip: lookup in the generation-time class grid (no probing), with

@@ -67,6 +67,13 @@ export type DensityField = {
   boundsForMask: (mask: number, y: number, out: Float64Array) => void;
   /** Same for sampleRaw (no vertical smoothing; used by the coarse LOD meshes). */
   rawBoundsForMask: (mask: number, y: number, out: Float64Array) => void;
+  /**
+   * Cheap conservative class of sampleRaw at a world point (no noise evaluated):
+   * 2 = certainly the deep-rock cap — out[0] is then exactly sampleRaw's value;
+   * 1 = certainly water — out[0] is an upper bound (< isoLevel); 0 = unknown.
+   * Lets the mesher skip noise where the exact value provably can't matter.
+   */
+  rawClass: (x: number, y: number, z: number, out: Float64Array) => number;
   /** Gradient pointing toward solid (central difference; the field is continuous). */
   gradient: (x: number, y: number, z: number, out: Float64Array, h?: number) => void;
 };
@@ -478,6 +485,46 @@ export function createDensityField(seed: number, s: TerrainSettings, params: rea
     return d < capHi ? d : capHi;
   };
 
+  // |erosion| bound: e = n(1 − r) + r(1 − 2|n|) with |n| ≤ NB
+  const erosionBound = NB * (1 + 2 * Math.abs(s.erosionRidge)) + Math.abs(s.erosionRidge);
+  const capWorld = S === 1 ? capHi : iso + S * (capHi - iso);
+  /** Per-point conservative bounds of evalRaw (see DensityField.rawClass); base coordinates. */
+  const rawClassBase = (slot: number, y: number, out: Float64Array): number => {
+    const n = cN[slot];
+    const o = slot * R6;
+    let lo = 0, hi = 0;
+    const layerOn = cLayer[slot] !== 0;
+    for (let q = 0; q < n; q++) {
+      const r = cReg[o + q];
+      const w = cW[o + q];
+      const common = pBias[r] + pSlope[r] * (cH[o + q] - y) + floorTerm(y, cFh[o + q]) + ceilTerm(y, cCh[o + q]);
+      const spread = (layerOn ? Math.abs(pLa[r]) * 1.3 : 0) + Math.abs(pEr[r]) * erosionBound;
+      let l = common - spread;
+      let h = common + spread + pNw[r] * noiseMax;
+      if (pExtra[r] & 1) l -= caveP[r]!.carve * caveEnvelope(caveP[r]!, y);
+      if (pExtra[r] & 2 && cBN[slot] > 0) {
+        let rMax = 0;
+        for (let k = 0; k < cBN[slot]; k++) rMax = Math.max(rMax, cBR[slot * 2 + k]);
+        h = Math.max(h, s.isoLevel + Math.abs(bGain) * (rMax + Math.abs(bBump) * erosionBound)) + (cBN[slot] * Math.abs(bK)) / 4;
+      }
+      lo += w * l;
+      hi += w * h;
+    }
+    if (lo >= capHi + 1e-7) {
+      out[0] = capWorld;
+      return 2;
+    }
+    if (hi < iso - 1e-7) {
+      out[0] = S === 1 ? hi : iso + S * (hi - iso);
+      return 1;
+    }
+    return 0;
+  };
+  const rawClass =
+    S === 1
+      ? (x: number, y: number, z: number, out: Float64Array) => rawClassBase(ctx(x, z), y, out)
+      : (x: number, y: number, z: number, out: Float64Array) => rawClassBase(ctx(x * invS, z * invS), y * invS, out);
+
   /** Raw bounds of region r at height y. */
   const regionRawBounds = (r: number, y: number, out: Float64Array) => {
     const p = params[r];
@@ -548,5 +595,5 @@ export function createDensityField(seed: number, s: TerrainSettings, params: rea
     out[2] = (sample(x, y, z + h) - sample(x, y, z - h)) * inv;
   };
 
-  return { settings: s, seed, regions, sample, sampleRaw, sampleRawCoarse, smoothStep, smoothWeights: SW, bounds, boundsForMask, rawBoundsForMask, gradient };
+  return { settings: s, seed, regions, sample, sampleRaw, sampleRawCoarse, rawClass, smoothStep, smoothWeights: SW, bounds, boundsForMask, rawBoundsForMask, gradient };
 }

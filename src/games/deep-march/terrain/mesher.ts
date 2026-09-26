@@ -87,7 +87,7 @@ export function columnRegionMask(field: DensityField, cx: number, cz: number, lo
   const hit = m.get(key);
   if (hit !== undefined) return hit;
   const s = field.settings;
-  const n = s.numPointsPerAxis;
+  const n = lodPoints(field, lod);
   // floater window: the same number of lattice cells at every LOD
   const Mi = Math.max(1, Math.ceil(s.floaterMargin / latticeSpacing(field))) + 2;
   const x0 = lodCoord(cx * (n - 1) - 1 - Mi, field, lod), x1 = lodCoord(cx * (n - 1) + n + Mi, field, lod);
@@ -186,7 +186,18 @@ export function latticeCoord(g: number, field: DensityField): number {
  * exactly level-0 columns cx·2^L … cx·2^L + 2^L − 1 (quadtree-aligned).
  */
 export function lodSpacing(field: DensityField, lod: number): number {
-  return latticeSpacing(field) * (1 << lod);
+  const s = field.settings;
+  return (s.boundsSize * (1 << lod)) / (lodPoints(field, lod) - 1);
+}
+
+/**
+ * Lattice points per column side at a LOD level. Far rings (≥ farLodFrom) may use a
+ * coarser lattice (settings.farLodCells) over the same footprint; their points are then
+ * not a subset of level 0 (skirts cover the transitions anyway).
+ */
+export function lodPoints(field: DensityField, lod: number): number {
+  const s = field.settings;
+  return lod > 0 && s.farLodCells > 0 && lod >= s.farLodFrom ? s.farLodCells + 1 : s.numPointsPerAxis;
 }
 
 export function lodCoord(g: number, field: DensityField, lod: number): number {
@@ -225,6 +236,25 @@ const SOLID = 1;
 const KEEP = 2;
 const REMOVED = 3;
 
+/** Binary max filter (Chebyshev radius rad) of a (k · py + j) · px + i grid. */
+function dilate(src: Uint8Array, px: number, py: number, pz: number, rad: number): Uint8Array {
+  const a = new Uint8Array(src.length);
+  const pass = (from: Uint8Array, to: Uint8Array, len: number, stride: number) => {
+    to.fill(0);
+    for (let idx = 0; idx < from.length; idx++) {
+      if (!from[idx]) continue;
+      const c = Math.floor(idx / stride) % len;
+      const lo = Math.max(0, c - rad) - c, hi = Math.min(len - 1, c + rad) - c;
+      for (let d = lo; d <= hi; d++) to[idx + d * stride] = 1;
+    }
+  };
+  const b = new Uint8Array(src.length);
+  pass(src, a, px, 1);
+  pass(a, b, py, px);
+  pass(b, a, pz, px * py);
+  return a;
+}
+
 export function generateColumnMesh(
   field: DensityField,
   cx: number,
@@ -248,7 +278,7 @@ export function generateColumnMesh(
 ): ColumnMeshData {
   const s = field.settings;
   const iso = s.isoLevel;
-  const n = s.numPointsPerAxis;
+  const n = lodPoints(field, lod);
   const sp = lodSpacing(field, lod);
   const lc = (g: number) => lodCoord(g, field, lod);
   const { gjMin, gjMax } = rows;
@@ -284,22 +314,87 @@ export function generateColumnMesh(
   const R = half * K; // raw-row padding on each side
   const rawNeed = new Uint8Array(py + 2 * R);
   for (let j = 0; j < py; j++) if (!rowSkip[j]) for (let d = 0; d <= 2 * R; d++) rawNeed[j + d] = 1;
-  const raw = new Float32Array((py + 2 * R) * px);
+  const RY = py + 2 * R;
+  const raw = new Float32Array(pz * RY * px); // index (k · RY + r) · px + i
+  const yOf = (r: number) => y0 + (r - R - 1) * sp;
+
+  // Slab skipping (mesh-only jobs): a cheap conservative bound (field.rawClass)
+  // classifies each raw sample as deep-rock cap (exact value, no noise), sure
+  // water, or unknown. Exact samples are taken only where they can influence the
+  // mesh: within 2 lattice points (gradient + edge reach) of any final point that
+  // is not sure water. Everything else keeps its water bound (< iso), so the
+  // marching-cubes output is bit-identical to sampling everything exactly.
+  const skipSlabs = !withInfo && !debugGrid;
+  if (!skipSlabs) {
+    for (let k = 0; k < pz; k++) {
+      const wz = z0 + (k - 1) * sp;
+      // x/z outer, y inner: consecutive samples share (x, z) (per-line region context)
+      for (let i = 0; i < px; i++) {
+        const wx = x0 + (i - 1) * sp;
+        for (let r = 0; r < RY; r++) {
+          if (!rawNeed[r]) continue;
+          raw[(k * RY + r) * px + i] = field.sampleRaw(wx, yOf(r), wz);
+          stats.noiseSamples++;
+        }
+      }
+    }
+  } else {
+    const cls = new Uint8Array(pz * RY * px);
+    const bnd = new Float64Array(1);
+    for (let k = 0; k < pz; k++) {
+      const wz = z0 + (k - 1) * sp;
+      for (let i = 0; i < px; i++) {
+        const wx = x0 + (i - 1) * sp;
+        for (let r = 0; r < RY; r++) {
+          if (!rawNeed[r]) continue;
+          const idx = (k * RY + r) * px + i;
+          const c = field.rawClass(wx, yOf(r), wz, bnd);
+          cls[idx] = c;
+          if (c !== 0) raw[idx] = bnd[0];
+        }
+      }
+    }
+    // final points that are not certainly water (seeds), dilated by 2 on every axis
+    const seeds = new Uint8Array(size);
+    for (let k = 0; k < pz; k++)
+      for (let j = 0; j < py; j++) {
+        const row = (k * py + j) * px;
+        if (rowSkip[j]) {
+          if (rowKind[j] !== 1) seeds.fill(1, row, row + px);
+          continue;
+        }
+        for (let i = 0; i < px; i++)
+          for (let t = 0; t <= 2 * R; t++)
+            if (cls[(k * RY + j + t) * px + i] !== 1) {
+              seeds[row + i] = 1;
+              break;
+            }
+      }
+    const need = dilate(seeds, px, py, pz, 2);
+    for (let k = 0; k < pz; k++) {
+      const wz = z0 + (k - 1) * sp;
+      for (let i = 0; i < px; i++) {
+        const wx = x0 + (i - 1) * sp;
+        for (let r = 0; r < RY; r++) {
+          if (!rawNeed[r]) continue;
+          const idx = (k * RY + r) * px + i;
+          const c = cls[idx];
+          if (c === 2) continue;
+          let exact = c === 0;
+          for (let j = Math.max(0, r - 2 * R), je = Math.min(py - 1, r); !exact && j <= je; j++)
+            if (!rowSkip[j] && need[(k * py + j) * px + i]) exact = true;
+          if (!exact) continue;
+          raw[idx] = field.sampleRaw(wx, yOf(r), wz);
+          stats.noiseSamples++;
+        }
+      }
+    }
+  }
 
   const dens = new Float32Array(size);
   const state = new Uint8Array(size);
   for (let k = 0; k < pz; k++) {
-    const wz = z0 + (k - 1) * sp;
-    // x/z outer, y inner: consecutive samples share (x, z), so the field's
-    // per-(x, z) region context is computed once per lattice line.
-    for (let i = 0; i < px; i++) {
-      const wx = x0 + (i - 1) * sp;
-      for (let r = 0; r < py + 2 * R; r++) {
-        if (!rawNeed[r]) continue;
-        raw[r * px + i] = field.sampleRaw(wx, y0 + (r - R - 1) * sp, wz);
-        stats.noiseSamples++;
-      }
-    }
+    const rk = k * RY * px;
     for (let j = 0; j < py; j++) {
       const row = (k * py + j) * px;
       if (rowSkip[j]) {
@@ -307,7 +402,7 @@ export function generateColumnMesh(
         state.fill(rowKind[j] === 2 ? SOLID : WATER, row, row + px);
         continue;
       }
-      const c = (j + R) * px;
+      const c = rk + (j + R) * px;
       for (let i = 0; i < px; i++) {
         let v = 0;
         for (let t = 0; t < SW.length; t++) v += SW[t] * raw[c + (t - half) * K * px + i];
