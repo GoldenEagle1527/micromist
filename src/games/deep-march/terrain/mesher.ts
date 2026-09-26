@@ -28,9 +28,10 @@
  *
  * Other differences from the reference: gradient normals from the padded grid,
  * shared per-edge vertices (indexed), rows provably above/below iso (from
- * field.bounds) skip noise.
+ * field.bounds) skip noise, and the field's vertical smoothing is assembled from
+ * raw lattice rows (no extra noise evaluations).
  */
-import type { DensityField } from "./density";
+import { SMOOTH_W, type DensityField } from "./density";
 import { CORNER_OFFSETS, EDGE_CORNER_A, EDGE_CORNER_B, TRI_TABLE } from "./tables";
 
 export type ColumnStats = {
@@ -178,24 +179,41 @@ export function generateColumnMesh(
     rowSkip[j] = ok ? 1 : 0;
   }
 
+  // field.sample is a vertical binomial blur of sampleRaw with taps K rows
+  // apart, so the blurred value of every sampled row is assembled exactly from
+  // raw rows j − 2K … j + 2K (each raw row evaluated once).
+  const K = s.smoothCells;
+  const R = 2 * K; // raw-row padding on each side
+  const rawNeed = new Uint8Array(py + 2 * R);
+  for (let j = 0; j < py; j++) if (!rowSkip[j]) for (let d = 0; d <= 2 * R; d++) rawNeed[j + d] = 1;
+  const raw = new Float32Array((py + 2 * R) * px);
+  const w0 = SMOOTH_W[0], w1 = SMOOTH_W[1], w2 = SMOOTH_W[2];
+
   const dens = new Float32Array(size);
   const state = new Uint8Array(size);
   for (let k = 0; k < pz; k++) {
     const wz = z0 + (k - 1) * sp;
+    for (let r = 0; r < py + 2 * R; r++) {
+      if (!rawNeed[r]) continue;
+      const wy = y0 + (r - R - 1) * sp;
+      const o = r * px;
+      for (let i = 0; i < px; i++) raw[o + i] = field.sampleRaw(x0 + (i - 1) * sp, wy, wz);
+      stats.noiseSamples += px;
+    }
     for (let j = 0; j < py; j++) {
-      const wy = y0 + (j - 1) * sp;
       const row = (k * py + j) * px;
       if (rowSkip[j]) {
         dens.fill(rowFill[j], row, row + px);
         state.fill(rowKind[j] === 2 ? SOLID : WATER, row, row + px);
         continue;
       }
+      const c = (j + R) * px;
+      const a2 = c - R * px, a1 = c - K * px, b1 = c + K * px, b2 = c + R * px;
       for (let i = 0; i < px; i++) {
-        const v = field.sample(x0 + (i - 1) * sp, wy, wz);
+        const v = w0 * (raw[a2 + i] + raw[b2 + i]) + w1 * (raw[a1 + i] + raw[b1 + i]) + w2 * raw[c + i];
         dens[row + i] = v;
         state[row + i] = v >= iso ? SOLID : WATER;
       }
-      stats.noiseSamples += px;
     }
   }
 
@@ -484,7 +502,8 @@ export function generateColumnMesh(
     let occ = 0;
     for (let q = 0; q < AO_STEPS.length; q++) {
       const t = AO_STEPS[q];
-      const d = field.sample(positions[o] + normals[o] * t, positions[o + 1] + normals[o + 1] * t, positions[o + 2] + normals[o + 2] * t);
+      // Unsmoothed field: AO is a heuristic, and this keeps it at 1 noise eval per tap.
+      const d = field.sampleRaw(positions[o] + normals[o] * t, positions[o + 1] + normals[o + 1] * t, positions[o + 2] + normals[o + 2] * t);
       const expected = g * t; // iso - d on a plane
       occ += AO_WEIGHTS[q] * Math.min(1, Math.max(0, 1 - (iso - d) / expected));
     }
