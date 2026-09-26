@@ -13,7 +13,6 @@
  */
 import * as THREE from "three";
 import type { DensityField } from "./density";
-import { ErosionStore } from "./erosion";
 import { columnRows, generateColumnMesh, latticeCoord, latticeSpacing, type ColumnRows } from "./mesher";
 import type { MesherRequest, MesherResponse } from "./protocol";
 
@@ -74,7 +73,6 @@ export class ChunkManager {
   private msCount = 0;
   private floaters = 0;
   private disposed = false;
-  private readonly erosion: ErosionStore;
 
   constructor(scene: THREE.Scene, field: DensityField, seed: number, material: THREE.Material) {
     this.scene = scene;
@@ -83,7 +81,6 @@ export class ChunkManager {
     this.rows = columnRows(field);
     this.yMin = latticeCoord(this.rows.gjMin, field);
     this.yMax = latticeCoord(this.rows.gjMax, field);
-    this.erosion = new ErosionStore(field.settings.numPointsPerAxis, latticeSpacing(field), field.settings.boundsSize / 2, this.rows.gjMin);
     scene.add(this.group);
     const cores = typeof navigator !== "undefined" ? navigator.hardwareConcurrency || 4 : 4;
     const count = Math.max(1, Math.min(4, cores - 1));
@@ -200,7 +197,6 @@ export class ChunkManager {
     if (entry.state === "pending") this.byId.delete(entry.id);
     entry.state = "queued";
     entry.removed = null;
-    this.erosion.delete(entry.cx, entry.cz);
     if (entry.mesh) {
       this.triangles -= (entry.mesh.geometry.index?.count ?? 0) / 3;
       entry.mesh.geometry.dispose();
@@ -258,13 +254,11 @@ export class ChunkManager {
         removed.add((r.removed[q + 1] * (n - 1) + r.removed[q + 2]) * (n - 1) + r.removed[q]);
       }
       e.removed = removed;
-      this.erosion.set(e.cx, e.cz, r.erosion, r.erosionJ0, r.erosionJ1);
       if (r.indices.length === 0) continue;
       const geo = new THREE.BufferGeometry();
       geo.setAttribute("position", new THREE.BufferAttribute(r.positions, 3));
       geo.setAttribute("normal", new THREE.BufferAttribute(r.normals, 3));
       geo.setAttribute("ao", new THREE.BufferAttribute(r.ao, 1));
-      geo.setAttribute("ero", new THREE.BufferAttribute(r.ero, 2));
       geo.setIndex(new THREE.BufferAttribute(r.indices, 1));
       this.setColumnBox(e.cx, e.cz);
       geo.boundingBox = this.box.clone();
@@ -311,11 +305,6 @@ export class ChunkManager {
       }
     }
     return false;
-  }
-
-  /** Hydraulic-erosion density change at a world position (0 where no column is loaded). */
-  erosionDelta(x: number, y: number, z: number): number {
-    return this.erosion.delta(x, y, z);
   }
 
   stats(): ChunkStats {

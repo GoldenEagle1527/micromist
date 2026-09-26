@@ -2,7 +2,6 @@
 import * as THREE from "three";
 import { SEA_COLORS, isLowSpecDevice, terrainForDevice } from "../terrain/config";
 import { createDensityField } from "../terrain/density";
-import { erodedField } from "../terrain/erosion";
 import { ChunkManager } from "../terrain/chunks";
 import { InputController, type PanelInput } from "./input";
 import { MarineSnow } from "./particles";
@@ -107,11 +106,7 @@ export function createDeepMarch(host: HTMLElement, opts: DeepMarchOptions): Deep
   const field = createDensityField(opts.seed, terrain);
   const chunks = new ChunkManager(scene, field, opts.seed, terrainMat);
 
-  // Collision samples the field as rendered (incl. per-column hydraulic erosion).
-  const diver = new DiverController(
-    erodedField(field, (x, y, z) => chunks.erosionDelta(x, y, z)),
-    (x, y, z) => chunks.isRemoved(x, y, z),
-  );
+  const diver = new DiverController(field, (x, y, z) => chunks.isRemoved(x, y, z));
   diver.spawn(0, 0);
   // Optional viewpoint for sharing / screenshots: ?at=x,y,z,yawDeg,pitchDeg.
   const at = new URLSearchParams(window.location.search).get("at");

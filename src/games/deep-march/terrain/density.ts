@@ -28,7 +28,6 @@ import type { TerrainSettings } from "./config";
 import { createSimplex3, mulberry32 } from "./noise";
 
 export type DensityField = {
-  seed: number;
   settings: TerrainSettings;
   /** Full density at a world position (vertically smoothed; this is the terrain). */
   sample: (x: number, y: number, z: number) => number;
@@ -187,5 +186,5 @@ export function createDensityField(seed: number, s: TerrainSettings): DensityFie
     out[2] = (sample(x, y, z + h) - sample(x, y, z - h)) * inv;
   };
 
-  return { seed, settings: s, sample, sampleRaw, smoothStep, bounds, gradient };
+  return { settings: s, sample, sampleRaw, smoothStep, bounds, gradient };
 }

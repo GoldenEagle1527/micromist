@@ -23,6 +23,6 @@ ctx.onmessage = (ev) => {
     const t0 = performance.now();
     const m = generateColumnMesh(field, msg.cx, msg.cz, rows, field.settings.floaterMargin);
     const res: MesherResponse = { type: "column", id: msg.id, ...m, ms: performance.now() - t0 };
-    ctx.postMessage(res, [m.positions.buffer, m.normals.buffer, m.ao.buffer, m.ero.buffer, m.indices.buffer, m.removed.buffer, m.erosion.buffer]);
+    ctx.postMessage(res, [m.positions.buffer, m.normals.buffer, m.ao.buffer, m.indices.buffer, m.removed.buffer]);
   }
 };
