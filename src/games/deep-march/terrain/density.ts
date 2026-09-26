@@ -95,6 +95,8 @@ function caveEnvelope(c: NonNullable<RegionParams["caves"]>, y: number): number 
   return smooth01((y - c.yMin) / c.edge) * smooth01((c.yMax - y) / c.edge);
 }
 
+/** Raw density is capped at iso + RAW_CAP (deep rock; see evalRaw). */
+export const RAW_CAP = 16;
 const CACHE_BITS = 12;
 const CACHE = 1 << CACHE_BITS;
 const R6 = REGION_COUNT;
@@ -123,8 +125,11 @@ export function createDensityField(seed: number, s: TerrainSettings, params: rea
   const floorTerm = (y: number, fh: number) => s.hardFloorWeight * smooth01((fh + fb - y) / (2 * fb));
   const ceilTerm = (y: number, ch: number) => s.ceilingSlope * ramp(y - ch, s.ceilingRamp);
 
+  // Ridged-noise maximum: each octave's v = (1 − √(n² + r²))² · weight ≤ (1 − r)² (weight ≤ 1),
+  // so noise ≤ (1 − r)² · Σ amplitudes — a tight, exact bound (r = ridgeSoftness).
   let ampSum = 0;
   for (let j = 0, a = 1; j < s.octaves; j++, a *= s.persistence) ampSum += a;
+  const noiseMax = (1 - s.ridgeSoftness) ** 2 * ampSum;
 
   // Terrace step heights per level (seeded; levels −4 … 11 → index level + 4).
   const terraceSteps = new Float64Array(16);
@@ -222,7 +227,58 @@ export function createDensityField(seed: number, s: TerrainSettings, params: rea
   const cNb = new Float64Array(CACHE);
   const cWarp = new Float64Array(CACHE);
   const cLayer = new Uint8Array(CACHE);
+  // Sand boulders overlapping (x, z) (≤ 2 per slot): horizontal normalised distance²,
+  // centre height, vertical radius, size scale.
+  const cBN = new Uint8Array(CACHE);
+  const cBH2 = new Float64Array(CACHE * 2);
+  const cBCy = new Float64Array(CACHE * 2);
+  const cBRy = new Float64Array(CACHE * 2);
+  const cBR = new Float64Array(CACHE * 2);
   const rs = createRegionSample();
+  const bP = params[REGION.SAND].boulders;
+  const sandIso = (s.isoLevel - params[REGION.SAND].bias) / params[REGION.SAND].slope; // sand surface = H − sandIso
+  const bhash = (a: number, b: number, c: number) => {
+    let h = (seed ^ 0x68e31da4) >>> 0;
+    h = Math.imul(h ^ a, 0x85ebca6b) >>> 0;
+    h = Math.imul((h ^ (h >>> 13)) ^ b, 0xc2b2ae35) >>> 0;
+    h = Math.imul((h ^ (h >>> 16)) ^ c, 0x27d4eb2f) >>> 0;
+    h ^= h >>> 15;
+    return (h >>> 0) / 4294967296;
+  };
+  /** Boulders of the cells around (x, z) whose footprint (plus fillet margin) covers it. */
+  const boulderCtx = (slot: number, x: number, z: number) => {
+    let n = 0;
+    const b = bP!;
+    const gx = Math.floor(x / b.cell), gz = Math.floor(z / b.cell);
+    for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) {
+      const cx = gx + dx, cz = gz + dz;
+      if (bhash(cx, cz, 1) >= b.chance) continue;
+      const bx = (cx + 0.2 + 0.6 * bhash(cx, cz, 2)) * b.cell;
+      const bz = (cz + 0.2 + 0.6 * bhash(cx, cz, 3)) * b.cell;
+      const u = bhash(cx, cz, 4);
+      const r = b.rMin + (b.rMax - b.rMin) * u;
+      const rx = r * (0.8 + 0.4 * bhash(cx, cz, 5)), rz = r * (0.8 + 0.4 * bhash(cx, cz, 6));
+      const ry = r * (b.flatMin + (b.flatMax - b.flatMin) * bhash(cx, cz, 7));
+      const th = bhash(cx, cz, 8) * Math.PI;
+      const c = Math.cos(th), sn = Math.sin(th);
+      const ex_ = x - bx, ez = z - bz;
+      const ux = (ex_ * c + ez * sn) / rx, uz = (-ex_ * sn + ez * c) / rz;
+      const h2 = ux * ux + uz * uz;
+      if (h2 >= 1.69) continue; // beyond 1.3 radii: no contribution even with the fillet
+      const cy = height(REGION.SAND, bx, bz, 0) - sandIso - b.sink * ry;
+      const rm = Math.cbrt(rx * ry * rz);
+      let q = n;
+      if (n === 2) {
+        q = cBH2[slot * 2] > cBH2[slot * 2 + 1] ? 0 : 1;
+        if (h2 >= cBH2[slot * 2 + q]) continue;
+      } else n++;
+      cBH2[slot * 2 + q] = h2;
+      cBCy[slot * 2 + q] = cy;
+      cBRy[slot * 2 + q] = ry;
+      cBR[slot * 2 + q] = rm;
+    }
+    cBN[slot] = n;
+  };
   const hsum = new Float64Array(R6);
   const fbits = new Float64Array(2);
   const ibits = new Int32Array(fbits.buffer);
@@ -266,6 +322,8 @@ export function createDensityField(seed: number, s: TerrainSettings, params: rea
       n++;
     }
     cN[slot] = n;
+    cBN[slot] = 0;
+    if (bP && rs.w[REGION.SAND] > 0) boulderCtx(slot, x, z);
     cNa[slot] = na;
     cNb[slot] = nb;
     cWarp[slot] = warp;
@@ -281,9 +339,11 @@ export function createDensityField(seed: number, s: TerrainSettings, params: rea
   const pNw = Float64Array.from(params, (p) => p.noiseWeight);
   const pLa = Float64Array.from(params, (p) => p.layerAmplitude);
   const pEr = Float64Array.from(params, (p) => p.erosionAmplitude);
-  const pExtra = Uint8Array.from(params, (p) => (p.caves ? 1 : 0) | (p.boulders ? 2 : 0));
+  const pExtra = Uint8Array.from(params, (p) => (p.caves ? 1 : 0) | (p.boulders && p === params[REGION.SAND] ? 2 : 0));
   const caveP = params.map((p) => p.caves);
-  const boulderP = params.map((p) => p.boulders);
+  const bGain = bP ? bP.gain : 0, bBump = bP ? bP.bump : 0, bK = bP ? bP.k : 1;
+  const part = new Float64Array(R6);
+  const capHi = s.isoLevel + RAW_CAP;
 
   const rs2 = s.ridgeSoftness * s.ridgeSoftness;
   const latSp = s.boundsSize / (s.numPointsPerAxis - 1);
@@ -297,6 +357,55 @@ export function createDensityField(seed: number, s: TerrainSettings, params: rea
     const wx = x + W * snoise(x * fw + ex[0], y * fw + ex[1], z * fw + ex[2]);
     const wy = y + W * Wv * snoise(x * fw + ex[3], y * fw + ex[4], z * fw + ex[5]);
     const wz = z + W * snoise(x * fw + ex[6], y * fw + ex[7], z * fw + ex[8]);
+
+    // --- soft layering: band height and phase vary across xz ---
+    let layer = 0;
+    if (cLayer[slot]) {
+      const H = s.layerHeight * (1 + s.layerHeightVariation * cNb[slot]);
+      const t = (wy + s.layerPhaseVariation * cNa[slot]) / H;
+      layer = Math.sin(TAU * t) + 0.3 * Math.sin(2 * TAU * t + 1.3);
+    }
+
+    // --- erosion detail: simplex blended toward a ridged variant (angular creases) ---
+    const es = s.erosionFrequency;
+    const en = snoise(wx * es + ex[15], wy * es + ex[16], wz * es + ex[17]);
+    const erosion = en + s.erosionRidge * (1 - 2 * Math.abs(en) - en);
+
+    // --- region terms without the ridged noise (a lower bound: noise weights are ≥ 0) ---
+    const n = cN[slot];
+    const o = slot * R6;
+    let lower = 0;
+    for (let q = 0; q < n; q++) {
+      const r = cReg[o + q];
+      let v =
+        pBias[r] +
+        pSlope[r] * (cH[o + q] - y) +
+        pLa[r] * layer +
+        pEr[r] * erosion +
+        floorTerm(y, cFh[o + q]) +
+        ceilTerm(y, cCh[o + q]);
+      if (pExtra[r] & 1) {
+        const c = caveP[r]!;
+        const env = caveEnvelope(c, y);
+        if (env > 0) {
+          const f = c.tubeFreq, fy = f * c.ySquash;
+          const n1 = snoise(wx * f + ro[30], wy * fy + ro[31], wz * f);
+          const n2 = snoise(wx * f + ro[0], wy * fy + ro[2], wz * f + ro[4]);
+          const tube = smooth01(1 - (n1 * n1 + n2 * n2) / (c.tubeWidth * c.tubeWidth));
+          const fc = c.chamberFreq;
+          const n3 = snoise(wx * fc + ro[6], wy * fc * 1.4 + ro[8], wz * fc + ro[10]);
+          const chamber = smooth01((n3 - c.chamberLevel) / 0.25);
+          // tunnels stay between the hard floor and the ceiling (world stays sealed)
+          v -= c.carve * env * (1 - (1 - tube) * (1 - chamber));
+        }
+      }
+      part[q] = v;
+      lower += cW[o + q] * v;
+    }
+    // Deep inside rock the exact value is irrelevant: raw is capped at iso + RAW_CAP
+    // (≥ RAW_CAP / |∇| units from any surface, beyond the smoothing reach), so the
+    // expensive octave loop is skipped once the lower bound already exceeds the cap.
+    if (lower >= capHi) return capHi;
 
     // --- reference ridged noise (on warped position) ---
     let noise = 0;
@@ -315,56 +424,27 @@ export function createDensityField(seed: number, s: TerrainSettings, params: rea
       frequency *= s.lacunarity;
     }
 
-    // --- soft layering: band height and phase vary across xz ---
-    let layer = 0;
-    if (cLayer[slot]) {
-      const H = s.layerHeight * (1 + s.layerHeightVariation * cNb[slot]);
-      const t = (wy + s.layerPhaseVariation * cNa[slot]) / H;
-      layer = Math.sin(TAU * t) + 0.3 * Math.sin(2 * TAU * t + 1.3);
-    }
-
-    // --- erosion detail: simplex blended toward a ridged variant (angular creases) ---
-    const es = s.erosionFrequency;
-    const en = snoise(wx * es + ex[15], wy * es + ex[16], wz * es + ex[17]);
-    const erosion = en + s.erosionRidge * (1 - 2 * Math.abs(en) - en);
-
     let d = 0;
-    const n = cN[slot];
-    const o = slot * R6;
     for (let q = 0; q < n; q++) {
       const r = cReg[o + q];
-      let v =
-        pBias[r] +
-        pSlope[r] * (cH[o + q] - y) +
-        pNw[r] * noise +
-        pLa[r] * layer +
-        pEr[r] * erosion +
-        floorTerm(y, cFh[o + q]) +
-        ceilTerm(y, cCh[o + q]);
-      const extra = pExtra[r];
-      if (extra & 1) {
-        const c = caveP[r]!;
-        const f = c.tubeFreq, fy = f * c.ySquash;
-        const n1 = snoise(wx * f + ro[30], wy * fy + ro[31], wz * f);
-        const n2 = snoise(wx * f + ro[0], wy * fy + ro[2], wz * f + ro[4]);
-        const tube = smooth01(1 - (n1 * n1 + n2 * n2) / (c.tubeWidth * c.tubeWidth));
-        const fc = c.chamberFreq;
-        const n3 = snoise(wx * fc + ro[6], wy * fc * 1.4 + ro[8], wz * fc + ro[10]);
-        const chamber = smooth01((n3 - c.chamberLevel) / 0.25);
-        // tunnels stay between the hard floor and the ceiling (world stays sealed)
-        v -= c.carve * caveEnvelope(c, y) * (1 - (1 - tube) * (1 - chamber));
-      }
-      if (extra & 2) {
-        const b = boulderP[r]!;
-        const fade = smooth01((b.top - y) / b.fade);
-        if (fade > 0) {
-          const nb = snoise(wx * b.freq + ro[12], wy * b.freq * 0.8 + ro[14], wz * b.freq + ro[16]);
-          v += b.amp * fade * smooth01((nb - b.threshold) / b.soft);
+      let v = part[q] + pNw[r] * noise;
+      if (pExtra[r] & 2) {
+        const nb = cBN[slot];
+        for (let k = 0; k < nb; k++) {
+          const i2 = slot * 2 + k;
+          const dy = (y - cBCy[i2]) / cBRy[i2];
+          const de = Math.sqrt(cBH2[i2] + dy * dy);
+          if (de > 1.6) continue;
+          // fades far below any nearby surface by de = 1.6 (so the cutoff is seamless)
+          const bv = s.isoLevel + bGain * (cBR[i2] * (1 - de) + bBump * erosion) - 40 * smooth01((de - 1.2) / 0.4);
+          // polynomial smooth max (C1): rounded fillet where the boulder meets the sand
+          const hk = Math.max(bK - Math.abs(v - bv), 0) / bK;
+          v = Math.max(v, bv) + (hk * hk * bK) / 4;
         }
       }
       d += cW[o + q] * v;
     }
-    return d;
+    return d < capHi ? d : capHi;
   };
 
   /** Raw bounds of region r at height y. */
@@ -376,11 +456,17 @@ export function createDensityField(seed: number, s: TerrainSettings, params: rea
     const fLo = p.floorHeight - p.floorUndulation * NB, fHi = p.floorHeight + p.floorUndulation * NB;
     const cLo = p.ceilingHeight - p.ceilingUndulation * NB, cHi = p.ceilingHeight + p.ceilingUndulation * NB;
     let lo = p.bias + p.slope * (Hlo - y) - la - e + floorTerm(y, fLo) + ceilTerm(y, cHi);
-    let hi = p.bias + p.slope * (Hhi - y) + p.noiseWeight * ampSum + la + e + floorTerm(y, fHi) + ceilTerm(y, cLo);
+    let hi = p.bias + p.slope * (Hhi - y) + p.noiseWeight * noiseMax + la + e + floorTerm(y, fHi) + ceilTerm(y, cLo);
     if (p.caves) lo -= p.caves.carve * caveEnvelope(p.caves, y);
-    if (p.boulders) hi += p.boulders.amp * smooth01((p.boulders.top - y) / p.boulders.fade);
-    out[0] = lo;
-    out[1] = hi;
+    if (p.boulders && r === REGION.SAND) {
+      // boulder density ≤ iso + gain·(rMax + bump·1.5) inside its vertical reach; smooth max adds ≤ k/4
+      const b = p.boulders;
+      const ryMax = b.rMax * b.flatMax; // flatMax ≤ 1.2 ⇒ size scale cbrt(rx·ry·rz) ≤ 1.2·rMax
+      const yLo = Hlo - sandIso - b.sink * ryMax - 1.6 * ryMax, yHi = Hhi - sandIso + 1.6 * ryMax;
+      if (y >= yLo && y <= yHi) hi = Math.max(hi, s.isoLevel + b.gain * (b.rMax * 1.2 + b.bump * 1.5)) + b.k / 4;
+    }
+    out[0] = Math.min(lo, capHi);
+    out[1] = Math.min(hi, capHi);
   };
 
   // --- vertical smoothing: binomial ([1 2 1]/4 or [1 4 6 4 1]/16), taps smoothStep apart ---

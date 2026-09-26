@@ -11,11 +11,15 @@
  *  2. sites:  one seeded site per `cell`-sized grid cell (jittered inside the cell),
  *             region id drawn per site from REGION_WEIGHTS (neighbouring sites of the
  *             same region merge into larger patches);
- *  3. blend:  site weight = smooth01(1 − (d_i − d_min) / band), normalised — the nearest
- *             site weighs 1, a site whose distance exceeds the nearest by `band` weighs 0,
- *             so the blend zone at a border is ≈ 15–20 units wide measured
- *             perpendicular to it (median ≈ 16 with band 14; wider where the border runs
- *             obliquely between sites / near triple junctions). C1-continuous everywhere. Weights of sites sharing a region add up.
+ *  3. blend:  pairwise bisector partition of unity: site weight
+ *               w_i = Π_j smooth01(1/2 + t_ij / band),  t_ij = (d_j² − d_i²) / (2·|s_i − s_j|)
+ *             (t_ij = signed distance from the bisector of sites i, j), normalised. Across
+ *             any border the weights fall from 1 to 0 over exactly `band` (warped units)
+ *             measured perpendicular to that border — no widening where borders run
+ *             obliquely or near triple junctions (the old Δd = d_i − d_min blend widened
+ *             by 1/sin(φ/2) there). C1 everywhere; only sites with Δd < band can have
+ *             weight (t ≥ Δd/2), so the mask test below stays conservative. Weights of
+ *             sites sharing a region add up.
  *
  * API:
  *   createRegionField(seed) → RegionField
@@ -23,7 +27,8 @@
  *     regionAt(x, z)       dominant region id
  *     maskInRect(…)        bitmask of regions with non-zero weight anywhere in a rectangle
  *                          (conservative; used for per-column density bounds)
- *     spawnPoint()         (x, z) at the core of the reef-forest region nearest the origin
+ *     coresOf(r, n)        cores (max border distance) of region r, nearest the origin first
+ *     spawnRegion()        seeded spawn region (uniform over the 6; see spawn.ts)
  */
 import { createSimplex3, mulberry32 } from "./noise";
 
@@ -42,9 +47,9 @@ export const MACRO = {
   /** Site jitter inside its cell (fraction of the cell). */
   jitter: 0.8,
   /** Blend band: a site's weight falls to 0 once it is `band` farther than the nearest (→ ~15–20 u zones). */
-  band: 14,
-  warpAmp: 22,
-  warpFreq: 0.0075,
+  band: 17,
+  warpAmp: 20,
+  warpFreq: 0.006,
 } as const;
 
 export type RegionSample = {
@@ -69,7 +74,10 @@ export type RegionField = {
   sample: (x: number, z: number, out: RegionSample) => RegionSample;
   regionAt: (x: number, z: number) => number;
   maskInRect: (x0: number, z0: number, x1: number, z1: number) => number;
-  spawnPoint: () => { x: number; z: number };
+  /** Up to `max` cores of region r (max-border-distance points), nearest the origin first. */
+  coresOf: (r: number, max: number) => { x: number; z: number; edge: number }[];
+  /** Region the diver spawns in for this seed (uniform over all 6). */
+  spawnRegion: () => number;
 };
 
 export function createRegionSample(): RegionSample {
@@ -141,14 +149,17 @@ export function createRegionField(seed: number): RegionField {
     }
     return slot;
   };
-  const siteX = (cx: number, cz: number) => mX[site(cx, cz)];
-  const siteZ = (cx: number, cz: number) => mZ[site(cx, cz)];
   const warpX = (x: number, z: number) => x + MACRO.warpAmp * noise(x * MACRO.warpFreq + ox, oy, z * MACRO.warpFreq);
   const warpZ = (x: number, z: number) => z + MACRO.warpAmp * noise(x * MACRO.warpFreq, oy + 37.1, z * MACRO.warpFreq + oz);
 
   const dist = new Float64Array(25);
   const reg = new Int8Array(25);
   const hs = new Float64Array(25);
+  const sxs = new Float64Array(25);
+  const szs = new Float64Array(25);
+  const cand = new Int32Array(25);
+  const near = new Int32Array(25);
+  const HB = B / 2;
   const sample = (x: number, z: number, out: RegionSample): RegionSample => {
     const qx = warpX(x, z), qz = warpZ(x, z);
     const gx = Math.floor(qx / G), gz = Math.floor(qz / G);
@@ -162,6 +173,8 @@ export function createRegionField(seed: number): RegionField {
         dist[n] = d;
         reg[n] = mR[sl];
         hs[n] = mH[sl];
+        sxs[n] = mX[sl];
+        szs[n] = mZ[sl];
         if (d < dmin) {
           dmin = d;
           imin = n;
@@ -169,14 +182,29 @@ export function createRegionField(seed: number): RegionField {
         n++;
       }
     }
+    // Candidates (Δd < B) and the sites that can still shape their weights (Δd < 2B).
+    let nc = 0, nn = 0;
+    for (let i = 0; i < n; i++) {
+      const dd = dist[i] - dmin;
+      if (dd < B) cand[nc++] = i;
+      if (dd < 2 * B) near[nn++] = i;
+    }
     out.w.fill(0);
     let sum = 0;
     out.sites = 0;
-    let other = Infinity; // nearest site of another region than the nearest site
-    const r0 = reg[imin];
-    for (let i = 0; i < n; i++) {
-      if (reg[i] !== r0 && dist[i] < other) other = dist[i];
-      const w = smooth01(1 - (dist[i] - dmin) / B);
+    for (let a = 0; a < nc; a++) {
+      const i = cand[a];
+      const di2 = dist[i] * dist[i];
+      let w = 1;
+      for (let b = 0; b < nn && w > 0; b++) {
+        const j = near[b];
+        if (j === i) continue;
+        const lx = sxs[j] - sxs[i], lz = szs[j] - szs[i];
+        // signed distance from the bisector of (i, j), positive on i's side
+        const t = (dist[j] * dist[j] - di2) / (2 * Math.sqrt(lx * lx + lz * lz));
+        if (t >= HB) continue;
+        w *= smooth01(0.5 + t / B);
+      }
       if (w <= 0) continue;
       out.siteW[out.sites] = w;
       out.siteRegion[out.sites] = reg[i];
@@ -193,8 +221,17 @@ export function createRegionField(seed: number): RegionField {
     for (let i = 0; i < out.sites; i++) out.siteW[i] /= sum;
     out.id = best;
     out.dominant = out.w[best];
-    // distance to the bisector with the nearest foreign site ≈ (d_other − d_min) / 2 (signed toward r0)
-    out.edge = Math.min(255, Math.max(0, (other - dmin) / 2));
+    // exact distance (warped space) to the nearest bisector with a site of another region
+    const r0 = reg[imin];
+    let edge = Infinity;
+    const d02 = dmin * dmin;
+    for (let j = 0; j < n; j++) {
+      if (reg[j] === r0) continue;
+      const lx = sxs[j] - sxs[imin], lz = szs[j] - szs[imin];
+      const t = (dist[j] * dist[j] - d02) / (2 * Math.sqrt(lx * lx + lz * lz));
+      if (t < edge) edge = t;
+    }
+    out.edge = Math.min(255, Math.max(0, edge));
     return out;
   };
 
@@ -202,15 +239,23 @@ export function createRegionField(seed: number): RegionField {
   const regionAt = (x: number, z: number) => sample(x, z, tmp).id;
 
   /**
-   * Regions with non-zero weight anywhere in [x0,x1]×[z0,z1]. Weight of region r is
-   * > 0 iff some site of r is within `band` of the nearest; (d_i − d_min) is
-   * 2·(1 + warp slope)-Lipschitz, so a grid with step h and a band inflated by
-   * 2·(1+L)·h·√2/2 cannot miss a region.
+   * Regions with non-zero weight anywhere in [x0,x1]×[z0,z1]. Site i can only have
+   * weight where h_i(q) = max_j (signed distance of q past the bisector of (i, j),
+   * on j's side) < band/2 (its factor for j vanishes beyond). Each term is a
+   * distance to a fixed line, so h_i is 1-Lipschitz in warped space, and the warp
+   * is (1 + L)-Lipschitz: a grid with step h and the threshold inflated by
+   * (1 + L)·h·√2/2 cannot miss a region. Using only some j (the sites near the
+   * nearest) under-estimates h_i, which keeps the test conservative.
    */
+  const mdist = new Float64Array(25);
+  const msx = new Float64Array(25);
+  const msz = new Float64Array(25);
+  const mreg = new Int8Array(25);
   const maskInRect = (x0: number, z0: number, x1: number, z1: number) => {
     const h = 2.5;
-    const L = MACRO.warpAmp * MACRO.warpFreq * 3; // |∇ simplex| ≲ 3 per noise unit
-    const slack = 2 * (1 + L) * h * Math.SQRT1_2 + 0.5;
+    const L = MACRO.warpAmp * MACRO.warpFreq * 7; // |∇ simplex| < 7 per noise unit (measured max ≈ 6.9)
+    const slack = (1 + L) * h * Math.SQRT1_2 + 0.25;
+    const lim = B / 2 + slack;
     const nx = Math.max(1, Math.ceil((x1 - x0) / h)), nz = Math.max(1, Math.ceil((z1 - z0) / h));
     let mask = 0;
     for (let iz = 0; iz <= nz; iz++) {
@@ -219,13 +264,30 @@ export function createRegionField(seed: number): RegionField {
         const qx = warpX(x, z), qz = warpZ(x, z);
         const gx = Math.floor(qx / G), gz = Math.floor(qz / G);
         let dmin = Infinity;
+        let n = 0;
         for (let dz = -2; dz <= 2; dz++) for (let dx = -2; dx <= 2; dx++) {
-          const d = Math.hypot(siteX(gx + dx, gz + dz) - qx, siteZ(gx + dx, gz + dz) - qz);
-          dist[(dz + 2) * 5 + dx + 2] = d;
+          const sl = site(gx + dx, gz + dz);
+          const d = Math.hypot(mX[sl] - qx, mZ[sl] - qz);
+          mdist[n] = d;
+          msx[n] = mX[sl];
+          msz[n] = mZ[sl];
+          mreg[n] = mR[sl];
           if (d < dmin) dmin = d;
+          n++;
         }
-        for (let dz = -2; dz <= 2; dz++) for (let dx = -2; dx <= 2; dx++) {
-          if (dist[(dz + 2) * 5 + dx + 2] - dmin < B + slack) mask |= 1 << mR[site(gx + dx, gz + dz)];
+        for (let i = 0; i < n; i++) {
+          if (mask & (1 << mreg[i])) continue;
+          // necessary condition first (t ≥ Δd / 2), then the bisector test
+          if (mdist[i] - dmin >= 2 * lim) continue;
+          let hi = 0;
+          const di2 = mdist[i] * mdist[i];
+          for (let j = 0; j < n && hi < lim; j++) {
+            if (j === i || mdist[j] - dmin >= 2 * lim) continue;
+            const lx = msx[j] - msx[i], lz = msz[j] - msz[i];
+            const past = (di2 - mdist[j] * mdist[j]) / (2 * Math.sqrt(lx * lx + lz * lz));
+            if (past > hi) hi = past;
+          }
+          if (hi < lim) mask |= 1 << mreg[i];
         }
       }
     }
@@ -233,16 +295,17 @@ export function createRegionField(seed: number): RegionField {
   };
 
   /**
-   * Core of the reef-forest region nearest the origin: the nearest reef site
-   * (mapped back through the warp by fixed-point iteration p = s − warp(p)),
-   * then the point of maximum border distance within ±36 units of it.
+   * Cores of region `r`, nearest the origin first: each site of r (mapped back
+   * through the warp by fixed-point iteration p = s − warp(p)) refined to the
+   * point of maximum border distance within ±36 units that is still in r.
    */
-  const spawnPoint = () => {
-    let best = { d: Infinity, x: 0, z: 0 };
-    for (let r = 2; r <= 24 && best.d === Infinity; r *= 2) {
-      for (let cz = -r; cz <= r; cz++) for (let cx = -r; cx <= r; cx++) {
+  const coresOf = (r: number, max: number) => {
+    const found: { d: number; x: number; z: number }[] = [];
+    for (let R = 3; R <= 48 && found.length < max; R *= 2) {
+      found.length = 0;
+      for (let cz = -R; cz <= R; cz++) for (let cx = -R; cx <= R; cx++) {
         const sl = site(cx, cz);
-        if (mR[sl] !== REGION.REEF) continue;
+        if (mR[sl] !== r) continue;
         const sx = mX[sl], sz = mZ[sl];
         let px = sx, pz = sz;
         for (let it = 0; it < 16; it++) {
@@ -251,24 +314,28 @@ export function createRegionField(seed: number): RegionField {
           px = nx;
           pz = nz;
         }
-        const d = Math.hypot(px, pz);
-        if (d < best.d) best = { d, x: px, z: pz };
+        found.push({ d: Math.hypot(px, pz), x: px, z: pz });
       }
     }
-    let bx = best.x, bz = best.z, be = -1;
-    for (let dz = -36; dz <= 36; dz += 6) for (let dx = -36; dx <= 36; dx += 6) {
-      const s = sample(best.x + dx, best.z + dz, tmp);
-      if (s.id !== REGION.REEF) continue;
-      if (s.edge > be + 1e-9) {
-        be = s.edge;
-        bx = best.x + dx;
-        bz = best.z + dz;
+    found.sort((p, q) => p.d - q.d);
+    return found.slice(0, max).map((c) => {
+      let bx = c.x, bz = c.z, be = -1;
+      for (let dz = -36; dz <= 36; dz += 6) for (let dx = -36; dx <= 36; dx += 6) {
+        const s = sample(c.x + dx, c.z + dz, tmp);
+        if (s.id !== r) continue;
+        if (s.edge > be + 1e-9) {
+          be = s.edge;
+          bx = c.x + dx;
+          bz = c.z + dz;
+        }
       }
-    }
-    return { x: bx, z: bz };
+      return { x: bx, z: bz, edge: Math.max(0, be) };
+    });
   };
+  /** Spawn region: uniform over the 6 regions, drawn from the seed. */
+  const spawnRegion = () => Math.min(REGION_COUNT - 1, Math.floor(hash(seed, 7, 13, 97) * REGION_COUNT));
 
-  const f: RegionField = { seed, sample, regionAt, maskInRect, spawnPoint };
+  const f: RegionField = { seed, sample, regionAt, maskInRect, coresOf, spawnRegion };
   fieldCache.set(seed, f);
   return f;
 }

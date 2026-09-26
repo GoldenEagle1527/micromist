@@ -300,6 +300,18 @@ export class DiverController {
   }
 
   /** Find open water near (x, z): the middle of the tallest water gap in the column. */
+  /** Place the diver at a known open-water point (terrain/spawn.ts), looking along `yaw`. */
+  spawnAt(x: number, y: number, z: number, yaw: number) {
+    this.position.set(x, y, z);
+    this.velocity.set(0, 0, 0);
+    this.yaw = yaw;
+    this.pitch = 0;
+    this.updateOrientation();
+    for (let i = 0; i < 10; i++) this.resolveCollisions();
+    this.velocity.set(0, 0, 0);
+    this.prev.copy(this.position);
+  }
+
   spawn(x0: number, z0: number) {
     const f = this.field;
     const iso = f.settings.isoLevel;

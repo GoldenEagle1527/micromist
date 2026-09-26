@@ -9,7 +9,7 @@
 import type { DensityField } from "./density";
 import { columnRegionMask, columnRowPlan, latticeCoord, latticeSpacing, type ColumnRows } from "./mesher";
 import { ENV, ENV_T, SURF, hash01, type ChunkTerrainInfo } from "./terrainInfo";
-import { createRegionSample } from "./regions";
+import { REGION, createRegionSample } from "./regions";
 
 /** 8 horizontal directions (dx, dz): +x, +x+z, +z, −x+z, −x, −x−z, −z, +x−z. */
 const DIRS = [1, 0, 1, 1, 0, 1, -1, 1, -1, 0, -1, -1, 0, -1, 1, -1];
@@ -126,7 +126,10 @@ export function buildColumnTerrainInfo(inp: ColumnInfoInput): ChunkTerrainInfo {
   const ck0 = Math.ceil(gk0 / S), ck1 = Math.floor((gk0 + n - 2) / S);
   const cj0 = Math.ceil(gjMin / S), cj1 = Math.floor(gjMax / S);
   const nx = ci1 - ci0 + 1, nz = ck1 - ck0 + 1, ny = cj1 - cj0 + 1;
-  const RING = ENV_T.ringAxis;
+  // Region-aware reach: columns near the cave warren / canyon belt scan farther.
+  const colMask = columnRegionMask(field, cx, cz);
+  const longCol = (colMask & ((1 << REGION.CAVE) | (1 << REGION.CANYON))) !== 0;
+  const RING = longCol ? ENV_T.ringAxisLong : ENV_T.ringAxis;
 
   // ---- lines (own from the final grid, ring from the sampler) ----
   const LW = nx + 2 * RING;
@@ -180,6 +183,20 @@ export function buildColumnTerrainInfo(inp: ColumnInfoInput): ChunkTerrainInfo {
 
   const floorAt = (ln: Line, ju: number, y: number) => (ln.d[ju] >= iso ? y + C : ln.below[ju]);
 
+  // ---- macro region per class-cell column (also drives the region-aware class rules) ----
+  const rsC = createRegionSample();
+  const regionId = new Uint8Array(nx * nz);
+  const regionW = new Uint8Array(nx * nz);
+  const regionEdge = new Uint8Array(nx * nz);
+  for (let iz = 0; iz < nz; iz++) {
+    for (let ix = 0; ix < nx; ix++) {
+      field.regions.sample(-s.boundsSize / 2 + (ci0 + ix) * S * sp, -s.boundsSize / 2 + (ck0 + iz) * S * sp, rsC);
+      regionId[iz * nx + ix] = rsC.id;
+      regionW[iz * nx + ix] = Math.round(rsC.dominant * 255);
+      regionEdge[iz * nx + ix] = Math.round(rsC.edge);
+    }
+  }
+
   // ---- (a) class grid ----
   const cells = nx * ny * nz;
   const env = new Uint8Array(cells);
@@ -190,6 +207,12 @@ export function buildColumnTerrainInfo(inp: ColumnInfoInput): ChunkTerrainInfo {
   const q = (v: number) => (Number.isFinite(v) ? Math.min(255, Math.max(0, Math.round(v * 4))) : 255);
   const sideD = new Float64Array(8);
   const sideV = new Uint8Array(8);
+  const longD = new Float64Array(8);
+  const longV = new Uint8Array(8);
+  const longTop = new Int32Array(8); // row where the wall hit in each direction ends (first water row above)
+  // Canyon belt: water between two trench walls, below their crest, reads as canyon
+  // (row index up to which the column is canyon; −1 = none yet).
+  const canyonRim = new Int32Array(nx * nz).fill(-1);
 
   for (let iz = 0; iz < nz; iz++) {
     for (let ix = 0; ix < nx; ix++) {
@@ -272,6 +295,63 @@ export function buildColumnTerrainInfo(inp: ColumnInfoInput): ChunkTerrainInfo {
         else if (down <= ENV_T.floorNear) k = slope < ENV_T.flatSlope ? ENV.FLAT : ENV.SLOPE;
         else if (closed > 0) k = nearVertical ? ENV.CLIFF : ENV.SLOPE;
         else k = ENV.OPEN;
+        const rid = longCol ? regionId[iz * nx + ix] : -1;
+        const col = iz * nx + ix;
+        if (rid === REGION.CANYON && ju < canyonRim[col] && up > ENV_T.overhangUp && k !== ENV.CAVE && k !== ENV.OVERHANG) k = ENV.CANYON;
+        else if ((rid === REGION.CAVE && k !== ENV.CAVE) || (rid === REGION.CANYON && k !== ENV.CAVE && k !== ENV.OVERHANG)) {
+          // long horizontal scans (same arithmetic as above, farther reach)
+          let closedL = 0;
+          for (let dir = 0; dir < 8; dir++) {
+            const dx = DIRS[dir * 2], dz = DIRS[dir * 2 + 1];
+            const diag = dx !== 0 && dz !== 0;
+            const steps = diag ? ENV_T.ringDiagLong : ENV_T.ringAxisLong;
+            const len = diag ? C * Math.SQRT2 : C;
+            let prev = d0;
+            longD[dir] = Infinity;
+            longV[dir] = 0;
+            for (let st = 1; st <= steps; st++) {
+              const l2 = L(ix + dx * st, iz + dz * st);
+              const v = l2.d[ju];
+              if (v >= iso) {
+                longD[dir] = (st - 1 + (iso - prev) / (v - prev)) * len;
+                const jA = Math.min(nyL - 1, ju + S), jB = Math.max(0, ju - S);
+                longV[dir] = l2.d[jA] >= iso && l2.d[jB] >= iso ? 1 : 0;
+                // crest of that wall: highest rock top (at this row) among the lines out to the reach
+                let top = ju;
+                for (let s2 = st; s2 <= steps; s2++) {
+                  const l3 = L(ix + dx * s2, iz + dz * s2);
+                  if (l3.d[ju] < iso) continue;
+                  let t = ju;
+                  while (t < nyL && l3.d[t] >= iso) t++;
+                  if (t > top) top = t;
+                }
+                longTop[dir] = top;
+                break;
+              }
+              prev = v;
+            }
+            if (longD[dir] <= ENV_T.caveReachLong) closedL++;
+          }
+          if (rid === REGION.CAVE) {
+            if ((up <= ENV_T.caveUpLong && closedL >= ENV_T.caveClosedLong) || (up <= ENV_T.overhangUp && closedL >= ENV_T.caveClosedLong - 1)) k = ENV.CAVE;
+          } else if (up > ENV_T.overhangUp) {
+            let rimPair = -1;
+            for (let a = 0; a < 4; a++) {
+              const g = longD[a] + longD[a + 4];
+              if (g <= ENV_T.canyonGapLong && (longV[a] || longV[a + 4])) {
+                const p = (a + 2) % 8;
+                if (!Number.isFinite(longD[p]) || !Number.isFinite(longD[(p + 4) % 8])) {
+                  k = ENV.CANYON;
+                  rimPair = a;
+                  break;
+                }
+                if (k === ENV.CANYON && rimPair < 0) rimPair = a; // canyon by the short rule
+              }
+            }
+            // the cells above stay canyon up to the lower of the two walls' crests
+            if (k === ENV.CANYON && rimPair >= 0) canyonRim[col] = Math.max(canyonRim[col], Math.min(longTop[rimPair], longTop[rimPair + 4]));
+          }
+        }
         env[idx] = k;
         up8[idx] = q(up);
         down8[idx] = q(down);
@@ -407,19 +487,6 @@ export function buildColumnTerrainInfo(inp: ColumnInfoInput): ChunkTerrainInfo {
       }
     }
     return false;
-  }
-
-  // ---- (c) macro region per class-cell column ----
-  const regionId = new Uint8Array(nx * nz);
-  const regionW = new Uint8Array(nx * nz);
-  const regionEdge = new Uint8Array(nx * nz);
-  for (let iz = 0; iz < nz; iz++) {
-    for (let ix = 0; ix < nx; ix++) {
-      field.regions.sample(-h + (ci0 + ix) * S * sp, -h + (ck0 + iz) * S * sp, rs);
-      regionId[iz * nx + ix] = rs.id;
-      regionW[iz * nx + ix] = Math.round(rs.dominant * 255);
-      regionEdge[iz * nx + ix] = Math.round(rs.edge);
-    }
   }
 
   return {
