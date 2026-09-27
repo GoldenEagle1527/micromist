@@ -20,6 +20,7 @@
     "test:wasm": "esbuild scripts/deep-march-wasm-test.ts --bundle --platform=node --outfile=node_modules/.cache/dm-wasm-test.cjs --log-level=warning && node node_modules/.cache/dm-wasm-test.cjs",
     "test:streaming": "esbuild scripts/deep-march-streaming-test.ts --bundle --platform=node --outfile=node_modules/.cache/dm-streaming-test.cjs --log-level=error && node node_modules/.cache/dm-streaming-test.cjs",
     "test:bricks": "esbuild scripts/deep-march-bricks-test.ts --bundle --platform=node --outfile=node_modules/.cache/dm-bricks-test.cjs --log-level=warning && node node_modules/.cache/dm-bricks-test.cjs",
+    "test:detail": "esbuild scripts/deep-march-detail-test.ts --bundle --platform=node --external:@webgpu/glslang --outfile=node_modules/.cache/dm-detail-test.cjs --log-level=warning && node node_modules/.cache/dm-detail-test.cjs",
     "test:refine": "esbuild scripts/deep-march-refine-test.ts --bundle --platform=node --outfile=node_modules/.cache/dm-refine-test.cjs --log-level=warning && node node_modules/.cache/dm-refine-test.cjs",
     "test:regions": "esbuild scripts/deep-march-regions-test.ts --bundle --platform=node --outfile=node_modules/.cache/dm-regions-test.cjs --log-level=warning && node node_modules/.cache/dm-regions-test.cjs",
     "cf-typegen": "wrangler types --include-runtime false",
@@ -39,6 +40,7 @@
     "@types/react-dom": "^19.1.9",
     "@types/three": "^0.185.4",
     "@vitejs/plugin-react": "^5.0.2",
+    "@webgpu/glslang": "^0.0.15",
     "typescript": "~5.9.2",
     "vite": "^7.1.5",
     "wrangler": "^4.37.0"
