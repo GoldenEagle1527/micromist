@@ -8,6 +8,7 @@ import type { DeepMarchDict } from "./i18n";
 import { isTouchDevice, loadSettings, panelEnabled, randomSeed, saveSettings } from "./settings";
 import { ControlPanel, type PanelLabels } from "./ui/ControlPanel";
 import { viewRotation, type Rotation } from "./viewRotation";
+import { LoadingScreen, type LoadingLabels } from "./ui/loading/LoadingScreen";
 
 /** Best effort: fullscreen + landscape lock (Android Chrome). Rejections are expected elsewhere (iOS). */
 async function enterLandscape(): Promise<void> {
@@ -54,9 +55,12 @@ function hudLabels(dm: DeepMarchDict): HudLabels {
     regionDebugTitle: dm.regionDebugTitle,
     regionNames: dm.regionNames,
     regionEdge: dm.regionEdge,
-    loading: dm.hudLoading,
     lockPrompt: dm.lockPrompt,
   };
+}
+
+function loadingLabels(dm: DeepMarchDict): LoadingLabels {
+  return { ...dm.loading, regionNames: dm.regionNames, lightModes: dm.lightModes };
 }
 
 function panelLabels(dm: DeepMarchDict): PanelLabels {
@@ -100,6 +104,7 @@ export function DeepMarchGame() {
   const [invertY, setInvertY] = useState(() => loadSettings().invertY);
   const [panelOn, setPanelOn] = useState(() => panelEnabled(loadSettings()));
   const [game, setGame] = useState<DeepMarchHandle | null>(null);
+  const [loadingOn, setLoadingOn] = useState(true);
   const hostRef = useRef<HTMLDivElement | null>(null);
   const [touch] = useState(isTouchDevice);
 
@@ -115,17 +120,27 @@ export function DeepMarchGame() {
     if (screen !== "playing") return;
     const host = hostRef.current;
     if (!host) return;
-    const g = createDeepMarch(host, {
-      seed: seedFromString(seed || "1"),
-      sensitivity,
-      invertY,
-      panel: panelOn,
-      labels: hudLabels(dm),
+    setLoadingOn(true);
+    // let the loading screen paint first: world creation (spawn search) is synchronous
+    let g: DeepMarchHandle | null = null;
+    let timer = 0;
+    const raf = requestAnimationFrame(() => {
+      timer = window.setTimeout(() => {
+        g = createDeepMarch(host, {
+          seed: seedFromString(seed || "1"),
+          sensitivity,
+          invertY,
+          panel: panelOn,
+          labels: hudLabels(dm),
+        });
+        setGame(g);
+      }, 0);
     });
-    setGame(g);
     return () => {
+      cancelAnimationFrame(raf);
+      clearTimeout(timer);
       setGame(null);
-      g.destroy();
+      g?.destroy();
     };
     // Settings/labels are read once per dive; the panel toggle is pushed via setPanelMode.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -177,6 +192,7 @@ export function DeepMarchGame() {
     setSeed(s);
     persist({ seed: s, sensitivity, invertY, panel: panelOn });
     if (touch) void enterLandscape();
+    setLoadingOn(true);
     setScreen("playing");
   }, [seed, sensitivity, invertY, panelOn, persist, touch]);
   const back = useCallback(() => {
@@ -275,6 +291,7 @@ export function DeepMarchGame() {
       <div className="deep-march dm-immersive">
         <div className="dm-rotor" data-rot={rot} style={rotorStyle}>
           <div ref={hostRef} className="game-stage dm-stage" aria-label={dm.stageAria}>
+            {loadingOn && <LoadingScreen game={game} seedText={seed || "1"} seed={seedFromString(seed || "1")} labels={loadingLabels(dm)} onDone={() => setLoadingOn(false)} />}
             <ControlPanel
               game={game}
               panelOn={panelOn}
@@ -300,6 +317,7 @@ export function DeepMarchGame() {
         <p className="hint dm-play-hint">{panelOn ? dm.hintPanel : dm.hint}</p>
       </div>
       <div ref={hostRef} className="game-stage dm-stage" aria-label={dm.stageAria}>
+        {loadingOn && <LoadingScreen game={game} seedText={seed || "1"} seed={seedFromString(seed || "1")} labels={loadingLabels(dm)} onDone={() => setLoadingOn(false)} />}
         <ControlPanel
           game={game}
           panelOn={panelOn}

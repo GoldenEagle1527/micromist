@@ -1,6 +1,7 @@
 import type { EnvironmentKind, SurfaceType } from "./terrain/terrainInfo";
 import type { RegionKey } from "./terrain/regions";
 import type { LightMode } from "./survival";
+import { loadingEn, loadingZh, type LoadingDict } from "./ui/loading/i18n";
 
 export type DeepMarchDict = {
   setupTitle: string;
@@ -36,7 +37,8 @@ export type DeepMarchDict = {
   /** HUD region chip. */
   hudRegion: string;
   regionNames: Record<RegionKey, string>;
-  hudLoading: string;
+  /** Loading screen (ui/loading). */
+  loading: LoadingDict;
   hudGrounded: string;
   hudCeiling: string;
   hudScrape: string;
@@ -117,7 +119,7 @@ export const deepMarchEn: DeepMarchDict = {
     terrace: "Cliff Terraces",
     trench: "Deep Trench",
   },
-  hudLoading: "Generating seabed…",
+  loading: loadingEn,
   hudGrounded: "Touching bottom",
   hudCeiling: "Touching ceiling",
   hudScrape: "Brushing rock",
@@ -205,7 +207,7 @@ export const deepMarchZh: DeepMarchDict = {
     terrace: "峭壁台地",
     trench: "深沟",
   },
-  hudLoading: "正在生成海床…",
+  loading: loadingZh,
   hudGrounded: "触底",
   hudCeiling: "触顶",
   hudScrape: "擦碰岩壁",

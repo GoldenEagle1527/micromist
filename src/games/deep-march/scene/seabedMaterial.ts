@@ -2,7 +2,7 @@
  * Seabed terrain material: MeshStandardMaterial extended via onBeforeCompile.
  *
  * - Multi-material (materialShader.ts, materialCatalog.ts): 22 CC0 PBR sets in two
- *   texture arrays (materialLibrary.ts streams them in), world-space triplanar with
+ *   texture arrays (materialLibrary.ts, all loaded before the dive), world-space triplanar with
  *   whiteout normal blend; each region has a main + alt palette of floor / wall /
  *   ceiling layers, blended by per-vertex region weights baked at generation time
  *   (terrain/regionWeights.ts) with noisy interfingering at the borders.

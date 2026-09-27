@@ -12,7 +12,6 @@
  *
  * Pure data, no asset imports (node tests: scripts/deep-march-materials-test.ts).
  */
-export type LayerGroup = "sand" | "gravel" | "rock-light" | "rock-dark";
 export type RotMode = "none" | "desktop" | "always";
 
 export type LayerDef = {
@@ -25,33 +24,31 @@ export type LayerDef = {
   gain: number;
   /** Rotated second-scale anti-tiling blend. */
   rot: RotMode;
-  /** Look-alike group: stand-in choice while a layer is still streaming. */
-  group: LayerGroup;
 };
 
 export const LAYERS: readonly LayerDef[] = [
-  { key: "sand", source: "ambientCG Ground061", repeat: 3.2, gain: 0.7, rot: "none", group: "sand" },
-  { key: "gravel", source: "ambientCG Gravel036S", repeat: 2.2, gain: 1.0, rot: "none", group: "gravel" },
-  { key: "rock", source: "Poly Haven rock_face_03", repeat: 5.5, gain: 1.0, rot: "desktop", group: "rock-light" },
-  { key: "moss", source: "Poly Haven mossy_rock", repeat: 4.0, gain: 1.0, rot: "none", group: "rock-light" },
-  { key: "basalt", source: "ambientCG Rock035", repeat: 5.0, gain: 0.85, rot: "always", group: "rock-dark" },
-  { key: "darkrock", source: "Poly Haven dark_rock", repeat: 5.0, gain: 0.85, rot: "none", group: "rock-dark" },
-  { key: "strata", source: "Poly Haven dark_rock_02", repeat: 6.0, gain: 1.0, rot: "none", group: "rock-dark" },
-  { key: "seaside", source: "Poly Haven seaside_rock", repeat: 4.5, gain: 1.0, rot: "none", group: "rock-dark" },
-  { key: "eroded", source: "ambientCG Rock062", repeat: 5.0, gain: 1.0, rot: "none", group: "rock-light" },
-  { key: "porous", source: "Poly Haven rock_05", repeat: 3.5, gain: 0.95, rot: "none", group: "rock-light" },
-  { key: "coralcrust", source: "Poly Haven coral_ground_02", repeat: 4.0, gain: 0.95, rot: "always", group: "rock-light" },
-  { key: "coralrubble", source: "Poly Haven coral_gravel", repeat: 2.6, gain: 0.95, rot: "none", group: "gravel" },
-  { key: "coralmud", source: "Poly Haven coral_mud_01", repeat: 3.0, gain: 0.85, rot: "none", group: "sand" },
-  { key: "shellsand", source: "ambientCG Ground060", repeat: 2.4, gain: 0.75, rot: "none", group: "sand" },
-  { key: "ripplesand", source: "Poly Haven damp_beach_sand_02", repeat: 3.4, gain: 0.95, rot: "none", group: "sand" },
-  { key: "coarsesand", source: "Poly Haven damp_beach_sand", repeat: 2.6, gain: 0.9, rot: "none", group: "sand" },
-  { key: "ooze", source: "Poly Haven moon_01", repeat: 4.0, gain: 0.8, rot: "none", group: "sand" },
-  { key: "mud", source: "ambientCG Ground095B", repeat: 3.2, gain: 0.8, rot: "none", group: "sand" },
-  { key: "nodules", source: "ambientCG Gravel024", repeat: 2.2, gain: 0.85, rot: "none", group: "gravel" },
-  { key: "scree", source: "Poly Haven low_tide_rocks", repeat: 2.8, gain: 0.95, rot: "none", group: "gravel" },
-  { key: "algae", source: "ambientCG Rock015", repeat: 4.5, gain: 1.0, rot: "none", group: "rock-light" },
-  { key: "lichen", source: "Poly Haven lichen_rock", repeat: 4.5, gain: 1.0, rot: "always", group: "rock-dark" },
+  { key: "sand", source: "ambientCG Ground061", repeat: 3.2, gain: 0.7, rot: "none" },
+  { key: "gravel", source: "ambientCG Gravel036S", repeat: 2.2, gain: 1.0, rot: "none" },
+  { key: "rock", source: "Poly Haven rock_face_03", repeat: 5.5, gain: 1.0, rot: "desktop" },
+  { key: "moss", source: "Poly Haven mossy_rock", repeat: 4.0, gain: 1.0, rot: "none" },
+  { key: "basalt", source: "ambientCG Rock035", repeat: 5.0, gain: 0.85, rot: "always" },
+  { key: "darkrock", source: "Poly Haven dark_rock", repeat: 5.0, gain: 0.85, rot: "none" },
+  { key: "strata", source: "Poly Haven dark_rock_02", repeat: 6.0, gain: 1.0, rot: "none" },
+  { key: "seaside", source: "Poly Haven seaside_rock", repeat: 4.5, gain: 1.0, rot: "none" },
+  { key: "eroded", source: "ambientCG Rock062", repeat: 5.0, gain: 1.0, rot: "none" },
+  { key: "porous", source: "Poly Haven rock_05", repeat: 3.5, gain: 0.95, rot: "none" },
+  { key: "coralcrust", source: "Poly Haven coral_ground_02", repeat: 4.0, gain: 0.95, rot: "always" },
+  { key: "coralrubble", source: "Poly Haven coral_gravel", repeat: 2.6, gain: 0.95, rot: "none" },
+  { key: "coralmud", source: "Poly Haven coral_mud_01", repeat: 3.0, gain: 0.85, rot: "none" },
+  { key: "shellsand", source: "ambientCG Ground060", repeat: 2.4, gain: 0.75, rot: "none" },
+  { key: "ripplesand", source: "Poly Haven damp_beach_sand_02", repeat: 3.4, gain: 0.95, rot: "none" },
+  { key: "coarsesand", source: "Poly Haven damp_beach_sand", repeat: 2.6, gain: 0.9, rot: "none" },
+  { key: "ooze", source: "Poly Haven moon_01", repeat: 4.0, gain: 0.8, rot: "none" },
+  { key: "mud", source: "ambientCG Ground095B", repeat: 3.2, gain: 0.8, rot: "none" },
+  { key: "nodules", source: "ambientCG Gravel024", repeat: 2.2, gain: 0.85, rot: "none" },
+  { key: "scree", source: "Poly Haven low_tide_rocks", repeat: 2.8, gain: 0.95, rot: "none" },
+  { key: "algae", source: "ambientCG Rock015", repeat: 4.5, gain: 1.0, rot: "none" },
+  { key: "lichen", source: "Poly Haven lichen_rock", repeat: 4.5, gain: 1.0, rot: "always" },
 ];
 
 export const LAYER_COUNT = LAYERS.length;
