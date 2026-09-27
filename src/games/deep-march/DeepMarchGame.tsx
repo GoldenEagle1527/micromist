@@ -56,6 +56,8 @@ function hudLabels(dm: DeepMarchDict): HudLabels {
     regionNames: dm.regionNames,
     regionEdge: dm.regionEdge,
     lockPrompt: dm.lockPrompt,
+    gpuLost: dm.gpuLost,
+    shaderFailed: dm.shaderFailed,
   };
 }
 
