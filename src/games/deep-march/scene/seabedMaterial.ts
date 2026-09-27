@@ -91,6 +91,14 @@ export type SeabedMaterial = {
    * −1 fading out). See chunks.ts.
    */
   fadeMaterial: () => LodFadeMaterial;
+  /**
+   * Switch every seabed material (base + fades) to the simple material path
+   * (DM_SIMPLE_MAT, materialShader.ts) — the fallback when the full program fails
+   * to build on this device. Returns false if already simple.
+   */
+  useSimplePath: () => boolean;
+  /** Simple material path in use (phones always; desktop after a fallback). */
+  simple: () => boolean;
   update: (time: number) => void;
   dispose: () => void;
 };
@@ -150,16 +158,25 @@ export function createSeabedMaterial(opts: SeabedOptions): SeabedMaterial {
     if (extra.uLodFade) shader.fragmentShader = shader.fragmentShader.replace("#include <common>", "#include <common>\nuniform vec2 uLodFade;");
   };
   const detail = opts.detail !== false;
+  // phones always use the simple material path; desktop switches to it if the full
+  // program fails to build (useSimplePath)
+  let simple = opts.lowSpec;
+  const defines = (fade: boolean) => ({
+    ...(opts.lowSpec ? { DM_LOW_SPEC: "" } : {}),
+    ...(simple ? { DM_SIMPLE_MAT: "" } : {}),
+    ...(detail ? { DM_DETAIL: "" } : {}),
+    ...(fade ? { DM_LOD_FADE: "" } : {}),
+    DM_SONAR_N: String(opts.sonar.uSonarPulse.value.length),
+  });
   const make = (fade: { value: THREE.Vector2 } | null) => {
     const m = new THREE.MeshStandardMaterial({ roughness: 1, metalness: 0 });
     m.fog = false; // own water model (see header)
-    m.defines = { ...(opts.lowSpec ? { DM_LOW_SPEC: "" } : {}), ...(detail ? { DM_DETAIL: "" } : {}), ...(fade ? { DM_LOD_FADE: "" } : {}), DM_SONAR_N: String(opts.sonar.uSonarPulse.value.length) };
+    m.defines = defines(!!fade);
     m.onBeforeCompile = (shader) => patch(shader, fade ? { uLodFade: fade } : {});
     // Fade variants share one program (their own uLodFade is uploaded when the
     // renderer switches material); the base material has no discard at all, so
     // the resting terrain keeps early depth testing.
-    const key = `deep-march-seabed-${opts.lowSpec ? "lo" : "hi"}${detail ? "-d" : ""}${fade ? "-fade" : ""}`;
-    m.customProgramCacheKey = () => key;
+    m.customProgramCacheKey = () => `deep-march-seabed-${opts.lowSpec ? "lo" : "hi"}${simple ? "-s" : ""}${detail ? "-d" : ""}${fade ? "-fade" : ""}`;
     return m;
   };
   const material = make(null);
@@ -175,6 +192,18 @@ export function createSeabedMaterial(opts: SeabedOptions): SeabedMaterial {
       fades.push(m);
       return { material: m, fade: fade.value };
     },
+    useSimplePath: () => {
+      if (simple) return false;
+      simple = true;
+      material.defines = defines(false);
+      material.needsUpdate = true;
+      for (const m of fades) {
+        m.defines = defines(true);
+        m.needsUpdate = true;
+      }
+      return true;
+    },
+    simple: () => simple,
     update: (time) => {
       uniforms.uTime.value = time;
     },
