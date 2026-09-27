@@ -26,13 +26,13 @@ export function createSurvival(): Survival {
   const b = SURVIVAL_TUNING.battery;
   resources.register({ id: "battery", capacity: b.capacity, regen: b.regen, regenDelay: b.regenDelay, flags: ["persist", "hud"] });
 
-  // Default loadout: head lamp + night-vision goggles, worn.
+  // Default loadout: head lamp + sonar unit, worn.
   const backpack = new CapacityStorage(12);
   const equipment = new Equipment(backpack);
   backpack.add("head-lamp");
-  backpack.add("nv-goggles");
+  backpack.add("sonar-unit");
   equipment.equip("head-lamp");
-  equipment.equip("nv-goggles");
+  equipment.equip("sonar-unit");
 
   const lights = new LightController(resources, equipment);
   return {

@@ -13,6 +13,7 @@ import { DETAIL_GLSL } from "../src/games/deep-march/scene/detailNormal";
 import { FOG_GLSL } from "../src/games/deep-march/scene/fog";
 import { BEAM_DECLS } from "../src/games/deep-march/scene/highBeam";
 import { PL_DECLS } from "../src/games/deep-march/scene/particleLight";
+import { SONAR_DECLS } from "../src/games/deep-march/scene/sonar";
 import { SNOW_FRAG, SNOW_VERT } from "../src/games/deep-march/scene/particles";
 
 let failed = 0;
@@ -35,7 +36,7 @@ function vulkanize(src: string, stage: "vertex" | "fragment", st: { binding: num
 
 function seabedSource(defines: string[]): string {
   const st = { binding: 0, inLoc: 0, outLoc: 0 };
-  const decls = DECLS + DETAIL_GLSL + WATER_GLSL + FOG_GLSL + BEAM_DECLS + PL_DECLS;
+  const decls = DECLS + DETAIL_GLSL + WATER_GLSL + FOG_GLSL + SONAR_DECLS + BEAM_DECLS + PL_DECLS;
   return [
     "#version 450",
     ...defines.map((d) => `#define ${d}`),
@@ -91,7 +92,7 @@ function snowSources(): [string, string] {
   };
   console.log("deep-march shaders (glslang)");
   const variants: string[][] = [];
-  for (const detail of [true, false]) for (const low of [false, true]) for (const fade of [false, true]) variants.push([...(detail ? ["DM_DETAIL"] : []), ...(low ? ["DM_LOW_SPEC"] : []), ...(fade ? ["DM_LOD_FADE"] : [])]);
+  for (const detail of [true, false]) for (const low of [false, true]) for (const fade of [false, true]) variants.push([...(detail ? ["DM_DETAIL"] : []), ...(low ? ["DM_LOW_SPEC"] : []), ...(fade ? ["DM_LOD_FADE"] : []), `DM_SONAR_N ${low ? 3 : 5}`]);
   for (const v of variants) compile(`seabed fragment [${v.join(" + ") || "base"}]`, seabedSource(v), "fragment");
   compile("background dome fragment", domeSource(), "fragment");
   const [sv, sf] = snowSources();

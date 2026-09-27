@@ -5,7 +5,7 @@
  * drawn after the opaque terrain with colour and depth writes off, wrapped in an
  * ANY_SAMPLES_PASSED_CONSERVATIVE query (onBeforeRender / onAfterRender, so it
  * works in whatever framebuffer three.js is rendering the scene into: the canvas,
- * or night vision's multisampled target). Results are read in later frames
+ * or any render target). Results are read in later frames
  * (never stalling) and decide whether the column is drawn:
  *
  * - a column is culled only when its latest query found no visible sample, that

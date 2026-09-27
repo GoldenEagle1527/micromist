@@ -1,14 +1,14 @@
 /**
  * Bottom-right fan-shaped button cluster: annular sectors along a quarter arc
  * around the corner — Down / Up (hold), Swim (toggle latch), Lamp (on/off),
- * Mode (cycle beam / high beam / night vision; icon + label show the current mode).
+ * Mode (cycle beam / high beam / sonar; icon + label show the current mode).
  */
 import { useRef, useState, type PointerEvent as RPointerEvent, type ReactNode } from "react";
 import { arcPath, polar, sectorPath, ticksPath } from "./geom";
 import type { LightMode } from "../survival";
-import { IconBeam, IconDown, IconHighBeam, IconLamp, IconNightVision, IconSwim, IconUp } from "./icons";
+import { IconBeam, IconDown, IconHighBeam, IconLamp, IconSonar, IconSwim, IconUp } from "./icons";
 
-const MODE_ICON: Record<LightMode, ReactNode> = { beam: <IconBeam />, high: <IconHighBeam />, night: <IconNightVision /> };
+const MODE_ICON: Record<LightMode, ReactNode> = { beam: <IconBeam />, high: <IconHighBeam />, sonar: <IconSonar /> };
 
 const VB = 240;
 const OX = VB;

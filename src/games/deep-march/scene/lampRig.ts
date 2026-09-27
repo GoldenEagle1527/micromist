@@ -2,8 +2,8 @@
  * Scene side of the diver's lights: turns the LightController state into
  *  - beam: the classic head-lamp SpotLight (bright centre, falls off with distance);
  *  - high: the shader-side fog-light cone (highBeam.ts), uniform with distance;
- *  - night: night-vision strength for the post pass (nightVision.ts) plus
- *    its own additive fill light (haze/absorption down) and a dim IR illuminator;
+ *  - sonar: strength of the SONAR render mode (sonar.ts, drawn by the seabed
+ *    shader); the lit environment goes fully dark underneath it;
  *  - off: total darkness — ambient, sun, caustics and water/haze colour fade to 0,
  *    leaving only the fluorescent plankton (particleLight.ts).
  * - turbidity (fog.ts): extinction per mode (visibility), murk colour and cone
@@ -18,8 +18,6 @@ import { FOG_TUNING, fogK, type FogVisibility } from "./fog";
 export const LAMP_TUNING = {
   spot: { intensity: 26, distance: 150, angleDeg: 32, penumbra: 0.7, decay: 1.1 },
   high: { gain: 1.15, range: 280, outerDeg: 48, innerDeg: 18, hazeCut: 0.75, globalHaze: 0.85 },
-  /** Night vision: additive hemisphere / sun fill (the base environment is dark without a lamp). */
-  night: { ambient: 2.4, sun: 1.0, water: 1, haze: 0.22, absorb: 0.35, irSpot: 0.3 },
   /** Cross-fade speed (1/s). */
   fade: 14,
 };
@@ -55,7 +53,7 @@ export class LampRig {
   private readonly fog: FogVisibility | null;
   private readonly spotCone: THREE.Vector2;
   private readonly highCone: THREE.Vector2;
-  private readonly level: Record<LightMode, number> = { beam: 0, high: 0, night: 0 };
+  private readonly level: Record<LightMode, number> = { beam: 0, high: 0, sonar: 0 };
   private readonly tmp = new THREE.Vector3();
 
   /** fog: visibility per mode (fog.ts parseFogParam), null = no turbidity. */
@@ -76,23 +74,23 @@ export class LampRig {
     this.spotCone = new THREE.Vector2(Math.cos(THREE.MathUtils.degToRad(s.angleDeg)), Math.cos(THREE.MathUtils.degToRad(s.angleDeg * (1 - s.penumbra))));
   }
 
-  /** Night-vision post strength (0…1). */
-  get night(): number {
-    return this.level.night;
+  /** SONAR mode strength (0…1). */
+  get sonar(): number {
+    return this.level.sonar;
   }
 
   /** Call after the camera moved and its world matrix was updated. */
   update(dt: number, st: LightState, snap = false) {
     const k = snap ? 1 : 1 - Math.exp(-dt * LAMP_TUNING.fade);
-    for (const m of ["beam", "high", "night"] as const) {
+    for (const m of ["beam", "high", "sonar"] as const) {
       const target = st.on && st.mode === m ? 1 : 0;
       this.level[m] += (target - this.level[m]) * k;
       if (Math.abs(target - this.level[m]) < 1e-3) this.level[m] = target;
     }
-    const { beam, high, night } = this.level;
+    const { beam, high } = this.level;
     const T = LAMP_TUNING;
 
-    this.spot.intensity = T.spot.intensity * (beam + night * T.night.irSpot);
+    this.spot.intensity = T.spot.intensity * beam;
     // stays "visible" at 0: toggling light visibility would recompile every lit shader
 
     this.beam.uBeamGain.value = (this.fog ? FOG_TUNING.highGain : T.high.gain) * high;
@@ -104,15 +102,15 @@ export class LampRig {
     }
 
     const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
-    // beam / high keep the natural environment; off and night vision drop it
+    // beam / high keep the natural environment; off and sonar drop it (dark background)
     const lamp = Math.min(1, beam + high);
     this.env.ambientMul = lamp;
     this.env.sunMul = lamp;
-    this.env.ambientAdd = T.night.ambient * night;
-    this.env.sunAdd = T.night.sun * night;
-    this.env.water = Math.min(1, lamp + T.night.water * night);
-    this.env.haze = lerp(1, T.high.globalHaze, high) * lerp(1, T.night.haze, night);
-    this.env.absorb = lerp(1, T.night.absorb, night);
+    this.env.ambientAdd = 0;
+    this.env.sunAdd = 0;
+    this.env.water = lamp;
+    this.env.haze = lerp(1, T.high.globalHaze, high);
+    this.env.absorb = 1;
 
     // turbidity: extinction blended by mode; murk + backscatter only with a lamp on
     const f = this.fog;

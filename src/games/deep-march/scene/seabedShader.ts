@@ -6,6 +6,7 @@ import { DETAIL_APPLY } from "./detailNormal";
 import { BEAM_LIGHT, BEAM_OPAQUE } from "./highBeam";
 import { PL_LIGHT } from "./particleLight";
 import { FOG_OPAQUE } from "./fog";
+import { SONAR_OPAQUE } from "./sonar";
 
 /** Open-water colour seen along a view direction (bright toward the surface, black below). */
 export const WATER_GLSL = /* glsl */ `
@@ -298,7 +299,7 @@ export const OPAQUE_FRAGMENT = /* glsl */ `{
     float sil = mix(uSil, 1.0, smoothstep(uFar * 0.22, uFar * 0.95, dist));
     outgoingLight = mix(outgoingLight, water * sil, haze);
 ${BEAM_OPAQUE}${FOG_OPAQUE}    outgoingLight = mix(outgoingLight, dmBackground(dir), smoothstep(uFar * 0.8, uFar, dist));
-  }
+${SONAR_OPAQUE}  }
   #include <opaque_fragment>`;
 
 /** Replaces <dithering_fragment>: LOD crossfade screen-door (DM_LOD_FADE). */
