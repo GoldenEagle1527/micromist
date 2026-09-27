@@ -6,10 +6,16 @@
  *
  *  - region choice: the 6 baked region weights reduced to the top two; their mix is
  *    sharpened by world noise into meandering interfingering (no hard seam, both
- *    regions fetched only in thin ribbons). DM_LOW_SPEC: single region per pixel,
- *    dithered inside the ribbon. Each region blends its main / alt palette by a
- *    world patch noise (narrow soft band);
- *  - slot entries of both palettes are merged by layer (shared layers fetched once);
+ *    regions fetched only in thin ribbons). Each region blends its main / alt
+ *    palette by a world patch noise (narrow soft band);
+ *  - full path (desktop): slot entries of up to 4 palettes merged by layer (shared
+ *    layers fetched once);
+ *  - DM_SIMPLE_MAT (phones, and the automatic fallback when the full program fails
+ *    to build): ONE palette per pixel — region and main / alt picked by an
+ *    interleaved-gradient dither inside the border ribbon / alt band — and its 5
+ *    slots fetched directly: no local arrays, no dynamic vector indexing, few
+ *    loops (mobile GLSL compilers choke on the full path, see test:shaders);
+ *  - no dynamic indexing of vector components anywhere (dmLayerOf);
  *  - triplanar with explicit gradients (derivatives taken in uniform control flow in
  *    MAP_FRAGMENT), floors on the top projection only, walls / ceiling on all three;
  *  - rotated second scale (anti-tiling) per layer: "desktop" sets on desktop,
@@ -48,7 +54,7 @@ void dmSampleLayer(int L, vec2 uv, vec2 dx, vec2 dy, float rMix, out vec3 a, out
   vec4 P = uLayer[L];
   float s = P.x;
   float fl = float(L);
-#ifdef DM_LOW_SPEC
+#ifdef DM_SIMPLE_MAT
   float m = P.z > 1.5 ? rMix : 0.0;
 #else
   float m = P.z > 0.5 ? rMix : 0.0;
@@ -72,6 +78,37 @@ void dmSampleLayer(int L, vec2 uv, vec2 dx, vec2 dy, float rMix, out vec3 a, out
   }
   a *= P.y;
 }
+
+// Layer of palette p in slot 0..4 (floorA, floorB, wallA, wallB, ceiling), without
+// dynamic vector-component indexing.
+int dmLayerOf(int p, int slot) {
+  vec4 v = uPal[p];
+  float f = slot == 0 ? v.x : slot == 1 ? v.y : slot == 2 ? v.z : slot == 3 ? v.w : uPalC[p].x;
+  return int(f + 0.5);
+}
+
+// Running top-2 of the region weights (called once per region with a literal id).
+void dmTop2(float w, int r, inout int ia, inout float wa, inout int ib, inout float wb) {
+  if (w > wa) { ib = ia; wb = wa; ia = r; wa = w; }
+  else if (w > wb) { ib = r; wb = w; }
+}
+
+// Alt-palette share of region r at this point (world patch noise, narrow soft band).
+float dmAltV(int r, float nP1, float nP2) {
+  float th = uPalC[2 * r].y;
+  return smoothstep(th - 0.05, th + 0.05, mix(nP1, nP2, float(r) * 0.2));
+}
+
+// Accumulate layer L with weight w (skipped at w <= 0).
+void dmAcc(int L, float w, vec2 uv, vec2 dx, vec2 dy, float rMix, inout vec3 a, inout vec4 n, inout float s) {
+  if (w <= 0.0) return;
+  vec3 ta;
+  vec4 tn;
+  dmSampleLayer(L, uv, dx, dy, rMix, ta, tn);
+  a += ta * w;
+  n += tn * w;
+  s += w;
+}
 `;
 
 export const MAT_FRAGMENT = /* glsl */ `
@@ -87,16 +124,20 @@ export const MAT_FRAGMENT = /* glsl */ `
   // wall B on gently sloped, lit rock and ledges, patchy
   float wallBMask = smoothstep(0.45, 0.7, nB * 0.7 + nA * 0.3 + up * 0.35) * (1.0 - ceilW);
   float slotW[5] = float[5](floorW * (1.0 - floorBMask), floorW * floorBMask, wallW * (1.0 - wallBMask), wallW * wallBMask, ceilW);
+  // side projections show walls / ceiling; where those fade out (gentle floor
+  // slopes) the floor layers fade in there instead (continuous: no seam line)
+  float sideSum = slotW[2] + slotW[3] + slotW[4];
+  float floorSide = 1.0 - smoothstep(0.0, 0.08, sideSum);
 
-  // ---- regions → the two strongest regions (each: main / alt palette mix) --
-  float regW[6] = float[6](vRegA.x, vRegA.y, vRegA.z, vRegA.w, vRegB.x, vRegB.y);
+  // ---- regions → the two strongest regions ---------------------------------
   int regA = 0, regB = 0;
   float wA = 0.0, wB = 0.0;
-  for (int r = 0; r < 6; r++) {
-    float w = regW[r];
-    if (w > wA) { regB = regA; wB = wA; regA = r; wA = w; }
-    else if (w > wB) { regB = r; wB = w; }
-  }
+  dmTop2(vRegA.x, 0, regA, wA, regB, wB);
+  dmTop2(vRegA.y, 1, regA, wA, regB, wB);
+  dmTop2(vRegA.z, 2, regA, wA, regB, wB);
+  dmTop2(vRegA.w, 3, regA, wA, regB, wB);
+  dmTop2(vRegB.x, 4, regA, wA, regB, wB);
+  dmTop2(vRegB.y, 5, regA, wA, regB, wB);
   if (wA < 1e-3) { regA = 0; wA = 1.0; }
   // order the pair by region index, not by weight: the blend below is then the
   // same function on both sides of a rank swap (no seam where wA = wB)
@@ -106,50 +147,11 @@ export const MAT_FRAGMENT = /* glsl */ `
   }
   // sub-region alt patches (~100 u), decorrelated per region by mixing two noises
   float nP1 = dmFbm(wp * 0.011 + 17.0), nP2 = dmFbm(wp * 0.0085 + 53.0);
-  float thA = uPalC[2 * regA].y, thB = uPalC[2 * regB].y;
-  float vA = smoothstep(thA - 0.05, thA + 0.05, mix(nP1, nP2, float(regA) * 0.2));
-  float vB = smoothstep(thB - 0.05, thB + 0.05, mix(nP1, nP2, float(regB) * 0.2));
+  float vA = dmAltV(regA, nP1, nP2);
+  float vB = dmAltV(regB, nP1, nP2);
   // interfingering: the linear blend becomes a noisy, meandering front
   float nI = dmFbm(wp * 0.045 + 7.0) * 0.6 + dmFbm(wp * 0.19 + 3.0) * 0.4;
-  float palMix = 0.0;
-  if (wB > 0.0) {
-    float t = wB / (wA + wB) + (nI - 0.5) * 1.5;
-#ifdef DM_LOW_SPEC
-    // single region per pixel, dithered only inside the ribbon (fog hides the grain)
-    float dth = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));
-    palMix = step(dth, smoothstep(0.44, 0.56, t));
-#else
-    palMix = smoothstep(0.44, 0.56, t);
-#endif
-  }
-  // palette weights: region A main / alt, region B main / alt
-  float palW[4] = float[4]((1.0 - palMix) * (1.0 - vA), (1.0 - palMix) * vA, palMix * (1.0 - vB), palMix * vB);
-  int palI[4] = int[4](2 * regA, 2 * regA + 1, 2 * regB, 2 * regB + 1);
-
-  // ---- slot entries of the palettes, merged by layer -----------------------
-  int eL[DM_ENTRIES];
-  float eW[DM_ENTRIES];
-  bool eFloor[DM_ENTRIES];
-  int ne = 0;
-  float sideSum = 0.0;
-  for (int k = 0; k < 20; k++) {
-    int slot = k - 5 * (k / 5);
-    float w = palW[k / 5] * slotW[slot];
-    if (w <= 0.0) continue;
-    int pi = palI[k / 5];
-    int L = int((slot < 4 ? uPal[pi][slot] : uPalC[pi].x) + 0.5);
-    bool isFloor = slot < 2;
-    if (!isFloor) sideSum += w;
-    bool merged = false;
-    for (int i = 0; i < DM_ENTRIES; i++) {
-      if (i >= ne) break;
-      if (eL[i] == L && eFloor[i] == isFloor) { eW[i] += w; merged = true; break; }
-    }
-    if (!merged && ne < DM_ENTRIES) { eL[ne] = L; eW[ne] = w; eFloor[ne] = isFloor; ne++; }
-  }
-  // side projections show walls / ceiling; where those fade out (gentle floor
-  // slopes) the floor layers fade in there instead (continuous: no seam line)
-  float floorSide = 1.0 - smoothstep(0.0, 0.08, sideSum);
+  float palMix = wB > 0.0 ? smoothstep(0.44, 0.56, wB / (wA + wB) + (nI - 0.5) * 1.5) : 0.0;
 
   // ---- UVs (units → texture repeats) ------------------------------------
   vec2 uvX = vec2(wp.z * axisSign.x, wp.y);
@@ -164,30 +166,75 @@ export const MAT_FRAGMENT = /* glsl */ `
   // rotated second-scale blend (anti-tiling), plain math: safe to branch on
   float rMix = smoothstep(0.35, 0.65, dmNoise(wp * 0.11 + 5.0));
 
-  // ---- albedo + packed normals, only for entries / axes that contribute ---
   vec3 aX = vec3(0.0), aY = vec3(0.0), aZ = vec3(0.0);
   vec4 nX4 = vec4(0.0), nY4 = vec4(0.0), nZ4 = vec4(0.0);
   float sY = 0.0, sX = 0.0, sZ = 0.0;
+#ifdef DM_SIMPLE_MAT
+  // ---- one palette per pixel: region, then main / alt, by dither ----------
+  float dth = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));
+  float dth2 = fract(dth + 0.61803399);
+  bool useB = palMix > dth;
+  int reg = useB ? regB : regA;
+  int pal = 2 * reg + ((useB ? vB : vA) > dth2 ? 1 : 0);
+  vec4 PL4 = uPal[pal];
+  int l0 = int(PL4.x + 0.5), l1 = int(PL4.y + 0.5), l2 = int(PL4.z + 0.5), l3 = int(PL4.w + 0.5);
+  int l4 = int(uPalC[pal].x + 0.5);
+  if (bw.y > 0.0) {
+    dmAcc(l0, slotW[0], uvY, gYx, gYy, rMix, aY, nY4, sY);
+    dmAcc(l1, slotW[1], uvY, gYx, gYy, rMix, aY, nY4, sY);
+    dmAcc(l2, slotW[2], uvY, gYx, gYy, rMix, aY, nY4, sY);
+    dmAcc(l3, slotW[3], uvY, gYx, gYy, rMix, aY, nY4, sY);
+    dmAcc(l4, slotW[4], uvY, gYx, gYy, rMix, aY, nY4, sY);
+  }
+  if (bw.x > 0.0) {
+    dmAcc(l0, slotW[0] * floorSide, uvX, gXx, gXy, rMix, aX, nX4, sX);
+    dmAcc(l1, slotW[1] * floorSide, uvX, gXx, gXy, rMix, aX, nX4, sX);
+    dmAcc(l2, slotW[2], uvX, gXx, gXy, rMix, aX, nX4, sX);
+    dmAcc(l3, slotW[3], uvX, gXx, gXy, rMix, aX, nX4, sX);
+    dmAcc(l4, slotW[4], uvX, gXx, gXy, rMix, aX, nX4, sX);
+  }
+  if (bw.z > 0.0) {
+    dmAcc(l0, slotW[0] * floorSide, uvZ, gZx, gZy, rMix, aZ, nZ4, sZ);
+    dmAcc(l1, slotW[1] * floorSide, uvZ, gZx, gZy, rMix, aZ, nZ4, sZ);
+    dmAcc(l2, slotW[2], uvZ, gZx, gZy, rMix, aZ, nZ4, sZ);
+    dmAcc(l3, slotW[3], uvZ, gZx, gZy, rMix, aZ, nZ4, sZ);
+    dmAcc(l4, slotW[4], uvZ, gZx, gZy, rMix, aZ, nZ4, sZ);
+  }
+#else
+  // ---- slot entries of up to 4 palettes (A main / alt, B main / alt), merged by layer
+  float pw0 = (1.0 - palMix) * (1.0 - vA), pw1 = (1.0 - palMix) * vA;
+  float pw2 = palMix * (1.0 - vB), pw3 = palMix * vB;
+  int eL[DM_ENTRIES];
+  float eW[DM_ENTRIES];
+  float eF[DM_ENTRIES]; // 1 = floor entry (top projection; sides only via floorSide)
+  int ne = 0;
+  for (int q = 0; q < 4; q++) {
+    float pw = q == 0 ? pw0 : q == 1 ? pw1 : q == 2 ? pw2 : pw3;
+    if (pw <= 0.0) continue;
+    int pi = 2 * (q < 2 ? regA : regB) + (q == 1 || q == 3 ? 1 : 0);
+    for (int slot = 0; slot < 5; slot++) {
+      float sw = slot == 0 ? slotW[0] : slot == 1 ? slotW[1] : slot == 2 ? slotW[2] : slot == 3 ? slotW[3] : slotW[4];
+      float w = pw * sw;
+      if (w <= 0.0) continue;
+      int L = dmLayerOf(pi, slot);
+      float fl = slot < 2 ? 1.0 : 0.0;
+      bool merged = false;
+      for (int i = 0; i < DM_ENTRIES; i++) {
+        if (i >= ne) break;
+        if (eL[i] == L && eF[i] == fl) { eW[i] += w; merged = true; break; }
+      }
+      if (!merged && ne < DM_ENTRIES) { eL[ne] = L; eW[ne] = w; eF[ne] = fl; ne++; }
+    }
+  }
   for (int i = 0; i < DM_ENTRIES; i++) {
     if (i >= ne) break;
     float w = eW[i];
-    vec3 a;
-    vec4 n;
-    if (bw.y > 0.0) {
-      dmSampleLayer(eL[i], uvY, gYx, gYy, rMix, a, n);
-      aY += a * w; nY4 += n * w; sY += w;
-    }
-    float ws = eFloor[i] ? w * floorSide : w;
-    if (ws <= 0.0) continue;
-    if (bw.x > 0.0) {
-      dmSampleLayer(eL[i], uvX, gXx, gXy, rMix, a, n);
-      aX += a * ws; nX4 += n * ws; sX += ws;
-    }
-    if (bw.z > 0.0) {
-      dmSampleLayer(eL[i], uvZ, gZx, gZy, rMix, a, n);
-      aZ += a * ws; nZ4 += n * ws; sZ += ws;
-    }
+    if (bw.y > 0.0) dmAcc(eL[i], w, uvY, gYx, gYy, rMix, aY, nY4, sY);
+    float ws = eF[i] > 0.5 ? w * floorSide : w;
+    if (bw.x > 0.0) dmAcc(eL[i], ws, uvX, gXx, gXy, rMix, aX, nX4, sX);
+    if (bw.z > 0.0) dmAcc(eL[i], ws, uvZ, gZx, gZy, rMix, aZ, nZ4, sZ);
   }
+#endif
   aY /= max(sY, 1e-4); nY4 /= max(sY, 1e-4);
   aX /= max(sX, 1e-4); nX4 /= max(sX, 1e-4);
   aZ /= max(sZ, 1e-4); nZ4 /= max(sZ, 1e-4);

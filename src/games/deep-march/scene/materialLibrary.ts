@@ -18,7 +18,10 @@
  */
 import * as THREE from "three";
 import { KTX2Loader } from "three/examples/jsm/loaders/KTX2Loader.js";
-import { LAYERS, LAYER_COUNT, PALETTE_COUNT, REGION_PALETTES, ROT_CODE, paletteOf } from "./materialCatalog";
+import { LAYERS, LAYER_COUNT } from "./materialCatalog";
+import { createMaterialUniforms, type MaterialUniforms } from "./materialUniforms";
+
+export type { MaterialUniforms };
 import { MaterialDownload, type MaterialProgress } from "./materialDownload";
 
 const FILES = import.meta.glob("../assets/materials/*", { query: "?url", import: "default", eager: true }) as Record<string, string>;
@@ -39,14 +42,6 @@ export const MATERIAL_LOAD = {
 
 /** Basis transcoder (copied into public/ by scripts/deep-march-materials.py). */
 const TRANSCODER_PATH = `${import.meta.env.BASE_URL}deep-march/basis/`;
-
-export type MaterialUniforms = {
-  tMatA: { value: THREE.Texture };
-  tMatN: { value: THREE.Texture };
-  uLayer: { value: THREE.Vector4[] };
-  uPal: { value: THREE.Vector4[] };
-  uPalC: { value: THREE.Vector4[] };
-};
 
 export type MaterialStatus = MaterialProgress & {
   /** All layers downloaded and both arrays uploaded. */
@@ -96,13 +91,7 @@ export class MaterialLibrary {
     this.placeholder.needsUpdate = true;
     const forceWebp = typeof window !== "undefined" && new URLSearchParams(window.location.search).get("ktx2") === "0";
     this.download = new MaterialDownload(lowSpec, forceWebp ? "webp" : "ktx2");
-    this.uniforms = {
-      tMatA: { value: this.placeholder },
-      tMatN: { value: this.placeholder },
-      uLayer: { value: LAYERS.map((l) => new THREE.Vector4(1 / l.repeat, l.gain, ROT_CODE[l.rot], 0)) },
-      uPal: { value: Array.from({ length: PALETTE_COUNT }, (_, p) => new THREE.Vector4(...paletteOf(p).slice(0, 4))) },
-      uPalC: { value: Array.from({ length: PALETTE_COUNT }, (_, p) => new THREE.Vector4(paletteOf(p)[4], REGION_PALETTES[p >> 1].altAt, 0, 0)) },
-    };
+    this.uniforms = createMaterialUniforms(this.placeholder);
     if (this.download.path === "ktx2") {
       try {
         this.ktx = new KTX2Loader().setTranscoderPath(TRANSCODER_PATH).detectSupport(renderer);
