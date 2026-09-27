@@ -18,6 +18,7 @@
     "test:terrain-info": "esbuild scripts/deep-march-terrain-info-test.ts --bundle --platform=node --outfile=node_modules/.cache/dm-terrain-info-test.cjs --log-level=warning && node node_modules/.cache/dm-terrain-info-test.cjs",
     "test:collision": "esbuild scripts/deep-march-collision-test.ts --bundle --platform=node --outfile=node_modules/.cache/dm-collision-test.cjs --log-level=warning && node node_modules/.cache/dm-collision-test.cjs",
     "test:wasm": "esbuild scripts/deep-march-wasm-test.ts --bundle --platform=node --outfile=node_modules/.cache/dm-wasm-test.cjs --log-level=warning && node node_modules/.cache/dm-wasm-test.cjs",
+    "test:streaming": "esbuild scripts/deep-march-streaming-test.ts --bundle --platform=node --outfile=node_modules/.cache/dm-streaming-test.cjs --log-level=error && node node_modules/.cache/dm-streaming-test.cjs",
     "test:refine": "esbuild scripts/deep-march-refine-test.ts --bundle --platform=node --outfile=node_modules/.cache/dm-refine-test.cjs --log-level=warning && node node_modules/.cache/dm-refine-test.cjs",
     "test:regions": "esbuild scripts/deep-march-regions-test.ts --bundle --platform=node --outfile=node_modules/.cache/dm-regions-test.cjs --log-level=warning && node node_modules/.cache/dm-regions-test.cjs",
     "cf-typegen": "wrangler types --include-runtime false",
