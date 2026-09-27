@@ -1,13 +1,11 @@
 /**
  * Seabed terrain material: MeshStandardMaterial extended via onBeforeCompile.
  *
- * - World-space triplanar mapping (blend = |n|^4) for four CC0 PBR sets
- *   (see ../assets/CREDITS.md): rippled sand, gravel, rock, mossy rock.
- * - Triplanar normal mapping with whiteout blend; roughness from the packed
- *   normal texture's blue channel.
- * - Material weights from slope (up-facing → sand/gravel, steep → rock/moss,
- *   overhangs → dark cave rock), height and world-space noise; macro colour
- *   variation + a second, rotated sampling scale on rock to hide tiling.
+ * - Multi-material (materialShader.ts, materialCatalog.ts): 22 CC0 PBR sets in two
+ *   texture arrays (materialLibrary.ts streams them in), world-space triplanar with
+ *   whiteout normal blend; each region has a main + alt palette of floor / wall /
+ *   ceiling layers, blended by per-vertex region weights baked at generation time
+ *   (terrain/regionWeights.ts) with noisy interfingering at the borders.
  * - Per-vertex AO attribute (from the mesher), animated caustics from above.
  * - SONAR mode (sonar.ts): expanding pulses light the terrain as cyan contour /
  *   scan lines (uSonar cross-fades it in; turbidity doesn't apply).
@@ -28,8 +26,8 @@ import { BEAM_DECLS, type BeamUniforms } from "./highBeam";
 import { PL_DECLS, type ParticleLightUniforms } from "./particleLight";
 import { FOG_GLSL, type FogUniforms } from "./fog";
 import { SONAR_DECLS, type SonarUniforms } from "./sonar";
-
-import { loadSeabedTextures } from "./seabedTextures";
+import { MAT_VERT_DECLS, MAT_VERT_MAIN } from "./materialShader";
+import type { MaterialUniforms } from "./materialLibrary";
 import { DETAIL_GLSL } from "./detailNormal";
 import { DECLS, DITHER_FRAGMENT, EMISSIVE_FRAGMENT, LIGHTS_END_FRAGMENT, MAP_FRAGMENT, OPAQUE_FRAGMENT, WATER_GLSL } from "./seabedShader";
 
@@ -60,14 +58,13 @@ export function createWaterUniforms(horizon: THREE.Color, far: number): WaterUni
 }
 
 export type SeabedOptions = {
-  /** For KTX2 transcoder format detection. */
-  renderer: THREE.WebGLRenderer;
   lowSpec: boolean;
   /** Shared water uniforms (createWaterUniforms). */
   water: WaterUniforms;
   /** World scale (terrain shapes are this much larger than the base design). */
   worldScale: number;
-  anisotropy: number;
+  /** Material texture arrays + per-layer / palette uniforms (MaterialLibrary.uniforms). */
+  materials: MaterialUniforms;
   /** Turbidity + lamp backscatter uniforms (fog.ts), shared with the background dome. */
   fog: FogUniforms;
   /** SONAR render-mode uniforms (sonar.ts). */
@@ -78,8 +75,6 @@ export type SeabedOptions = {
   particleLights: ParticleLightUniforms;
   /** Shader detail normal (detailNormal.ts); false = ?detail=0. Default true. */
   detail?: boolean;
-  /** Called when all textures finished loading (or failed). */
-  onReady?: () => void;
 };
 
 export type LodFadeMaterial = { material: THREE.Material; fade: THREE.Vector2 };
@@ -101,10 +96,8 @@ export type SeabedMaterial = {
 };
 
 export function createSeabedMaterial(opts: SeabedOptions): SeabedMaterial {
-  const tex = loadSeabedTextures(opts.renderer, opts.lowSpec ? 512 : 1024, opts.anisotropy, () => opts.onReady?.());
-
   const uniforms = {
-    ...tex.uniforms,
+    ...opts.materials,
     uTime: { value: 0 },
     // per-unit absorption (red goes first) — close surfaces keep true colour
     uAbsorb: { value: new THREE.Vector3(0.06, 0.024, 0.014) },
@@ -124,11 +117,11 @@ export function createSeabedMaterial(opts: SeabedOptions): SeabedMaterial {
     shader.vertexShader = shader.vertexShader
       .replace(
         "#include <common>",
-        "#include <common>\nattribute float ao;\nvarying vec3 vWPos;\nvarying vec3 vWNrm;\nvarying float vAO;",
+        "#include <common>\nattribute float ao;\nvarying vec3 vWPos;\nvarying vec3 vWNrm;\nvarying float vAO;" + MAT_VERT_DECLS,
       )
       .replace(
         "#include <project_vertex>",
-        "#include <project_vertex>\n  vWPos = (modelMatrix * vec4(transformed, 1.0)).xyz;\n  vWNrm = normalize(mat3(modelMatrix) * objectNormal);\n  vAO = ao;",
+        "#include <project_vertex>\n  vWPos = (modelMatrix * vec4(transformed, 1.0)).xyz;\n  vWNrm = normalize(mat3(modelMatrix) * objectNormal);\n  vAO = ao;" + MAT_VERT_MAIN,
       );
     shader.fragmentShader = shader.fragmentShader
       .replace("#include <common>", "#include <common>\n" + DECLS + DETAIL_GLSL + WATER_GLSL + FOG_GLSL + SONAR_DECLS + BEAM_DECLS + PL_DECLS)
@@ -186,7 +179,6 @@ export function createSeabedMaterial(opts: SeabedOptions): SeabedMaterial {
       uniforms.uTime.value = time;
     },
     dispose: () => {
-      tex.dispose();
       material.dispose();
       fades.forEach((m) => m.dispose());
     },

@@ -9,6 +9,7 @@ import { SpawnDebugView } from "./spawnDebug";
 import { findSpawn } from "../terrain/spawn";
 import { InputController, type PanelInput } from "./input";
 import { MarineSnow } from "./particles";
+import { MaterialLibrary } from "./materialLibrary";
 import { WATER_GLSL, createSeabedMaterial, createWaterUniforms } from "./seabedMaterial";
 import { DiverController, type DiverState } from "./diver";
 import { LampRig } from "./lampRig";
@@ -195,11 +196,12 @@ void main() {
   sun.position.set(0.25, 1, 0.15);
   scene.add(sun);
 
+  // Seabed materials: streamed into texture arrays after the spawn is known (materialLibrary.ts).
   let texturesReady = false;
+  const materials = new MaterialLibrary(renderer, lowSpec, Math.min(8, renderer.capabilities.getMaxAnisotropy()));
   const seabed = createSeabedMaterial({
     // ?detail=0: no shader detail normal (creases + facet blend, detailNormal.ts)
     detail: qs.get("detail") !== "0",
-    renderer,
     lowSpec,
     water,
     fog,
@@ -207,10 +209,7 @@ void main() {
     worldScale: terrain.worldScale,
     beam: rig.beam,
     particleLights,
-    anisotropy: Math.min(8, renderer.capabilities.getMaxAnisotropy()),
-    onReady: () => {
-      texturesReady = true;
-    },
+    materials: materials.uniforms,
   });
   const terrainMat = seabed.material;
   const baseAbsorb = seabed.absorb.clone();
@@ -284,6 +283,10 @@ void main() {
       diver.setView(((v[3] ?? 0) * Math.PI) / 180, ((v[4] ?? 0) * Math.PI) / 180);
     }
   }
+  // spawn area's materials first (loading screen waits for them), the rest progressively
+  materials.start(diver.position.clone(), field.regions, () => diver.position, () => {
+    texturesReady = true;
+  });
   // First person: the camera is the diver's eyes; the head lamp (LampRig) rides just above them.
   const BASE_FOV = 70;
   scene.add(camera);
@@ -390,6 +393,7 @@ void main() {
     snow.update(camera.position, dt);
     snow.fillLights(camera.position, camera.getWorldDirection(camForward), particleLights);
     seabed.update(now / 1000);
+    materials.update(dt);
 
     // Lighting: depth-driven base (deeper = darker) × light mode (lights off = black
     // water and no ambient; sonar draws on a dark background).
@@ -514,6 +518,7 @@ void main() {
       survival.dispose();
       occlusion.dispose();
       seabed.dispose();
+      materials.dispose();
       dome.geometry.dispose();
       (dome.material as THREE.Material).dispose();
       renderer.dispose();
