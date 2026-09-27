@@ -18,6 +18,7 @@ import { ENV_KINDS, SURFACE_TYPES } from "../src/games/deep-march/terrain/terrai
 import { mulberry32 } from "../src/games/deep-march/terrain/noise";
 import { DiverController } from "../src/games/deep-march/scene/diver";
 import { findSpawn, type SpawnSpot } from "../src/games/deep-march/terrain/spawn";
+import { createLatticeSampler } from "../src/games/deep-march/terrain/latticeSampler";
 
 const TERRAIN = process.env.LOWSPEC ? terrainForDevice(true) : DESKTOP;
 const SEEDS = (process.env.SEEDS ?? "1,7,12345").split(",").map(Number);
@@ -276,6 +277,7 @@ for (const seed of SEEDS) {
       const p = c[r];
       if (!p) continue;
       const d = new DiverController(field);
+      const drawn = createLatticeSampler(field); // the surface as drawn (level-0 lattice), what collision follows
       d.spawn(p[0], p[1]);
       runs++;
       const rnd = mulberry32(seed * 7 + r);
@@ -283,12 +285,12 @@ for (const seed of SEEDS) {
         d.look((rnd() - 0.5) * 0.8, (rnd() - 0.5) * 0.5);
         d.update(0.25, { forward: 1, strafe: rnd() - 0.5, up: rnd() < 0.3, down: rnd() < 0.3, sprint: rnd() < 0.5 });
         ticks += d.lastTicks;
-        if (field.sample(d.position.x, d.position.y, d.position.z) >= iso) inRock++;
+        if (drawn.sample(d.position.x, d.position.y, d.position.z) >= iso) inRock++;
         field.bounds(d.position.y, bnd);
         if (d.position.y < yLo || d.position.y > yHi) escaped++;
       }
     }
-    check("collision: diver never ends a step inside rock, stays inside the sealed world", inRock === 0 && escaped === 0, `${runs} dives, ${ticks} ticks, in rock ${inRock}, outside ${escaped}`);
+    check("collision: diver never ends a step inside the drawn rock (level-0 lattice surface), stays inside the sealed world", inRock === 0 && escaped === 0, `${runs} dives, ${ticks} ticks, in rock ${inRock}, outside ${escaped}`);
   }
 
   // ---------- 5. border block: seams, bounds, row plans, floaters ----------

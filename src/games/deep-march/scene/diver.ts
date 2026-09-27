@@ -19,6 +19,7 @@
  */
 import * as THREE from "three";
 import type { DensityField } from "../terrain/density";
+import { createLatticeSampler, type LatticeSampler, type RemovedPoint } from "../terrain/latticeSampler";
 
 export const DIVER = {
   /** World units per Minecraft block. */
@@ -87,11 +88,13 @@ export class DiverController {
   private readonly field: DensityField;
   private readonly euler = new THREE.Euler(0, 0, 0, "YXZ");
   private readonly g = new Float64Array(3);
-  private readonly isRemoved: (x: number, y: number, z: number) => boolean;
+  /** Collision field: trilinear over the level-0 lattice, i.e. the surface as drawn. */
+  private readonly lattice: LatticeSampler;
 
-  constructor(field: DensityField, isRemoved: (x: number, y: number, z: number) => boolean = () => false) {
+  /** isRemovedPoint: level-0 lattice points removed as floating rock (chunks.isRemovedPoint). */
+  constructor(field: DensityField, isRemovedPoint?: RemovedPoint) {
     this.field = field;
-    this.isRemoved = isRemoved;
+    this.lattice = createLatticeSampler(field, isRemovedPoint);
   }
 
   get state(): DiverState {
@@ -121,11 +124,9 @@ export class DiverController {
     return out.lerpVectors(this.prev, this.position, this.acc * DIVER.tickRate);
   }
 
-  /** Density as rendered: removed floating rock counts as water. */
+  /** Density as rendered: level-0 lattice interpolation, removed floating rock counts as water. */
   private sample(x: number, y: number, z: number): number {
-    const d = this.field.sample(x, y, z);
-    const iso = this.field.settings.isoLevel;
-    return d >= iso && this.isRemoved(x, y, z) ? iso - 1 : d;
+    return this.lattice.sample(x, y, z);
   }
 
   private updateOrientation() {
@@ -233,11 +234,10 @@ export class DiverController {
    * differences): g = Σ kᵢ·f(p + h·kᵢ) / (4h), exact for a linear field.
    */
   private gradient4(x: number, y: number, z: number, h: number) {
-    const f = this.field;
-    const a = f.sample(x + h, y - h, z - h);
-    const b = f.sample(x - h, y - h, z + h);
-    const c = f.sample(x - h, y + h, z - h);
-    const d = f.sample(x + h, y + h, z + h);
+    const a = this.sample(x + h, y - h, z - h);
+    const b = this.sample(x - h, y - h, z + h);
+    const c = this.sample(x - h, y + h, z - h);
+    const d = this.sample(x + h, y + h, z + h);
     const k = 1 / (4 * h);
     this.g[0] = (a - b - c + d) * k;
     this.g[1] = (-a - b + c + d) * k;

@@ -22,7 +22,7 @@
  *   main-thread fallback if workers fail.
  *
  * Level-0 columns report which lattice points they removed as floating rock;
- * `isRemoved()` lets collision ignore exactly what the renderer dropped (the diver
+ * `isRemovedPoint()` lets collision ignore exactly what the renderer dropped (the diver
  * is always inside the level-0 area).
  *
  * Terrain classification (TerrainInfoStore `terrain`: getEnvAt / getSpawnCandidates)
@@ -32,7 +32,7 @@
 import * as THREE from "three";
 import { INFO_GRID, baseTerrain } from "./config";
 import { createDensityField, type DensityField } from "./density";
-import { columnRows, generateColumnMesh, latticeSpacing, lodCoord, type ColumnRows } from "./mesher";
+import { columnRows, generateColumnMesh, lodCoord, type ColumnRows } from "./mesher";
 import type { MesherRequest, MesherResponse } from "./protocol";
 import type { LodFadeMaterial } from "../scene/seabedMaterial";
 import { TerrainInfoStore } from "./terrainInfo";
@@ -616,36 +616,7 @@ export class ChunkManager {
     if (changed) this.retire();
   }
 
-  /**
-   * True when (x, y, z) lies in a lattice cell touching a removed floating-rock
-   * point of a level-0 column. Removed components have no kept solid within one
-   * lattice step (26-connectivity), so such cells render as open water.
-   */
-  isRemoved(x: number, y: number, z: number): boolean {
-    const f = this.field;
-    const n = f.settings.numPointsPerAxis;
-    const sp = latticeSpacing(f);
-    const h = f.settings.boundsSize / 2;
-    const gi = Math.floor((x + h) / sp);
-    const gj = Math.floor((y + h) / sp);
-    const gk = Math.floor((z + h) / sp);
-    for (let dk = 0; dk <= 1; dk++) {
-      for (let di = 0; di <= 1; di++) {
-        const ggi = gi + di, ggk = gk + dk;
-        const cx = Math.floor(ggi / (n - 1));
-        const cz = Math.floor(ggk / (n - 1));
-        const set = this.nodes.get(meshKey(0, cx, cz))?.removed;
-        if (!set || set.size === 0) continue;
-        const li = ggi - cx * (n - 1);
-        const lk = ggk - cz * (n - 1);
-        for (let dj = 0; dj <= 1; dj++) {
-          const j = gj + dj - this.rows.gjMin;
-          if (set.has((j * (n - 1) + lk) * (n - 1) + li)) return true;
-        }
-      }
-    }
-    return false;
-  }
+
 
   stats(): ChunkStats {
     let meshes = 0;
@@ -679,6 +650,19 @@ export class ChunkManager {
   }
 
   /** True once every level-0 column near the viewer has been meshed (and its classification built). */
+  /**
+   * True when level-0 lattice point (gi, gj, gk) was removed as floating rock by its
+   * (built) column: the collision field (latticeSampler) treats it as water, as the mesh does.
+   */
+  isRemovedPoint(gi: number, gj: number, gk: number): boolean {
+    const n = this.field.settings.numPointsPerAxis;
+    const cx = Math.floor(gi / (n - 1)), cz = Math.floor(gk / (n - 1));
+    const set = this.nodes.get(meshKey(0, cx, cz))?.removed;
+    if (!set || set.size === 0) return false;
+    const j = gj - this.rows.gjMin;
+    return set.has((j * (n - 1) + (gk - cz * (n - 1))) * (n - 1) + (gi - cx * (n - 1)));
+  }
+
   nearReady(viewer: THREE.Vector3, radius: number): boolean {
     const r2 = radius * radius;
     let any = false;
