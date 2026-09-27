@@ -105,6 +105,12 @@ export type TerrainSettings = {
    * pre-pass (terrain/refine.ts). Default on; false (?refine=0) = full evaluation.
    */
   refine?: boolean;
+  /**
+   * Noise hot path in WebAssembly (terrain/noiseWasm.ts, bit-exact with JS). Default
+   * off: on V8 the scalar port measured ~4% slower end-to-end than the JIT-compiled
+   * JS (node, separate processes); ?wasm=1 turns it on (e.g. to compare on iOS), ?wasm=0 forces JS.
+   */
+  wasm?: boolean;
 };
 
 export const TERRAIN: TerrainSettings = {

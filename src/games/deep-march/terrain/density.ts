@@ -37,7 +37,8 @@
  * `boundsForMask(mask, y)` only the regions in `mask` (per-column row skipping).
  */
 import type { TerrainSettings } from "./config";
-import { createSimplex3, mulberry32 } from "./noise";
+import { createSimplex3, mulberry32, simplexTables } from "./noise";
+import { getWasmNoise } from "./noiseWasm";
 import { REGION_PARAMS, type RegionParams } from "./regionParams";
 import { REGION, REGION_COUNT, createRegionField, createRegionSample, scaleRegionField, type RegionField } from "./regions";
 
@@ -370,6 +371,28 @@ export function createDensityField(seed: number, s: TerrainSettings, params: rea
   const capHi = s.isoLevel + RAW_CAP;
 
   const rs2 = s.ridgeSoftness * s.ridgeSoftness;
+  const freq0 = s.noiseScale / 100;
+  const es = s.erosionFrequency;
+  // WebAssembly hot path (bit-exact port of the warp / erosion / ridged code below):
+  // per-field block = simplex tables (1 KiB) + extra offsets + octave offsets + 4 results.
+  const wasm = s.wasm === true ? getWasmNoise() : null;
+  let wT = -1, wEx = 0, wOffs = 0, wOut = 0;
+  if (wasm) {
+    wT = wasm.alloc(1024 + (ex.length + offs.length + 4) * 8);
+    if (wT >= 0) {
+      const tables = simplexTables(seed);
+      wasm.u8.set(tables.perm, wT);
+      wasm.u8.set(tables.permMod12, wT + 512);
+      wEx = wT + 1024;
+      wOffs = wEx + ex.length * 8;
+      wOut = wOffs + offs.length * 8;
+      wasm.f64.set(ex, wEx >> 3);
+      wasm.f64.set(offs, wOffs >> 3);
+    }
+  }
+  const wF = wasm ? wasm.f64 : new Float64Array(4);
+  const wO = wOut >> 3;
+  const useWasm = !!wasm && wT >= 0;
   const latSp = s.boundsSize / (s.numPointsPerAxis - 1);
   const latH = s.boundsSize / 2;
   const snap = (v: number) => -latH + Math.round((v + latH) / latSp) * latSp;
@@ -391,10 +414,20 @@ export function createDensityField(seed: number, s: TerrainSettings, params: rea
         };
   const evalRaw = (slot: number, x: number, y: number, z: number): number => {
     const W = cWarp[slot];
-    // --- domain warp ---
-    const wx = x + W * snoise(x * fw + ex[0], y * fw + ex[1], z * fw + ex[2]);
-    const wy = y + W * Wv * snoise(x * fw + ex[3], y * fw + ex[4], z * fw + ex[5]);
-    const wz = z + W * snoise(x * fw + ex[6], y * fw + ex[7], z * fw + ex[8]);
+    // --- domain warp (+ the erosion simplex on the warped position) ---
+    let wx: number, wy: number, wz: number, en: number;
+    if (useWasm) {
+      wasm!.warpErosion(wT, wEx, x, y, z, fw, W, Wv, es, wOut);
+      wx = wF[wO];
+      wy = wF[wO + 1];
+      wz = wF[wO + 2];
+      en = wF[wO + 3];
+    } else {
+      wx = x + W * snoise(x * fw + ex[0], y * fw + ex[1], z * fw + ex[2]);
+      wy = y + W * Wv * snoise(x * fw + ex[3], y * fw + ex[4], z * fw + ex[5]);
+      wz = z + W * snoise(x * fw + ex[6], y * fw + ex[7], z * fw + ex[8]);
+      en = snoise(wx * es + ex[15], wy * es + ex[16], wz * es + ex[17]);
+    }
 
     // --- soft layering: band height and phase vary across xz ---
     let layer = 0;
@@ -405,8 +438,6 @@ export function createDensityField(seed: number, s: TerrainSettings, params: rea
     }
 
     // --- erosion detail: simplex blended toward a ridged variant (angular creases) ---
-    const es = s.erosionFrequency;
-    const en = snoise(wx * es + ex[15], wy * es + ex[16], wz * es + ex[17]);
     const erosion = en + s.erosionRidge * (1 - 2 * Math.abs(en) - en);
 
     // --- region terms without the ridged noise (a lower bound: noise weights are ≥ 0) ---
@@ -447,19 +478,23 @@ export function createDensityField(seed: number, s: TerrainSettings, params: rea
 
     // --- reference ridged noise (on warped position) ---
     let noise = 0;
-    let frequency = s.noiseScale / 100;
-    let amplitude = 1;
-    let weight = 1;
-    for (let j = 0; j < s.octaves; j++) {
-      const nn = snoise(wx * frequency + offs[j * 3] + ox, wy * frequency + offs[j * 3 + 1] + oy, wz * frequency + offs[j * 3 + 2] + oz);
-      // Smooth |n| ≈ √(n² + r²): rounded crest instead of the ridged cusp.
-      let v = Math.max(0, 1 - Math.sqrt(nn * nn + rs2));
-      v = v * v * weight;
-      weight = Math.max(Math.min(v * s.weightMultiplier, 1), 0);
-      noise += j >= s.fineOctaveFrom ? v * amplitude * s.fineOctaveGain : v * amplitude;
-      if (weight === 0) break;
-      amplitude *= s.persistence;
-      frequency *= s.lacunarity;
+    if (useWasm) {
+      noise = wasm!.ridged(wT, wOffs, s.octaves, wx, wy, wz, freq0, rs2, s.weightMultiplier, s.fineOctaveFrom, s.fineOctaveGain, s.persistence, s.lacunarity, ox, oy, oz);
+    } else {
+      let frequency = freq0;
+      let amplitude = 1;
+      let weight = 1;
+      for (let j = 0; j < s.octaves; j++) {
+        const nn = snoise(wx * frequency + offs[j * 3] + ox, wy * frequency + offs[j * 3 + 1] + oy, wz * frequency + offs[j * 3 + 2] + oz);
+        // Smooth |n| ≈ √(n² + r²): rounded crest instead of the ridged cusp.
+        let v = Math.max(0, 1 - Math.sqrt(nn * nn + rs2));
+        v = v * v * weight;
+        weight = Math.max(Math.min(v * s.weightMultiplier, 1), 0);
+        noise += j >= s.fineOctaveFrom ? v * amplitude * s.fineOctaveGain : v * amplitude;
+        if (weight === 0) break;
+        amplitude *= s.persistence;
+        frequency *= s.lacunarity;
+      }
     }
 
     let d = 0;
