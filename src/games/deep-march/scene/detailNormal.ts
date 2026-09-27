@@ -115,7 +115,8 @@ export const DETAIL_APPLY = /* glsl */ `
   {
     // pixel footprint in world units (uniform control flow: derivatives defined)
     float dmFw = length(fwidth(wp));
-    float dAmp = wRock + wMoss * 0.7 + wGravel * 0.45 + wSand * 0.2;
+    // slots (materialShader.ts): wall A + ceiling full, wall B 0.7, floor B 0.45, floor A 0.2
+    float dAmp = slotW[2] + slotW[4] + slotW[3] * 0.7 + slotW[1] * 0.45 + slotW[0] * 0.2;
     dmWorldNormal = dmDetailNormal(dmWorldNormal, wp, dmFw, dAmp);
     float fW = dmFacetW(nAgree, length(cameraPosition - wp), wallW + ceilW);
     dmWorldNormal = normalize(dmWorldNormal + fW * (geoN - wn));

@@ -3,6 +3,8 @@
  *  - seabed terrain fragment: the full chain the material patches into three's
  *    MeshStandardMaterial (map / emissive / lights_end / opaque / dithering blocks),
  *    three's built-ins stubbed, for detail on/off × desktop/low spec × LOD fade on/off;
+ *  - seabed terrain vertex region-weight patch (materialShader.ts): compiles, its
+ *    varyings match the fragment's, its attributes are the ones chunks.ts binds;
  *  - background dome (water + turbidity);
  *  - plankton sprites (vertex + fragment).
  * Run: npm run test:shaders
@@ -15,6 +17,8 @@ import { BEAM_DECLS } from "../src/games/deep-march/scene/highBeam";
 import { PL_DECLS } from "../src/games/deep-march/scene/particleLight";
 import { SONAR_DECLS } from "../src/games/deep-march/scene/sonar";
 import { SNOW_FRAG, SNOW_VERT } from "../src/games/deep-march/scene/particles";
+import { MAT_DECLS, MAT_VERT_DECLS, MAT_VERT_MAIN } from "../src/games/deep-march/scene/materialShader";
+import { readFileSync } from "node:fs";
 
 let failed = 0;
 const check = (ok: boolean, name: string, detail: string) => {
@@ -26,7 +30,7 @@ const check = (ok: boolean, name: string, detail: string) => {
 function vulkanize(src: string, stage: "vertex" | "fragment", st: { binding: number; inLoc: number; outLoc: number }): string {
   return src
     .replace(/#include <[^>]+>/g, "")
-    .replace(/uniform sampler2D (\w+);/g, (_, n) => `layout(set = 0, binding = ${st.binding++}) uniform sampler2D ${n};`)
+    .replace(/uniform (sampler2D|sampler2DArray) (\w+);/g, (_, t, n) => `layout(set = 0, binding = ${st.binding++}) uniform ${t} ${n};`)
     .replace(/uniform (float|int|vec2|vec3|vec4|mat3|mat4) (\w+(?:\[\w+\])?);/g, "$1 $2;")
     .replace(/attribute (\w+) (\w+);/g, (_, t, n) => `layout(location = ${st.inLoc++}) in ${t} ${n};`)
     .replace(/varying (\w+) (\w+);/g, (_, t, n) => (stage === "vertex" ? `layout(location = ${st.outLoc++}) out ${t} ${n};` : `layout(location = ${st.inLoc++}) in ${t} ${n};`))
@@ -58,6 +62,14 @@ function seabedSource(defines: string[]): string {
     vulkanize(DITHER_FRAGMENT, "fragment", st),
     "}",
   ].join("\n");
+}
+
+function seabedVertexSource(): string {
+  const st = { binding: 0, inLoc: 3, outLoc: 0 };
+  return ["#version 450", "mat4 modelMatrix; mat4 viewMatrix; mat4 projectionMatrix;",
+    "layout(location = 0) in vec3 position;", "layout(location = 1) in vec3 normal;", "layout(location = 2) in float ao;",
+    vulkanize(MAT_VERT_DECLS, "vertex", st), "layout(location = 15) out float vAO;",
+    "void main() {", "  vAO = ao;", MAT_VERT_MAIN, "  gl_Position = projectionMatrix * viewMatrix * modelMatrix * vec4(position, 1.0);", "}"].join("\n");
 }
 
 function domeSource(): string {
@@ -94,6 +106,18 @@ function snowSources(): [string, string] {
   const variants: string[][] = [];
   for (const detail of [true, false]) for (const low of [false, true]) for (const fade of [false, true]) variants.push([...(detail ? ["DM_DETAIL"] : []), ...(low ? ["DM_LOW_SPEC"] : []), ...(fade ? ["DM_LOD_FADE"] : []), `DM_SONAR_N ${low ? 3 : 5}`]);
   for (const v of variants) compile(`seabed fragment [${v.join(" + ") || "base"}]`, seabedSource(v), "fragment");
+  // GLSL ES rules (no implicit int→float etc., as WebGL2 enforces): the same chain as ES 3.1
+  const es = (src: string) => src.replace("#version 450", "#version 310 es\nprecision highp float;\nprecision highp int;\nprecision highp sampler2D;\nprecision highp sampler2DArray;");
+  for (const v of variants) compile(`seabed fragment ES [${v.join(" + ")}]`, es(seabedSource(v)), "fragment");
+  compile("seabed vertex ES (region weights)", es(seabedVertexSource()), "vertex");
+  compile("seabed vertex (region weights)", seabedVertexSource(), "vertex");
+  {
+    const vary = (src: string) => [...src.matchAll(/varying (\w+) (vReg\w*);/g)].map((m) => `${m[1]} ${m[2]}`).sort().join();
+    check(vary(MAT_VERT_DECLS) === vary(MAT_DECLS) && vary(MAT_DECLS) !== "", "region varyings vertex = fragment", vary(MAT_VERT_DECLS));
+    const attrs = [...MAT_VERT_DECLS.matchAll(/attribute \w+ (\w+);/g)].map((m) => m[1]);
+    const chunks = readFileSync("src/games/deep-march/terrain/chunks.ts", "utf8");
+    check(attrs.length === 2 && attrs.every((a) => chunks.includes(`setAttribute("${a}"`)), "region attributes bound by chunks.ts", attrs.join(", "));
+  }
   compile("background dome fragment", domeSource(), "fragment");
   const [sv, sf] = snowSources();
   compile("plankton vertex", sv, "vertex");
