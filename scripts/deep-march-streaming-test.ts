@@ -17,8 +17,8 @@ import { ChunkManager } from "../src/games/deep-march/terrain/chunks";
 import type { JobPool, JobRequest } from "../src/games/deep-march/terrain/jobPool";
 import type { MesherResponse } from "../src/games/deep-march/terrain/protocol";
 
-/** Desktop single-core ms per column job by level (node bench, stage 1), info job ms. */
-const LEVEL_MS = [270, 190, 107, 96];
+/** Desktop single-core ms per column job by level (node bench, sparse-brick mesher), info job ms. */
+const LEVEL_MS = [200, 166, 100, 84];
 const INFO_MS = 45;
 
 class SimPool implements JobPool {
