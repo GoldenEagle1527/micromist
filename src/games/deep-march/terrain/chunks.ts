@@ -751,6 +751,34 @@ export class ChunkManager {
     return this.drawn(this.nodes.get(meshKey(lod, cx, cz)));
   }
 
+  /**
+   * Loading-screen progress toward the gate (nearReady + coverageComplete): ready
+   * level-0 / classification columns within `radius` plus covered view points, of
+   * their totals (totals grow while the column set is still being planned).
+   */
+  loadProgress(viewer: THREE.Vector3, radius: number): { done: number; total: number } {
+    const r2 = radius * radius;
+    let done = 0, total = 0;
+    for (const e of this.nodes.values()) {
+      if (!e.wanted) continue;
+      if (e.kind === "mesh" && e.lod > 0) continue;
+      if (this.sqrDst(viewer, e) > r2) continue;
+      total++;
+      if (e.kind === "info" ? e.state === "ready" : this.drawn(e)) done++;
+    }
+    const s = this.field.settings;
+    const step = 16, r = s.viewDistance;
+    let points = 0;
+    for (let z = Math.ceil((viewer.z - r) / step) * step; z <= viewer.z + r; z += step) {
+      for (let x = Math.ceil((viewer.x - r) / step) * step; x <= viewer.x + r; x += step) {
+        const dx = x - viewer.x, dz = z - viewer.z;
+        if (dx * dx + dz * dz <= r * r) points++;
+      }
+    }
+    const holes = this.coverageHoles(viewer, step);
+    return { done: done + points - holes, total: total + points };
+  }
+
   /** Every footprint inside the view is drawn (the loading gate). */
   coverageComplete(viewer: THREE.Vector3): boolean {
     return this.coverageHoles(viewer, 16) === 0;

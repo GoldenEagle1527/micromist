@@ -14,8 +14,7 @@
  *    MAP_FRAGMENT), floors on the top projection only, walls / ceiling on all three;
  *  - rotated second scale (anti-tiling) per layer: "desktop" sets on desktop,
  *    "always" sets (large unique features, B slots only) everywhere;
- *  - streaming: a layer not fully in is drawn with its stand-in, cross-faded in
- *    (uLayerS: x = ready 0…1, y = stand-in layer).
+ *  - all layers are on the GPU before the dive (materialLibrary.ts): no stand-ins.
  * Needs DECLS (dmNoise / dmFbm / dmRot) first. MAT_FRAGMENT defines floorW, ceilW,
  * nA, albedo, nX4 / nY4 / nZ4 for the rest of MAP_FRAGMENT.
  */
@@ -40,7 +39,6 @@ export const MAT_DECLS = /* glsl */ `
 uniform sampler2DArray tMatA;
 uniform sampler2DArray tMatN;
 uniform vec4 uLayer[DM_LAYERS];   // x = 1 / repeat, y = gain, z = rot (1 desktop, 2 always)
-uniform vec4 uLayerS[DM_LAYERS];  // x = ready 0..1, y = stand-in layer
 uniform vec4 uPal[DM_PALETTES];   // floorA, floorB, wallA, wallB layers
 uniform vec4 uPalC[DM_PALETTES];  // x = ceiling layer, y = alt-patch threshold
 varying vec4 vRegA;               // region weights: sand, reef, canyon, cave
@@ -73,23 +71,6 @@ void dmSampleLayer(int L, vec2 uv, vec2 dx, vec2 dy, float rMix, out vec3 a, out
     n = mix(n, n2, m);
   }
   a *= P.y;
-}
-
-// Layer L as currently shown: itself, its stand-in, or a cross-fade of both.
-void dmFetch(int L, vec2 uv, vec2 dx, vec2 dy, float rMix, out vec3 a, out vec4 n) {
-  vec4 S = uLayerS[L];
-  if (S.x >= 1.0) {
-    dmSampleLayer(L, uv, dx, dy, rMix, a, n);
-    return;
-  }
-  dmSampleLayer(int(S.y + 0.5), uv, dx, dy, rMix, a, n);
-  if (S.x > 0.0) {
-    vec3 a2;
-    vec4 n2;
-    dmSampleLayer(L, uv, dx, dy, rMix, a2, n2);
-    a = mix(a, a2, S.x);
-    n = mix(n, n2, S.x);
-  }
 }
 `;
 
@@ -193,17 +174,17 @@ export const MAT_FRAGMENT = /* glsl */ `
     vec3 a;
     vec4 n;
     if (bw.y > 0.0) {
-      dmFetch(eL[i], uvY, gYx, gYy, rMix, a, n);
+      dmSampleLayer(eL[i], uvY, gYx, gYy, rMix, a, n);
       aY += a * w; nY4 += n * w; sY += w;
     }
     float ws = eFloor[i] ? w * floorSide : w;
     if (ws <= 0.0) continue;
     if (bw.x > 0.0) {
-      dmFetch(eL[i], uvX, gXx, gXy, rMix, a, n);
+      dmSampleLayer(eL[i], uvX, gXx, gXy, rMix, a, n);
       aX += a * ws; nX4 += n * ws; sX += ws;
     }
     if (bw.z > 0.0) {
-      dmFetch(eL[i], uvZ, gZx, gZy, rMix, a, n);
+      dmSampleLayer(eL[i], uvZ, gZx, gZy, rMix, a, n);
       aZ += a * ws; nZ4 += n * ws; sZ += ws;
     }
   }

@@ -4,12 +4,12 @@ import { SEA_COLORS, TERRAIN, isLowSpecDevice, terrainForDevice } from "../terra
 import { createDensityField } from "../terrain/density";
 import { ChunkManager } from "../terrain/chunks";
 import type { EnvironmentKind, SurfaceType } from "../terrain/terrainInfo";
-import { REGION_KEYS, createRegionSample, type RegionKey } from "../terrain/regions";
+import { REGION_KEYS, createRegionSample, type RegionField, type RegionKey } from "../terrain/regions";
 import { SpawnDebugView } from "./spawnDebug";
 import { findSpawn } from "../terrain/spawn";
 import { InputController, type PanelInput } from "./input";
 import { MarineSnow } from "./particles";
-import { MaterialLibrary } from "./materialLibrary";
+import { MaterialLibrary, type MaterialStatus } from "./materialLibrary";
 import { WATER_GLSL, createSeabedMaterial, createWaterUniforms } from "./seabedMaterial";
 import { DiverController, type DiverState } from "./diver";
 import { LampRig } from "./lampRig";
@@ -31,7 +31,6 @@ export type HudLabels = {
   regionDebugTitle: string;
   regionNames: Record<RegionKey, string>;
   regionEdge: string;
-  loading: string;
   lockPrompt: string;
 };
 
@@ -66,7 +65,29 @@ export type Telemetry = {
   z: number;
 };
 
+/** Raw initialization state for the loading screen (ui/loading), polled per frame. */
+export type LoadingSnapshot = {
+  seed: number;
+  spawn: { x: number; y: number; z: number };
+  /** Macro region field of this world (world units) for the region map. */
+  regions: RegionField;
+  materials: MaterialStatus;
+  /** Terrain around the spawn: gate items done / total, and the gate itself. */
+  terrain: { done: number; total: number; ready: boolean };
+  system: { battery: number; lamps: LightMode[]; sonar: boolean; shaders: boolean };
+  /** Everything above is ready: the dive can start (startDive). */
+  loaded: boolean;
+  /** The dive started (simulation running). */
+  diving: boolean;
+};
+
 export type DeepMarchHandle = {
+  /** Loading-screen state (textures, terrain, system check). */
+  loading: () => LoadingSnapshot;
+  /** Leave the loading screen: the simulation starts once everything is loaded. */
+  startDive: () => void;
+  /** After a final texture download failure: try the failed layers again. */
+  retryMaterials: () => void;
   destroy: () => void;
   /** Analog state from the on-screen panel. */
   panelInput: PanelInput;
@@ -113,10 +134,6 @@ export function createDeepMarch(host: HTMLElement, opts: DeepMarchOptions): Deep
   const stats = document.createElement("div");
   stats.className = "dm-stats";
   overlay.appendChild(stats);
-  const loading = document.createElement("div");
-  loading.className = "dm-loading";
-  loading.textContent = opts.labels.loading;
-  overlay.appendChild(loading);
 
   // ?lodNear=<units> overrides the full-resolution ring radius (LOD comparisons / debugging)
   const lodNearParam = Number(new URLSearchParams(window.location.search).get("lodNear"));
@@ -196,9 +213,12 @@ void main() {
   sun.position.set(0.25, 1, 0.15);
   scene.add(sun);
 
-  // Seabed materials: streamed into texture arrays after the spawn is known (materialLibrary.ts).
+  // Seabed materials: all 22 downloaded into texture arrays and uploaded before the dive
+  // (materialLibrary.ts); the download starts right away, alongside terrain generation.
   let texturesReady = false;
-  const materials = new MaterialLibrary(renderer, lowSpec, Math.min(8, renderer.capabilities.getMaxAnisotropy()));
+  const materials = new MaterialLibrary(renderer, lowSpec, Math.min(8, renderer.capabilities.getMaxAnisotropy()), () => {
+    texturesReady = true;
+  });
   const seabed = createSeabedMaterial({
     // ?detail=0: no shader detail normal (creases + facet blend, detailNormal.ts)
     detail: qs.get("detail") !== "0",
@@ -219,10 +239,20 @@ void main() {
   const chunks = new ChunkManager(scene, field, opts.seed, terrainMat, lowSpec, seabed.fadeMaterial);
   // GPU occlusion culling of terrain columns (?occ=0 disables)
   const occlusion = new TerrainOcclusion(renderer, scene, new URLSearchParams(window.location.search).get("occ") !== "0");
+  // System check: compile the terrain programs (base + LOD crossfade) before the dive,
+  // so neither the first frame nor the first LOD swap hitches.
+  let shadersReady = false;
   {
-    // compile the LOD-crossfade program up front: no shader-compile hitch at the first swap
-    const warm = new THREE.Mesh(new THREE.BufferGeometry(), seabed.fadeMaterial().material);
-    renderer.compileAsync(warm, camera, scene).catch(() => {}).finally(() => warm.geometry.dispose());
+    const geo = new THREE.BufferGeometry();
+    const warm = new THREE.Group();
+    warm.add(new THREE.Mesh(geo, terrainMat), new THREE.Mesh(geo, seabed.fadeMaterial().material));
+    renderer
+      .compileAsync(warm, camera, scene)
+      .catch(() => {})
+      .finally(() => {
+        shadersReady = true;
+        geo.dispose();
+      });
   }
 
   const diver = new DiverController(field, (gi, gj, gk) => chunks.isRemovedPoint(gi, gj, gk));
@@ -283,10 +313,6 @@ void main() {
       diver.setView(((v[3] ?? 0) * Math.PI) / 180, ((v[4] ?? 0) * Math.PI) / 180);
     }
   }
-  // spawn area's materials first (loading screen waits for them), the rest progressively
-  materials.start(diver.position.clone(), field.regions, () => diver.position, () => {
-    texturesReady = true;
-  });
   // First person: the camera is the diver's eyes; the head lamp (LampRig) rides just above them.
   const BASE_FOV = 70;
   scene.add(camera);
@@ -356,6 +382,8 @@ void main() {
   resize();
 
   let ready = false;
+  let diveRequested = false;
+  let terrainReady = false;
   let raf = 0;
   let last = performance.now();
   let hudTimer = 0;
@@ -376,12 +404,15 @@ void main() {
     if (ready) {
       diver.update(dt, input.move());
       if (diver.lastTicks > 0) input.consumePulse();
-    } else if (texturesReady && chunks.nearReady(diver.position, 14) && chunks.coverageComplete(diver.position)) {
-      // loading gate: every footprint in view drawn + level 0 around the diver
-      ready = true;
-      chunks.loading = false;
-      loading.classList.add("done");
-      updatePrompt();
+    } else {
+      // loading gate: every footprint in view drawn + level 0 around the diver, all
+      // materials on the GPU, programs compiled; then the loading screen starts the dive
+      if (!terrainReady) terrainReady = chunks.nearReady(diver.position, 14) && chunks.coverageComplete(diver.position);
+      if (diveRequested && terrainReady && texturesReady && shadersReady) {
+        ready = true;
+        chunks.loading = false;
+        updatePrompt();
+      }
     }
     syncCamera(dt);
     if (ready) survival.tick(dt);
@@ -393,7 +424,6 @@ void main() {
     snow.update(camera.position, dt);
     snow.fillLights(camera.position, camera.getWorldDirection(camForward), particleLights);
     seabed.update(now / 1000);
-    materials.update(dt);
 
     // Lighting: depth-driven base (deeper = darker) × light mode (lights off = black
     // water and no ambient; sonar draws on a dark background).
@@ -462,7 +492,38 @@ void main() {
   };
   document.addEventListener("visibilitychange", onVisibility);
 
+  let terrainProgressAt = -1e9;
+  let terrainProgress = { done: 0, total: 0 };
+  const systemState = () => {
+    const avail = lights.available();
+    return { battery: survival.resources.view("battery").ratio, lamps: avail.filter((m) => m !== "sonar"), sonar: avail.includes("sonar") && sonar.uSonarPulse.value.length > 0, shaders: shadersReady };
+  };
   return {
+    loading: () => {
+      // terrain progress walks the column set: refreshed at most every 150 ms
+      const t = performance.now();
+      if (t - terrainProgressAt > 150) {
+        terrainProgressAt = t;
+        terrainProgress = chunks.loadProgress(diver.position, 14);
+      }
+      const tp = terrainProgress;
+      const system = systemState();
+      const mat = materials.status();
+      return {
+        seed: opts.seed,
+        spawn: { x: spawnAt.x, y: spawnAt.y, z: spawnAt.z },
+        regions: field.regions,
+        materials: mat,
+        terrain: { done: tp.done, total: tp.total, ready: terrainReady },
+        system,
+        loaded: terrainReady && mat.ready && system.shaders,
+        diving: ready,
+      };
+    },
+    startDive: () => {
+      diveRequested = true;
+    },
+    retryMaterials: () => materials.retry(),
     panelInput: input.panel,
     setPanelMode: (on) => {
       input.panelMode = on;
@@ -472,7 +533,6 @@ void main() {
     setLabels: (next) => {
       labels = next;
       lockPrompt.textContent = next.lockPrompt;
-      loading.textContent = next.loading;
       spawnDebug.setLabels(next);
       hudTimer = 0;
     },
