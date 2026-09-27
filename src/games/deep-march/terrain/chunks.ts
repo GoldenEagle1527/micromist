@@ -13,13 +13,21 @@
  *   crossfade (LOD_FADE_S, seabedMaterial fadeMaterial) instead of a one-frame pop:
  *   replacement meshes stay hidden until the whole footprint is ready, then they
  *   dither in while the old ones dither out on the complementary pixels;
- * - refinement is progressive where terrain is already drawn: a column splits only
- *   once it is drawn and settled, so a swap is always one column ↔ its 4 children;
+ * - streaming (coverage first): top-level columns are built before anything
+ *   else and stay resident (hidden, not freed) while their children are drawn, so
+ *   coarsening back is instant; a node splits only once it is drawn and settled
+ *   (or its footprint is already drawn finer), so refinement only happens where
+ *   terrain is on screen and every swap is one column ↔ its 4 children. Top-level
+ *   columns are prefetched PREFETCH_U beyond viewDistance so nothing inside the view
+ *   is ever uncovered while swimming;
+ * - build order: uncovered footprints first, then refinements, near first,
+ *   weighted towards the camera / swim direction; stale queued jobs are dropped
+ *   and stale results discarded (jobPool.ts on in-flight jobs);
  * - the split distance and the build order use the viewer's position predicted
  *   LOOKAHEAD_S ahead along its smoothed velocity (min of both distances), so at
  *   swimming speed the fine rings are built ahead of the diver, in-view first;
- * - meshes are built by a Web Worker pool and uploaded under a per-frame budget;
- *   main-thread fallback if workers fail.
+ * - meshes are built by a JobPool (Web Workers, jobPool.ts) and uploaded under a
+ *   per-frame budget; main-thread fallback if workers fail.
  *
  * Level-0 columns report which lattice points they removed as floating rock;
  * `isRemovedPoint()` lets collision ignore exactly what the renderer dropped (the diver
@@ -33,7 +41,8 @@ import * as THREE from "three";
 import { INFO_GRID, baseTerrain } from "./config";
 import { createDensityField, type DensityField } from "./density";
 import { columnRows, generateColumnMesh, lodCoord, type ColumnRows } from "./mesher";
-import type { MesherRequest, MesherResponse } from "./protocol";
+import type { MesherResponse } from "./protocol";
+import { WorkerPool, type JobPool, type JobRequest } from "./jobPool";
 import type { LodFadeMaterial } from "../scene/seabedMaterial";
 import { TerrainInfoStore } from "./terrainInfo";
 
@@ -50,7 +59,6 @@ type Node = {
   id: number;
   mesh: THREE.Mesh | null;
   priority: number;
-  worker: number;
   /** Level 0 only: removed lattice points owned by this column, keyed (j*(n-1) + k)*(n-1) + i. */
   removed: Set<number> | null;
   /** Still part of the wanted set (else drawn only until its replacement is ready). */
@@ -61,9 +69,9 @@ type Node = {
   fade: number;
   fadeStart: number;
   fadeMat: LodFadeMaterial | null;
+  /** Top level only: built, hidden while finer columns cover it, kept for instant coarsening. */
+  resident: boolean;
 };
-
-type Slot = { worker: Worker; inFlight: number; alive: boolean };
 
 export type ChunkStats = {
   active: number;
@@ -84,7 +92,6 @@ export type ChunkStats = {
   lodMs: number[];
 };
 
-const MAX_IN_FLIGHT_PER_WORKER = 1;
 const UPLOAD_BUDGET_MS = 4;
 const MAIN_THREAD_BUDGET_MS = 8;
 /**
@@ -94,7 +101,16 @@ const MAIN_THREAD_BUDGET_MS = 8;
  */
 const LOD_FADE_S = 0.5;
 /** How far ahead (s of travel) the LOD split / build order looks. */
-const LOOKAHEAD_S = 1.5;
+const LOOKAHEAD_S = 2.5;
+/**
+ * Top-level columns are wanted this far beyond viewDistance (units): at 9.8 u/s a
+ * phone builds a top column (~0.1 s × 3–5) long before the view edge reaches it.
+ */
+export const PREFETCH_U = 48;
+/** A split area merges back only this factor beyond the split distance (no split/merge churn). */
+const SPLIT_HYST = 1.3;
+/** Priority band of footprints nothing drawn covers (built before any refinement). */
+const UNCOVERED_BAND = -1e6;
 
 const meshKey = (lod: number, cx: number, cz: number) => `${lod}:${cx}:${cz}`;
 const infoKey = (cx: number, cz: number) => `i:${cx}:${cz}`;
@@ -104,7 +120,7 @@ export class ChunkManager {
   private readonly byId = new Map<number, Node>();
   private readonly results: MesherResponse[] = [];
   private readonly meshPool: THREE.Mesh[] = [];
-  private readonly slots: Slot[] = [];
+  private readonly pool: JobPool;
   private readonly group = new THREE.Group();
   private readonly frustum = new THREE.Frustum();
   private readonly projScreen = new THREE.Matrix4();
@@ -135,19 +151,22 @@ export class ChunkManager {
   /** Smoothed viewer velocity (units/s) and the look-ahead point it gives. */
   private readonly vel = new THREE.Vector3();
   private readonly ahead = new THREE.Vector3();
+  private readonly camFwd = new THREE.Vector3(0, 0, -1);
   /** Generation-time terrain classification near the viewer (base-scale columns, world-unit queries). */
   readonly terrain: TerrainInfoStore;
   private floaters = 0;
   private disposed = false;
   /**
-   * Refine one level at a time where terrain is already drawn (see wantedSet).
-   * Off while the loading screen is up, so the start area builds straight to full
-   * resolution; world.ts turns it on once the dive starts.
+   * Loading screen up: swaps are instant (no crossfade) so the start area refines
+   * quickly; world.ts clears it once coverageComplete() and the dive starts.
    */
-  progressive = false;
+  loading = true;
 
-  /** lowSpec: at most 2 mesher workers (leaves the main thread / GPU driver room on phones). */
-  constructor(scene: THREE.Scene, field: DensityField, seed: number, material: THREE.Material, lowSpec = false, fadeMaterial?: () => LodFadeMaterial) {
+  /**
+   * lowSpec: at most 2 mesher workers (leaves the main thread / GPU driver room on phones).
+   * pool: job runner override (tests); default a WorkerPool.
+   */
+  constructor(scene: THREE.Scene, field: DensityField, seed: number, material: THREE.Material, lowSpec = false, fadeMaterial?: () => LodFadeMaterial, pool?: JobPool) {
     this.scene = scene;
     this.fadeFactory = fadeMaterial ?? null;
     this.field = field;
@@ -162,48 +181,23 @@ export class ChunkManager {
     this.yMin = lodCoord(this.rows.gjMin, field, 0);
     this.yMax = lodCoord(this.rows.gjMax, field, 0);
     scene.add(this.group);
-    const cores = typeof navigator !== "undefined" ? navigator.hardwareConcurrency || 4 : 4;
-    // Desktop: min(4, cores − 2) keeps two cores for the main thread + GPU driver
-    // (6 workers made the main thread stutter while streaming); low-spec: 2.
-    const count = lowSpec ? Math.max(1, Math.min(2, cores - 1)) : Math.max(1, Math.min(4, cores - 2));
-    for (let i = 0; i < count; i++) {
-      try {
-        const worker = new Worker(new URL("./mesher.worker.ts", import.meta.url), { type: "module" });
-        const slot: Slot = { worker, inFlight: 0, alive: true };
-        const index = this.slots.length;
-        worker.onmessage = (ev: MessageEvent<MesherResponse>) => {
-          slot.inFlight = Math.max(0, slot.inFlight - 1);
-          this.results.push(ev.data);
-        };
-        worker.onerror = (ev) => {
-          ev.preventDefault();
-          this.killSlot(index);
-        };
-        const init: MesherRequest = { type: "init", seed, settings: s };
-        worker.postMessage(init);
-        this.slots.push(slot);
-      } catch {
-        break;
-      }
+    if (pool) this.pool = pool;
+    else {
+      const cores = typeof navigator !== "undefined" ? navigator.hardwareConcurrency || 4 : 4;
+      // Desktop: min(4, cores − 2) keeps two cores for the main thread + GPU driver
+      // (6 workers made the main thread stutter while streaming); low-spec: 2.
+      const count = lowSpec ? Math.max(1, Math.min(2, cores - 1)) : Math.max(1, Math.min(4, cores - 2));
+      this.pool = new WorkerPool(seed, s, typeof Worker === "undefined" ? 0 : count);
     }
-  }
-
-  private get liveWorkers(): number {
-    return this.slots.filter((s) => s.alive).length;
-  }
-
-  private killSlot(index: number) {
-    const slot = this.slots[index];
-    if (!slot || !slot.alive) return;
-    slot.alive = false;
-    slot.worker.terminate();
-    for (const node of this.nodes.values()) {
-      if (node.state === "pending" && node.worker === index) {
-        this.byId.delete(node.id);
+    this.pool.onLost = (ids) => {
+      for (const id of ids) {
+        const node = this.byId.get(id);
+        if (!node || node.state !== "pending") continue;
+        this.byId.delete(id);
         node.state = "queued";
         this.queue.push(node);
       }
-    }
+    };
   }
 
   /** The group holding every column mesh (occlusion culling walks it). */
@@ -257,6 +251,7 @@ export class ChunkManager {
     camera.updateMatrixWorld();
     this.projScreen.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
     this.frustum.setFromProjectionMatrix(this.projScreen);
+    camera.getWorldDirection(this.camFwd);
 
     this.clock += dt;
     // smoothed horizontal velocity → look-ahead point (teleports / respawns ignored)
@@ -280,6 +275,7 @@ export class ChunkManager {
       this.refreshSet(viewer);
     }
     this.dispatch();
+    this.pool.drain(this.results);
     this.applyResults();
     this.stepFades();
   }
@@ -296,32 +292,32 @@ export class ChunkManager {
     const top = this.levels - 1;
     const topSize = s.boundsSize * (1 << top);
     const view2 = s.viewDistance * s.viewDistance;
-    // Progressive refinement: where something is already drawn (`covered`), a node
-    // only splits once it is itself drawn and settled, so every swap replaces a
-    // column by its 4 children (or back) in one crossfade. Without this, when
-    // streaming lagged at swimming speed, fine columns right ahead waited hidden
-    // behind a 160 m level-4 column until its whole footprint was rebuilt, and the
-    // diver swam through the coarsest mesh. Where nothing is drawn yet (start,
-    // teleport) the tree splits straight to the target level.
-    const visit = (lod: number, cx: number, cz: number, covered: boolean) => {
+    // Coverage first, progressive refinement: a node splits only when it is drawn
+    // and settled, or when its footprint is already drawn finer (keeps an existing
+    // fine area). Everything therefore starts from the top level, and every swap
+    // replaces a column by its 4 children (or back) in one crossfade — never a
+    // hidden fine column waiting behind a big coarse one, never a hole.
+    const visit = (lod: number, cx: number, cz: number) => {
       const [x0, z0] = this.origin("mesh", lod, cx, cz);
       const size = s.boundsSize * (1 << lod);
       const d2 = this.sqrDstRect(viewer, x0, z0, size);
-      if (d2 > view2) return;
+      if (d2 > (lod === top ? prefetch2 : view2)) return;
       const key = meshKey(lod, cx, cz);
-      const node = this.nodes.get(key);
-      const settled = this.settled(node);
-      const split = lod > 0 && this.sqrDstAhead(viewer, x0, z0, size) < (s.lodNear * (1 << (lod - 1))) ** 2 && (!this.progressive || !covered || settled);
-      if (!split) {
+      // hysteresis: an area already drawn finer merges back only SPLIT_HYST further out
+      const finer = lod > 0 && this.coveredBelow(lod, cx, cz);
+      const near = lod > 0 && d2 <= view2 && this.sqrDstAhead(viewer, x0, z0, size) < (s.lodNear * (1 << (lod - 1)) * (finer ? SPLIT_HYST : 1)) ** 2;
+      if (!near || !(finer || this.settled(this.nodes.get(key)))) {
         out.set(key, { kind: "mesh", lod, cx, cz });
         return;
       }
-      for (let dz = 0; dz <= 1; dz++) for (let dx = 0; dx <= 1; dx++) visit(lod - 1, cx * 2 + dx, cz * 2 + dz, covered || this.drawn(node));
+      for (let dz = 0; dz <= 1; dz++) for (let dx = 0; dx <= 1; dx++) visit(lod - 1, cx * 2 + dx, cz * 2 + dz);
     };
     const h = s.boundsSize / 2;
-    const tx0 = Math.floor((viewer.x + h - s.viewDistance) / topSize), tx1 = Math.floor((viewer.x + h + s.viewDistance) / topSize);
-    const tz0 = Math.floor((viewer.z + h - s.viewDistance) / topSize), tz1 = Math.floor((viewer.z + h + s.viewDistance) / topSize);
-    for (let cz = tz0; cz <= tz1; cz++) for (let cx = tx0; cx <= tx1; cx++) visit(top, cx, cz, false);
+    const reach = s.viewDistance + PREFETCH_U;
+    const prefetch2 = reach * reach;
+    const tx0 = Math.floor((viewer.x + h - reach) / topSize), tx1 = Math.floor((viewer.x + h + reach) / topSize);
+    const tz0 = Math.floor((viewer.z + h - reach) / topSize), tz1 = Math.floor((viewer.z + h + reach) / topSize);
+    for (let cz = tz0; cz <= tz1; cz++) for (let cx = tx0; cx <= tx1; cx++) visit(top, cx, cz);
     // base-scale classification columns
     const bs = INFO_GRID.boundsSize * s.worldScale;
     const r = s.infoRadius;
@@ -342,6 +338,25 @@ export class ChunkManager {
   /** On screen (possibly mid-crossfade), or built empty. */
   private drawn(n: Node | undefined): boolean {
     return !!n && n.state === "ready" && !n.awaitFade && (!n.mesh || n.mesh.visible);
+  }
+
+  /** The footprint of mesh node (lod, cx, cz) is fully drawn by its descendants. */
+  private coveredBelow(lod: number, cx: number, cz: number): boolean {
+    if (lod === 0) return false;
+    for (let dz = 0; dz <= 1; dz++) for (let dx = 0; dx <= 1; dx++) {
+      const c = lod - 1, x = cx * 2 + dx, z = cz * 2 + dz;
+      if (!this.drawn(this.nodes.get(meshKey(c, x, z))) && !this.coveredBelow(c, x, z)) return false;
+    }
+    return true;
+  }
+
+  /** Some drawn mesh node (ancestor, itself, or its full set of descendants) covers the footprint. */
+  private coveredAt(lod: number, cx: number, cz: number): boolean {
+    for (let l = lod; l < this.levels; l++) {
+      const d = l - lod;
+      if (this.drawn(this.nodes.get(meshKey(l, cx >> d, cz >> d)))) return true;
+    }
+    return this.coveredBelow(lod, cx, cz);
   }
 
   /** Node b's footprint contains node a's (both mesh nodes). */
@@ -368,23 +383,38 @@ export class ChunkManager {
     for (const [key, w] of want) {
       if (this.nodes.has(key)) continue;
       const node: Node = {
-        key, kind: w.kind, lod: w.lod, cx: w.cx, cz: w.cz, state: "queued", id: 0, mesh: null, priority: 0, worker: -1, removed: null, wanted: true,
-        awaitFade: false, fade: 0, fadeStart: 0, fadeMat: null,
+        key, kind: w.kind, lod: w.lod, cx: w.cx, cz: w.cz, state: "queued", id: 0, mesh: null, priority: 0, removed: null, wanted: true,
+        awaitFade: false, fade: 0, fadeStart: 0, fadeMat: null, resident: false,
       };
       this.nodes.set(key, node);
       this.queue.push(node);
     }
     this.retire();
 
+    // stale (unwanted / recycled) jobs drop out of the queue here
     this.queue = this.queue.filter((e) => e.state === "queued" && this.nodes.get(e.key) === e);
+    const speed = Math.hypot(this.vel.x, this.vel.z);
+    const fl = Math.hypot(this.camFwd.x, this.camFwd.z) || 1;
+    const fx = this.camFwd.x / fl, fz = this.camFwd.z / fl;
     for (const e of this.queue) {
       const [x0, z0] = this.origin(e.kind, e.lod, e.cx, e.cz);
-      const d = Math.sqrt(this.sqrDstAhead(viewer, x0, z0, this.size(e)));
+      const size = this.size(e);
+      const d = Math.sqrt(this.sqrDstAhead(viewer, x0, z0, size));
       this.setNodeBox(e);
       const inView = this.frustum.intersectsBox(this.box);
+      // view / swim direction: ×1 straight ahead … ×2.2 behind
+      const dx = x0 + size / 2 - viewer.x, dz = z0 + size / 2 - viewer.z;
+      const dl = Math.hypot(dx, dz);
+      let facing = 1;
+      if (dl > size * 0.75) {
+        facing = (dx * fx + dz * fz) / dl;
+        if (speed > 1) facing = Math.max(facing, (dx * this.vel.x + dz * this.vel.z) / (dl * speed));
+      }
       // near first; coarse rings early too (cheap, they give the far silhouettes)
-      const p = e.kind === "info" ? d + 6 : d / (1 + 0.6 * e.lod);
-      e.priority = inView ? p : p * 3 + 60;
+      let p = (e.kind === "info" ? d + 6 : d / (1 + 0.3 * e.lod)) * (1.6 - 0.6 * facing);
+      if (!inView) p = p * 3 + 60;
+      if (e.kind === "mesh" && !this.coveredAt(e.lod, e.cx, e.cz)) p += UNCOVERED_BAND;
+      e.priority = p;
     }
     this.queue.sort((a, b) => b.priority - a.priority);
   }
@@ -402,6 +432,11 @@ export class ChunkManager {
     for (const n of this.nodes.values()) if (n.wanted && n.kind === "mesh") wantedMesh.push(n);
     for (const n of [...this.nodes.values()]) {
       if (n.wanted) continue;
+      if (n.resident) {
+        // hidden top-level column: freed only once nothing wanted overlaps it (out of range)
+        if (!wantedMesh.some((w) => ChunkManager.overlaps(w, n))) this.recycle(n);
+        continue;
+      }
       if (n.kind === "info" || n.state !== "ready" || !n.mesh) {
         this.recycle(n);
         continue;
@@ -420,8 +455,8 @@ export class ChunkManager {
       if (!overlap) this.recycle(n);
       else if (covered) {
         const incoming = wantedMesh.filter((w) => w.awaitFade && ChunkManager.overlaps(w, n));
-        if (!this.fadeFactory || !n.mesh.visible) {
-          this.recycle(n);
+        if (!this.fadeFactory || !n.mesh.visible || this.loading) {
+          this.dropCovered(n);
           for (const w of incoming) this.reveal(w);
           continue;
         }
@@ -451,14 +486,26 @@ export class ChunkManager {
     return false;
   }
 
+  /** An unwanted node whose footprint is drawn by its replacement: freed, or hidden if top-level. */
+  private dropCovered(n: Node) {
+    if (n.kind === "mesh" && n.lod === this.levels - 1 && n.mesh) {
+      if (n.fade !== 0 || n.fadeMat) this.endFade(n);
+      n.mesh.visible = false;
+      n.awaitFade = true;
+      n.resident = true;
+    } else this.recycle(n);
+  }
+
   private reveal(w: Node) {
     w.awaitFade = false;
+    w.resident = false;
     if (w.mesh) w.mesh.visible = true;
   }
 
   private startFade(n: Node, dir: number) {
     if (!n.mesh || !this.fadeFactory) return;
     n.awaitFade = false;
+    n.resident = false;
     if (!n.fadeMat) n.fadeMat = this.fadePool.pop() ?? this.fadeFactory();
     n.fade = dir;
     n.fadeStart = this.clock;
@@ -485,7 +532,7 @@ export class ChunkManager {
         n.fadeMat!.fade.x = f;
         continue;
       }
-      if (n.fade < 0) this.recycle(n);
+      if (n.fade < 0) this.dropCovered(n);
       else this.endFade(n);
     }
   }
@@ -493,6 +540,7 @@ export class ChunkManager {
   private recycle(node: Node) {
     if (node.fade !== 0 || node.fadeMat) this.endFade(node);
     node.awaitFade = false;
+    node.resident = false;
     this.nodes.delete(node.key);
     if (node.state === "pending") this.byId.delete(node.id);
     node.state = "queued";
@@ -525,7 +573,7 @@ export class ChunkManager {
   }
 
   private dispatch() {
-    if (this.liveWorkers === 0) {
+    if (this.pool.live() === 0) {
       const t0 = performance.now();
       while (this.queue.length && performance.now() - t0 < MAIN_THREAD_BUDGET_MS) {
         const e = this.queue.pop()!;
@@ -537,20 +585,14 @@ export class ChunkManager {
       }
       return;
     }
-    for (let i = 0; i < this.slots.length; i++) {
-      const slot = this.slots[i];
-      while (slot.alive && slot.inFlight < MAX_IN_FLIGHT_PER_WORKER && this.queue.length) {
-        const e = this.queue.pop()!;
-        if (e.state !== "queued" || this.nodes.get(e.key) !== e) continue;
-        e.id = this.nextId++;
-        e.state = "pending";
-        e.worker = i;
-        this.byId.set(e.id, e);
-        slot.inFlight++;
-        const req: MesherRequest =
-          e.kind === "info" ? { type: "info", id: e.id, cx: e.cx, cz: e.cz } : { type: "column", id: e.id, cx: e.cx, cz: e.cz, lod: e.lod };
-        slot.worker.postMessage(req);
-      }
+    while (this.pool.free() > 0 && this.queue.length) {
+      const e = this.queue.pop()!;
+      if (e.state !== "queued" || this.nodes.get(e.key) !== e) continue;
+      e.id = this.nextId++;
+      e.state = "pending";
+      this.byId.set(e.id, e);
+      const req: JobRequest = e.kind === "info" ? { type: "info", id: e.id, cx: e.cx, cz: e.cz } : { type: "column", id: e.id, cx: e.cx, cz: e.cz, lod: e.lod };
+      this.pool.submit(req);
     }
   }
 
@@ -639,7 +681,7 @@ export class ChunkManager {
       queued: this.queue.length,
       pending,
       triangles: this.lodTris.reduce((a, b) => a + b, 0),
-      workers: this.liveWorkers,
+      workers: this.pool.live(),
       avgMs: this.lodMsCount[0] ? this.lodMsTotal[0] / this.lodMsCount[0] : 0,
       avgInfoMs: this.infoMsCount ? this.infoMsTotal / this.infoMsCount : 0,
       floaters: this.floaters,
@@ -649,7 +691,6 @@ export class ChunkManager {
     };
   }
 
-  /** True once every level-0 column near the viewer has been meshed (and its classification built). */
   /**
    * True when level-0 lattice point (gi, gj, gk) was removed as floating rock by its
    * (built) column: the collision field (latticeSampler) treats it as water, as the mesh does.
@@ -663,24 +704,61 @@ export class ChunkManager {
     return set.has((j * (n - 1) + (gk - cz * (n - 1))) * (n - 1) + (gi - cx * (n - 1)));
   }
 
+  /** True once every wanted level-0 column within radius is drawn (and the classification columns built). */
   nearReady(viewer: THREE.Vector3, radius: number): boolean {
     const r2 = radius * radius;
     let any = false;
     for (const e of this.nodes.values()) {
       if (!e.wanted) continue;
       if (e.kind === "mesh" && e.lod > 0) continue;
+      if (this.sqrDst(viewer, e) > r2) continue;
       any = true;
-      if (e.state !== "ready" && this.sqrDst(viewer, e) <= r2) return false;
+      if (e.kind === "info" ? e.state !== "ready" : !this.drawn(e)) return false;
     }
     return any;
   }
 
+  /**
+   * Points on a `step` grid within viewDistance (XZ) of the viewer whose footprint
+   * no drawn column covers (0 = full coverage).
+   */
+  coverageHoles(viewer: THREE.Vector3, step = 8): number {
+    const s = this.field.settings;
+    const b = s.boundsSize;
+    const r = s.viewDistance;
+    const top = this.levels - 1;
+    let holes = 0;
+    for (let z = Math.ceil((viewer.z - r) / step) * step; z <= viewer.z + r; z += step) {
+      for (let x = Math.ceil((viewer.x - r) / step) * step; x <= viewer.x + r; x += step) {
+        const dx = x - viewer.x, dz = z - viewer.z;
+        if (dx * dx + dz * dz > r * r) continue;
+        const gx = Math.floor((x + b / 2) / b), gz = Math.floor((z + b / 2) / b);
+        let ok = false;
+        for (let l = top; l >= 0 && !ok; l--) ok = this.drawn(this.nodes.get(meshKey(l, gx >> l, gz >> l)));
+        if (!ok) holes++;
+      }
+    }
+    return holes;
+  }
+
+  /** Mesh column (lod, cx, cz) is on screen. */
+  drawnAt(lod: number, cx: number, cz: number): boolean {
+    return this.drawn(this.nodes.get(meshKey(lod, cx, cz)));
+  }
+
+  /** Every footprint inside the view is drawn (the loading gate). */
+  coverageComplete(viewer: THREE.Vector3): boolean {
+    return this.coverageHoles(viewer, 16) === 0;
+  }
+
+  /** Queued (not yet dispatched) jobs. */
+  get queueLength(): number {
+    return this.queue.length;
+  }
+
   dispose() {
     this.disposed = true;
-    for (const slot of this.slots) {
-      slot.alive = false;
-      slot.worker.terminate();
-    }
+    this.pool.dispose();
     for (const e of [...this.nodes.values()]) this.recycle(e);
     this.meshPool.length = 0;
     this.scene.remove(this.group);
