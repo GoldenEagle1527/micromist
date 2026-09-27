@@ -25,6 +25,7 @@
     "test:fog": "esbuild scripts/deep-march-fog-test.ts --bundle --platform=node --outfile=node_modules/.cache/dm-fog-test.cjs --log-level=warning && node node_modules/.cache/dm-fog-test.cjs",
     "test:sonar": "esbuild scripts/deep-march-sonar-test.ts --bundle --platform=node --outfile=node_modules/.cache/dm-sonar-test.cjs --log-level=warning && node node_modules/.cache/dm-sonar-test.cjs",
     "test:materials": "esbuild scripts/deep-march-materials-test.ts --bundle --platform=node --outfile=node_modules/.cache/dm-materials-test.cjs --log-level=warning && node node_modules/.cache/dm-materials-test.cjs",
+    "test:loading": "esbuild scripts/deep-march-loading-test.ts --bundle --platform=node --outfile=node_modules/.cache/dm-loading-test.cjs --log-level=warning && node node_modules/.cache/dm-loading-test.cjs",
     "test:regionweights": "esbuild scripts/deep-march-regionweights-test.ts --bundle --platform=node --outfile=node_modules/.cache/dm-regionweights-test.cjs --log-level=warning && node node_modules/.cache/dm-regionweights-test.cjs",
     "test:refine": "esbuild scripts/deep-march-refine-test.ts --bundle --platform=node --outfile=node_modules/.cache/dm-refine-test.cjs --log-level=warning && node node_modules/.cache/dm-refine-test.cjs",
     "test:regions": "esbuild scripts/deep-march-regions-test.ts --bundle --platform=node --outfile=node_modules/.cache/dm-regions-test.cjs --log-level=warning && node node_modules/.cache/dm-regions-test.cjs",
