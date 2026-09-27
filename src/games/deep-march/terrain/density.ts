@@ -27,8 +27,8 @@
  *
  * World scale (settings.worldScale = S): the public samplers evaluate everything
  * above at p / S and return iso + S·(value − iso), so the world is S× larger in
- * every direction with unchanged density gradients; octaves beyond the reference 8
- * restore the fine detail at the diver's scale. The vertical smoothing and the
+ * every direction with unchanged density gradients (octaves beyond the reference 8
+ * are supported but off: finer than the lattice). The vertical smoothing and the
  * lattice stay in world units.
  *
  * Bounds: each region's D_r has analytic per-y bounds; since raw is a convex
