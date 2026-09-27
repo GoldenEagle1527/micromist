@@ -223,6 +223,25 @@
   opacity: 1;
 }
 
+.dm-alert {
+  position: absolute;
+  left: 50%;
+  top: 40%;
+  transform: translateX(-50%);
+  max-width: min(90%, 36rem);
+  padding: 0.5rem 1rem;
+  border: 1px solid rgb(255 110 90 / 0.6);
+  background: rgb(40 8 8 / 0.8);
+  color: #ffd2c8;
+  font-size: 0.82rem;
+  text-align: center;
+  display: none;
+}
+
+.dm-alert.on {
+  display: block;
+}
+
 @media (max-width: 560px) {
   .dm-play-hint {
     display: none;

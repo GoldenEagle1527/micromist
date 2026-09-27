@@ -45,6 +45,8 @@ export type DeepMarchDict = {
   hudTerrain: string;
   terrainKinds: Record<EnvironmentKind, string>;
   lockPrompt: string;
+  gpuLost: string;
+  shaderFailed: string;
   stateSwim: string;
   stateHover: string;
   btnUp: string;
@@ -135,6 +137,8 @@ export const deepMarchEn: DeepMarchDict = {
     ridge: "Ridge / peak",
   },
   lockPrompt: "Click to look around · Esc releases the mouse",
+  gpuLost: "Graphics context lost (GPU reset) — reload the page",
+  shaderFailed: "Graphics shader failed",
   stateSwim: "SWIM",
   stateHover: "HOVER",
   btnUp: "UP",
@@ -223,6 +227,8 @@ export const deepMarchZh: DeepMarchDict = {
     ridge: "山脊/峰顶",
   },
   lockPrompt: "点击画面转动视角 · Esc 释放鼠标",
+  gpuLost: "图形上下文丢失（GPU 重置）— 请刷新页面",
+  shaderFailed: "图形着色器出错",
   stateSwim: "游泳",
   stateHover: "悬浮",
   btnUp: "上浮",

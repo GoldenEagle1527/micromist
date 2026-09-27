@@ -32,6 +32,10 @@ export type HudLabels = {
   regionNames: Record<RegionKey, string>;
   regionEdge: string;
   lockPrompt: string;
+  /** In-game alert: WebGL context lost (GPU reset). */
+  gpuLost: string;
+  /** In-game alert: a shader program failed to build during the dive. */
+  shaderFailed: string;
 };
 
 export type DeepMarchOptions = {
@@ -74,7 +78,19 @@ export type LoadingSnapshot = {
   materials: MaterialStatus;
   /** Terrain around the spawn: gate items done / total, and the gate itself. */
   terrain: { done: number; total: number; ready: boolean };
-  system: { battery: number; lamps: LightMode[]; sonar: boolean; shaders: boolean };
+  system: {
+    battery: number;
+    lamps: LightMode[];
+    sonar: boolean;
+    /** Program compile / link check finished. */
+    shaders: boolean;
+    /** A program failed to build and no fallback exists (driver log excerpt). */
+    shaderError: string | null;
+    /** The full seabed program failed; the simple material path is in use. */
+    shaderFallback: boolean;
+    /** WebGL context lost (GPU reset / out of memory). */
+    gpuLost: boolean;
+  };
   /** Everything above is ready: the dive can start (startDive). */
   loaded: boolean;
   /** The dive started (simulation running). */
@@ -134,6 +150,11 @@ export function createDeepMarch(host: HTMLElement, opts: DeepMarchOptions): Deep
   const stats = document.createElement("div");
   stats.className = "dm-stats";
   overlay.appendChild(stats);
+  // in-game alert (GPU context lost / shader failure after the loading screen)
+  const alertBox = document.createElement("div");
+  alertBox.className = "dm-alert";
+  alertBox.setAttribute("role", "alert");
+  overlay.appendChild(alertBox);
 
   // ?lodNear=<units> overrides the full-resolution ring radius (LOD comparisons / debugging)
   const lodNearParam = Number(new URLSearchParams(window.location.search).get("lodNear"));
@@ -241,18 +262,78 @@ void main() {
   const occlusion = new TerrainOcclusion(renderer, scene, new URLSearchParams(window.location.search).get("occ") !== "0");
   // System check: compile the terrain programs (base + LOD crossfade) before the dive,
   // so neither the first frame nor the first LOD swap hitches.
+  // A program that fails to link is skipped by three at draw time (nothing drawn, no
+  // exception), so the check touches every compiled program (three's link check runs on
+  // first use) and reports failures: a failed full seabed program switches the seabed to
+  // the simple material path and compiles again; anything else is surfaced on the
+  // loading screen (and in-game) instead of silently rendering nothing.
   let shadersReady = false;
-  {
-    const geo = new THREE.BufferGeometry();
-    const warm = new THREE.Group();
-    warm.add(new THREE.Mesh(geo, terrainMat), new THREE.Mesh(geo, seabed.fadeMaterial().material));
+  let shaderError: string | null = null;
+  let shaderFallback = false;
+  let gpuLost = false;
+  let recompile = false;
+  let compiling = false;
+  let destroyed = false;
+  const warmGeo = new THREE.BufferGeometry();
+  const warm = new THREE.Group();
+  warm.add(new THREE.Mesh(warmGeo, terrainMat), new THREE.Mesh(warmGeo, seabed.fadeMaterial().material));
+  renderer.debug.onShaderError = (gl, program, vs, fs) => {
+    const log = [gl.getProgramInfoLog(program), gl.getShaderInfoLog(vs), gl.getShaderInfoLog(fs)]
+      .map((s) => (s ?? "").trim())
+      .filter(Boolean)
+      .join("\n");
+    const isSeabed = (gl.getShaderSource(fs) ?? "").includes("dmSampleLayer");
+    console.error(`[deep-march] shader program failed to link${isSeabed ? ` (seabed, ${seabed.simple() ? "simple" : "full"} path)` : ""}:\n${log || "(no driver log)"}`);
+    if (isSeabed && seabed.useSimplePath()) {
+      console.warn("[deep-march] seabed: switching to the simple material path");
+      shaderFallback = true;
+      recompile = true;
+      // may run inside renderer.render (first draw): compile again outside of it
+      if (!compiling) {
+        compiling = true;
+        setTimeout(() => !destroyed && compileShaders(), 0);
+      }
+      return;
+    }
+    shaderError ??= (log.split("\n").find((l) => /error/i.test(l)) ?? log.split("\n")[0] ?? "").slice(0, 200) || "link failed";
+    updateAlert();
+  };
+  function compileShaders() {
+    compiling = true;
+    recompile = false;
+    shadersReady = false;
     renderer
       .compileAsync(warm, camera, scene)
-      .catch(() => {})
+      .catch((e: unknown) => console.error("[deep-march] shader compile failed:", e))
+      .then(() => {
+        if (destroyed) return;
+        // first use runs three's link check → onShaderError on failure
+        for (const p of renderer.info.programs ?? []) p.getUniforms();
+      })
       .finally(() => {
-        shadersReady = true;
-        geo.dispose();
+        compiling = false;
+        if (destroyed) return;
+        if (recompile) compileShaders();
+        else shadersReady = true;
       });
+  }
+  compileShaders();
+  const onContextLost = (e: Event) => {
+    e.preventDefault(); // allow three to restore
+    gpuLost = true;
+    console.error("[deep-march] WebGL context lost");
+    updateAlert();
+  };
+  const onContextRestored = () => {
+    gpuLost = false;
+    updateAlert();
+  };
+  renderer.domElement.addEventListener("webglcontextlost", onContextLost);
+  renderer.domElement.addEventListener("webglcontextrestored", onContextRestored);
+  function updateAlert() {
+    const msg = gpuLost ? labels.gpuLost : shaderError ? `${labels.shaderFailed}: ${shaderError}` : "";
+    alertBox.textContent = msg;
+    alertBox.classList.toggle("on", msg !== "");
   }
 
   const diver = new DiverController(field, (gi, gj, gk) => chunks.isRemovedPoint(gi, gj, gk));
@@ -496,7 +577,15 @@ void main() {
   let terrainProgress = { done: 0, total: 0 };
   const systemState = () => {
     const avail = lights.available();
-    return { battery: survival.resources.view("battery").ratio, lamps: avail.filter((m) => m !== "sonar"), sonar: avail.includes("sonar") && sonar.uSonarPulse.value.length > 0, shaders: shadersReady };
+    return {
+      battery: survival.resources.view("battery").ratio,
+      lamps: avail.filter((m) => m !== "sonar"),
+      sonar: avail.includes("sonar") && sonar.uSonarPulse.value.length > 0,
+      shaders: shadersReady,
+      shaderError,
+      shaderFallback,
+      gpuLost,
+    };
   };
   return {
     loading: () => {
@@ -516,7 +605,7 @@ void main() {
         materials: mat,
         terrain: { done: tp.done, total: tp.total, ready: terrainReady },
         system,
-        loaded: terrainReady && mat.ready && system.shaders,
+        loaded: terrainReady && mat.ready && system.shaders && !system.shaderError && !system.gpuLost,
         diving: ready,
       };
     },
@@ -534,6 +623,7 @@ void main() {
       labels = next;
       lockPrompt.textContent = next.lockPrompt;
       spawnDebug.setLabels(next);
+      updateAlert();
       hudTimer = 0;
     },
     addLook: (dx, dy, touch) => input.addLookPx(dx, dy, touch),
@@ -577,6 +667,11 @@ void main() {
       rig.dispose();
       survival.dispose();
       occlusion.dispose();
+      destroyed = true;
+      renderer.domElement.removeEventListener("webglcontextlost", onContextLost);
+      renderer.domElement.removeEventListener("webglcontextrestored", onContextRestored);
+      renderer.debug.onShaderError = null;
+      warmGeo.dispose();
       seabed.dispose();
       materials.dispose();
       dome.geometry.dispose();

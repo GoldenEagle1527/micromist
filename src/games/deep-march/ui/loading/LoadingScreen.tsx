@@ -41,6 +41,8 @@ export function LoadingScreen({ game, seedText, seed, labels: L, onDone }: Props
   const [view, setView] = useState<View>({ snap: null, mapRows: 0, phase: "loading" });
   const onDoneRef = useRef(onDone);
   onDoneRef.current = onDone;
+  // after a shader error: the player chose to dive anyway (the error stays listed)
+  const forceRef = useRef(false);
 
   useEffect(() => {
     let raf = 0;
@@ -92,11 +94,17 @@ export function LoadingScreen({ game, seedText, seed, labels: L, onDone }: Props
         else model.report("terrain", snap.terrain.done, Math.max(1, snap.terrain.total));
         // 5. system check
         const s = snap.system;
-        const ok = [s.battery > 0, s.lamps.length > 0, s.sonar, s.shaders].filter(Boolean).length;
+        const broken = !!s.shaderError || s.gpuLost;
+        const ok = [s.battery > 0, s.lamps.length > 0, s.sonar, s.shaders && !broken].filter(Boolean).length;
         if (ok === 4) model.complete("system");
-        else model.report("system", ok, 4);
-        // begin dive → fade
-        if (phase === "loading" && model.allDone() && snap.loaded) {
+        else {
+          model.report("system", ok, 4);
+          if (broken) model.fail("system");
+          else model.recover("system");
+        }
+        // begin dive → fade (or, after a shader error, once the player chose to dive anyway)
+        const forced = forceRef.current && !s.gpuLost && s.shaders && snap.terrain.ready && snap.materials.ready && STEPS.every((id) => id === "system" || model.status[id] === "done");
+        if (phase === "loading" && ((model.allDone() && snap.loaded) || forced)) {
           phase = "begin";
           beginAt = now;
           game?.startDive();
@@ -151,7 +159,7 @@ export function LoadingScreen({ game, seedText, seed, labels: L, onDone }: Props
           `${s.battery > 0 ? "✓" : "·"} ${L.battery(Math.round(s.battery * 100))}`,
           `${s.lamps.length ? "✓" : "·"} ${L.lamps(s.lamps.map((m) => L.lightModes[m]).join(" · "))}`,
           `${s.sonar ? "✓" : "·"} ${L.sonar}`,
-          `${s.shaders ? "✓" : "·"} ${L.shaders}`,
+          s.gpuLost ? `✗ ${L.gpuLost}` : s.shaderError ? `✗ ${L.shaderError(s.shaderError)}` : `${s.shaders ? "✓" : "·"} ${s.shaderFallback ? L.shadersSimple : L.shaders}`,
         ];
       }
     }
@@ -186,6 +194,17 @@ export function LoadingScreen({ game, seedText, seed, labels: L, onDone }: Props
                     {id === "materials" && snap?.materials.error && (
                       <button type="button" className="dm-load-retry" onClick={() => game?.retryMaterials()}>
                         {L.retry}
+                      </button>
+                    )}
+                    {id === "system" && snap?.system.shaderError && !snap.system.gpuLost && (
+                      <button
+                        type="button"
+                        className="dm-load-retry"
+                        onClick={() => {
+                          forceRef.current = true;
+                        }}
+                      >
+                        {L.diveAnyway}
                       </button>
                     )}
                   </div>
