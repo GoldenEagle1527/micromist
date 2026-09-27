@@ -1,6 +1,6 @@
 /**
  * Sparse 8³ bricks (terrain/bricks.ts) vs the dense mesher (bricks: false).
- *  1. bit-exact: positions, normals, AO, indices, removed floating points and the
+ *  1. bit-exact: positions, normals, AO, region weights, indices, removed floating points and the
  *     floater count, across seeds × random columns at every LOD level (columns
  *     with floaters included and counted);
  *  2. step-4 coarse margin: sign check of every step-4-resolvable raw sample
@@ -27,7 +27,7 @@ const same = (a: ArrayLike<number>, b: ArrayLike<number>): number => {
   return d;
 };
 const diff = (a: ColumnMeshData, b: ColumnMeshData, ra: number[], rb: number[]) =>
-  same(a.positions, b.positions) + same(a.normals, b.normals) + same(a.ao, b.ao) + same(a.indices, b.indices) + same(a.removed, b.removed) + same(ra, rb) + (a.stats.floaters !== b.stats.floaters ? 1 : 0);
+  same(a.positions, b.positions) + same(a.normals, b.normals) + same(a.ao, b.ao) + same(a.region, b.region) + same(a.indices, b.indices) + same(a.removed, b.removed) + same(ra, rb) + (a.stats.floaters !== b.stats.floaters ? 1 : 0);
 
 // 1 + 3
 const SEEDS = [1, 7, 42, 99, 2024];

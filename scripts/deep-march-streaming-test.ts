@@ -44,7 +44,7 @@ class SimPool implements JobPool {
       out.push({
         type: r.type, id: r.id,
         positions: new Float32Array([x0, 0, z0, x0 + size, 0, z0, x0, 0, z0 + size]),
-        normals: new Float32Array([0, 1, 0, 0, 1, 0, 0, 1, 0]), ao: new Float32Array(3),
+        normals: new Float32Array([0, 1, 0, 0, 1, 0, 0, 1, 0]), ao: new Float32Array(3), region: new Uint8Array(24),
         indices: r.type === "info" ? new Uint16Array(0) : new Uint16Array([0, 1, 2]),
         bounds: new Float32Array([x0, -1, z0, x0 + size, 1, z0 + size]), removed: new Int32Array(0),
         stats: { floaters: 0, floaterPoints: 0, ambiguous: 0, searched: 0, noiseSamples: 0, rawPoints: 0, coarseSamples: 0 },

@@ -1,7 +1,7 @@
 /**
  * Coarse pre-pass ("refine", terrain/refine.ts) vs full evaluation.
  * Several seeds × columns at every LOD level (levels without the coarse pass must be unchanged):
- *  1. mesh + floater removal with refine on == refine off (positions, normals, AO, indices, removed points), bit-exact;
+ *  1. mesh + floater removal with refine on == refine off (positions, normals, AO, region weights, indices, removed points), bit-exact;
  *  2. sign check of every coarse-resolved raw sample against the true sampleRaw (mismatches, and the smallest
  *     margin that would still give 0 misses — REFINE_MARGIN should be ≥ 2× it);
  *  3. fraction of raw samples evaluated and time per column, on vs off.
@@ -24,7 +24,7 @@ const same = (a: ArrayLike<number>, b: ArrayLike<number>): number => {
   return d;
 };
 const meshDiff = (a: ColumnMeshData, b: ColumnMeshData, ra: number[], rb: number[]) =>
-  same(a.positions, b.positions) + same(a.normals, b.normals) + same(a.ao, b.ao) + same(a.indices, b.indices) + same(ra, rb);
+  same(a.positions, b.positions) + same(a.normals, b.normals) + same(a.ao, b.ao) + same(a.region, b.region) + same(a.indices, b.indices) + same(ra, rb);
 
 /** Sign check of the coarse pass on one column (replicates the mesher's raw grid). */
 function signCheck(field: DensityField, cx: number, cz: number, lod: number) {

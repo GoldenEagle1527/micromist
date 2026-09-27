@@ -38,6 +38,7 @@ import { CLS_COARSE_SOLID, CLS_COARSE_WATER, coarseResolve, refineMargin } from 
 import { REFINE_MARGIN4, assemble, brickGrid, cellMask, floodKeep, resolveCoarse, resolveNeed, scratchF32, scratchI32, scratchU8, type NeedResult } from "./bricks";
 import { buildColumnTerrainInfo, createLineSampler } from "./terrainInfoGen";
 import type { ChunkTerrainInfo } from "./terrainInfo";
+import { RegionWeightSampler, packRegionWeights, regionGridSpacing } from "./regionWeights";
 
 export type ColumnStats = {
   /** Components removed as floating rock. */
@@ -59,6 +60,8 @@ export type ColumnMeshData = {
   normals: Float32Array;
   /** Per-vertex ambient occlusion (1 = open water, 0 = fully enclosed). */
   ao: Float32Array;
+  /** Per-vertex macro-region weights, 8 bytes per vertex (regionWeights.ts). */
+  region: Uint8Array;
   indices: Uint16Array | Uint32Array;
   /** Tight AABB of `positions` (incl. skirts): minX, minY, minZ, maxX, maxY, maxZ (empty mesh: zeros). */
   bounds: Float32Array;
@@ -918,6 +921,9 @@ export function generateColumnMesh(
     ao[v] = 1 - occ;
   }
   for (let q = surfaceVerts; q < vcount; q++) ao[q] = ao[skirtSrc[q - surfaceVerts]];
+  // macro-region weights for the material system: global grid → identical at every LOD
+  // (classification-only info jobs don't render the mesh)
+  const region = withInfo ? new Uint8Array(0) : packRegionWeights(positions, surfaceVerts, vcount, new RegionWeightSampler(field.regions, regionGridSpacing(field.settings.worldScale)), skirtSrc);
   let info: ChunkTerrainInfo | null = null;
   let infoMs = 0;
   if (withInfo) {
@@ -940,5 +946,5 @@ export function generateColumnMesh(
       }
     }
   }
-  return { positions, normals, ao, indices, bounds, removed: Int32Array.from(removedList), stats, info, infoMs };
+  return { positions, normals, ao, region, indices, bounds, removed: Int32Array.from(removedList), stats, info, infoMs };
 }

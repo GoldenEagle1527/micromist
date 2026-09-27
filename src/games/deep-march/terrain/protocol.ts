@@ -18,6 +18,8 @@ export type MesherResponse = {
   positions: Float32Array;
   normals: Float32Array;
   ao: Float32Array;
+  /** Macro-region weights, 8 bytes per vertex (regionWeights.ts). */
+  region: Uint8Array;
   indices: Uint16Array | Uint32Array;
   /** Tight mesh AABB (min xyz, max xyz) — frustum culling. */
   bounds: Float32Array;
