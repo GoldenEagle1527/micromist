@@ -9,6 +9,8 @@
  *   overhangs → dark cave rock), height and world-space noise; macro colour
  *   variation + a second, rotated sampling scale on rock to hide tiling.
  * - Per-vertex AO attribute (from the mesher), animated caustics from above.
+ * - SONAR mode (sonar.ts): expanding pulses light the terrain as cyan contour /
+ *   scan lines (uSonar cross-fades it in; turbidity doesn't apply).
  * - Turbidity (fog.ts): lit surfaces fade into a dark blue-green murk within tens
  *   of metres, with lamp backscatter in the cone.
  * - Detail normal (detailNormal.ts): world-space ridged creases at 2 scales stand in
@@ -25,6 +27,7 @@ import * as THREE from "three";
 import { BEAM_DECLS, type BeamUniforms } from "./highBeam";
 import { PL_DECLS, type ParticleLightUniforms } from "./particleLight";
 import { FOG_GLSL, type FogUniforms } from "./fog";
+import { SONAR_DECLS, type SonarUniforms } from "./sonar";
 
 import { loadSeabedTextures } from "./seabedTextures";
 import { DETAIL_GLSL } from "./detailNormal";
@@ -67,6 +70,8 @@ export type SeabedOptions = {
   anisotropy: number;
   /** Turbidity + lamp backscatter uniforms (fog.ts), shared with the background dome. */
   fog: FogUniforms;
+  /** SONAR render-mode uniforms (sonar.ts). */
+  sonar: SonarUniforms;
   /** High-beam (fog-light) uniforms, see highBeam.ts. */
   beam: BeamUniforms;
   /** Fluorescent-plankton point lights, see particleLight.ts. */
@@ -81,7 +86,7 @@ export type LodFadeMaterial = { material: THREE.Material; fade: THREE.Vector2 };
 
 export type SeabedMaterial = {
   material: THREE.MeshStandardMaterial;
-  /** Live per-unit absorption (scaled by night vision). */
+  /** Live per-unit absorption (scaled by the lamp rig). */
   absorb: THREE.Vector3;
   /** Scales surface-borne light that isn't from a light object (caustics); 0 = total darkness. */
   envLight: { value: number };
@@ -108,6 +113,7 @@ export function createSeabedMaterial(opts: SeabedOptions): SeabedMaterial {
     uWS: { value: opts.worldScale },
     ...opts.water,
     ...opts.fog,
+    ...opts.sonar,
     ...opts.beam,
     ...opts.particleLights,
     uEnvLight: { value: 1 },
@@ -125,7 +131,7 @@ export function createSeabedMaterial(opts: SeabedOptions): SeabedMaterial {
         "#include <project_vertex>\n  vWPos = (modelMatrix * vec4(transformed, 1.0)).xyz;\n  vWNrm = normalize(mat3(modelMatrix) * objectNormal);\n  vAO = ao;",
       );
     shader.fragmentShader = shader.fragmentShader
-      .replace("#include <common>", "#include <common>\n" + DECLS + DETAIL_GLSL + WATER_GLSL + FOG_GLSL + BEAM_DECLS + PL_DECLS)
+      .replace("#include <common>", "#include <common>\n" + DECLS + DETAIL_GLSL + WATER_GLSL + FOG_GLSL + SONAR_DECLS + BEAM_DECLS + PL_DECLS)
       .replace("#include <map_fragment>", MAP_FRAGMENT)
       .replace("#include <roughnessmap_fragment>", "float roughnessFactor = clamp(mix(0.55, 1.0, dmRough), 0.3, 1.0);")
       .replace(
@@ -154,7 +160,7 @@ export function createSeabedMaterial(opts: SeabedOptions): SeabedMaterial {
   const make = (fade: { value: THREE.Vector2 } | null) => {
     const m = new THREE.MeshStandardMaterial({ roughness: 1, metalness: 0 });
     m.fog = false; // own water model (see header)
-    m.defines = { ...(opts.lowSpec ? { DM_LOW_SPEC: "" } : {}), ...(detail ? { DM_DETAIL: "" } : {}), ...(fade ? { DM_LOD_FADE: "" } : {}) };
+    m.defines = { ...(opts.lowSpec ? { DM_LOW_SPEC: "" } : {}), ...(detail ? { DM_DETAIL: "" } : {}), ...(fade ? { DM_LOD_FADE: "" } : {}), DM_SONAR_N: String(opts.sonar.uSonarPulse.value.length) };
     m.onBeforeCompile = (shader) => patch(shader, fade ? { uLodFade: fade } : {});
     // Fade variants share one program (their own uLodFade is uploaded when the
     // renderer switches material); the base material has no discard at all, so

@@ -13,7 +13,7 @@ import { WATER_GLSL, createSeabedMaterial, createWaterUniforms } from "./seabedM
 import { DiverController, type DiverState } from "./diver";
 import { LampRig } from "./lampRig";
 import { FOG_GLSL, FOG_TUNING, createFogUniforms, parseFogParam } from "./fog";
-import { NightVision } from "./nightVision";
+import { SONAR_TUNING, SonarPulses, createSonarUniforms } from "./sonar";
 import { FramePacer } from "./framePacer";
 import { TerrainOcclusion } from "./occlusion";
 import { createParticleLightUniforms } from "./particleLight";
@@ -181,7 +181,9 @@ void main() {
   const survival = createSurvival();
   const lights = survival.lights;
   const rig = new LampRig(camera, fogVis);
-  const nightVision = new NightVision(renderer, lowSpec ? 0 : 4);
+  // SONAR mode: pulse scheduler + seabed-shader uniforms (sonar.ts)
+  const sonarPulses = new SonarPulses(lowSpec ? SONAR_TUNING.maxPulsesLow : SONAR_TUNING.maxPulses);
+  const sonar = createSonarUniforms(sonarPulses);
   const particleLights = createParticleLightUniforms();
   const camForward = new THREE.Vector3();
 
@@ -201,6 +203,7 @@ void main() {
     lowSpec,
     water,
     fog,
+    sonar,
     worldScale: terrain.worldScale,
     beam: rig.beam,
     particleLights,
@@ -315,10 +318,10 @@ void main() {
   const snow = new MarineSnow(900, opts.seed);
   scene.add(snow.points);
 
-  // Optional start mode for screenshots: ?light=beam|high|night|off.
+  // Optional start mode for screenshots: ?light=beam|high|sonar|off.
   const lightParam = new URLSearchParams(window.location.search).get("light");
   if (lightParam === "off") lights.setOn(false);
-  else if (lightParam === "beam" || lightParam === "high" || lightParam === "night") lights.select(lightParam);
+  else if (lightParam === "beam" || lightParam === "high" || lightParam === "sonar") lights.select(lightParam);
   const toggleLamp = () => lights.toggle();
   const cycleLight = () => lights.cycle();
   const input = new InputController(renderer.domElement, {
@@ -342,8 +345,6 @@ void main() {
     const w = Math.max(1, host.clientWidth);
     const h = Math.max(1, host.clientHeight);
     renderer.setSize(w, h, false);
-    const pr = renderer.getPixelRatio();
-    nightVision.setSize(Math.floor(w * pr), Math.floor(h * pr));
     camera.aspect = w / h;
     camera.updateProjectionMatrix();
   };
@@ -391,7 +392,7 @@ void main() {
     seabed.update(now / 1000);
 
     // Lighting: depth-driven base (deeper = darker) × light mode (lights off = black
-    // water and no ambient; night vision brings its own fill).
+    // water and no ambient; sonar draws on a dark background).
     const W = terrain.worldScale;
     const deep = THREE.MathUtils.smoothstep(-camera.position.y, 8 * W, 26 * W);
     const env = rig.env;
@@ -416,8 +417,13 @@ void main() {
     fog.uGlowCone.value.copy(env.glowCone);
     fog.uGlowDir.value.copy(rig.glowDir);
     snow.setFog(env.fogK);
+    // SONAR: pulses from the diver while the mode is on; plankton dimmed underneath
+    const ls = lights.state();
+    sonarPulses.update(now / 1000, ls.on && ls.mode === "sonar", camera.position);
+    sonar.uSonar.value = rig.sonar;
+    snow.setDim(1 - 0.85 * rig.sonar);
 
-    nightVision.render(scene, camera, rig.night, now / 1000);
+    renderer.render(scene, camera);
     if (pacer.frameDone(performance.now())) {
       renderer.setPixelRatio(pacer.ratio);
       resize();
@@ -505,7 +511,6 @@ void main() {
       chunks.dispose();
       snow.dispose();
       rig.dispose();
-      nightVision.dispose();
       survival.dispose();
       occlusion.dispose();
       seabed.dispose();

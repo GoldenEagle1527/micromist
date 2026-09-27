@@ -18,19 +18,18 @@ export function IconLamp() {
     </>
   );
 }
-/** Light-mode glyphs: narrow beam, wide fog-light fan, goggles. */
+/** Light-mode glyphs: narrow beam, wide fog-light fan, sonar pings. */
 export function IconBeam() {
   return <path d="M -10 -3 L -10 3 L -5 3 L -5 -3 Z M -5 -1 L 10 -4 M -5 1 L 10 4 M -5 0 L 10 0" />;
 }
 export function IconHighBeam() {
   return <path d="M -10 -3 L -10 3 L -6 3 L -6 -3 Z M -6 -2 L 10 -9 M -6 -0.7 L 10 -3 M -6 0.7 L 10 3 M -6 2 L 10 9" />;
 }
-export function IconNightVision() {
+export function IconSonar() {
   return (
     <>
-      <circle cx={-5} r={4.5} />
-      <circle cx={5} r={4.5} />
-      <path d="M -0.5 0 L 0.5 0 M -10 -2 L -11 -4 M 10 -2 L 11 -4" />
+      <circle cx={-8} r={1.6} />
+      <path d="M -4 -4 A 5.7 5.7 0 0 1 -4 4 M 0 -7.5 A 10.6 10.6 0 0 1 0 7.5 M 3 -9 A 12.7 12.7 0 0 1 3 9" />
     </>
   );
 }

@@ -14,10 +14,10 @@ export const SURVIVAL_TUNING = {
     /** HUD warning threshold (fraction of capacity). */
     lowFraction: 0.2,
   },
-  /** Drain per light mode (charge / s). Order: beam < high beam < night vision. */
+  /** Drain per light mode (charge / s). Order: beam < high beam < sonar. */
   lights: {
     beam: 0.25, // ~6.7 min on a full battery
     high: 0.6, // ~2.8 min
-    night: 1.2, // ~1.4 min
+    sonar: 1.2, // ~1.4 min
   },
 } as const;

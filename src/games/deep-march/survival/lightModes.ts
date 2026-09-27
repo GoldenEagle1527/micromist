@@ -7,11 +7,11 @@ import { SURVIVAL_TUNING } from "./config";
 import type { Equipment, ItemTag } from "./items";
 import type { ResourceSystem } from "./resources";
 
-export type LightMode = "beam" | "high" | "night";
-export const LIGHT_MODES: readonly LightMode[] = ["beam", "high", "night"];
+export type LightMode = "beam" | "high" | "sonar";
+export const LIGHT_MODES: readonly LightMode[] = ["beam", "high", "sonar"];
 
 /** Gear each mode needs. */
-const REQUIRES: Record<LightMode, ItemTag> = { beam: "headLamp", high: "headLamp", night: "nightVision" };
+const REQUIRES: Record<LightMode, ItemTag> = { beam: "headLamp", high: "headLamp", sonar: "sonar" };
 
 export type LightState = {
   mode: LightMode;

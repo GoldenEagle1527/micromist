@@ -1,13 +1,13 @@
 /**
  * Item catalogue, capacity-based storage and equipment slots.
- * Deliberately small: enough to model gear that gates abilities (night-vision
- * goggles → night-vision light mode) and to grow into loot / crafting later.
+ * Deliberately small: enough to model gear that gates abilities (sonar unit →
+ * sonar light mode) and to grow into loot / crafting later.
  */
 
 export type EquipSlot = "head" | "face" | "body" | "back";
 
 /** Capability tags that gameplay systems query instead of item ids. */
-export type ItemTag = "nightVision" | "headLamp" | "battery";
+export type ItemTag = "sonar" | "headLamp" | "battery";
 
 export type ItemDef = {
   id: string;
@@ -21,7 +21,7 @@ export type ItemDef = {
 
 export const ITEMS = {
   "head-lamp": { id: "head-lamp", size: 1, stack: 1, slot: "head", tags: ["headLamp"] },
-  "nv-goggles": { id: "nv-goggles", size: 2, stack: 1, slot: "face", tags: ["nightVision"] },
+  "sonar-unit": { id: "sonar-unit", size: 2, stack: 1, slot: "back", tags: ["sonar"] },
   "battery-cell": { id: "battery-cell", size: 1, stack: 8, tags: ["battery"] },
 } as const satisfies Record<string, ItemDef>;
 
