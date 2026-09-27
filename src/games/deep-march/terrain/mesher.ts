@@ -195,14 +195,9 @@ export function lodSpacing(field: DensityField, lod: number): number {
   return (s.boundsSize * (1 << lod)) / (lodPoints(field, lod) - 1);
 }
 
-/**
- * Lattice points per column side at a LOD level. Far rings (≥ farLodFrom) may use a
- * coarser lattice (settings.farLodCells) over the same footprint; their points are then
- * not a subset of level 0 (skirts cover the transitions anyway).
- */
-export function lodPoints(field: DensityField, lod: number): number {
-  const s = field.settings;
-  return lod > 0 && s.farLodCells > 0 && lod >= s.farLodFrom ? s.farLodCells + 1 : s.numPointsPerAxis;
+/** Lattice points per column side at a LOD level: the same at every level (points of level L ⊂ level L − 1). */
+export function lodPoints(field: DensityField, _lod: number): number {
+  return field.settings.numPointsPerAxis;
 }
 
 export function lodCoord(g: number, field: DensityField, lod: number): number {

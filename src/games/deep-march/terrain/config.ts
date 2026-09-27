@@ -25,13 +25,6 @@ export type TerrainSettings = {
    */
   lodLevels: number;
   lodNear: number;
-  /**
-   * Far rings (level ≥ farLodFrom) use this many cells per column side instead of
-   * numPointsPerAxis − 1 (same footprint, coarser lattice): they are hundreds of metres
-   * away in fog, so fewer triangles / samples. 0 = off.
-   */
-  farLodCells: number;
-  farLodFrom: number;
   /** Terrain classification (base-scale columns) is built within this distance of the viewer. */
   infoRadius: number;
 
@@ -117,19 +110,20 @@ export type TerrainSettings = {
 export const TERRAIN: TerrainSettings = {
   isoLevel: 8,
   worldScale: 4,
-  boundsSize: 10,
-  numPointsPerAxis: 30,
+  // Lattice from the feature scale of the ×4 world: 1.0 u L0 spacing (32 u columns,
+  // 33² points), levels at 1 / 2 / 4 / 8 u. Geometry carries features of ~2 u and up;
+  // finer detail belongs to the material. (Was 0.345 u / 10 u columns: 4× denser
+  // relative to the features than the base design, ~3.6× the work to fill the view.)
+  boundsSize: 32,
+  numPointsPerAxis: 33,
   offset: [-0.64, 0, 0],
   viewDistance: 420,
-  lodLevels: 5,
-  lodNear: 20,
-  farLodCells: 22, // 29 → 22 cells: L3 / L4 spacing × 1.32, ≈ 0.58× triangles
-  farLodFrom: 3,
+  lodLevels: 4,
+  lodNear: 32,
   infoRadius: 22,
 
-  // The reference 8 octaves only: the two extra octaves of the scaled world (0.58 / 0.29 u
-  // wavelengths) were finer than the 0.345 u lattice — aliased, ~15% of every sample.
-  octaves: 8,
+  // 7 octaves (finest wavelength 2.3 u ≈ 2.3 cells): finer octaves are below the lattice.
+  octaves: 7,
   lacunarity: 2,
   persistence: 0.54,
   noiseScale: 2.71,
@@ -154,7 +148,9 @@ export const TERRAIN: TerrainSettings = {
 
   ridgeSoftness: 0.15,
   smoothCells: 1,
-  smoothTaps: 5,
+  // No vertical smoothing in the world field: every LOD level and collision see the
+  // same raw field (the 1 u lattice cannot carry paper-thin shelves anyway).
+  smoothTaps: 1,
 
   fineOctaveFrom: 5, // octaves 5+ (≈ 4.6 m wavelength and finer)
   fineOctaveGain: 0.45, // shallower small cells: no pock-marked "acne" on big faces / floors
@@ -177,19 +173,29 @@ export function isLowSpecDevice(): boolean {
   return coarse || cores <= 4;
 }
 
-/** Lighter preset: coarser voxels (≈0.6× triangles), fewer LOD rings, a shorter view distance. */
+/**
+ * Phone preset: the same lattice and field (same look up close), a shorter view
+ * distance — the 8 u level is then never needed — and a smaller classification radius.
+ */
 export function terrainForDevice(lowSpec = isLowSpecDevice()): TerrainSettings {
-  return lowSpec ? { ...TERRAIN, numPointsPerAxis: 22, viewDistance: 230, lodLevels: 4, lodNear: 18, infoRadius: 14, farLodCells: 16 } : TERRAIN;
+  return lowSpec ? { ...TERRAIN, viewDistance: 230, infoRadius: 14 } : TERRAIN;
 }
 
 /**
- * Base-scale settings (worldScale 1, same octaves): the terrain classification
- * runs on this field — the world field at p / S (the octaves are evaluated at
- * p / S in both) — so its class thresholds and scan reach keep their meaning at
- * every world scale.
+ * Terrain classification lattice (base units): fixed, independent of the world
+ * mesh lattice — base 10 u columns with 30 points (1.38 u world cells) and the
+ * vertical [1 4 6 4 1] smoothing the classification thresholds were tuned on.
+ */
+export const INFO_GRID = { boundsSize: 10, numPointsPerAxis: 30, smoothCells: 1, smoothTaps: 5 } as const;
+
+/**
+ * Base-scale settings (worldScale 1, INFO_GRID lattice): the terrain
+ * classification runs on this field — the world field at p / S (same octaves and
+ * terms, evaluated at p / S in both) — so its class thresholds and scan reach keep
+ * their meaning at every world scale and every world mesh lattice.
  */
 export function baseTerrain(s: TerrainSettings): TerrainSettings {
-  return { ...s, worldScale: 1, octaves: s.octaves, floaterMargin: 12 };
+  return { ...s, ...INFO_GRID, worldScale: 1, octaves: s.octaves, floaterMargin: 12 };
 }
 
 /** Underwater look. Fog colour == camera background from the reference scene (sRGB). */

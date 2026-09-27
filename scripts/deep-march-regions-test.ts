@@ -10,7 +10,7 @@
  */
 import { deflateSync } from "node:zlib";
 import { writeFileSync } from "node:fs";
-import { TERRAIN as DESKTOP, baseTerrain, terrainForDevice } from "../src/games/deep-march/terrain/config";
+import { TERRAIN as DESKTOP, INFO_GRID, baseTerrain, terrainForDevice } from "../src/games/deep-march/terrain/config";
 import { ALL_REGIONS_MASK, createDensityField, type DensityField } from "../src/games/deep-march/terrain/density";
 import { columnRegionMask, columnRowPlan, columnRows, generateColumnMesh, latticeCoord, latticeSpacing, lodCoord, type ColumnMeshData } from "../src/games/deep-march/terrain/mesher";
 import { REGION_COLORS, REGION_COUNT, REGION_KEYS, createRegionSample, MACRO } from "../src/games/deep-march/terrain/regions";
@@ -34,6 +34,8 @@ const pct = (a: number, b: number) => `${b ? ((a / b) * 100).toFixed(1) : "–"}
 const rs = createRegionSample();
 const n = TERRAIN.numPointsPerAxis;
 const colOf = (x: number) => Math.round(x / TERRAIN.boundsSize);
+/** Base-scale classification column of a base-unit coordinate (own fixed lattice, config.INFO_GRID). */
+const infoColOf = (x: number) => Math.round(x / INFO_GRID.boundsSize);
 
 // per-region accumulators over all seeds
 const acc = REGION_KEYS.map(() => ({
@@ -177,7 +179,7 @@ for (const seed of SEEDS) {
       const lx = Math.floor((p[0] + TERRAIN.boundsSize / 2) / size), lz = Math.floor((p[1] + TERRAIN.boundsSize / 2) / size);
       const la = generateColumnMesh(field, lx, lz, columnRows(field, L), TERRAIN.floaterMargin << L, undefined, false, undefined, L);
       const lb = generateColumnMesh(f2, lx, lz, columnRows(f2, L), TERRAIN.floaterMargin << L, undefined, false, undefined, L);
-      const bcx = colOf(p[0] / WS), bcz = colOf(p[1] / WS);
+      const bcx = infoColOf(p[0] / WS), bcz = infoColOf(p[1] / WS);
       const ia = generateColumnMesh(base, bcx, bcz, baseRows, base.settings.floaterMargin).info!;
       const ib = generateColumnMesh(b2, bcx, bcz, columnRows(b2), b2.settings.floaterMargin).info!;
       colN++;
@@ -218,7 +220,7 @@ for (const seed of SEEDS) {
       }
     }
     // fine classes: base-scale classification columns (5×5) around the core, as in the game
-    const bbx = colOf(p[0] / WS), bbz = colOf(p[1] / WS);
+    const bbx = infoColOf(p[0] / WS), bbz = infoColOf(p[1] / WS);
     for (let dz = -2; dz <= 2; dz++) for (let dx = -2; dx <= 2; dx++) {
       const t0 = performance.now();
       const m = generateColumnMesh(base, bbx + dx, bbz + dz, baseRows, base.settings.floaterMargin);

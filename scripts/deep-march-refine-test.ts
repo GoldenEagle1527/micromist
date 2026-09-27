@@ -1,6 +1,6 @@
 /**
  * Coarse pre-pass ("refine", terrain/refine.ts) vs full evaluation.
- * Several seeds × columns at LOD 0–4 (the coarse pass runs at L0–L2; L3+ must be unchanged):
+ * Several seeds × columns at every LOD level (levels without the coarse pass must be unchanged):
  *  1. mesh + floater removal with refine on == refine off (positions, normals, AO, indices, removed points), bit-exact;
  *  2. sign check of every coarse-resolved raw sample against the true sampleRaw (mismatches, and the smallest
  *     margin that would still give 0 misses — REFINE_MARGIN should be ≥ 2× it);
@@ -79,8 +79,7 @@ const LODS = [
   { lod: 0, cols: 4 },
   { lod: 1, cols: 4 },
   { lod: 2, cols: 4 },
-  { lod: 3, cols: 2 },
-  { lod: 4, cols: 2 },
+  { lod: 3, cols: 3 },
 ];
 const SEEDS = [1, 7, 42];
 const agg = LODS.map(() => ({ diff: 0, resolved: 0, miss: 0, needMargin: 0, onSamp: 0, offSamp: 0, rawPts: 0, onMs: 0, offMs: 0, cols: 0 }));

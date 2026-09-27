@@ -30,7 +30,7 @@
  * config.baseTerrain) within infoRadius of the viewer.
  */
 import * as THREE from "three";
-import { baseTerrain } from "./config";
+import { INFO_GRID, baseTerrain } from "./config";
 import { createDensityField, type DensityField } from "./density";
 import { columnRows, generateColumnMesh, latticeSpacing, lodCoord, type ColumnRows } from "./mesher";
 import type { MesherRequest, MesherResponse } from "./protocol";
@@ -158,7 +158,7 @@ export class ChunkManager {
     this.lodTris = new Array(this.levels).fill(0);
     this.lodMsTotal = new Array(this.levels).fill(0);
     this.lodMsCount = new Array(this.levels).fill(0);
-    this.terrain = new TerrainInfoStore({ seed, boundsSize: s.boundsSize, numPointsPerAxis: s.numPointsPerAxis, scale: s.worldScale });
+    this.terrain = new TerrainInfoStore({ seed, boundsSize: INFO_GRID.boundsSize, numPointsPerAxis: INFO_GRID.numPointsPerAxis, scale: s.worldScale });
     this.yMin = lodCoord(this.rows.gjMin, field, 0);
     this.yMax = lodCoord(this.rows.gjMax, field, 0);
     scene.add(this.group);
@@ -219,15 +219,16 @@ export class ChunkManager {
   /** Width of a node's footprint (units). */
   private size(n: { kind: "mesh" | "info"; lod: number }): number {
     const b = this.field.settings.boundsSize;
-    return n.kind === "info" ? b * this.field.settings.worldScale : b * (1 << n.lod);
+    return n.kind === "info" ? INFO_GRID.boundsSize * this.field.settings.worldScale : b * (1 << n.lod);
   }
 
   /** Footprint of a node: [x0, z0] (min corner). */
   private origin(kind: "mesh" | "info", lod: number, cx: number, cz: number): [number, number] {
     const b = this.field.settings.boundsSize;
-    const size = kind === "info" ? b * this.field.settings.worldScale : b * (1 << lod);
+    const bi = INFO_GRID.boundsSize * this.field.settings.worldScale;
+    const size = kind === "info" ? bi : b * (1 << lod);
     // lattice origin −b/2 (base columns: −b/2 in base units = −b·S/2 in world)
-    const o = kind === "info" ? (-b * this.field.settings.worldScale) / 2 : -b / 2;
+    const o = kind === "info" ? -bi / 2 : -b / 2;
     return [o + cx * size, o + cz * size];
   }
 
@@ -322,7 +323,7 @@ export class ChunkManager {
     const tz0 = Math.floor((viewer.z + h - s.viewDistance) / topSize), tz1 = Math.floor((viewer.z + h + s.viewDistance) / topSize);
     for (let cz = tz0; cz <= tz1; cz++) for (let cx = tx0; cx <= tx1; cx++) visit(top, cx, cz, false);
     // base-scale classification columns
-    const bs = s.boundsSize * s.worldScale;
+    const bs = INFO_GRID.boundsSize * s.worldScale;
     const r = s.infoRadius;
     const ix0 = Math.floor((viewer.x + bs / 2 - r) / bs), ix1 = Math.floor((viewer.x + bs / 2 + r) / bs);
     const iz0 = Math.floor((viewer.z + bs / 2 - r) / bs), iz1 = Math.floor((viewer.z + bs / 2 + r) / bs);
@@ -513,7 +514,7 @@ export class ChunkManager {
     let m: ReturnType<typeof generateColumnMesh>;
     if (e.kind === "info") {
       const s = this.field.settings;
-      if (!this.base) this.base = s.worldScale === 1 ? this.field : createDensityField(this.field.seed, baseTerrain(s));
+      if (!this.base) this.base = createDensityField(this.field.seed, baseTerrain(s));
       const full = generateColumnMesh(this.base, e.cx, e.cz, columnRows(this.base), this.base.settings.floaterMargin, undefined, true);
       m = { ...full, positions: new Float32Array(0), normals: new Float32Array(0), ao: new Float32Array(0), indices: new Uint16Array(0), removed: new Int32Array(0) };
     } else {

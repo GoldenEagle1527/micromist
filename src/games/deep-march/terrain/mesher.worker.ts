@@ -21,7 +21,7 @@ ctx.onmessage = (ev) => {
   const msg = ev.data;
   if (msg.type === "init") {
     field = createDensityField(msg.seed, msg.settings);
-    base = msg.settings.worldScale === 1 ? field : createDensityField(msg.seed, baseTerrain(msg.settings));
+    base = createDensityField(msg.seed, baseTerrain(msg.settings));
     baseRows = columnRows(base);
     rowsByLod.length = 0;
     return;

@@ -24,12 +24,12 @@ export const REFINE_STEP = 2;
 
 /**
  * Required |value − iso| of every coarse corner (density units, world field)
- * per LOD level. The refine test (3 seeds × 12 columns per level) needs 0.29 /
- * 0.58 / 2.38 for 0 sign misses at L0 / L1 / L2; 8 is ≥ 2× that (and 2× the 4
- * measured in the earlier offline study). L3+ are off: their coarse cells span
- * 11+ u, the needed margin jumps to ~24–29 and the saving is < 10%.
+ * per LOD level. On the 1 u lattice (coarse cells 2 u at L0) the refine test
+ * (3 seeds × 12 columns) needs 1.79 for 0 sign misses at L0; 8 is > 4× that.
+ * L1+ are off: their coarse cells span 4+ u, the needed margin jumps to 14–31
+ * and the saving is ≤ 10%.
  */
-export const REFINE_MARGIN: readonly number[] = [8, 8, 8];
+export const REFINE_MARGIN: readonly number[] = [8];
 
 /** Margin for LOD `lod`, or null when the coarse pass is off at that level. */
 export function refineMargin(lod: number): number | null {
