@@ -9,6 +9,8 @@
  *   overhangs → dark cave rock), height and world-space noise; macro colour
  *   variation + a second, rotated sampling scale on rock to hide tiling.
  * - Per-vertex AO attribute (from the mesher), animated caustics from above.
+ * - Turbidity (fog.ts): lit surfaces fade into a dark blue-green murk within tens
+ *   of metres, with lamp backscatter in the cone.
  * - Detail normal (detailNormal.ts): world-space ridged creases at 2 scales stand in
  *   for sub-metre relief, plus a little facet normal on rock (?detail=0 = off).
  * - Water for a vast scale (replaces three's fog): blue-green absorption over the
@@ -20,12 +22,13 @@
  *   (world.ts) draws the same water colour.
  */
 import * as THREE from "three";
-import { BEAM_DECLS, BEAM_LIGHT, BEAM_OPAQUE, type BeamUniforms } from "./highBeam";
-import { PL_DECLS, PL_LIGHT, type ParticleLightUniforms } from "./particleLight";
+import { BEAM_DECLS, type BeamUniforms } from "./highBeam";
+import { PL_DECLS, type ParticleLightUniforms } from "./particleLight";
+import { FOG_GLSL, type FogUniforms } from "./fog";
 
 import { loadSeabedTextures } from "./seabedTextures";
 import { DETAIL_GLSL } from "./detailNormal";
-import { DECLS, MAP_FRAGMENT, WATER_GLSL } from "./seabedShader";
+import { DECLS, DITHER_FRAGMENT, EMISSIVE_FRAGMENT, LIGHTS_END_FRAGMENT, MAP_FRAGMENT, OPAQUE_FRAGMENT, WATER_GLSL } from "./seabedShader";
 
 export { WATER_GLSL };
 
@@ -62,6 +65,8 @@ export type SeabedOptions = {
   /** World scale (terrain shapes are this much larger than the base design). */
   worldScale: number;
   anisotropy: number;
+  /** Turbidity + lamp backscatter uniforms (fog.ts), shared with the background dome. */
+  fog: FogUniforms;
   /** High-beam (fog-light) uniforms, see highBeam.ts. */
   beam: BeamUniforms;
   /** Fluorescent-plankton point lights, see particleLight.ts. */
@@ -102,6 +107,7 @@ export function createSeabedMaterial(opts: SeabedOptions): SeabedMaterial {
     uCeilingTint: { value: new THREE.Color(0.55, 0.58, 0.64) },
     uWS: { value: opts.worldScale },
     ...opts.water,
+    ...opts.fog,
     ...opts.beam,
     ...opts.particleLights,
     uEnvLight: { value: 1 },
@@ -119,7 +125,7 @@ export function createSeabedMaterial(opts: SeabedOptions): SeabedMaterial {
         "#include <project_vertex>\n  vWPos = (modelMatrix * vec4(transformed, 1.0)).xyz;\n  vWNrm = normalize(mat3(modelMatrix) * objectNormal);\n  vAO = ao;",
       );
     shader.fragmentShader = shader.fragmentShader
-      .replace("#include <common>", "#include <common>\n" + DECLS + DETAIL_GLSL + WATER_GLSL + BEAM_DECLS + PL_DECLS)
+      .replace("#include <common>", "#include <common>\n" + DECLS + DETAIL_GLSL + WATER_GLSL + FOG_GLSL + BEAM_DECLS + PL_DECLS)
       .replace("#include <map_fragment>", MAP_FRAGMENT)
       .replace("#include <roughnessmap_fragment>", "float roughnessFactor = clamp(mix(0.55, 1.0, dmRough), 0.3, 1.0);")
       .replace(
@@ -128,62 +134,19 @@ export function createSeabedMaterial(opts: SeabedOptions): SeabedMaterial {
       )
       .replace(
         "#include <emissivemap_fragment>",
-        /* glsl */ `#include <emissivemap_fragment>
-  {
-    // caustics from the surface above: on up-facing surfaces, fading with distance
-    // (skipped entirely where it can't show: beyond 30 m, deep water, down-facing, lights off)
-    float camDist = length(vWPos - cameraPosition);
-    float facing = pow(clamp(dmWorldNormal.y, 0.0, 1.0), 1.5);
-    float fade = (1.0 - smoothstep(10.0, 30.0, camDist)) * smoothstep(-10.0 * uWS, 4.0 * uWS, vWPos.y);
-    float k = facing * fade * uEnvLight;
-    if (k > 0.0) {
-      float c = dmCaustics(vWPos.xz * 0.42, uTime * 0.9);
-      totalEmissiveRadiance += diffuseColor.rgb * uCausticColor * c * k * mix(0.4, 1.0, vAO);
-    }
-  }`,
+        EMISSIVE_FRAGMENT,
       )
       .replace(
         "#include <lights_fragment_end>",
-        /* glsl */ `#include <lights_fragment_end>
-  {
-    float occ = clamp(vAO, 0.0, 1.0);
-    reflectedLight.indirectDiffuse *= occ * occ;
-    reflectedLight.directDiffuse *= mix(0.55, 1.0, occ);
-  }
-${BEAM_LIGHT}
-${PL_LIGHT}`,
+        LIGHTS_END_FRAGMENT,
       )
       .replace(
         "#include <opaque_fragment>",
-        /* glsl */ `{
-    vec3 dv = vWPos - cameraPosition;
-    float dist = length(dv);
-    vec3 dir = dv / max(dist, 1e-4);
-    vec3 water = dmWater(dir);
-    // absorption (red first) over the near range, then haze toward the silhouette tone
-    outgoingLight *= exp(-uAbsorb * min(dist, 28.0));
-    float haze = 1.0 - exp(-dist * uHaze);
-    // silhouette tone: darkest in the middle distance, lifting toward the open water far
-    // away, so masses emerge as faint shadows, darken into silhouettes, then resolve
-    float sil = mix(uSil, 1.0, smoothstep(uFar * 0.22, uFar * 0.95, dist));
-    outgoingLight = mix(outgoingLight, water * sil, haze);
-${BEAM_OPAQUE}    outgoingLight = mix(outgoingLight, water, smoothstep(uFar * 0.8, uFar, dist));
-  }
-  #include <opaque_fragment>`,
+        OPAQUE_FRAGMENT,
       )
       .replace(
         "#include <dithering_fragment>",
-        /* glsl */ `#include <dithering_fragment>
-#ifdef DM_LOD_FADE
-  {
-    // LOD crossfade (screen-door): the incoming column keeps the pixels whose
-    // threshold is below the progress, the outgoing one exactly the others, so
-    // every pixel shows one of the two. Decided after shading, so the screen-space
-    // derivatives above stay defined for every pixel of the quad.
-    float d = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));
-    if (uLodFade.y > 0.0 ? d >= uLodFade.x : d < uLodFade.x) discard;
-  }
-#endif`,
+        DITHER_FRAGMENT,
       );
     if (extra.uLodFade) shader.fragmentShader = shader.fragmentShader.replace("#include <common>", "#include <common>\nuniform vec2 uLodFade;");
   };

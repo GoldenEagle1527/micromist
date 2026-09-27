@@ -1,10 +1,42 @@
 /**
  * Glowing plankton: soft, deep-blue fluorescent specks wrapped in a box around the
- * camera. Additive, self-lit (not fogged), each with its own pulse phase and size;
+ * camera. Additive, self-lit, faded by the turbidity (fog.ts), each with its own pulse phase and size;
  * they fade toward the box edge so wrapping never pops.
  */
 import * as THREE from "three";
 import { PARTICLE_LIGHT, type ParticleLightUniforms } from "./particleLight";
+
+/** Sprite shaders (exported for the glslang compile test). */
+export const SNOW_VERT = /* glsl */ `
+uniform float uTime; uniform float uHalf; uniform float uPixelRatio;
+uniform float uFogK; uniform float uDim;
+attribute vec3 aSeed;
+varying float vAlpha; varying float vHue;
+void main() {
+  vec4 mv = modelViewMatrix * vec4(position, 1.0);
+  float dist = -mv.z;
+  float pulse = 0.55 + 0.45 * sin(uTime * (0.8 + aSeed.z * 1.2) + aSeed.x);
+  float edge = 1.0 - smoothstep(uHalf * 0.6, uHalf * 0.98, length(mv.xyz));
+  // turbidity (fog.ts) and render-mode dimming (sonar)
+  vAlpha = pulse * edge * smoothstep(0.15, 0.6, dist) * exp(-uFogK * length(mv.xyz)) * uDim;
+  vHue = aSeed.z;
+  gl_PointSize = clamp(aSeed.y * 18.0 * uPixelRatio / max(dist, 0.1), 1.5, 26.0);
+  gl_Position = projectionMatrix * mv;
+}`;
+export const SNOW_FRAG = /* glsl */ `
+varying float vAlpha; varying float vHue;
+void main() {
+  vec2 d = gl_PointCoord - 0.5;
+  float r = length(d) * 2.0;
+  if (r > 1.0) discard;
+  float core = exp(-r * r * 9.0);
+  float halo = exp(-r * r * 2.5) * 0.45;
+  vec3 deep = vec3(0.05, 0.35, 1.0);   // deep blue
+  vec3 cyan = vec3(0.25, 0.9, 1.0);    // fluorescent cyan
+  vec3 col = mix(deep, cyan, vHue * vHue);
+  vec3 c = col * (core + halo) + vec3(0.6, 0.9, 1.0) * core * 0.35;
+  gl_FragColor = vec4(c * vAlpha * 1.4, 1.0);
+}`;
 
 export class MarineSnow {
   readonly points: THREE.Points;
@@ -41,41 +73,28 @@ export class MarineSnow {
         uTime: { value: 0 },
         uHalf: { value: this.size / 2 },
         uPixelRatio: { value: 1 },
+        uFogK: { value: 0 },
+        uDim: { value: 1 },
       },
-      vertexShader: /* glsl */ `
-uniform float uTime; uniform float uHalf; uniform float uPixelRatio;
-attribute vec3 aSeed;
-varying float vAlpha; varying float vHue;
-void main() {
-  vec4 mv = modelViewMatrix * vec4(position, 1.0);
-  float dist = -mv.z;
-  float pulse = 0.55 + 0.45 * sin(uTime * (0.8 + aSeed.z * 1.2) + aSeed.x);
-  float edge = 1.0 - smoothstep(uHalf * 0.6, uHalf * 0.98, length(mv.xyz));
-  vAlpha = pulse * edge * smoothstep(0.15, 0.6, dist);
-  vHue = aSeed.z;
-  gl_PointSize = clamp(aSeed.y * 18.0 * uPixelRatio / max(dist, 0.1), 1.5, 26.0);
-  gl_Position = projectionMatrix * mv;
-}`,
-      fragmentShader: /* glsl */ `
-varying float vAlpha; varying float vHue;
-void main() {
-  vec2 d = gl_PointCoord - 0.5;
-  float r = length(d) * 2.0;
-  if (r > 1.0) discard;
-  float core = exp(-r * r * 9.0);
-  float halo = exp(-r * r * 2.5) * 0.45;
-  vec3 deep = vec3(0.05, 0.35, 1.0);   // deep blue
-  vec3 cyan = vec3(0.25, 0.9, 1.0);    // fluorescent cyan
-  vec3 col = mix(deep, cyan, vHue * vHue);
-  vec3 c = col * (core + halo) + vec3(0.6, 0.9, 1.0) * core * 0.35;
-  gl_FragColor = vec4(c * vAlpha * 1.4, 1.0);
-}`,
+      vertexShader: SNOW_VERT,
+      fragmentShader: SNOW_FRAG,
       transparent: true,
       depthWrite: false,
       blending: THREE.AdditiveBlending,
     });
     this.points = new THREE.Points(geo, this.material);
     this.points.frustumCulled = false;
+  }
+
+  /** Turbidity extinction per metre (fog.ts). */
+  setFog(k: number) {
+    this.material.uniforms.uFogK.value = k;
+  }
+
+  /** Brightness multiplier (sonar dims the plankton). */
+  setDim(d: number) {
+    this.material.uniforms.uDim.value = d;
+    this.points.visible = d > 0.001;
   }
 
   update(center: THREE.Vector3, dt: number) {
