@@ -125,6 +125,8 @@ export function createDeepMarch(host: HTMLElement, opts: DeepMarchOptions): Deep
   const terrain = {
     ...terrainBase,
     ...(qs.get("refine") === "0" ? { refine: false } : {}),
+    // ?bricks=0: dense mesher passes instead of sparse 8³ bricks (terrain/bricks.ts; same output)
+    ...(qs.get("bricks") === "0" ? { bricks: false } : {}),
     // ?wasm=1: WebAssembly noise (bit-exact; default JS, see TerrainSettings.wasm); ?wasm=0: JS
     ...(wasmParam === "1" ? { wasm: true } : wasmParam === "0" ? { wasm: false } : {}),
   };

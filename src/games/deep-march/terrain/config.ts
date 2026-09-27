@@ -111,6 +111,11 @@ export type TerrainSettings = {
    * JS (node, separate processes); ?wasm=1 turns it on (e.g. to compare on iOS), ?wasm=0 forces JS.
    */
   wasm?: boolean;
+  /**
+   * Sparse 8³ bricks in mesh jobs (terrain/bricks.ts, bit-identical output).
+   * Default on; false (?bricks=0) = the dense passes.
+   */
+  bricks?: boolean;
 };
 
 export const TERRAIN: TerrainSettings = {
