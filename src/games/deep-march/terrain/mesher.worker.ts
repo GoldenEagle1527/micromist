@@ -34,10 +34,10 @@ ctx.onmessage = (ev) => {
     m = generateColumnMesh(field, msg.cx, msg.cz, rows, field.settings.floaterMargin * (1 << msg.lod), undefined, false, undefined, msg.lod);
   } else {
     const full = generateColumnMesh(base, msg.cx, msg.cz, baseRows, base.settings.floaterMargin, undefined, true);
-    m = { ...full, positions: new Float32Array(0), normals: new Float32Array(0), ao: new Float32Array(0), indices: new Uint16Array(0), removed: new Int32Array(0) };
+    m = { ...full, positions: new Float32Array(0), normals: new Float32Array(0), ao: new Float32Array(0), region: new Uint8Array(0), indices: new Uint16Array(0), removed: new Int32Array(0) };
   }
   const res: MesherResponse = { type: msg.type, id: msg.id, ...m, ms: performance.now() - t0 };
-  const transfer: Transferable[] = [m.positions.buffer, m.normals.buffer, m.ao.buffer, m.indices.buffer, m.removed.buffer];
+  const transfer: Transferable[] = [m.positions.buffer, m.normals.buffer, m.ao.buffer, m.region.buffer, m.indices.buffer, m.removed.buffer];
   if (m.info) transfer.push(...terrainInfoTransfers(m.info));
   ctx.postMessage(res, transfer);
 };

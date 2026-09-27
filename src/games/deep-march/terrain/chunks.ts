@@ -45,6 +45,7 @@ import type { MesherResponse } from "./protocol";
 import { WorkerPool, type JobPool, type JobRequest } from "./jobPool";
 import type { LodFadeMaterial } from "../scene/seabedMaterial";
 import { TerrainInfoStore } from "./terrainInfo";
+import { REGION_STRIDE } from "./regionWeights";
 
 type NodeState = "queued" | "pending" | "ready";
 
@@ -564,7 +565,7 @@ export class ChunkManager {
       const s = this.field.settings;
       if (!this.base) this.base = createDensityField(this.field.seed, baseTerrain(s));
       const full = generateColumnMesh(this.base, e.cx, e.cz, columnRows(this.base), this.base.settings.floaterMargin, undefined, true);
-      m = { ...full, positions: new Float32Array(0), normals: new Float32Array(0), ao: new Float32Array(0), indices: new Uint16Array(0), removed: new Int32Array(0) };
+      m = { ...full, positions: new Float32Array(0), normals: new Float32Array(0), ao: new Float32Array(0), region: new Uint8Array(0), indices: new Uint16Array(0), removed: new Int32Array(0) };
     } else {
       const rows = e.lod === 0 ? this.rows : columnRows(this.field, e.lod);
       m = generateColumnMesh(this.field, e.cx, e.cz, rows, this.field.settings.floaterMargin * (1 << e.lod), undefined, false, undefined, e.lod);
@@ -632,6 +633,10 @@ export class ChunkManager {
       geo.setAttribute("position", new THREE.BufferAttribute(r.positions, 3));
       geo.setAttribute("normal", new THREE.BufferAttribute(r.normals, 3));
       geo.setAttribute("ao", new THREE.BufferAttribute(r.ao, 1));
+      // macro-region weights (regionWeights.ts): 8 normalised bytes → aRegA (4) + aRegB (2)
+      const reg = new THREE.InterleavedBuffer(r.region, REGION_STRIDE);
+      geo.setAttribute("aRegA", new THREE.InterleavedBufferAttribute(reg, 4, 0, true));
+      geo.setAttribute("aRegB", new THREE.InterleavedBufferAttribute(reg, 2, 4, true));
       geo.setIndex(new THREE.BufferAttribute(r.indices, 1));
       // Tight bounds from the actual vertices (worker-computed): full-height column boxes
       // (~240 m tall) let about half of the drawn triangles through the frustum test off-screen.

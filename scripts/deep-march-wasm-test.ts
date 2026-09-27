@@ -70,7 +70,7 @@ for (const seed of SEEDS.slice(0, 2)) {
       time.on[lod] += performance.now() - t0;
       time.n[lod]++;
       const eq = (u: ArrayLike<number>, v: ArrayLike<number>) => u.length === v.length && Array.from(u).every((q, i) => Object.is(q, v[i]));
-      if (!(eq(ma.positions, mb.positions) && eq(ma.normals, mb.normals) && eq(ma.ao, mb.ao) && eq(ma.indices, mb.indices) && eq(ma.removed, mb.removed))) mDiff++;
+      if (!(eq(ma.positions, mb.positions) && eq(ma.normals, mb.normals) && eq(ma.ao, mb.ao) && eq(ma.region, mb.region) && eq(ma.indices, mb.indices) && eq(ma.removed, mb.removed))) mDiff++;
     }
   }
 }
