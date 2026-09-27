@@ -12,6 +12,7 @@ import { MarineSnow } from "./particles";
 import { WATER_GLSL, createSeabedMaterial, createWaterUniforms } from "./seabedMaterial";
 import { DiverController, type DiverState } from "./diver";
 import { LampRig } from "./lampRig";
+import { FOG_GLSL, FOG_TUNING, createFogUniforms, parseFogParam } from "./fog";
 import { NightVision } from "./nightVision";
 import { FramePacer } from "./framePacer";
 import { TerrainOcclusion } from "./occlusion";
@@ -146,20 +147,23 @@ export function createDeepMarch(host: HTMLElement, opts: DeepMarchOptions): Deep
   // three's fog now only tints the marine snow near the camera
   scene.fog = new THREE.Fog(fogColor, 1.5, 34);
   const water = createWaterUniforms(baseFog, terrain.viewDistance);
+  // Turbidity (fog.ts): ?fog=0|off disables, ?fog=60 sets the beam visibility (m), ?fog=50,80 beam + high beam
+  const fogVis = parseFogParam(qs.get("fog"));
+  const fog = createFogUniforms();
   const baseWater = { top: water.uWaterTop.value.clone(), horizon: water.uWaterHorizon.value.clone(), bottom: water.uWaterBottom.value.clone() };
   const dome = new THREE.Mesh(
     new THREE.SphereGeometry(1, 32, 16),
     new THREE.ShaderMaterial({
-      uniforms: water,
+      uniforms: { ...water, ...fog },
       vertexShader: /* glsl */ `varying vec3 vDir;
 void main() {
   vDir = position;
   gl_Position = projectionMatrix * vec4(mat3(viewMatrix) * position, 1.0);
 }`,
-      fragmentShader: /* glsl */ `${WATER_GLSL}
+      fragmentShader: /* glsl */ `${WATER_GLSL}${FOG_GLSL}
 varying vec3 vDir;
 void main() {
-  gl_FragColor = vec4(dmWater(normalize(vDir)), 1.0);
+  gl_FragColor = vec4(dmBackground(normalize(vDir)), 1.0);
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
 }`,
@@ -176,7 +180,7 @@ void main() {
   // Survival layer (battery, gear, light modes) and the scene side of the lights.
   const survival = createSurvival();
   const lights = survival.lights;
-  const rig = new LampRig(camera);
+  const rig = new LampRig(camera, fogVis);
   const nightVision = new NightVision(renderer, lowSpec ? 0 : 4);
   const particleLights = createParticleLightUniforms();
   const camForward = new THREE.Vector3();
@@ -196,6 +200,7 @@ void main() {
     renderer,
     lowSpec,
     water,
+    fog,
     worldScale: terrain.worldScale,
     beam: rig.beam,
     particleLights,
@@ -405,6 +410,12 @@ void main() {
     sun.intensity = 0.4 * (1 - 0.75 * deep) * env.sunMul + env.sunAdd;
     water.uHaze.value = baseHaze * env.haze;
     seabed.absorb.copy(baseAbsorb).multiplyScalar(env.absorb);
+    fog.uFogK.value = env.fogK;
+    fog.uFogColor.value.copy(FOG_TUNING.murk).multiplyScalar(env.murk * (1 - 0.6 * deep));
+    fog.uGlowGain.value = env.glow;
+    fog.uGlowCone.value.copy(env.glowCone);
+    fog.uGlowDir.value.copy(rig.glowDir);
+    snow.setFog(env.fogK);
 
     nightVision.render(scene, camera, rig.night, now / 1000);
     if (pacer.frameDone(performance.now())) {

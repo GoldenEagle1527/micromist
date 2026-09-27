@@ -3,6 +3,9 @@
  * three imports so node tests can compile it (scripts/deep-march-detail-test.ts).
  */
 import { DETAIL_APPLY } from "./detailNormal";
+import { BEAM_LIGHT, BEAM_OPAQUE } from "./highBeam";
+import { PL_LIGHT } from "./particleLight";
+import { FOG_OPAQUE } from "./fog";
 
 /** Open-water colour seen along a view direction (bright toward the surface, black below). */
 export const WATER_GLSL = /* glsl */ `
@@ -255,3 +258,58 @@ export const MAP_FRAGMENT = /* glsl */ `
   vec3 dmWorldNormal = normalize(tnX.zyx * bw.x + tnY.xzy * bw.y + tnZ.xyz * bw.z);
   float dmRough = nX4.b * bw.x + nY4.b * bw.y + nZ4.b * bw.z;
 ${DETAIL_APPLY}`;
+
+/** Replaces <emissivemap_fragment>: caustics. */
+export const EMISSIVE_FRAGMENT = /* glsl */ `#include <emissivemap_fragment>
+  {
+    // caustics from the surface above: on up-facing surfaces, fading with distance
+    // (skipped entirely where it can't show: beyond 30 m, deep water, down-facing, lights off)
+    float camDist = length(vWPos - cameraPosition);
+    float facing = pow(clamp(dmWorldNormal.y, 0.0, 1.0), 1.5);
+    float fade = (1.0 - smoothstep(10.0, 30.0, camDist)) * smoothstep(-10.0 * uWS, 4.0 * uWS, vWPos.y);
+    float k = facing * fade * uEnvLight;
+    if (k > 0.0) {
+      float c = dmCaustics(vWPos.xz * 0.42, uTime * 0.9);
+      totalEmissiveRadiance += diffuseColor.rgb * uCausticColor * c * k * mix(0.4, 1.0, vAO);
+    }
+  }`;
+
+/** Replaces <lights_fragment_end>: AO, high beam, plankton lights. */
+export const LIGHTS_END_FRAGMENT = /* glsl */ `#include <lights_fragment_end>
+  {
+    float occ = clamp(vAO, 0.0, 1.0);
+    reflectedLight.indirectDiffuse *= occ * occ;
+    reflectedLight.directDiffuse *= mix(0.55, 1.0, occ);
+  }
+${BEAM_LIGHT}
+${PL_LIGHT}`;
+
+/** Replaces <opaque_fragment>: absorption, haze, high beam, turbidity (fog.ts), far fade. */
+export const OPAQUE_FRAGMENT = /* glsl */ `{
+    vec3 dv = vWPos - cameraPosition;
+    float dist = length(dv);
+    vec3 dir = dv / max(dist, 1e-4);
+    vec3 water = dmWater(dir);
+    // absorption (red first) over the near range, then haze toward the silhouette tone
+    outgoingLight *= exp(-uAbsorb * min(dist, 28.0));
+    float haze = 1.0 - exp(-dist * uHaze);
+    // silhouette tone: darkest in the middle distance, lifting toward the open water far
+    // away, so masses emerge as faint shadows, darken into silhouettes, then resolve
+    float sil = mix(uSil, 1.0, smoothstep(uFar * 0.22, uFar * 0.95, dist));
+    outgoingLight = mix(outgoingLight, water * sil, haze);
+${BEAM_OPAQUE}${FOG_OPAQUE}    outgoingLight = mix(outgoingLight, dmBackground(dir), smoothstep(uFar * 0.8, uFar, dist));
+  }
+  #include <opaque_fragment>`;
+
+/** Replaces <dithering_fragment>: LOD crossfade screen-door (DM_LOD_FADE). */
+export const DITHER_FRAGMENT = /* glsl */ `#include <dithering_fragment>
+#ifdef DM_LOD_FADE
+  {
+    // LOD crossfade (screen-door): the incoming column keeps the pixels whose
+    // threshold is below the progress, the outgoing one exactly the others, so
+    // every pixel shows one of the two. Decided after shading, so the screen-space
+    // derivatives above stay defined for every pixel of the quad.
+    float d = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));
+    if (uLodFade.y > 0.0 ? d >= uLodFade.x : d < uLodFade.x) discard;
+  }
+#endif`;
