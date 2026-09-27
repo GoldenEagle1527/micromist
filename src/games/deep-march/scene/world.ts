@@ -363,9 +363,10 @@ void main() {
     if (ready) {
       diver.update(dt, input.move());
       if (diver.lastTicks > 0) input.consumePulse();
-    } else if (texturesReady && chunks.nearReady(diver.position, 14)) {
+    } else if (texturesReady && chunks.nearReady(diver.position, 14) && chunks.coverageComplete(diver.position)) {
+      // loading gate: every footprint in view drawn + level 0 around the diver
       ready = true;
-      chunks.progressive = true;
+      chunks.loading = false;
       loading.classList.add("done");
       updatePrompt();
     }
