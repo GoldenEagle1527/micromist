@@ -29,11 +29,13 @@
  * Other differences from the reference: gradient normals from the padded grid,
  * shared per-edge vertices (indexed), rows provably above/below iso (from
  * field.bounds) skip noise, and the field's vertical smoothing is assembled from
- * raw lattice rows (no extra noise evaluations).
+ * raw lattice rows (no extra noise evaluations). Mesh-only jobs run the passes
+ * over sparse 8³ bricks (bricks.ts, same output; ?bricks=0 = dense).
  */
 import { ALL_REGIONS_MASK, type DensityField } from "./density";
 import { CORNER_OFFSETS, EDGE_CORNER_A, EDGE_CORNER_B, TRI_TABLE } from "./tables";
 import { CLS_COARSE_SOLID, CLS_COARSE_WATER, coarseResolve, refineMargin } from "./refine";
+import { REFINE_MARGIN4, assemble, brickGrid, cellMask, floodKeep, resolveCoarse, resolveNeed, scratchF32, scratchI32, scratchU8, type NeedResult } from "./bricks";
 import { buildColumnTerrainInfo, createLineSampler } from "./terrainInfoGen";
 import type { ChunkTerrainInfo } from "./terrainInfo";
 
@@ -407,7 +409,9 @@ export function generateColumnMesh(
   const rawNeed = new Uint8Array(py + 2 * R);
   for (let j = 0; j < py; j++) if (!rowSkip[j]) for (let d = 0; d <= 2 * R; d++) rawNeed[j + d] = 1;
   const RY = py + 2 * R;
-  const raw = new Float32Array(pz * RY * px); // index (k · RY + r) · px + i
+  const skipSlabs = !withInfo && !debugGrid;
+  const useBricks = skipSlabs && s.bricks !== false;
+  const raw = useBricks ? scratchF32("raw", pz * RY * px) : new Float32Array(pz * RY * px); // index (k · RY + r) · px + i
   const yOf = (r: number) => y0 + (r - R - 1) * sp;
   for (let r = 0; r < RY; r++) if (rawNeed[r]) stats.rawPoints += px * pz;
 
@@ -417,7 +421,7 @@ export function generateColumnMesh(
   // mesh: within 2 lattice points (gradient + edge reach) of any final point that
   // is not sure water. Everything else keeps its water bound (< iso), so the
   // marching-cubes output is bit-identical to sampling everything exactly.
-  const skipSlabs = !withInfo && !debugGrid;
+  let need: NeedResult | null = null;
   if (!skipSlabs) {
     for (let k = 0; k < pz; k++) {
       const wz = z0 + (k - 1) * sp;
@@ -432,7 +436,7 @@ export function generateColumnMesh(
       }
     }
   } else {
-    const cls = new Uint8Array(pz * RY * px);
+    const cls = useBricks ? scratchU8("cls", pz * RY * px).fill(0) : new Uint8Array(pz * RY * px);
     const bnd = new Float64Array(1);
     for (let k = 0; k < pz; k++) {
       const wz = z0 + (k - 1) * sp;
@@ -448,7 +452,18 @@ export function generateColumnMesh(
       }
     }
     const margin = s.refine === false ? null : refineMargin(lod);
-    if (margin !== null) {
+    if (useBricks) {
+      const g = { px, RY, pz, rawNeed, cls, raw, exact: scratchU8("exact", cls.length).fill(0) };
+      const at = (i: number, r: number, k: number) => field.sampleRaw(x0 + (i - 1) * sp, yOf(r), z0 + (k - 1) * sp);
+      if (margin !== null) {
+        const c = resolveCoarse(g, iso, lod < REFINE_MARGIN4.length ? REFINE_MARGIN4[lod] : null, margin, at, (i, r, k, b) => field.rawClass(x0 + (i - 1) * sp, yOf(r), z0 + (k - 1) * sp, b));
+        stats.noiseSamples += c;
+        stats.coarseSamples += c;
+      }
+      const r = resolveNeed(g, brickGrid(px, py, pz), R, rowSkip, rowKind, at);
+      stats.noiseSamples += r.evals;
+      need = r.res;
+    } else if (margin !== null) {
       refineSamples(field, cls, raw, rawNeed, rowSkip, rowKind, px, py, pz, RY, R, x0, z0, sp, yOf, margin, stats);
     } else {
       // final points that are not certainly water (seeds), dilated by 2 on every axis
@@ -489,9 +504,11 @@ export function generateColumnMesh(
     }
   }
 
-  const dens = new Float32Array(size);
-  const state = new Uint8Array(size);
-  for (let k = 0; k < pz; k++) {
+  const bricks = useBricks ? brickGrid(px, py, pz) : null;
+  const dens = bricks ? scratchF32("dens", size) : new Float32Array(size);
+  const state = bricks ? scratchU8("state", size) : new Uint8Array(size);
+  if (bricks) assemble(bricks, need!, raw, RY, SW, K, rowSkip, rowKind, rowFill, iso, dens, state);
+  else for (let k = 0; k < pz; k++) {
     const rk = k * RY * px;
     for (let j = 0; j < py; j++) {
       const row = (k * py + j) * px;
@@ -511,7 +528,7 @@ export function generateColumnMesh(
   }
 
   // --- 1. anchored flood from hard rows -------------------------------------
-  const stack = new Int32Array(size);
+  const stack = bricks ? scratchI32("stack", size) : new Int32Array(size);
   let sp_ = 0;
   for (let j = 0; j < py; j++) {
     if (rowKind[j] !== 2) continue;
@@ -544,7 +561,10 @@ export function generateColumnMesh(
       }
     }
   };
-  floodInGrid(KEEP);
+  if (bricks) {
+    floodKeep(bricks, state, stack, sp_);
+    sp_ = 0;
+  } else floodInGrid(KEEP);
 
   // --- 2. search remaining components -----------------------------------
   const Mi = Math.max(1, Math.ceil(floaterMargin / sp));
@@ -675,7 +695,7 @@ export function generateColumnMesh(
 
   // Remove floaters from the density field; collect owned removed points.
   const removedList: number[] = [];
-  for (let k = 0; k < pz; k++) {
+  if (!bricks || stats.floaters > 0) for (let k = 0; k < pz; k++) {
     for (let j = 0; j < py; j++) {
       for (let i = 0; i < px; i++) {
         const idx = (k * py + j) * px + i;
@@ -706,7 +726,9 @@ export function generateColumnMesh(
   const cornerI = new Int32Array(8);
   const cornerJ = new Int32Array(8);
   const cornerK = new Int32Array(8);
-  const edgeVertex = new Int32Array(n * ny * n * 3).fill(-1);
+  const edgeVertex = (bricks ? scratchI32("edgeVertex", n * ny * n * 3) : new Int32Array(n * ny * n * 3)).fill(-1);
+  // sparse bricks: skip cell bricks whose corners all share a sign (same scan order)
+  const cm = bricks ? cellMask(bricks, state) : null;
   let vcount = 0;
   let icount = 0;
   const tri = new Int32Array(3);
@@ -714,7 +736,12 @@ export function generateColumnMesh(
   for (let k = 0; k < n - 1; k++) {
     for (let j = 0; j < ny - 1; j++) {
       if (rowSkip[j + 1] && rowSkip[j + 2] && rowKind[j + 1] === rowKind[j + 2]) continue;
+      const cmRow = cm ? ((k >> 3) * cm.cby + (j >> 3)) * cm.cbx : 0;
       for (let i = 0; i < n - 1; i++) {
+        if (cm && cm.mask[cmRow + (i >> 3)]) {
+          i |= 7;
+          continue;
+        }
         let cubeIndex = 0;
         for (let c = 0; c < 8; c++) {
           const ci = i + CORNER_OFFSETS[c * 3];
