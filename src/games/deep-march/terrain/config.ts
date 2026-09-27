@@ -122,7 +122,9 @@ export const TERRAIN: TerrainSettings = {
   farLodFrom: 3,
   infoRadius: 22,
 
-  octaves: 10, // reference 8 + log2(worldScale): fine detail at the diver's scale
+  // The reference 8 octaves only: the two extra octaves of the scaled world (0.58 / 0.29 u
+  // wavelengths) were finer than the 0.345 u lattice — aliased, ~15% of every sample.
+  octaves: 8,
   lacunarity: 2,
   persistence: 0.54,
   noiseScale: 2.71,
@@ -176,12 +178,13 @@ export function terrainForDevice(lowSpec = isLowSpecDevice()): TerrainSettings {
 }
 
 /**
- * Base-scale settings (worldScale 1, the reference 8 octaves): the terrain
- * classification runs on this field — the world field at p / S — so its
- * class thresholds and scan reach keep their meaning at every world scale.
+ * Base-scale settings (worldScale 1, same octaves): the terrain classification
+ * runs on this field — the world field at p / S (the octaves are evaluated at
+ * p / S in both) — so its class thresholds and scan reach keep their meaning at
+ * every world scale.
  */
 export function baseTerrain(s: TerrainSettings): TerrainSettings {
-  return { ...s, worldScale: 1, octaves: Math.max(1, s.octaves - Math.round(Math.log2(s.worldScale))), floaterMargin: 12 };
+  return { ...s, worldScale: 1, octaves: s.octaves, floaterMargin: 12 };
 }
 
 /** Underwater look. Fog colour == camera background from the reference scene (sRGB). */
