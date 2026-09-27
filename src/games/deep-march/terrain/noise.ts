@@ -27,7 +27,7 @@ export function seedFromString(input: string): number {
   return h >>> 0;
 }
 
-const GRAD3 = new Float64Array([
+export const GRAD3 = new Float64Array([
   1, 1, 0, -1, 1, 0, 1, -1, 0, -1, -1, 0,
   1, 0, 1, -1, 0, 1, 1, 0, -1, -1, 0, -1,
   0, 1, 1, 0, -1, 1, 0, 1, -1, 0, -1, -1,
@@ -38,7 +38,8 @@ const G3 = 1 / 6;
 
 export type Noise3 = (x: number, y: number, z: number) => number;
 
-export function createSimplex3(seed: number): Noise3 {
+/** Permutation tables of the seeded simplex (perm, permMod12 · 3), shared with the WASM port. */
+export function simplexTables(seed: number): { perm: Uint8Array; permMod12: Uint8Array } {
   const rand = mulberry32(seed ^ 0x9e3779b9);
   const p = new Uint8Array(256);
   for (let i = 0; i < 256; i++) p[i] = i;
@@ -54,6 +55,11 @@ export function createSimplex3(seed: number): Noise3 {
     perm[i] = p[i & 255];
     permMod12[i] = (perm[i] % 12) * 3;
   }
+  return { perm, permMod12 };
+}
+
+export function createSimplex3(seed: number): Noise3 {
+  const { perm, permMod12 } = simplexTables(seed);
 
   return (xin, yin, zin) => {
     const s = (xin + yin + zin) * F3;

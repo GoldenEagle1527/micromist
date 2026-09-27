@@ -120,7 +120,14 @@ export function createDeepMarch(host: HTMLElement, opts: DeepMarchOptions): Deep
   const lodNearParam = Number(new URLSearchParams(window.location.search).get("lodNear"));
   const terrainBase = lodNearParam > 0 ? { ...terrainForDevice(lowSpec), lodNear: lodNearParam } : terrainForDevice(lowSpec);
   // ?refine=0 forces full noise evaluation in mesh jobs (no coarse pre-pass, terrain/refine.ts)
-  const terrain = new URLSearchParams(window.location.search).get("refine") === "0" ? { ...terrainBase, refine: false } : terrainBase;
+  const qs = new URLSearchParams(window.location.search);
+  const wasmParam = qs.get("wasm");
+  const terrain = {
+    ...terrainBase,
+    ...(qs.get("refine") === "0" ? { refine: false } : {}),
+    // ?wasm=1: WebAssembly noise (bit-exact; default JS, see TerrainSettings.wasm); ?wasm=0: JS
+    ...(wasmParam === "1" ? { wasm: true } : wasmParam === "0" ? { wasm: false } : {}),
+  };
 
   // Underwater look for a vast world: the reference water colour (0, .168, .453) is the
   // horizon of an open-water gradient (brighter toward the surface, black below) drawn
