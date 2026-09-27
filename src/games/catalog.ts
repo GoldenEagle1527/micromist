@@ -58,13 +58,12 @@ export const games: GameMeta[] = [
   {
     slug: "deep-march",
     mode: "single",
-    audience: "staging",
     title: { zh: "深潜", en: "Deep March" },
     blurb: {
-      zh: "以潜水员视角游过无尽的 Marching Cubes 海底洞穴，种子决定地形。纯探索，仅测试站。",
-      en: "Swim as a diver through an endless marching-cubes cavern sea; the seed shapes the world. Exploration only, staging.",
+      zh: "以潜水员视角游过无尽的 Marching Cubes 海底洞穴，种子决定地形。深海探索，注意电量。",
+      en: "Swim as a diver through an endless marching-cubes cavern sea; the seed shapes the world. Deep-sea exploration; watch your battery.",
     },
-    badge: { zh: "3D · 测试", en: "3D · Staging" },
+    badge: { zh: "3D", en: "3D" },
   },
 ];
 
