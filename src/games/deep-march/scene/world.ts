@@ -207,7 +207,7 @@ void main() {
     renderer.compileAsync(warm, camera, scene).catch(() => {}).finally(() => warm.geometry.dispose());
   }
 
-  const diver = new DiverController(field, (x, y, z) => chunks.isRemoved(x, y, z));
+  const diver = new DiverController(field, (gi, gj, gk) => chunks.isRemovedPoint(gi, gj, gk));
   // HUD terrain chip: lookup in the generation-time class grid (no probing), with
   // a short hold so the label doesn't flicker on class-cell borders.
   let terrainKind: EnvironmentKind | null = null;
