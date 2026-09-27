@@ -107,6 +107,11 @@ export type TerrainSettings = {
    * Components that are still unresolved at this distance are kept.
    */
   floaterMargin: number;
+  /**
+   * Mesh jobs evaluate the full noise only near the surface, found by a coarse
+   * pre-pass (terrain/refine.ts). Default on; false (?refine=0) = full evaluation.
+   */
+  refine?: boolean;
 };
 
 export const TERRAIN: TerrainSettings = {

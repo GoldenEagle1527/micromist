@@ -118,7 +118,9 @@ export function createDeepMarch(host: HTMLElement, opts: DeepMarchOptions): Deep
 
   // ?lodNear=<units> overrides the full-resolution ring radius (LOD comparisons / debugging)
   const lodNearParam = Number(new URLSearchParams(window.location.search).get("lodNear"));
-  const terrain = lodNearParam > 0 ? { ...terrainForDevice(lowSpec), lodNear: lodNearParam } : terrainForDevice(lowSpec);
+  const terrainBase = lodNearParam > 0 ? { ...terrainForDevice(lowSpec), lodNear: lodNearParam } : terrainForDevice(lowSpec);
+  // ?refine=0 forces full noise evaluation in mesh jobs (no coarse pre-pass, terrain/refine.ts)
+  const terrain = new URLSearchParams(window.location.search).get("refine") === "0" ? { ...terrainBase, refine: false } : terrainBase;
 
   // Underwater look for a vast world: the reference water colour (0, .168, .453) is the
   // horizon of an open-water gradient (brighter toward the surface, black below) drawn
