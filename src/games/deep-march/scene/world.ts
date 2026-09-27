@@ -191,6 +191,8 @@ void main() {
 
   let texturesReady = false;
   const seabed = createSeabedMaterial({
+    // ?detail=0: no shader detail normal (creases + facet blend, detailNormal.ts)
+    detail: qs.get("detail") !== "0",
     renderer,
     lowSpec,
     water,
