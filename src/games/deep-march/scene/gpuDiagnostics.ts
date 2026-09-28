@@ -3,8 +3,6 @@
  * helpers + a WebGL query): renderer string, the limits the seabed programs depend
  * on, and a compact report of a failed program's info logs.
  */
-import type { SeabedShaderMode } from "./seabedMaterial";
-
 export type GpuInfo = {
   /** Unmasked renderer (WEBGL_debug_renderer_info) or the masked RENDERER string. */
   renderer: string;
@@ -31,14 +29,6 @@ export function gpuInfo(gl: WebGLRenderingContext | WebGL2RenderingContext): Gpu
     fragmentVectors: Number(gl.getParameter(gl.MAX_FRAGMENT_UNIFORM_VECTORS)) || 0,
     highp: !!hp && hp.precision > 0,
   };
-}
-
-/** Seabed shader mode of a fragment source (its mode define). */
-export function shaderModeOf(src: string): SeabedShaderMode {
-  if (/#define DM_FLAT_MAT\b/.test(src)) return "flat";
-  if (/#define DM_LITE_MAT\b/.test(src)) return "lite";
-  if (/#define DM_SIMPLE_MAT\b/.test(src)) return "simple";
-  return "full";
 }
 
 const MAX_LOG = 360;

@@ -75,19 +75,7 @@ export type SeabedOptions = {
   particleLights: ParticleLightUniforms;
   /** Shader detail normal (detailNormal.ts); false = ?detail=0. Default true. */
   detail?: boolean;
-  /** Starting shader mode (?seabed=); default "full" on desktop, "lite" on low spec. */
-  mode?: SeabedShaderMode;
 };
-
-/**
- * Seabed shader modes, heaviest first (materialShader.ts). A mode whose program
- * fails to build falls back to the next (SeabedMaterial.degrade); "flat" samples no
- * material textures at all.
- */
-export const SEABED_MODES = ["full", "simple", "lite", "flat"] as const;
-export type SeabedShaderMode = (typeof SEABED_MODES)[number];
-export const parseSeabedMode = (v: string | null): SeabedShaderMode | undefined => (SEABED_MODES as readonly string[]).includes(v ?? "") ? (v as SeabedShaderMode) : undefined;
-const MODE_DEFINE: Record<SeabedShaderMode, string | null> = { full: null, simple: "DM_SIMPLE_MAT", lite: "DM_LITE_MAT", flat: "DM_FLAT_MAT" };
 
 export type LodFadeMaterial = { material: THREE.Material; fade: THREE.Vector2 };
 
@@ -103,16 +91,6 @@ export type SeabedMaterial = {
    * −1 fading out). See chunks.ts.
    */
   fadeMaterial: () => LodFadeMaterial;
-  /** Current shader mode. */
-  mode: () => SeabedShaderMode;
-  /**
-   * Switch every seabed material (base + fades) to the next lighter mode — the
-   * fallback when the current program fails to build on this device. Returns the
-   * new mode, or null if already "flat".
-   */
-  degrade: () => SeabedShaderMode | null;
-  /** Set a mode directly (tests / debugging). */
-  setMode: (mode: SeabedShaderMode) => void;
   update: (time: number) => void;
   dispose: () => void;
 };
@@ -172,39 +150,20 @@ export function createSeabedMaterial(opts: SeabedOptions): SeabedMaterial {
     if (extra.uLodFade) shader.fragmentShader = shader.fragmentShader.replace("#include <common>", "#include <common>\nuniform vec2 uLodFade;");
   };
   const detail = opts.detail !== false;
-  // phones start at "lite"; any mode falls back to the next if its program fails
-  let mode: SeabedShaderMode = opts.mode ?? (opts.lowSpec ? "lite" : "full");
-  const defines = (fade: boolean) => ({
-    ...(opts.lowSpec ? { DM_LOW_SPEC: "" } : {}),
-    ...(MODE_DEFINE[mode] ? { [MODE_DEFINE[mode]!]: "" } : {}),
-    // flat = the guaranteed-safe mode: no detail normal either
-    ...(detail && mode !== "flat" ? { DM_DETAIL: "" } : {}),
-    ...(fade ? { DM_LOD_FADE: "" } : {}),
-    DM_SONAR_N: String(opts.sonar.uSonarPulse.value.length),
-  });
   const make = (fade: { value: THREE.Vector2 } | null) => {
     const m = new THREE.MeshStandardMaterial({ roughness: 1, metalness: 0 });
     m.fog = false; // own water model (see header)
-    m.defines = defines(!!fade);
+    m.defines = { ...(opts.lowSpec ? { DM_LOW_SPEC: "" } : {}), ...(detail ? { DM_DETAIL: "" } : {}), ...(fade ? { DM_LOD_FADE: "" } : {}), DM_SONAR_N: String(opts.sonar.uSonarPulse.value.length) };
     m.onBeforeCompile = (shader) => patch(shader, fade ? { uLodFade: fade } : {});
     // Fade variants share one program (their own uLodFade is uploaded when the
     // renderer switches material); the base material has no discard at all, so
     // the resting terrain keeps early depth testing.
-    m.customProgramCacheKey = () => `deep-march-seabed-${opts.lowSpec ? "lo" : "hi"}-${mode}${detail ? "-d" : ""}${fade ? "-fade" : ""}`;
+    const key = `deep-march-seabed-${opts.lowSpec ? "lo" : "hi"}${detail ? "-d" : ""}${fade ? "-fade" : ""}`;
+    m.customProgramCacheKey = () => key;
     return m;
   };
   const material = make(null);
   const fades: THREE.MeshStandardMaterial[] = [];
-  const apply = (m: SeabedShaderMode) => {
-    if (m === mode) return;
-    mode = m;
-    material.defines = defines(false);
-    material.needsUpdate = true;
-    for (const f of fades) {
-      f.defines = defines(true);
-      f.needsUpdate = true;
-    }
-  };
 
   return {
     material,
@@ -216,14 +175,6 @@ export function createSeabedMaterial(opts: SeabedOptions): SeabedMaterial {
       fades.push(m);
       return { material: m, fade: fade.value };
     },
-    mode: () => mode,
-    degrade: () => {
-      const i = SEABED_MODES.indexOf(mode);
-      if (i >= SEABED_MODES.length - 1) return null;
-      apply(SEABED_MODES[i + 1]);
-      return mode;
-    },
-    setMode: (m) => apply(m),
     update: (time) => {
       uniforms.uTime.value = time;
     },

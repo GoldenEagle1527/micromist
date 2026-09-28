@@ -150,44 +150,6 @@ export function dynamicSamplerIndexing(source: string): string[] {
   return out;
 }
 
-/**
- * Texture fetch sites of main() once every user function is inlined (drivers inline
- * everything): per function its own texture*() calls plus, per call of another
- * user function, that function's total. Loops are not multiplied (unrolling adds more).
- */
-export function inlinedFetchSites(source: string): number {
-  const src = preprocess(source).replace(/\/\/.*$/gm, "").replace(/\/\*[\s\S]*?\*\//g, "");
-  const bodies = new Map<string, string>();
-  const head = /\b(?:void|float|int|bool|u?int|[biu]?vec[234]|mat[234]|\w+)\s+(\w+)\s*\(([^()]|\([^()]*\))*\)\s*\{/g;
-  let m: RegExpExecArray | null;
-  while ((m = head.exec(src))) {
-    const name = m[1];
-    if (/^(if|for|while|switch|return)$/.test(name)) continue;
-    let depth = 1, i = head.lastIndex;
-    for (; i < src.length && depth > 0; i++) depth += src[i] === "{" ? 1 : src[i] === "}" ? -1 : 0;
-    bodies.set(name, (bodies.get(name) ?? "") + src.slice(head.lastIndex, i - 1));
-    head.lastIndex = i;
-  }
-  // function-like macros wrapping a fetch count as one fetch per use
-  const fetchMacros = [...src.matchAll(/^\s*#\s*define\s+(\w+)\(([^)]*)\)(.*)$/gm)].filter((d) => /\btexture\w*\s*\(/.test(d[3])).map((d) => d[1]);
-  const memo = new Map<string, number>();
-  const total = (name: string, stack: string[] = []): number => {
-    if (memo.has(name)) return memo.get(name)!;
-    if (stack.includes(name)) return 0;
-    const body = bodies.get(name) ?? "";
-    let n = [...body.matchAll(/\btexture(?:Grad|Lod|Offset|Proj|GradOffset|LodOffset|ProjLod|ProjGrad|2D|Cube)?\s*\(/g)].length;
-    for (const mac of fetchMacros) n += [...body.matchAll(new RegExp(`\\b${mac}\\s*\\(`, "g"))].length;
-    for (const [callee] of bodies) {
-      if (callee === name) continue;
-      const calls = [...body.matchAll(new RegExp(`\\b${callee}\\s*\\(`, "g"))].length;
-      if (calls) n += calls * total(callee, [...stack, name]);
-    }
-    memo.set(name, n);
-    return n;
-  };
-  return total("main");
-}
-
 const ARRAY_ELEM = String.raw`(?:float|int|uint|bool|[biu]?vec[234]|mat[234](?:x[234])?)`;
 
 /**
