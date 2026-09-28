@@ -1,7 +1,7 @@
 /**
  * glslang compile check of every deep-march shader variant (code check only):
  *  - seabed terrain fragment: the full chain the material patches into three's
- *    MeshStandardMaterial (map / emissive / lights_end / opaque / dithering blocks),
+ *    MeshStandardMaterial (map incl. LOD fade / emissive / lights_end / opaque blocks),
  *    three's built-ins stubbed, for detail on/off × desktop/low spec × LOD fade on/off;
  *  - seabed terrain vertex region-weight patch (materialShader.ts): compiles, its
  *    varyings match the fragment's, its attributes are the ones chunks.ts binds;
@@ -17,11 +17,15 @@
  *    statements, and one material shader for phones and desktop;
  *  - array precision lint on every injected block and no array constructors in any
  *    captured program (Mali behind ANGLE: "S0032: no default precision defined for
- *    variable 'float[5]'").
+ *    variable 'float[5]'");
+ *  - Mali-G57 cost budget on every captured seabed fragment program (Mali Offline
+ *    Compiler, scripts/lib/malioc.ts; skipped with a warning when not installed):
+ *    stack, longest-path load/store and texture cycles, and the LOD fade program
+ *    discarding before any shading.
  * Run: npm run test:shaders
  */
 import glslangInit from "@webgpu/glslang/dist/node-devel/glslang.js";
-import { DECLS, DITHER_FRAGMENT, EMISSIVE_FRAGMENT, LIGHTS_END_FRAGMENT, MAP_FRAGMENT, OPAQUE_FRAGMENT, WATER_GLSL } from "../src/games/deep-march/scene/seabedShader";
+import { DECLS, EMISSIVE_FRAGMENT, LOD_FADE_FRAGMENT, LIGHTS_END_FRAGMENT, MAP_FRAGMENT, OPAQUE_FRAGMENT, WATER_GLSL } from "../src/games/deep-march/scene/seabedShader";
 import { DETAIL_GLSL } from "../src/games/deep-march/scene/detailNormal";
 import { FOG_GLSL } from "../src/games/deep-march/scene/fog";
 import { BEAM_DECLS } from "../src/games/deep-march/scene/highBeam";
@@ -36,6 +40,7 @@ import { PL_LIGHT } from "../src/games/deep-march/scene/particleLight";
 import { SONAR_OPAQUE } from "../src/games/deep-march/scene/sonar";
 import * as THREE from "three";
 import { capturePrograms } from "./lib/three-capture";
+import { MALIOC_INSTALL, SEABED_MALI_BUDGET, budgetIssues, findMalioc, fmtMalioc, maliocFragment, type MaliocStats } from "./lib/malioc";
 import { arrayPrecisionIssues, dynamicSamplerIndexing, esForGlslang, preprocess, samplerUniforms, uniformVectors } from "./lib/glsl-es";
 import { createSeabedMaterial, createWaterUniforms } from "../src/games/deep-march/scene/seabedMaterial";
 import { spawnSync } from "node:child_process";
@@ -58,7 +63,7 @@ const check = (ok: boolean, name: string, detail: string) => {
 function vulkanize(src: string, stage: "vertex" | "fragment", st: { binding: number; inLoc: number; outLoc: number }): string {
   return src
     .replace(/#include <[^>]+>/g, "")
-    .replace(/uniform (sampler2D|sampler2DArray) (\w+);/g, (_, t, n) => `layout(set = 0, binding = ${st.binding++}) uniform ${t} ${n};`)
+    .replace(/uniform ((?:highp |mediump |lowp |DM_M )?)(sampler2D|sampler2DArray) (\w+);/g, (_, q, t, n) => `layout(set = 0, binding = ${st.binding++}) uniform ${q}${t} ${n};`)
     .replace(/uniform ((?:highp |mediump |lowp |DM_P )?)(float|int|vec2|vec3|vec4|mat3|mat4) (\w+(?:\[[\w${}.* ]+\])?);/g, "$1$2 $3;")
     .replace(/attribute (\w+) (\w+);/g, (_, t, n) => `layout(location = ${st.inLoc++}) in ${t} ${n};`)
     .replace(/varying (\w+) (\w+);/g, (_, t, n) => (stage === "vertex" ? `layout(location = ${st.outLoc++}) out ${t} ${n};` : `layout(location = ${st.inLoc++}) in ${t} ${n};`))
@@ -87,7 +92,6 @@ function seabedSource(defines: string[]): string {
     "  vec3 outgoingLight = reflectedLight.directDiffuse + reflectedLight.indirectDiffuse + totalEmissiveRadiance;",
     vulkanize(OPAQUE_FRAGMENT, "fragment", st),
     "  outColor = vec4(outgoingLight, 1.0);",
-    vulkanize(DITHER_FRAGMENT, "fragment", st),
     "}",
   ].join("\n");
 }
@@ -169,7 +173,7 @@ function es300(name: string, src: string, stage: "vert" | "frag") {
 
 /** Every GLSL block we inject: array types need explicit precision, no array constructors. */
 function arrayLint() {
-  const blocks: Record<string, string> = { DECLS, WATER_GLSL, DETAIL_GLSL, DETAIL_APPLY, FOG_GLSL, FOG_OPAQUE, SONAR_DECLS, SONAR_OPAQUE, BEAM_DECLS, BEAM_LIGHT, BEAM_OPAQUE, PL_LIGHT, MAT_DECLS, MAT_FRAGMENT, MAT_VERT_DECLS, MAT_VERT_MAIN, MAP_FRAGMENT, EMISSIVE_FRAGMENT, LIGHTS_END_FRAGMENT, OPAQUE_FRAGMENT, DITHER_FRAGMENT, SNOW_VERT, SNOW_FRAG };
+  const blocks: Record<string, string> = { DECLS, WATER_GLSL, DETAIL_GLSL, DETAIL_APPLY, FOG_GLSL, FOG_OPAQUE, SONAR_DECLS, SONAR_OPAQUE, BEAM_DECLS, BEAM_LIGHT, BEAM_OPAQUE, PL_LIGHT, MAT_DECLS, MAT_FRAGMENT, MAT_VERT_DECLS, MAT_VERT_MAIN, MAP_FRAGMENT, EMISSIVE_FRAGMENT, LIGHTS_END_FRAGMENT, OPAQUE_FRAGMENT, LOD_FADE_FRAGMENT, SNOW_VERT, SNOW_FRAG };
   for (const [name, src] of Object.entries(blocks)) {
     const issues = arrayPrecisionIssues(src);
     check(issues.length === 0, `array types carry explicit precision, no array constructors: ${name}`, issues.join(" | ") || "clean");
@@ -191,9 +195,10 @@ function exactPrograms(compile: Compile) {
   // the region between these markers is the material code (materialShader.ts)
   const material = (frag: string) => {
     const pf = preprocess(frag);
-    return pf.slice(pf.indexOf("---- surface weights"), pf.indexOf("vec3 albedo ="));
+    return pf.slice(pf.indexOf("---- surface weights"), pf.indexOf("tone the photo sets"));
   };
   const materialOf: Record<string, string> = {};
+  const fragments: { tag: string; kind: string; fragment: string }[] = [];
   for (const c of cases) for (const highp of [true, false]) {
     const { scene, camera } = seabedScene(c.lowSpec);
     const progs = capturePrograms(scene, camera, { highp });
@@ -203,6 +208,7 @@ function exactPrograms(compile: Compile) {
     progs.forEach((p, i) => {
       const kind = i === 0 ? "base" : "fade";
       const t = `[${tag}, ${kind}]`;
+      fragments.push({ tag, kind, fragment: p.fragment });
       check(p.fragment.startsWith("#version 300 es") && /precision (highp|mediump) sampler2DArray;/.test(p.fragment), `three declares sampler2DArray precision ${t}`, (/precision \w+ sampler2DArray;/.exec(p.fragment) ?? ["missing"])[0]);
       check(!highp === /precision mediump float;/.test(p.fragment), `default float precision follows the device ${t}`, (/precision \w+ float;/.exec(p.fragment) ?? ["?"])[0]);
       check(!/[^\x00-\x7f]/.test(p.vertex + p.fragment), `sources are pure ASCII ${t}`, "");
@@ -240,6 +246,34 @@ function exactPrograms(compile: Compile) {
   }
   const mats = Object.values(materialOf);
   check(mats[0].length > 1000 && mats.every((m) => m === mats[0]), "one material shader for phones and desktop", `${mats.length} programs, ${mats[0].length} chars`);
+  maliBudget(fragments);
+}
+
+/**
+ * Mali-G57 cost budget (scripts/lib/malioc.ts) on the exact programs: stack
+ * (spills / local arrays), longest-path load/store and texture cycles; the LOD fade
+ * program must discard before shading (its shortest path is the discard).
+ */
+function maliBudget(fragments: { tag: string; kind: string; fragment: string }[]) {
+  const bin = findMalioc();
+  if (!bin) {
+    console.log(`  WARN malioc not found: Mali cost budget SKIPPED (${MALIOC_INSTALL})`);
+    return;
+  }
+  const b = SEABED_MALI_BUDGET;
+  for (const f of fragments) {
+    const t = `[${f.tag}, ${f.kind}]`;
+    let s: MaliocStats;
+    try {
+      s = maliocFragment(bin, f.fragment);
+    } catch (e) {
+      check(false, `malioc compiles the seabed fragment ${t}`, String(e).slice(0, 400));
+      continue;
+    }
+    const issues = budgetIssues(s, b);
+    check(issues.length === 0, `Mali-G57 budget (stack <= ${b.stack} B, load/store <= ${b.longestLS}, texture <= ${b.longestTex}) ${t}`, issues.length ? `${issues.join("; ")} | ${fmtMalioc(s)}` : fmtMalioc(s));
+    if (f.kind === "fade") check(s.shortest.arith < 2 && s.shortest.ls === 0 && s.shortest.tex === 0, `LOD fade discards before shading ${t}`, `shortest path A/LS/T ${s.shortest.arith}/${s.shortest.ls}/${s.shortest.tex}`);
+  }
 }
 
 (async () => {

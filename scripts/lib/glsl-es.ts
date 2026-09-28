@@ -25,8 +25,9 @@ export function esForGlslang(src: string, stage: "vertex" | "fragment"): string 
     // glslang's SPIR-V front end knows extension built-ins GLSL ES doesn't have
     .replace(/\baverage\b/g, "average_")
     .replace(/^#define (attribute|varying) (in|out)\s*$/gm, "")
-    .replace(/\buniform\s+((?:highp|mediump|lowp)\s+)?((?:[iu]?sampler\w+))\s+(\w+)\s*;/g, (_, p, t, n) => `layout(binding = ${binding++}) uniform ${p ?? ""}${t} ${n};`)
-    .replace(/\buniform\s+(?!((?:highp|mediump|lowp)\s+)?[iu]?sampler)/g, "")
+    // precision: a keyword or a macro (DM_M, seabedShader.ts)
+    .replace(/\buniform\s+((?:highp|mediump|lowp|DM_\w+)\s+)?((?:[iu]?sampler\w+))\s+(\w+)\s*;/g, (_, p, t, n) => `layout(binding = ${binding++}) uniform ${p ?? ""}${t} ${n};`)
+    .replace(/\buniform\s+(?!((?:highp|mediump|lowp|DM_\w+)\s+)?[iu]?sampler)/g, "")
     .replace(/^(\s*)attribute\s+/gm, () => `layout(location = ${inLoc++}) in `)
     .replace(/^(\s*)(flat\s+)?varying\s+/gm, (_, sp, fl) => (stage === "vertex" ? `layout(location = ${outLoc++}) ${fl ?? ""}out ` : `layout(location = ${inLoc++}) ${fl ?? ""}in `));
 }
@@ -74,6 +75,9 @@ export function preprocess(src: string): string {
   return out.join("\n");
 }
 
+/** Optional precision qualifier: a keyword or one of our precision macros (DM_P / DM_M, seabedShader.ts). */
+const PREC = String.raw`(?:(?:highp|mediump|lowp|DM_[A-Z]\w*)\s+)?`;
+
 const ROWS: Record<string, [number, number]> = {
   // [rows, columns used per row]
   float: [1, 1], int: [1, 1], uint: [1, 1], bool: [1, 1],
@@ -96,7 +100,7 @@ export function uniformVectors(source: string): { rows: number; packed: number; 
   const structs = new Map<string, [string, number][]>();
   for (const m of src.matchAll(/struct\s+(\w+)\s*\{([^}]*)\}/g)) {
     const members: [string, number][] = [];
-    for (const d of m[2].matchAll(/((?:highp|mediump|lowp)\s+)?(\w+)\s+(\w+)(?:\s*\[\s*(\w+)\s*\])?\s*;/g)) members.push([d[2], d[4] ? Number(defs.get(d[4]) ?? d[4]) : 1]);
+    for (const d of m[2].matchAll(new RegExp(String.raw`(${PREC})(\w+)\s+(\w+)(?:\s*\[\s*(\w+)\s*\])?\s*;`, "g"))) members.push([d[2], d[4] ? Number(defs.get(d[4]) ?? d[4]) : 1]);
     structs.set(m[1], members);
   }
   const names: [string, number][] = [];
@@ -115,7 +119,7 @@ export function uniformVectors(source: string): { rows: number; packed: number; 
     else if (r[1] === 2) v2 += count;
     else v1 += count;
   };
-  for (const m of src.matchAll(/\buniform\s+((?:highp|mediump|lowp)\s+)?(\w+)\s+(\w+)(?:\s*\[\s*(\w+)\s*\])?\s*;/g)) {
+  for (const m of src.matchAll(new RegExp(String.raw`\buniform\s+(${PREC})(\w+)\s+(\w+)(?:\s*\[\s*(\w+)\s*\])?\s*;`, "g"))) {
     const n = m[4] ? Number(defs.get(m[4]) ?? m[4]) : 1;
     const before = rows;
     add(m[2], n, m[3], !!m[4]);
@@ -133,7 +137,7 @@ export function samplerUniforms(source: string): { count: number; names: string[
   for (const m of src.matchAll(/^\s*#define\s+(\w+)\s+(\d+)\s*$/gm)) defs.set(m[1], Number(m[2]));
   let count = 0;
   const names: string[] = [];
-  for (const m of src.matchAll(/\buniform\s+(?:(?:highp|mediump|lowp)\s+)?([iu]?sampler\w+)\s+(\w+)(?:\s*\[\s*(\w+)\s*\])?\s*;/g)) {
+  for (const m of src.matchAll(new RegExp(String.raw`\buniform\s+${PREC}([iu]?sampler\w+)\s+(\w+)(?:\s*\[\s*(\w+)\s*\])?\s*;`, "g"))) {
     const n = m[3] ? Number(defs.get(m[3]) ?? m[3]) : 1;
     count += n;
     if (n > 0) names.push(n > 1 ? `${m[2]}[${n}]` : m[2]);
@@ -144,7 +148,7 @@ export function samplerUniforms(source: string): { count: number; names: string[
 /** Sampler-array accesses whose index isn't an integer literal (must be constant-index-expressions). */
 export function dynamicSamplerIndexing(source: string): string[] {
   const src = preprocess(source);
-  const arrays = [...src.matchAll(/\buniform\s+(?:(?:highp|mediump|lowp)\s+)?[iu]?sampler\w+\s+(\w+)\s*\[/g)].map((m) => m[1]);
+  const arrays = [...src.matchAll(new RegExp(String.raw`\buniform\s+${PREC}[iu]?sampler\w+\s+(\w+)\s*\[`, "g"))].map((m) => m[1]);
   const out: string[] = [];
   for (const a of arrays) for (const m of src.matchAll(new RegExp(`\\b${a}\\s*\\[\\s*([^\\]]*)\\]`, "g"))) if (!/^\d+$/.test(m[1].trim()) && !/uniform/.test(src.slice(Math.max(0, m.index! - 60), m.index))) out.push(m[0]);
   return out;
