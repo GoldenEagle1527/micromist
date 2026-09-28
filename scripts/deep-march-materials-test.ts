@@ -59,8 +59,6 @@ for (let r = 0; r < REGION_COUNT; r++) {
   }
   check(worst <= cap, `shader entry list (${cap}) fits the worst region pair (${worst})`);
 }
-// flat-colour fallback: every layer has a plausible mean tone (linear albedo)
-check(LAYERS.every((l) => l.tone.length === 3 && l.tone.every((c) => c > 0.01 && c < 0.6)), "every layer has a mean tone for the flat fallback shader");
 // terrace keeps the original 4-set look as its main palette
 const T = REGION_PALETTES[4].main.map((l) => LAYERS[l].key);
 check(T.join() === "sand,gravel,rock,moss,rock", `terrace main = original look (${T})`);

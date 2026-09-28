@@ -104,9 +104,7 @@ export function LoadingScreen({ game, seedText, seed, labels: L, onDone }: Props
         }
         // begin dive → fade (or, after a shader error, once the player chose to dive anyway)
         const forced = forceRef.current && !s.gpuLost && s.shaders && snap.terrain.ready && snap.materials.ready && STEPS.every((id) => id === "system" || model.status[id] === "done");
-        // after a shader fallback the screen waits for the player (the report stays readable)
-        const hold = s.shaderFailures.length > 0 && !forceRef.current;
-        if (phase === "loading" && ((model.allDone() && snap.loaded && !hold) || forced)) {
+        if (phase === "loading" && ((model.allDone() && snap.loaded) || forced)) {
           phase = "begin";
           beginAt = now;
           game?.startDive();
@@ -161,8 +159,7 @@ export function LoadingScreen({ game, seedText, seed, labels: L, onDone }: Props
           `${s.battery > 0 ? "✓" : "·"} ${L.battery(Math.round(s.battery * 100))}`,
           `${s.lamps.length ? "✓" : "·"} ${L.lamps(s.lamps.map((m) => L.lightModes[m]).join(" · "))}`,
           `${s.sonar ? "✓" : "·"} ${L.sonar}`,
-          ...s.shaderFailures.map((f) => `✗ ${L.modeFailed(L.seabedModes[f.mode], f.log)}`),
-          s.gpuLost ? `✗ ${L.gpuLost}` : s.shaderError ? `✗ ${L.shaderError(s.shaderError)}` : `${s.shaders ? "✓" : "·"} ${L.shaders} · ${L.seabedMode(L.seabedModes[s.seabedMode])}`,
+          s.gpuLost ? `✗ ${L.gpuLost}` : s.shaderError ? `✗ ${L.shaderError(s.shaderError)}` : `${s.shaders ? "✓" : "·"} ${L.shaders}`,
           L.gpu(s.gpu.renderer, s.gpu.textureUnits, s.gpu.fragmentVectors, s.gpu.highp),
         ];
       }
@@ -198,17 +195,6 @@ export function LoadingScreen({ game, seedText, seed, labels: L, onDone }: Props
                     {id === "materials" && snap?.materials.error && (
                       <button type="button" className="dm-load-retry" onClick={() => game?.retryMaterials()}>
                         {L.retry}
-                      </button>
-                    )}
-                    {id === "system" && snap && !snap.system.shaderError && !snap.system.gpuLost && snap.system.shaderFailures.length > 0 && snap.loaded && (
-                      <button
-                        type="button"
-                        className="dm-load-retry"
-                        onClick={() => {
-                          forceRef.current = true;
-                        }}
-                      >
-                        {L.continueDive}
                       </button>
                     )}
                     {id === "system" && snap?.system.shaderError && !snap.system.gpuLost && (
