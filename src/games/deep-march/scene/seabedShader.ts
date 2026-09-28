@@ -30,6 +30,16 @@ export const DECLS = /* glsl */ `
 #define DM_P mediump
 #endif
 #endif
+// Reduced precision for material weights, colours and normal sums (materialShader.ts):
+// mediump unless three itself runs at lowp. World positions, UVs and derivatives keep
+// the default precision. Desktop GPUs evaluate mediump as fp32 (no change there).
+#ifndef DM_M
+#ifdef LOW_PRECISION
+#define DM_M lowp
+#else
+#define DM_M mediump
+#endif
+#endif
 uniform float uWS;
 uniform float uTime;
 uniform vec3 uAbsorb;
@@ -105,12 +115,31 @@ float dmCaustics(vec2 p, float t) {
 }
 ${MAT_DECLS}`;
 
-export const MAP_FRAGMENT = /* glsl */ `
+/**
+ * Start of MAP_FRAGMENT: LOD crossfade screen-door (DM_LOD_FADE, fade program only).
+ * The incoming column keeps the cells whose threshold is below the progress, the
+ * outgoing one exactly the others, so every pixel shows one of the two and is shaded
+ * once. Cells are the 2x2 pixel quads the GPU shades together (floor(gl_FragCoord / 2)
+ * is constant within a quad): a quad is discarded or kept whole before any shading,
+ * so the screen-space derivatives of every kept pixel stay defined.
+ */
+export const LOD_FADE_FRAGMENT = /* glsl */ `
+#ifdef DM_LOD_FADE
+  {
+    vec2 dmCell = floor(gl_FragCoord.xy * 0.5);
+    float d = fract(52.9829189 * fract(dot(dmCell, vec2(0.06711056, 0.00583715))));
+    if (uLodFade.y > 0.0 ? d >= uLodFade.x : d < uLodFade.x) discard;
+  }
+#endif
+`;
+
+export const MAP_FRAGMENT = /* glsl */ `${LOD_FADE_FRAGMENT}
   vec3 wp = vWPos;
   // Smooth (field-gradient) normal drives projection and material choice so
   // rock reads rounded; the flat facet normal is only a fallback where the two
   // truly disagree (grazing / sub-voxel features), never a per-triangle switch.
-  vec3 geoN = normalize(cross(dFdx(wp), dFdy(wp)));
+  vec3 dpx = dFdx(wp), dpy = dFdy(wp);   // also the triplanar UV gradients (materialShader.ts)
+  vec3 geoN = normalize(cross(dpx, dpy));
   if (dot(geoN, cameraPosition - wp) < 0.0) geoN = -geoN;
   vec3 wn = normalize(vWNrm);
   float nAgree = dot(wn, geoN);
@@ -135,18 +164,8 @@ ${MAT_FRAGMENT}
   albedo *= mix(0.62, 1.0, smoothstep(-24.0 * uWS, 6.0 * uWS, wp.y)); // deeper = darker sediment
   diffuseColor.rgb *= albedo;
 
-  // ---- normals (whiteout triplanar) + roughness --------------------------
-  vec3 tnX = dmUnpack(nX4);
-  vec3 tnY = dmUnpack(nY4);
-  vec3 tnZ = dmUnpack(nZ4);
-  tnX.x *= axisSign.x;
-  tnY.x *= axisSign.y;
-  tnZ.x *= -axisSign.z;
-  tnX = vec3(tnX.xy + wn.zy, abs(tnX.z) * wn.x);
-  tnY = vec3(tnY.xy + wn.xz, abs(tnY.z) * wn.y);
-  tnZ = vec3(tnZ.xy + wn.xy, abs(tnZ.z) * wn.z);
-  vec3 dmWorldNormal = normalize(tnX.zyx * bw.x + tnY.xzy * bw.y + tnZ.xyz * bw.z);
-  float dmRough = nX4.b * bw.x + nY4.b * bw.y + nZ4.b * bw.z;
+  // ---- normal (whiteout triplanar, blended per axis in MAT_FRAGMENT) ------------
+  vec3 dmWorldNormal = normalize(dmNrm);
 ${DETAIL_APPLY}`;
 
 /** Replaces <emissivemap_fragment>: caustics. */
@@ -190,16 +209,3 @@ export const OPAQUE_FRAGMENT = /* glsl */ `{
 ${BEAM_OPAQUE}${FOG_OPAQUE}    outgoingLight = mix(outgoingLight, dmBackground(dir), smoothstep(uFar * 0.8, uFar, dist));
 ${SONAR_OPAQUE}  }
   #include <opaque_fragment>`;
-
-/** Replaces <dithering_fragment>: LOD crossfade screen-door (DM_LOD_FADE). */
-export const DITHER_FRAGMENT = /* glsl */ `#include <dithering_fragment>
-#ifdef DM_LOD_FADE
-  {
-    // LOD crossfade (screen-door): the incoming column keeps the pixels whose
-    // threshold is below the progress, the outgoing one exactly the others, so
-    // every pixel shows one of the two. Decided after shading, so the screen-space
-    // derivatives above stay defined for every pixel of the quad.
-    float d = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));
-    if (uLodFade.y > 0.0 ? d >= uLodFade.x : d < uLodFade.x) discard;
-  }
-#endif`;

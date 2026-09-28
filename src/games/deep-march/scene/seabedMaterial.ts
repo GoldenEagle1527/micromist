@@ -29,7 +29,7 @@ import { SONAR_DECLS, type SonarUniforms } from "./sonar";
 import { MAT_VERT_DECLS, MAT_VERT_MAIN } from "./materialShader";
 import type { MaterialUniforms } from "./materialLibrary";
 import { DETAIL_GLSL } from "./detailNormal";
-import { DECLS, DITHER_FRAGMENT, EMISSIVE_FRAGMENT, LIGHTS_END_FRAGMENT, MAP_FRAGMENT, OPAQUE_FRAGMENT, WATER_GLSL } from "./seabedShader";
+import { DECLS, EMISSIVE_FRAGMENT, LIGHTS_END_FRAGMENT, MAP_FRAGMENT, OPAQUE_FRAGMENT, WATER_GLSL } from "./seabedShader";
 
 export { WATER_GLSL };
 
@@ -87,7 +87,7 @@ export type SeabedMaterial = {
   envLight: { value: number };
   /**
    * A new LOD-crossfade variant of the material (same look and program family,
-   * screen-door dither by its own `fade`: x = progress 0..1, y = +1 fading in /
+   * screen-door on 2x2 pixel quads by its own `fade`: x = progress 0..1, y = +1 fading in /
    * −1 fading out). See chunks.ts.
    */
   fadeMaterial: () => LodFadeMaterial;
@@ -142,10 +142,6 @@ export function createSeabedMaterial(opts: SeabedOptions): SeabedMaterial {
       .replace(
         "#include <opaque_fragment>",
         OPAQUE_FRAGMENT,
-      )
-      .replace(
-        "#include <dithering_fragment>",
-        DITHER_FRAGMENT,
       );
     if (extra.uLodFade) shader.fragmentShader = shader.fragmentShader.replace("#include <common>", "#include <common>\nuniform vec2 uLodFade;");
   };
