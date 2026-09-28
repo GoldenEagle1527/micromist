@@ -73,7 +73,7 @@ vec4 dmNoiseD(vec3 x) {
                      kc + ke * u.y + kf * u.x + kg * u.x * u.y);
   return vec4(n, g);
 }
-// gradient of the crease height h = -w^3 (w = 1 - smoothabs(2n - 1)) at p·freq
+// gradient of the crease height h = -w^3 (w = 1 - smoothabs(2n - 1)) at p*freq
 vec3 dmCreaseGrad(vec3 q, float freq) {
   vec4 nd = dmNoiseD(q * freq);
   float u = 2.0 * nd.x - 1.0;

@@ -125,3 +125,65 @@ export function uniformVectors(source: string): { rows: number; packed: number; 
   const packed = full + v3 + Math.ceil(v2 / 2) + Math.ceil(Math.max(0, floatsLeft - (v2 % 2) * 2) / 4);
   return { rows, packed, names };
 }
+
+/** Active sampler uniforms (preprocessed source), arrays counted by size. */
+export function samplerUniforms(source: string): { count: number; names: string[] } {
+  const src = preprocess(source);
+  const defs = new Map<string, number>();
+  for (const m of src.matchAll(/^\s*#define\s+(\w+)\s+(\d+)\s*$/gm)) defs.set(m[1], Number(m[2]));
+  let count = 0;
+  const names: string[] = [];
+  for (const m of src.matchAll(/\buniform\s+(?:(?:highp|mediump|lowp)\s+)?([iu]?sampler\w+)\s+(\w+)(?:\s*\[\s*(\w+)\s*\])?\s*;/g)) {
+    const n = m[3] ? Number(defs.get(m[3]) ?? m[3]) : 1;
+    count += n;
+    if (n > 0) names.push(n > 1 ? `${m[2]}[${n}]` : m[2]);
+  }
+  return { count, names };
+}
+
+/** Sampler-array accesses whose index isn't an integer literal (must be constant-index-expressions). */
+export function dynamicSamplerIndexing(source: string): string[] {
+  const src = preprocess(source);
+  const arrays = [...src.matchAll(/\buniform\s+(?:(?:highp|mediump|lowp)\s+)?[iu]?sampler\w+\s+(\w+)\s*\[/g)].map((m) => m[1]);
+  const out: string[] = [];
+  for (const a of arrays) for (const m of src.matchAll(new RegExp(`\\b${a}\\s*\\[\\s*([^\\]]*)\\]`, "g"))) if (!/^\d+$/.test(m[1].trim()) && !/uniform/.test(src.slice(Math.max(0, m.index! - 60), m.index))) out.push(m[0]);
+  return out;
+}
+
+/**
+ * Texture fetch sites of main() once every user function is inlined (drivers inline
+ * everything): per function its own texture*() calls plus, per call of another
+ * user function, that function's total. Loops are not multiplied (unrolling adds more).
+ */
+export function inlinedFetchSites(source: string): number {
+  const src = preprocess(source).replace(/\/\/.*$/gm, "").replace(/\/\*[\s\S]*?\*\//g, "");
+  const bodies = new Map<string, string>();
+  const head = /\b(?:void|float|int|bool|u?int|[biu]?vec[234]|mat[234]|\w+)\s+(\w+)\s*\(([^()]|\([^()]*\))*\)\s*\{/g;
+  let m: RegExpExecArray | null;
+  while ((m = head.exec(src))) {
+    const name = m[1];
+    if (/^(if|for|while|switch|return)$/.test(name)) continue;
+    let depth = 1, i = head.lastIndex;
+    for (; i < src.length && depth > 0; i++) depth += src[i] === "{" ? 1 : src[i] === "}" ? -1 : 0;
+    bodies.set(name, (bodies.get(name) ?? "") + src.slice(head.lastIndex, i - 1));
+    head.lastIndex = i;
+  }
+  // function-like macros wrapping a fetch count as one fetch per use
+  const fetchMacros = [...src.matchAll(/^\s*#\s*define\s+(\w+)\(([^)]*)\)(.*)$/gm)].filter((d) => /\btexture\w*\s*\(/.test(d[3])).map((d) => d[1]);
+  const memo = new Map<string, number>();
+  const total = (name: string, stack: string[] = []): number => {
+    if (memo.has(name)) return memo.get(name)!;
+    if (stack.includes(name)) return 0;
+    const body = bodies.get(name) ?? "";
+    let n = [...body.matchAll(/\btexture(?:Grad|Lod|Offset|Proj|GradOffset|LodOffset|ProjLod|ProjGrad|2D|Cube)?\s*\(/g)].length;
+    for (const mac of fetchMacros) n += [...body.matchAll(new RegExp(`\\b${mac}\\s*\\(`, "g"))].length;
+    for (const [callee] of bodies) {
+      if (callee === name) continue;
+      const calls = [...body.matchAll(new RegExp(`\\b${callee}\\s*\\(`, "g"))].length;
+      if (calls) n += calls * total(callee, [...stack, name]);
+    }
+    memo.set(name, n);
+    return n;
+  };
+  return total("main");
+}

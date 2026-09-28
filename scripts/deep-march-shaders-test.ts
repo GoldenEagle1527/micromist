@@ -12,7 +12,11 @@
  *    our onBeforeCompile patches) for desktop / phone / fallback × highp / mediump,
  *    compiled under GLSL ES rules, checked against the WebGL2 minimum limits, and the
  *    phone / fallback material path linted for the constructs mobile compilers fail
- *    on (local arrays, dynamic vector indexing, loops).
+ *    on (local arrays, dynamic vector indexing, loops), for every seabed shader mode
+ *    (full / simple / lite / flat): texture units (≤ 16 fragment, 32 combined), no
+ *    dynamic sampler indexing, ASCII only, no #extension, the real GLSL ES 3.00
+ *    front end (glslangValidator, when installed), and a fetch-site budget for the
+ *    phone modes (the lite path must stay below the pre-library 4-set shader).
  * Run: npm run test:shaders
  */
 import glslangInit from "@webgpu/glslang/dist/node-devel/glslang.js";
@@ -24,11 +28,15 @@ import { PL_DECLS } from "../src/games/deep-march/scene/particleLight";
 import { SONAR_DECLS } from "../src/games/deep-march/scene/sonar";
 import { SNOW_FRAG, SNOW_VERT } from "../src/games/deep-march/scene/particles";
 import { MAT_DECLS, MAT_VERT_DECLS, MAT_VERT_MAIN } from "../src/games/deep-march/scene/materialShader";
-import { readFileSync } from "node:fs";
 import * as THREE from "three";
 import { capturePrograms } from "./lib/three-capture";
-import { esForGlslang, preprocess, uniformVectors } from "./lib/glsl-es";
-import { createSeabedMaterial, createWaterUniforms } from "../src/games/deep-march/scene/seabedMaterial";
+import { dynamicSamplerIndexing, esForGlslang, inlinedFetchSites, preprocess, samplerUniforms, uniformVectors } from "./lib/glsl-es";
+import { SEABED_MODES, createSeabedMaterial, createWaterUniforms, type SeabedShaderMode } from "../src/games/deep-march/scene/seabedMaterial";
+import { shaderModeOf } from "../src/games/deep-march/scene/gpuDiagnostics";
+import { spawnSync } from "node:child_process";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { createMaterialUniforms } from "../src/games/deep-march/scene/materialUniforms";
 import { createFogUniforms } from "../src/games/deep-march/scene/fog";
 import { SonarPulses, createSonarUniforms } from "../src/games/deep-march/scene/sonar";
@@ -102,7 +110,7 @@ function snowSources(): [string, string] {
 }
 
 /** Seabed scene as world.ts builds it: hemisphere + sun + camera spot lamp, base + LOD fade meshes. */
-function seabedScene(lowSpec: boolean, simple: boolean) {
+function seabedScene(lowSpec: boolean, mode: SeabedShaderMode) {
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera();
   scene.add(new THREE.HemisphereLight(), new THREE.DirectionalLight());
@@ -119,13 +127,14 @@ function seabedScene(lowSpec: boolean, simple: boolean) {
     particleLights: createParticleLightUniforms(),
     materials: createMaterialUniforms(new THREE.DataArrayTexture(new Uint8Array(4), 1, 1, 1)),
   });
+  const defaultMode = sb.mode();
   const fade = sb.fadeMaterial().material;
-  if (simple) sb.useSimplePath();
+  sb.setMode(mode); // after the fade material exists: exercises the runtime switch
   const geo = new THREE.BufferGeometry();
   geo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(9), 3));
   geo.setAttribute("normal", new THREE.BufferAttribute(new Float32Array(9), 3));
   scene.add(new THREE.Mesh(geo, sb.material), new THREE.Mesh(geo, fade));
-  return { scene, camera, simple: sb.simple() };
+  return { scene, camera, sb, defaultMode };
 }
 
 // WebGL2 minimums (a phone may have exactly these)
@@ -133,45 +142,100 @@ const MIN_FRAGMENT_UNIFORM_VECTORS = 224;
 const MIN_VERTEX_UNIFORM_VECTORS = 256;
 const MIN_VARYING_VECTORS = 15;
 const MIN_VERTEX_ATTRIBS = 16;
+const MIN_TEXTURE_IMAGE_UNITS = 16;
+const MIN_VERTEX_TEXTURE_IMAGE_UNITS = 16;
+const MIN_COMBINED_TEXTURE_IMAGE_UNITS = 32;
+/**
+ * Texture fetch sites of main() after inlining, phone modes. The 4-set seabed that
+ * phones rendered before the material library had 17-23; "simple" has 61 and
+ * failed on a phone ("Fragment shader is not compiled", empty driver log).
+ */
+const PHONE_FETCH_BUDGET = 16;
 
 type Compile = (name: string, src: string, stage: "vertex" | "fragment") => void;
 
+/** Real GLSL ES 3.00 front end (glslangValidator, if installed): the exact three strings. */
+function es300(name: string, src: string, stage: "vert" | "frag") {
+  const probe = spawnSync("glslangValidator", ["--version"], { encoding: "utf8" });
+  if (probe.status !== 0) {
+    console.log(`  SKIP ${name}: glslangValidator not installed`);
+    return;
+  }
+  const dir = mkdtempSync(join(tmpdir(), "dm-es300-"));
+  const file = join(dir, `s.${stage}`);
+  // glslang knows an AMD built-in named average(); three's common chunk declares one
+  writeFileSync(file, src.replace(/\baverage\b/g, "average_"));
+  const r = spawnSync("glslangValidator", [file], { encoding: "utf8" });
+  rmSync(dir, { recursive: true, force: true });
+  check(r.status === 0, name, r.status === 0 ? "#version 300 es accepted" : (r.stdout + r.stderr).trim().slice(0, 400));
+}
+
 function exactPrograms(compile: Compile) {
-  const cases = [
-    { name: "desktop", lowSpec: false, simple: false },
-    { name: "desktop fallback", lowSpec: false, simple: true },
-    { name: "phone", lowSpec: true, simple: false },
+  const cases: { name: string; lowSpec: boolean; mode: SeabedShaderMode; phone: boolean }[] = [
+    { name: "desktop full", lowSpec: false, mode: "full", phone: false },
+    { name: "desktop simple", lowSpec: false, mode: "simple", phone: false },
+    { name: "desktop lite", lowSpec: false, mode: "lite", phone: false },
+    { name: "desktop flat", lowSpec: false, mode: "flat", phone: false },
+    { name: "phone simple (?seabed=simple)", lowSpec: true, mode: "simple", phone: false },
+    { name: "phone lite", lowSpec: true, mode: "lite", phone: true },
+    { name: "phone flat", lowSpec: true, mode: "flat", phone: true },
   ];
+  {
+    check(seabedScene(true, "lite").defaultMode === "lite", "phones start in lite mode", "");
+    check(seabedScene(false, "full").defaultMode === "full", "desktop starts in full mode", "");
+    const { sb } = seabedScene(false, "full");
+    const chain = [sb.mode()];
+    for (let m = sb.degrade(); m; m = sb.degrade()) chain.push(m);
+    check(chain.join(">") === SEABED_MODES.join(">") && sb.degrade() === null, "fallback chain", chain.join(" > "));
+  }
   for (const c of cases) for (const highp of [true, false]) {
-    const { scene, camera, simple } = seabedScene(c.lowSpec, c.simple);
+    const { scene, camera, sb } = seabedScene(c.lowSpec, c.mode);
     const progs = capturePrograms(scene, camera, { highp });
     const tag = `${c.name}, ${highp ? "highp" : "mediump"}`;
-    check(progs.length === 2 && progs.every((p) => p.fragment.includes("dmSampleLayer")), `three builds base + fade seabed programs [${tag}]`, `${progs.length} programs`);
-    check(simple === (c.lowSpec || c.simple), `material path [${tag}]`, simple ? "simple" : "full");
+    check(progs.length === 2 && progs.every((p) => /#define DM_SONAR_N/.test(p.fragment)) && sb.mode() === c.mode, `three builds base + fade seabed programs [${tag}]`, `${progs.length} programs`);
+    check(progs.every((p) => shaderModeOf(p.fragment) === c.mode), `mode define in the program [${tag}]`, progs.map((p) => shaderModeOf(p.fragment)).join(", "));
     progs.forEach((p, i) => {
       const kind = i === 0 ? "base" : "fade";
-      check(p.fragment.startsWith("#version 300 es") && /precision (highp|mediump) sampler2DArray;/.test(p.fragment), `three declares sampler2DArray precision [${tag}, ${kind}]`, (/precision \w+ sampler2DArray;/.exec(p.fragment) ?? ["missing"])[0]);
-      check(!highp === /precision mediump float;/.test(p.fragment), `default float precision follows the device [${tag}, ${kind}]`, (/precision \w+ float;/.exec(p.fragment) ?? ["?"])[0]);
-      compile(`exact three vertex ES [${tag}, ${kind}]`, esForGlslang(p.vertex, "vertex"), "vertex");
-      compile(`exact three fragment ES [${tag}, ${kind}]`, esForGlslang(p.fragment, "fragment"), "fragment");
+      const t = `[${tag}, ${kind}]`;
+      check(p.fragment.startsWith("#version 300 es") && /precision (highp|mediump) sampler2DArray;/.test(p.fragment), `three declares sampler2DArray precision ${t}`, (/precision \w+ sampler2DArray;/.exec(p.fragment) ?? ["missing"])[0]);
+      check(!highp === /precision mediump float;/.test(p.fragment), `default float precision follows the device ${t}`, (/precision \w+ float;/.exec(p.fragment) ?? ["?"])[0]);
+      check(!/[^\x00-\x7f]/.test(p.vertex + p.fragment), `sources are pure ASCII ${t}`, "");
+      check(!/^\s*#\s*extension\b/m.test(preprocess(p.fragment)), `no #extension directives ${t}`, "");
+      compile(`exact three vertex ES ${t}`, esForGlslang(p.vertex, "vertex"), "vertex");
+      compile(`exact three fragment ES ${t}`, esForGlslang(p.fragment, "fragment"), "fragment");
+      if (highp || c.phone) {
+        es300(`exact three vertex, glslangValidator ES 300 ${t}`, p.vertex, "vert");
+        es300(`exact three fragment, glslangValidator ES 300 ${t}`, p.fragment, "frag");
+      }
       const fu = uniformVectors(p.fragment), vu = uniformVectors(p.vertex);
-      check(fu.packed <= MIN_FRAGMENT_UNIFORM_VECTORS - 16, `fragment uniform vectors [${tag}, ${kind}]`, `${fu.packed} packed (${fu.rows} unpacked) ≤ ${MIN_FRAGMENT_UNIFORM_VECTORS} − 16 headroom`);
-      check(vu.packed <= MIN_VERTEX_UNIFORM_VECTORS - 16, `vertex uniform vectors [${tag}, ${kind}]`, `${vu.packed} packed`);
+      check(fu.packed <= MIN_FRAGMENT_UNIFORM_VECTORS - 16 && fu.rows <= MIN_FRAGMENT_UNIFORM_VECTORS, `fragment uniform vectors ${t}`, `${fu.packed} packed, ${fu.rows} unpacked (every declaration its own rows) ≤ ${MIN_FRAGMENT_UNIFORM_VECTORS}`);
+      check(vu.packed <= MIN_VERTEX_UNIFORM_VECTORS - 16, `vertex uniform vectors ${t}`, `${vu.packed} packed`);
+      const fs = samplerUniforms(p.fragment), vs = samplerUniforms(p.vertex);
+      check(fs.count <= MIN_TEXTURE_IMAGE_UNITS && vs.count <= MIN_VERTEX_TEXTURE_IMAGE_UNITS && fs.count + vs.count <= MIN_COMBINED_TEXTURE_IMAGE_UNITS, `texture image units ${t}`, `fragment ${fs.count} (${fs.names.join(", ")}) ≤ ${MIN_TEXTURE_IMAGE_UNITS}, vertex ${vs.count}, combined ${fs.count + vs.count} ≤ ${MIN_COMBINED_TEXTURE_IMAGE_UNITS}`);
+      const dyn = [...dynamicSamplerIndexing(p.fragment), ...dynamicSamplerIndexing(p.vertex)];
+      check(dyn.length === 0, `no dynamic sampler-array indexing ${t}`, dyn.join(" ") || "none");
       const pv = preprocess(p.vertex);
       const vary = [...pv.matchAll(/^\s*(?:flat\s+)?varying\s+(?:\w+\s+)?(\w+)\s+\w+/gm)].map((m) => (m[1] === "mat3" ? 3 : m[1] === "mat4" ? 4 : 1)).reduce((a, b) => a + b, 0);
       const attrs = [...pv.matchAll(/^\s*attribute\s+/gm)].length;
-      check(vary <= MIN_VARYING_VECTORS && attrs <= MIN_VERTEX_ATTRIBS, `varyings / attributes [${tag}, ${kind}]`, `${vary} varyings, ${attrs} attributes`);
+      check(vary <= MIN_VARYING_VECTORS && attrs <= MIN_VERTEX_ATTRIBS, `varyings / attributes ${t}`, `${vary} varyings, ${attrs} attributes`);
       // constructs mobile GLSL compilers are known to fail or miscompile
       const pf = preprocess(p.fragment);
-      check(!/\bbool\s+\w+\s*\[/.test(pf), `no bool arrays [${tag}, ${kind}]`, "");
-      check(!/\buPalC?\s*\[[^\]]+\]\s*\[/.test(pf), `no dynamic vector component indexing of palettes [${tag}, ${kind}]`, "");
-      if (simple) {
-        const a = pf.indexOf("---- surface weights"), b = pf.indexOf("vec3 albedo =");
+      check(!/\bbool\s+\w+\s*\[/.test(pf), `no bool arrays ${t}`, "");
+      check(!/\buPalC?\s*\[[^\]]+\]\s*\[/.test(pf), `no dynamic vector component indexing of palettes ${t}`, "");
+      const sites = inlinedFetchSites(p.fragment);
+      if (c.phone) check(sites <= PHONE_FETCH_BUDGET, `phone mode: texture fetch sites after inlining ${t}`, `${sites} ≤ ${PHONE_FETCH_BUDGET}`);
+      else console.log(`  INFO texture fetch sites after inlining ${t}: ${sites}`);
+      if (c.mode === "flat") {
+        check(fs.names.every((n) => !/^tMat/.test(n)), `flat mode samples no material textures ${t}`, fs.names.join(", "));
+        check(!/\[\s*[a-zA-Z_]\w*\s*\]/.test(pf.slice(pf.indexOf("---- surface weights"), pf.indexOf("vec3 albedo ="))) && pf.includes("---- flat tones"), `flat mode: constant indices only ${t}`, "");
+      }
+      if (c.mode !== "full") {
+        const a = pf.indexOf("---- surface weights"), b = pf.lastIndexOf("vec3 albedo =");
         const body = a >= 0 && b > a ? pf.slice(a, b) : "";
         const localArrays = [...body.matchAll(/^\s*(?:int|float|vec\d|ivec\d)\s+\w+\s*\[[^\]]*\]\s*(?:;|=)/gm)].map((m) => m[0].trim());
-        check(body !== "" && localArrays.every((d) => /float slotW\[5\] =/.test(d)), `simple material path: only the initialized constant-read slot array [${tag}, ${kind}]`, localArrays.join(" | ") || "none");
-        check(!/\bfor\s*\(|\bwhile\s*\(/.test(body), `simple material path: no loops [${tag}, ${kind}]`, "");
-        check(!/slotW\s*\[\s*[^\d\s]/.test(body), `simple material path: slot weights read with constant indices only [${tag}, ${kind}]`, "");
+        check(body !== "" && localArrays.every((d) => /float slotW\[5\] =/.test(d)), `${c.mode} material path: only the initialized constant-read slot array ${t}`, localArrays.join(" | ") || "none");
+        check(!/\bfor\s*\(|\bwhile\s*\(/.test(body), `${c.mode} material path: no loops ${t}`, "");
+        check(!/slotW\s*\[\s*[^\d\s]/.test(body), `${c.mode} material path: slot weights read with constant indices only ${t}`, "");
       }
     });
   }
@@ -196,7 +260,11 @@ function exactPrograms(compile: Compile) {
   console.log("deep-march shaders (glslang)");
   const variants: string[][] = [];
   // desktop full path, desktop fallback (simple path), phone (always simple)
-  for (const detail of [true, false]) for (const kind of ["full", "safe", "low"]) for (const fade of [false, true]) variants.push([...(detail ? ["DM_DETAIL"] : []), ...(kind === "low" ? ["DM_LOW_SPEC"] : []), ...(kind !== "full" ? ["DM_SIMPLE_MAT"] : []), ...(fade ? ["DM_LOD_FADE"] : []), `DM_SONAR_N ${kind === "low" ? 3 : 5}`]);
+  const MODE_DEF: Record<string, string[]> = { full: [], simple: ["DM_SIMPLE_MAT"], lite: ["DM_LITE_MAT"], flat: ["DM_FLAT_MAT"] };
+  for (const detail of [true, false]) for (const low of [false, true]) for (const mode of ["full", "simple", "lite", "flat"]) for (const fade of [false, true]) {
+    if (low && mode === "full") continue;
+    variants.push([...(detail ? ["DM_DETAIL"] : []), ...(low ? ["DM_LOW_SPEC"] : []), ...MODE_DEF[mode], ...(fade ? ["DM_LOD_FADE"] : []), `DM_SONAR_N ${low ? 3 : 5}`]);
+  }
   for (const v of variants) compile(`seabed fragment [${v.join(" + ") || "base"}]`, seabedSource(v), "fragment");
   // GLSL ES rules (no implicit int→float etc., as WebGL2 enforces): the same chain as ES 3.1
   const es = (src: string) => src.replace("#version 450", "#version 310 es\nprecision highp float;\nprecision highp int;\nprecision highp sampler2D;\nprecision highp sampler2DArray;");
