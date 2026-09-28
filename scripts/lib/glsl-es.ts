@@ -187,3 +187,30 @@ export function inlinedFetchSites(source: string): number {
   };
   return total("main");
 }
+
+const ARRAY_ELEM = String.raw`(?:float|int|uint|bool|[biu]?vec[234]|mat[234](?:x[234])?)`;
+
+/**
+ * Array-type precision lint. Mali's native compiler behind ANGLE (Mali-G57, "S0032:
+ * no default precision defined for variable 'float[5]'") rejects array types the
+ * default precision statement doesn't reach: every array constructor
+ * (`float[5](...)`) is an error, and every array declaration / parameter / return
+ * type must carry an explicit precision qualifier (highp / mediump / lowp / DM_P).
+ * `constructorsOnly` checks only the constructors (for three's own chunks).
+ */
+export function arrayPrecisionIssues(source: string, opts: { constructorsOnly?: boolean } = {}): string[] {
+  const src = source.replace(/\/\/.*$/gm, "").replace(/\/\*[\s\S]*?\*\//g, "");
+  const out: string[] = [];
+  for (const m of src.matchAll(new RegExp(String.raw`\b${ARRAY_ELEM}\s*\[\s*[\w${"$"}{}.* ]*\]\s*\(`, "g"))) {
+    // a return-type array (`float[5] f(`) is caught below, not a constructor
+    const after = src.slice(m.index! + m[0].length - 1);
+    if (!/^\(/.test(after)) continue;
+    out.push(`array constructor: ${m[0].trim()}…`);
+  }
+  if (opts.constructorsOnly) return out;
+  const decl = new RegExp(String.raw`(^|[;{}(,]|\n)\s*((?:(?:const|in|out|inout|uniform|flat)\s+)*)((?:highp|mediump|lowp|DM_P)\s+)?(${ARRAY_ELEM})\s+(\w+)\s*\[`, "g");
+  for (const m of src.matchAll(decl)) if (!m[3]) out.push(`array without precision: ${`${m[2]}${m[4]} ${m[5]}[`.trim()}`);
+  const ret = new RegExp(String.raw`(^|[;{}]|\n)\s*((?:highp|mediump|lowp|DM_P)\s+)?(${ARRAY_ELEM})\s*\[[^\]]*\]\s+(\w+)\s*\(`, "g");
+  for (const m of src.matchAll(ret)) if (!m[2]) out.push(`array return type without precision: ${m[3]}[] ${m[4]}(`);
+  return out;
+}

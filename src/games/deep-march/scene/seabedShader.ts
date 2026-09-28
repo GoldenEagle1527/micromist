@@ -20,6 +20,16 @@ vec3 dmWater(vec3 dir) {
 `;
 
 export const DECLS = /* glsl */ `
+// Explicit precision for every array type (DM_P = the renderer's float precision,
+// three's HIGH_ / MEDIUM_PRECISION): Mali's native compiler (behind ANGLE) doesn't
+// apply the default precision to some array types (S0032, see materialShader.ts).
+#ifndef DM_P
+#if defined(HIGH_PRECISION) || !defined(MEDIUM_PRECISION)
+#define DM_P highp
+#else
+#define DM_P mediump
+#endif
+#endif
 uniform float uWS;
 uniform float uTime;
 uniform vec3 uAbsorb;

@@ -28,7 +28,7 @@ function fragmentSource(defines: string[]): string {
   const vk = (src: string) =>
     src
       .replace(/uniform (sampler2D|sampler2DArray) (\w+);/g, (_, t, n) => `layout(set = 0, binding = ${binding++}) uniform ${t} ${n};`)
-      .replace(/uniform (float|int|vec2|vec3|vec4) (\w+(?:\[\w+\])?);/g, "$1 $2;")
+      .replace(/uniform ((?:highp |mediump |lowp |DM_P )?)(float|int|vec2|vec3|vec4) (\w+(?:\[\w+\])?);/g, "$1$2 $3;")
       .replace(/varying (\w+) (\w+);/g, (_, t, n) => `layout(location = ${loc++}) in ${t} ${n};`);
   return [
     "#version 450",

@@ -153,8 +153,8 @@ export const SONAR_DECLS = /* glsl */ `
 #define DM_SONAR_N 5
 #endif
 uniform float uSonar;
-uniform vec4 uSonarPulse[DM_SONAR_N];
-uniform float uSonarAmp[DM_SONAR_N];
+uniform DM_P vec4 uSonarPulse[DM_SONAR_N];
+uniform DM_P float uSonarAmp[DM_SONAR_N];
 uniform vec4 uSonarWave;
 uniform vec3 uSonarLine;
 uniform vec3 uSonarColor;
