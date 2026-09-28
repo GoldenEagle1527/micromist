@@ -26,10 +26,14 @@ export type LoadingDict = {
   lamps: (modes: string) => string;
   sonar: string;
   shaders: string;
-  shadersSimple: string;
+  seabedMode: (mode: string) => string;
+  seabedModes: Record<"full" | "simple" | "lite" | "flat", string>;
+  modeFailed: (mode: string, log: string) => string;
+  gpu: (renderer: string, units: number, vectors: number, highp: boolean) => string;
   shaderError: (msg: string) => string;
   gpuLost: string;
   diveAnyway: string;
+  continueDive: string;
   overall: string;
   begin: string;
   materialNames: Record<string, string>;
@@ -66,10 +70,14 @@ export const loadingEn: LoadingDict = {
   lamps: (modes) => `Lamps: ${modes}`,
   sonar: "Sonar ready",
   shaders: "Seabed shaders compiled",
-  shadersSimple: "Seabed shaders compiled (compatibility mode)",
+  seabedMode: (m) => `mode: ${m}`,
+  seabedModes: { full: "full", simple: "simplified", lite: "lite", flat: "flat colour (no textures)" },
+  modeFailed: (m, log) => `Seabed shader "${m}" failed on this GPU, trying a lighter one — ${log}`,
+  gpu: (r, u, v, h) => `GPU: ${r} · texture units ${u} · fragment uniforms ${v} · highp ${h ? "yes" : "no"}`,
   shaderError: (msg) => `Shader error: ${msg}`,
   gpuLost: "Graphics context lost (GPU reset) — reload the page",
   diveAnyway: "Dive anyway",
+  continueDive: "Continue dive",
   overall: "Overall",
   begin: "Begin dive",
   materialNames: {
@@ -129,10 +137,14 @@ export const loadingZh: LoadingDict = {
   lamps: (modes) => `灯光：${modes}`,
   sonar: "声呐就绪",
   shaders: "海床着色器已编译",
-  shadersSimple: "海床着色器已编译（兼容模式）",
+  seabedMode: (m) => `模式：${m}`,
+  seabedModes: { full: "完整", simple: "简化", lite: "轻量", flat: "纯色（无贴图）" },
+  modeFailed: (m, log) => `海床着色器“${m}”在此 GPU 上失败，改用更轻的版本 — ${log}`,
+  gpu: (r, u, v, h) => `GPU：${r} · 纹理单元 ${u} · 片元 uniform ${v} · highp ${h ? "支持" : "不支持"}`,
   shaderError: (msg) => `着色器错误：${msg}`,
   gpuLost: "图形上下文丢失（GPU 重置）— 请刷新页面",
   diveAnyway: "仍然下潜",
+  continueDive: "继续下潜",
   overall: "总进度",
   begin: "开始下潜",
   materialNames: {

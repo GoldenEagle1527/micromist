@@ -10,7 +10,8 @@ import { findSpawn } from "../terrain/spawn";
 import { InputController, type PanelInput } from "./input";
 import { MarineSnow } from "./particles";
 import { MaterialLibrary, type MaterialStatus } from "./materialLibrary";
-import { WATER_GLSL, createSeabedMaterial, createWaterUniforms } from "./seabedMaterial";
+import { WATER_GLSL, createSeabedMaterial, createWaterUniforms, parseSeabedMode, type SeabedShaderMode } from "./seabedMaterial";
+import { failureReport, gpuInfo, shaderModeOf, type GpuInfo } from "./gpuDiagnostics";
 import { DiverController, type DiverState } from "./diver";
 import { LampRig } from "./lampRig";
 import { FOG_GLSL, FOG_TUNING, createFogUniforms, parseFogParam } from "./fog";
@@ -86,8 +87,12 @@ export type LoadingSnapshot = {
     shaders: boolean;
     /** A program failed to build and no fallback exists (driver log excerpt). */
     shaderError: string | null;
-    /** The full seabed program failed; the simple material path is in use. */
-    shaderFallback: boolean;
+    /** Seabed shader mode in use (materialShader.ts). */
+    seabedMode: SeabedShaderMode;
+    /** Seabed modes whose program failed on this device (driver logs), in order. */
+    shaderFailures: { mode: SeabedShaderMode; log: string }[];
+    /** Renderer string and key limits. */
+    gpu: GpuInfo;
     /** WebGL context lost (GPU reset / out of memory). */
     gpuLost: boolean;
   };
@@ -244,6 +249,8 @@ void main() {
     // ?detail=0: no shader detail normal (creases + facet blend, detailNormal.ts)
     detail: qs.get("detail") !== "0",
     lowSpec,
+    // ?seabed=full|simple|lite|flat: starting shader mode (fallbacks still apply)
+    mode: parseSeabedMode(qs.get("seabed")),
     water,
     fog,
     sonar,
@@ -269,7 +276,7 @@ void main() {
   // loading screen (and in-game) instead of silently rendering nothing.
   let shadersReady = false;
   let shaderError: string | null = null;
-  let shaderFallback = false;
+  const shaderFailures: { mode: SeabedShaderMode; log: string }[] = [];
   let gpuLost = false;
   let recompile = false;
   let compiling = false;
@@ -277,25 +284,32 @@ void main() {
   const warmGeo = new THREE.BufferGeometry();
   const warm = new THREE.Group();
   warm.add(new THREE.Mesh(warmGeo, terrainMat), new THREE.Mesh(warmGeo, seabed.fadeMaterial().material));
+  // GPU facts for the system check (and for any failure report)
+  const gpu = gpuInfo(renderer.getContext());
+  console.info(`[deep-march] GPU: ${gpu.renderer} · texture units ${gpu.textureUnits} · fragment uniform vectors ${gpu.fragmentVectors} · fragment highp ${gpu.highp ? "yes" : "no"} · seabed mode ${seabed.mode()}`);
   renderer.debug.onShaderError = (gl, program, vs, fs) => {
-    const log = [gl.getProgramInfoLog(program), gl.getShaderInfoLog(vs), gl.getShaderInfoLog(fs)]
-      .map((s) => (s ?? "").trim())
-      .filter(Boolean)
-      .join("\n");
-    const isSeabed = (gl.getShaderSource(fs) ?? "").includes("dmSampleLayer");
-    console.error(`[deep-march] shader program failed to link${isSeabed ? ` (seabed, ${seabed.simple() ? "simple" : "full"} path)` : ""}:\n${log || "(no driver log)"}`);
-    if (isSeabed && seabed.useSimplePath()) {
-      console.warn("[deep-march] seabed: switching to the simple material path");
-      shaderFallback = true;
-      recompile = true;
-      // may run inside renderer.render (first draw): compile again outside of it
-      if (!compiling) {
-        compiling = true;
-        setTimeout(() => !destroyed && compileShaders(), 0);
-      }
-      return;
+    const src = gl.getShaderSource(fs) ?? "";
+    const failedMode = /#define DM_SONAR_N/.test(src) ? shaderModeOf(src) : null;
+    const report = failureReport(gl.getProgramInfoLog(program), gl.getShaderInfoLog(vs), gl.getShaderInfoLog(fs));
+    console.error(`[deep-march] shader program failed to link${failedMode ? ` (seabed, mode ${failedMode})` : ""}:\n${report}\nGPU: ${gpu.renderer}`);
+    if (failedMode) {
+      // base and fade programs of one mode may both report: degrade once per mode
+      if (!shaderFailures.some((f) => f.mode === failedMode)) shaderFailures.push({ mode: failedMode, log: report });
+      if (failedMode === seabed.mode()) {
+        const next = seabed.degrade();
+        if (next) {
+          console.warn(`[deep-march] seabed: falling back to shader mode "${next}"`);
+          recompile = true;
+          // may run inside renderer.render (first draw): compile again outside of it
+          if (!compiling) {
+            compiling = true;
+            setTimeout(() => !destroyed && compileShaders(), 0);
+          }
+          return;
+        }
+      } else return; // a stale program of an already abandoned mode
     }
-    shaderError ??= (log.split("\n").find((l) => /error/i.test(l)) ?? log.split("\n")[0] ?? "").slice(0, 200) || "link failed";
+    shaderError ??= `${failedMode ? `seabed ${failedMode}: ` : ""}${report}`;
     updateAlert();
   };
   function compileShaders() {
@@ -558,7 +572,7 @@ void main() {
       spawnDebug.updateDiver(diver.position.x, diver.position.z, -diver.yaw);
       hudTimer = 0.25;
       const st = chunks.stats();
-      stats.textContent = `${fps.toFixed(0)} fps ×${pacer.ratio.toFixed(2)} · ${labels.chunks} ${st.meshes}/${st.active} (LOD ${st.lodMeshes.join("/")}) · −${st.floaters} ${labels.floaters} · q${st.queued}+${st.pending} · ${(st.triangles / 1000).toFixed(0)}k ${labels.tris} · ${st.workers ? `${st.workers}w` : labels.mainThread} ${st.avgMs.toFixed(1)}ms (${labels.classify} ${st.avgInfoMs.toFixed(1)}) · occ ${occlusion.enabled ? `−${occlusion.culledCount}` : "off"}`;
+      stats.textContent = `${fps.toFixed(0)} fps ×${pacer.ratio.toFixed(2)} · ${labels.chunks} ${st.meshes}/${st.active} (LOD ${st.lodMeshes.join("/")}) · −${st.floaters} ${labels.floaters} · q${st.queued}+${st.pending} · ${(st.triangles / 1000).toFixed(0)}k ${labels.tris} · ${st.workers ? `${st.workers}w` : labels.mainThread} ${st.avgMs.toFixed(1)}ms (${labels.classify} ${st.avgInfoMs.toFixed(1)}) · occ ${occlusion.enabled ? `−${occlusion.culledCount}` : "off"} · seabed ${seabed.mode()}`;
     }
   };
   raf = requestAnimationFrame(frame);
@@ -583,7 +597,9 @@ void main() {
       sonar: avail.includes("sonar") && sonar.uSonarPulse.value.length > 0,
       shaders: shadersReady,
       shaderError,
-      shaderFallback,
+      seabedMode: seabed.mode(),
+      shaderFailures: shaderFailures.slice(),
+      gpu,
       gpuLost,
     };
   };
