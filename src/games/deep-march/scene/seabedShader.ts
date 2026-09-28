@@ -35,7 +35,7 @@ float dmHash(vec3 p) {
   p *= 17.0;
   return fract(p.x * p.y * p.z * (p.x + p.y + p.z));
 }
-// Value noise on dmHash lattice values. dmHash's first steps (fract(p / π + c) · 17)
+// Value noise on dmHash lattice values. dmHash's first steps (fract(p / pi + c) * 17)
 // act per axis, so the 8 corners share only two values per axis (i, i + 1): computed
 // once here with the same arithmetic, the result is identical to hashing each corner.
 float dmNoise(vec3 x) {
@@ -44,7 +44,7 @@ float dmNoise(vec3 x) {
   f = f * f * (3.0 - 2.0 * f);
   vec3 a = fract(i * 0.3183099 + vec3(0.1, 0.2, 0.3)) * 17.0;
   vec3 b = fract((i + 1.0) * 0.3183099 + vec3(0.1, 0.2, 0.3)) * 17.0;
-  // dmHash = fract(x·y·z·(x + y + z)), same operation order
+  // dmHash = fract(x*y*z*(x + y + z)), same operation order
   float p00 = a.x * a.y, p10 = b.x * a.y, p01 = a.x * b.y, p11 = b.x * b.y;
   float s00 = a.x + a.y, s10 = b.x + a.y, s01 = a.x + b.y, s11 = b.x + b.y;
   return mix(mix(mix(fract(p00 * a.z * (s00 + a.z)), fract(p10 * a.z * (s10 + a.z)), f.x),

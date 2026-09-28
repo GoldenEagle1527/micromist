@@ -4,27 +4,31 @@
  * → region palettes (main + alt sub-patches) → the 5 surface slots of the current
  * surface weights (floor A/B, wall A/B, ceiling).
  *
- *  - region choice: the 6 baked region weights reduced to the top two; their mix is
- *    sharpened by world noise into meandering interfingering (no hard seam, both
- *    regions fetched only in thin ribbons). Each region blends its main / alt
- *    palette by a world patch noise (narrow soft band);
- *  - full path (desktop): slot entries of up to 4 palettes merged by layer (shared
- *    layers fetched once);
- *  - DM_SIMPLE_MAT (phones, and the automatic fallback when the full program fails
- *    to build): ONE palette per pixel — region and main / alt picked by an
- *    interleaved-gradient dither inside the border ribbon / alt band — and its 5
- *    slots fetched directly: no local arrays, no dynamic vector indexing, few
- *    loops (mobile GLSL compilers choke on the full path, see test:shaders);
- *  - no dynamic indexing of vector components anywhere (dmLayerOf);
- *  - triplanar with explicit gradients (derivatives taken in uniform control flow in
- *    MAP_FRAGMENT), floors on the top projection only, walls / ceiling on all three;
- *  - rotated second scale (anti-tiling) per layer: "desktop" sets on desktop,
- *    "always" sets (large unique features, B slots only) everywhere;
- *  - all layers are on the GPU before the dive (materialLibrary.ts): no stand-ins.
- * Needs DECLS (dmNoise / dmFbm / dmRot) first. MAT_FRAGMENT defines floorW, ceilW,
- * nA, albedo, nX4 / nY4 / nZ4 for the rest of MAP_FRAGMENT.
+ * Four shader modes (SeabedShaderMode, seabedMaterial.ts), heaviest first; a mode
+ * whose program fails to build on the device falls back to the next one (world.ts):
+ *  - "full" (desktop): the 6 baked region weights reduced to the top two, their mix
+ *    sharpened by world noise into meandering interfingering; each region blends its
+ *    main / alt palette by a world patch noise; the slot entries of up to 4 palettes
+ *    merged by layer (shared layers fetched once), triplanar, rotated second scale;
+ *  - "simple" (DM_SIMPLE_MAT): ONE palette per pixel — region and main / alt picked
+ *    by an interleaved-gradient dither inside the border ribbon / alt band — and its
+ *    5 slots fetched directly (no local arrays, loops or dynamic vector indexing);
+ *    still up to 60 fetch sites once inlined;
+ *  - "lite" (DM_LITE_MAT, phones): one dithered palette, only its 2 strongest slots,
+ *    the anti-tiling scale dithered instead of blended, single-octave shaping
+ *    noises: 12 fetch sites (fewer than the 4-set shader phones ran before the
+ *    material library);
+ *  - "flat" (DM_FLAT_MAT, last resort): no material textures at all — per region
+ *    floor / wall / ceiling mean tones (uFlat, constant indices only), no dynamic
+ *    indexing; the seabed stays visible whatever the driver.
+ * Common: triplanar with explicit gradients (derivatives taken in uniform control
+ * flow), floors on the top projection, walls / ceiling on all three; no dynamic
+ * indexing of vector components or samplers anywhere. All layers are on the GPU
+ * before the dive (materialLibrary.ts). Needs DECLS (dmNoise / dmFbm / dmRot) first.
+ * MAT_FRAGMENT defines floorW, ceilW, nA, slotW, albedo, nX4 / nY4 / nZ4 for the rest
+ * of MAP_FRAGMENT.
  */
-import { LAYER_COUNT, PALETTE_COUNT } from "./materialCatalog";
+import { LAYER_COUNT, PALETTE_COUNT, REGION_PALETTES } from "./materialCatalog";
 
 /** Vertex side: region weight attributes (terrain/regionWeights.ts) → varyings. */
 export const MAT_VERT_DECLS = /* glsl */ `
@@ -42,13 +46,22 @@ export const MAT_DECLS = /* glsl */ `
 #define DM_LAYERS ${LAYER_COUNT}
 #define DM_PALETTES ${PALETTE_COUNT}
 #define DM_ENTRIES 14
+// region-scale shaping noises: one octave in lite mode (a third of the math)
+#ifdef DM_LITE_MAT
+#define DM_SHAPE_NOISE(p) dmNoise(p)
+#else
+#define DM_SHAPE_NOISE(p) dmFbm(p)
+#endif
+varying vec4 vRegA;               // region weights: sand, reef, canyon, cave
+varying vec2 vRegB;               //                 terrace, trench
+#ifdef DM_FLAT_MAT
+uniform vec3 uFlat[${REGION_PALETTES.length * 3}];       // per region: floor, wall, ceiling tone
+#else
 uniform sampler2DArray tMatA;
 uniform sampler2DArray tMatN;
 uniform vec4 uLayer[DM_LAYERS];   // x = 1 / repeat, y = gain, z = rot (1 desktop, 2 always)
 uniform vec4 uPal[DM_PALETTES];   // floorA, floorB, wallA, wallB layers
 uniform vec4 uPalC[DM_PALETTES];  // x = ceiling layer, y = alt-patch threshold
-varying vec4 vRegA;               // region weights: sand, reef, canyon, cave
-varying vec2 vRegB;               //                 terrace, trench
 
 void dmSampleLayer(int L, vec2 uv, vec2 dx, vec2 dy, float rMix, out vec3 a, out vec4 n) {
   vec4 P = uLayer[L];
@@ -79,18 +92,28 @@ void dmSampleLayer(int L, vec2 uv, vec2 dx, vec2 dy, float rMix, out vec3 a, out
   a *= P.y;
 }
 
+// Lite: one fetch pair per layer; the rotated scale ("always" sets) chosen by dither.
+void dmAccLite(int L, float w, vec2 uv, vec2 dx, vec2 dy, bool rot, inout vec3 a, inout vec4 n, inout float s) {
+  if (w <= 0.0) return;
+  vec4 P = uLayer[L];
+  bool r = rot && P.z > 1.5;
+  float k = P.x * (r ? 0.43 : 1.0);
+  vec2 u = (r ? dmRot(uv) : uv) * k + (r ? 0.37 : 0.0);
+  vec2 gx = (r ? dmRot(dx) : dx) * k, gy = (r ? dmRot(dy) : dy) * k;
+  vec3 ta = textureGrad(tMatA, vec3(u, float(L)), gx, gy).rgb * P.y;
+  vec4 tn = textureGrad(tMatN, vec3(u, float(L)), gx, gy);
+  if (r) tn.xy = (transpose(mat2(0.8, -0.6, 0.6, 0.8)) * (tn.xy * 2.0 - 1.0)) * 0.5 + 0.5;
+  a += ta * w;
+  n += tn * w;
+  s += w;
+}
+
 // Layer of palette p in slot 0..4 (floorA, floorB, wallA, wallB, ceiling), without
 // dynamic vector-component indexing.
 int dmLayerOf(int p, int slot) {
   vec4 v = uPal[p];
   float f = slot == 0 ? v.x : slot == 1 ? v.y : slot == 2 ? v.z : slot == 3 ? v.w : uPalC[p].x;
   return int(f + 0.5);
-}
-
-// Running top-2 of the region weights (called once per region with a literal id).
-void dmTop2(float w, int r, inout int ia, inout float wa, inout int ib, inout float wb) {
-  if (w > wa) { ib = ia; wb = wa; ia = r; wa = w; }
-  else if (w > wb) { ib = r; wb = w; }
 }
 
 // Alt-palette share of region r at this point (world patch noise, narrow soft band).
@@ -109,6 +132,13 @@ void dmAcc(int L, float w, vec2 uv, vec2 dx, vec2 dy, float rMix, inout vec3 a, 
   n += tn * w;
   s += w;
 }
+#endif
+
+// Running top-2 (called with literal ids).
+void dmTop2(float w, int r, inout int ia, inout float wa, inout int ib, inout float wb) {
+  if (w > wa) { ib = ia; wb = wa; ia = r; wa = w; }
+  else if (w > wb) { ib = r; wb = w; }
+}
 `;
 
 export const MAT_FRAGMENT = /* glsl */ `
@@ -124,12 +154,23 @@ export const MAT_FRAGMENT = /* glsl */ `
   // wall B on gently sloped, lit rock and ledges, patchy
   float wallBMask = smoothstep(0.45, 0.7, nB * 0.7 + nA * 0.3 + up * 0.35) * (1.0 - ceilW);
   float slotW[5] = float[5](floorW * (1.0 - floorBMask), floorW * floorBMask, wallW * (1.0 - wallBMask), wallW * wallBMask, ceilW);
+
+#ifdef DM_FLAT_MAT
+  // ---- flat tones: every region weighted in, constant indices only ---------
+  float rs = max(vRegA.x + vRegA.y + vRegA.z + vRegA.w + vRegB.x + vRegB.y, 1e-3);
+  vec3 cF = (uFlat[0] * vRegA.x + uFlat[3] * vRegA.y + uFlat[6] * vRegA.z + uFlat[9] * vRegA.w + uFlat[12] * vRegB.x + uFlat[15] * vRegB.y) / rs;
+  vec3 cW = (uFlat[1] * vRegA.x + uFlat[4] * vRegA.y + uFlat[7] * vRegA.z + uFlat[10] * vRegA.w + uFlat[13] * vRegB.x + uFlat[16] * vRegB.y) / rs;
+  vec3 cC = (uFlat[2] * vRegA.x + uFlat[5] * vRegA.y + uFlat[8] * vRegA.z + uFlat[11] * vRegA.w + uFlat[14] * vRegB.x + uFlat[17] * vRegB.y) / rs;
+  vec3 albedo = cF * (slotW[0] + slotW[1] * 0.85) + cW * (slotW[2] + slotW[3] * 1.1) + cC * slotW[4];
+  albedo *= mix(0.8, 1.15, dmNoise(wp * 0.9));   // a little grain in place of the texture
+  vec4 nX4 = vec4(0.5, 0.5, 0.85, 1.0), nY4 = nX4, nZ4 = nX4;
+#else
   // side projections show walls / ceiling; where those fade out (gentle floor
   // slopes) the floor layers fade in there instead (continuous: no seam line)
   float sideSum = slotW[2] + slotW[3] + slotW[4];
   float floorSide = 1.0 - smoothstep(0.0, 0.08, sideSum);
 
-  // ---- regions → the two strongest regions ---------------------------------
+  // ---- regions -> the two strongest regions --------------------------------
   int regA = 0, regB = 0;
   float wA = 0.0, wB = 0.0;
   dmTop2(vRegA.x, 0, regA, wA, regB, wB);
@@ -146,14 +187,14 @@ export const MAT_FRAGMENT = /* glsl */ `
     float tw = wA; wA = wB; wB = tw;
   }
   // sub-region alt patches (~100 u), decorrelated per region by mixing two noises
-  float nP1 = dmFbm(wp * 0.011 + 17.0), nP2 = dmFbm(wp * 0.0085 + 53.0);
+  float nP1 = DM_SHAPE_NOISE(wp * 0.011 + 17.0), nP2 = DM_SHAPE_NOISE(wp * 0.0085 + 53.0);
   float vA = dmAltV(regA, nP1, nP2);
   float vB = dmAltV(regB, nP1, nP2);
   // interfingering: the linear blend becomes a noisy, meandering front
-  float nI = dmFbm(wp * 0.045 + 7.0) * 0.6 + dmFbm(wp * 0.19 + 3.0) * 0.4;
+  float nI = DM_SHAPE_NOISE(wp * 0.045 + 7.0) * 0.6 + DM_SHAPE_NOISE(wp * 0.19 + 3.0) * 0.4;
   float palMix = wB > 0.0 ? smoothstep(0.44, 0.56, wB / (wA + wB) + (nI - 0.5) * 1.5) : 0.0;
 
-  // ---- UVs (units → texture repeats) ------------------------------------
+  // ---- UVs (units -> texture repeats) ------------------------------------
   vec2 uvX = vec2(wp.z * axisSign.x, wp.y);
   vec2 uvY = vec2(wp.x * axisSign.y, wp.z);
   vec2 uvZ = vec2(-wp.x * axisSign.z, wp.y);
@@ -169,13 +210,42 @@ export const MAT_FRAGMENT = /* glsl */ `
   vec3 aX = vec3(0.0), aY = vec3(0.0), aZ = vec3(0.0);
   vec4 nX4 = vec4(0.0), nY4 = vec4(0.0), nZ4 = vec4(0.0);
   float sY = 0.0, sX = 0.0, sZ = 0.0;
-#ifdef DM_SIMPLE_MAT
+#if defined(DM_LITE_MAT) || defined(DM_SIMPLE_MAT)
   // ---- one palette per pixel: region, then main / alt, by dither ----------
   float dth = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));
   float dth2 = fract(dth + 0.61803399);
   bool useB = palMix > dth;
   int reg = useB ? regB : regA;
   int pal = 2 * reg + ((useB ? vB : vA) > dth2 ? 1 : 0);
+#endif
+#if defined(DM_LITE_MAT)
+  // ---- the palette's two strongest slots, anti-tiling scale by dither --------
+  int s1 = 0, s2 = 0;
+  float w1 = slotW[0], w2 = -1.0;
+  dmTop2(slotW[1], 1, s1, w1, s2, w2);
+  dmTop2(slotW[2], 2, s1, w1, s2, w2);
+  dmTop2(slotW[3], 3, s1, w1, s2, w2);
+  dmTop2(slotW[4], 4, s1, w1, s2, w2);
+  w2 = max(w2, 0.0);
+  if (w2 < 0.06 * (w1 + w2)) w2 = 0.0;
+  int L1 = dmLayerOf(pal, s1), L2 = dmLayerOf(pal, s2);
+  bool rot = rMix > dth;
+  // side axes: floor slots only where walls fade out (as above); never all zero
+  float f1 = s1 < 2 ? floorSide : 1.0, f2 = s2 < 2 ? floorSide : 1.0;
+  if (w1 * f1 + w2 * f2 < 1e-3) { f1 = 1.0; f2 = 1.0; }
+  if (bw.y > 0.0) {
+    dmAccLite(L1, w1, uvY, gYx, gYy, rot, aY, nY4, sY);
+    dmAccLite(L2, w2, uvY, gYx, gYy, rot, aY, nY4, sY);
+  }
+  if (bw.x > 0.0) {
+    dmAccLite(L1, w1 * f1, uvX, gXx, gXy, rot, aX, nX4, sX);
+    dmAccLite(L2, w2 * f2, uvX, gXx, gXy, rot, aX, nX4, sX);
+  }
+  if (bw.z > 0.0) {
+    dmAccLite(L1, w1 * f1, uvZ, gZx, gZy, rot, aZ, nZ4, sZ);
+    dmAccLite(L2, w2 * f2, uvZ, gZx, gZy, rot, aZ, nZ4, sZ);
+  }
+#elif defined(DM_SIMPLE_MAT)
   vec4 PL4 = uPal[pal];
   int l0 = int(PL4.x + 0.5), l1 = int(PL4.y + 0.5), l2 = int(PL4.z + 0.5), l3 = int(PL4.w + 0.5);
   int l4 = int(uPalC[pal].x + 0.5);
@@ -239,4 +309,5 @@ export const MAT_FRAGMENT = /* glsl */ `
   aX /= max(sX, 1e-4); nX4 /= max(sX, 1e-4);
   aZ /= max(sZ, 1e-4); nZ4 /= max(sZ, 1e-4);
   vec3 albedo = aX * bw.x + aY * bw.y + aZ * bw.z;
+#endif
 `;
