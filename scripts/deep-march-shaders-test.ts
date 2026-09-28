@@ -27,10 +27,15 @@ import { BEAM_DECLS } from "../src/games/deep-march/scene/highBeam";
 import { PL_DECLS } from "../src/games/deep-march/scene/particleLight";
 import { SONAR_DECLS } from "../src/games/deep-march/scene/sonar";
 import { SNOW_FRAG, SNOW_VERT } from "../src/games/deep-march/scene/particles";
-import { MAT_DECLS, MAT_VERT_DECLS, MAT_VERT_MAIN } from "../src/games/deep-march/scene/materialShader";
+import { MAT_DECLS, MAT_FRAGMENT, MAT_VERT_DECLS, MAT_VERT_MAIN } from "../src/games/deep-march/scene/materialShader";
+import { DETAIL_APPLY } from "../src/games/deep-march/scene/detailNormal";
+import { FOG_OPAQUE } from "../src/games/deep-march/scene/fog";
+import { BEAM_LIGHT, BEAM_OPAQUE } from "../src/games/deep-march/scene/highBeam";
+import { PL_LIGHT } from "../src/games/deep-march/scene/particleLight";
+import { SONAR_OPAQUE } from "../src/games/deep-march/scene/sonar";
 import * as THREE from "three";
 import { capturePrograms } from "./lib/three-capture";
-import { dynamicSamplerIndexing, esForGlslang, inlinedFetchSites, preprocess, samplerUniforms, uniformVectors } from "./lib/glsl-es";
+import { arrayPrecisionIssues, dynamicSamplerIndexing, esForGlslang, inlinedFetchSites, preprocess, samplerUniforms, uniformVectors } from "./lib/glsl-es";
 import { SEABED_MODES, createSeabedMaterial, createWaterUniforms, type SeabedShaderMode } from "../src/games/deep-march/scene/seabedMaterial";
 import { shaderModeOf } from "../src/games/deep-march/scene/gpuDiagnostics";
 import { spawnSync } from "node:child_process";
@@ -54,7 +59,7 @@ function vulkanize(src: string, stage: "vertex" | "fragment", st: { binding: num
   return src
     .replace(/#include <[^>]+>/g, "")
     .replace(/uniform (sampler2D|sampler2DArray) (\w+);/g, (_, t, n) => `layout(set = 0, binding = ${st.binding++}) uniform ${t} ${n};`)
-    .replace(/uniform (float|int|vec2|vec3|vec4|mat3|mat4) (\w+(?:\[\w+\])?);/g, "$1 $2;")
+    .replace(/uniform ((?:highp |mediump |lowp |DM_P )?)(float|int|vec2|vec3|vec4|mat3|mat4) (\w+(?:\[[\w${}.* ]+\])?);/g, "$1$2 $3;")
     .replace(/attribute (\w+) (\w+);/g, (_, t, n) => `layout(location = ${st.inLoc++}) in ${t} ${n};`)
     .replace(/varying (\w+) (\w+);/g, (_, t, n) => (stage === "vertex" ? `layout(location = ${st.outLoc++}) out ${t} ${n};` : `layout(location = ${st.inLoc++}) in ${t} ${n};`))
     .replace(/gl_FragColor/g, "outColor")
@@ -146,9 +151,10 @@ const MIN_TEXTURE_IMAGE_UNITS = 16;
 const MIN_VERTEX_TEXTURE_IMAGE_UNITS = 16;
 const MIN_COMBINED_TEXTURE_IMAGE_UNITS = 32;
 /**
- * Texture fetch sites of main() after inlining, phone modes. The 4-set seabed that
- * phones rendered before the material library had 17-23; "simple" has 61 and
- * failed on a phone ("Fragment shader is not compiled", empty driver log).
+ * Texture fetch sites of main() after inlining, phone modes (a GPU-cost guard for
+ * low-end phones: the 4-set seabed phones ran before the material library had
+ * 17-23, "simple" has 61). The phone failures themselves were the float[5]
+ * constructor (Mali S0032), see arrayLint.
  */
 const PHONE_FETCH_BUDGET = 16;
 
@@ -168,6 +174,22 @@ function es300(name: string, src: string, stage: "vert" | "frag") {
   const r = spawnSync("glslangValidator", [file], { encoding: "utf8" });
   rmSync(dir, { recursive: true, force: true });
   check(r.status === 0, name, r.status === 0 ? "#version 300 es accepted" : (r.stdout + r.stderr).trim().slice(0, 400));
+}
+
+/** Every GLSL block we inject: array types need explicit precision, no array constructors. */
+function arrayLint() {
+  const blocks: Record<string, string> = { DECLS, WATER_GLSL, DETAIL_GLSL, DETAIL_APPLY, FOG_GLSL, FOG_OPAQUE, SONAR_DECLS, SONAR_OPAQUE, BEAM_DECLS, BEAM_LIGHT, BEAM_OPAQUE, PL_LIGHT, MAT_DECLS, MAT_FRAGMENT, MAT_VERT_DECLS, MAT_VERT_MAIN, MAP_FRAGMENT, EMISSIVE_FRAGMENT, LIGHTS_END_FRAGMENT, OPAQUE_FRAGMENT, DITHER_FRAGMENT, SNOW_VERT, SNOW_FRAG };
+  for (const [name, src] of Object.entries(blocks)) {
+    const issues = arrayPrecisionIssues(src);
+    check(issues.length === 0, `array types carry explicit precision, no array constructors: ${name}`, issues.join(" | ") || "clean");
+  }
+  // particleLight.ts is frozen: its one global uniform array (after three's default
+  // precision statement, present since before the material library) is reported only
+  const pl = arrayPrecisionIssues(PL_DECLS);
+  check(pl.every((i) => /uniform vec4 uPL\[/.test(i)), "PL_DECLS: nothing beyond the known uniform uPL[]", pl.join(" | ") || "clean");
+  // the lint itself: the Mali-rejected line of 8435322..e68b454 must be caught
+  const bad = arrayPrecisionIssues("  float slotW[5] = float[5](a, b, c, d, e);\nvoid f(in vec3 v[4]) {}\nint k[3];");
+  check(bad.length === 4, "lint catches float[5](...) constructors and unqualified array declarations / parameters", bad.join(" | "));
 }
 
 function exactPrograms(compile: Compile) {
@@ -201,6 +223,14 @@ function exactPrograms(compile: Compile) {
       check(!highp === /precision mediump float;/.test(p.fragment), `default float precision follows the device ${t}`, (/precision \w+ float;/.exec(p.fragment) ?? ["?"])[0]);
       check(!/[^\x00-\x7f]/.test(p.vertex + p.fragment), `sources are pure ASCII ${t}`, "");
       check(!/^\s*#\s*extension\b/m.test(preprocess(p.fragment)), `no #extension directives ${t}`, "");
+      for (const [stage, src] of [["vertex", p.vertex], ["fragment", p.fragment]] as const) {
+        const pp = preprocess(src);
+        const ctor = arrayPrecisionIssues(pp, { constructorsOnly: true });
+        check(ctor.length === 0, `no array constructors (Mali S0032) in the ${stage} program ${t}`, ctor.join(" | ") || "none");
+        const prec = pp.search(/^\s*precision\s+(highp|mediump)\s+float\s*;/m);
+        const ours = pp.search(stage === "vertex" ? /\bvRegA\b/ : /\buWS\b/);
+        check(prec >= 0 && ours > prec, `injected code after the float precision statement (${stage}) ${t}`, `precision at ${prec}, injected at ${ours}`);
+      }
       compile(`exact three vertex ES ${t}`, esForGlslang(p.vertex, "vertex"), "vertex");
       compile(`exact three fragment ES ${t}`, esForGlslang(p.fragment, "fragment"), "fragment");
       if (highp || c.phone) {
@@ -233,9 +263,9 @@ function exactPrograms(compile: Compile) {
         const a = pf.indexOf("---- surface weights"), b = pf.lastIndexOf("vec3 albedo =");
         const body = a >= 0 && b > a ? pf.slice(a, b) : "";
         const localArrays = [...body.matchAll(/^\s*(?:int|float|vec\d|ivec\d)\s+\w+\s*\[[^\]]*\]\s*(?:;|=)/gm)].map((m) => m[0].trim());
-        check(body !== "" && localArrays.every((d) => /float slotW\[5\] =/.test(d)), `${c.mode} material path: only the initialized constant-read slot array ${t}`, localArrays.join(" | ") || "none");
+        check(body !== "" && localArrays.length === 0, `${c.mode} material path: no local arrays ${t}`, localArrays.join(" | ") || "none");
         check(!/\bfor\s*\(|\bwhile\s*\(/.test(body), `${c.mode} material path: no loops ${t}`, "");
-        check(!/slotW\s*\[\s*[^\d\s]/.test(body), `${c.mode} material path: slot weights read with constant indices only ${t}`, "");
+        check(!/slotW\s*\[/.test(body), `${c.mode} material path: slot weights are scalars ${t}`, "");
       }
     });
   }
@@ -278,6 +308,7 @@ function exactPrograms(compile: Compile) {
     const chunks = readFileSync("src/games/deep-march/terrain/chunks.ts", "utf8");
     check(attrs.length === 2 && attrs.every((a) => chunks.includes(`setAttribute("${a}"`)), "region attributes bound by chunks.ts", attrs.join(", "));
   }
+  arrayLint();
   exactPrograms(compile);
   compile("background dome fragment", domeSource(), "fragment");
   const [sv, sf] = snowSources();

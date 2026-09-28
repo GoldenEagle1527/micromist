@@ -25,7 +25,7 @@
  * flow), floors on the top projection, walls / ceiling on all three; no dynamic
  * indexing of vector components or samplers anywhere. All layers are on the GPU
  * before the dive (materialLibrary.ts). Needs DECLS (dmNoise / dmFbm / dmRot) first.
- * MAT_FRAGMENT defines floorW, ceilW, nA, slotW, albedo, nX4 / nY4 / nZ4 for the rest
+ * MAT_FRAGMENT defines floorW, ceilW, nA, slotW0..4, albedo, nX4 / nY4 / nZ4 for the rest
  * of MAP_FRAGMENT.
  */
 import { LAYER_COUNT, PALETTE_COUNT, REGION_PALETTES } from "./materialCatalog";
@@ -55,13 +55,13 @@ export const MAT_DECLS = /* glsl */ `
 varying vec4 vRegA;               // region weights: sand, reef, canyon, cave
 varying vec2 vRegB;               //                 terrace, trench
 #ifdef DM_FLAT_MAT
-uniform vec3 uFlat[${REGION_PALETTES.length * 3}];       // per region: floor, wall, ceiling tone
+uniform DM_P vec3 uFlat[${REGION_PALETTES.length * 3}];       // per region: floor, wall, ceiling tone
 #else
 uniform sampler2DArray tMatA;
 uniform sampler2DArray tMatN;
-uniform vec4 uLayer[DM_LAYERS];   // x = 1 / repeat, y = gain, z = rot (1 desktop, 2 always)
-uniform vec4 uPal[DM_PALETTES];   // floorA, floorB, wallA, wallB layers
-uniform vec4 uPalC[DM_PALETTES];  // x = ceiling layer, y = alt-patch threshold
+uniform DM_P vec4 uLayer[DM_LAYERS];   // x = 1 / repeat, y = gain, z = rot (1 desktop, 2 always)
+uniform DM_P vec4 uPal[DM_PALETTES];   // floorA, floorB, wallA, wallB layers
+uniform DM_P vec4 uPalC[DM_PALETTES];  // x = ceiling layer, y = alt-patch threshold
 
 void dmSampleLayer(int L, vec2 uv, vec2 dx, vec2 dy, float rMix, out vec3 a, out vec4 n) {
   vec4 P = uLayer[L];
@@ -153,7 +153,11 @@ export const MAT_FRAGMENT = /* glsl */ `
   float floorBMask = smoothstep(0.42, 0.62, nA + (1.0 - floorW) * 0.15 - (wp.y / uWS - 2.0) * 0.015);
   // wall B on gently sloped, lit rock and ledges, patchy
   float wallBMask = smoothstep(0.45, 0.7, nB * 0.7 + nA * 0.3 + up * 0.35) * (1.0 - ceilW);
-  float slotW[5] = float[5](floorW * (1.0 - floorBMask), floorW * floorBMask, wallW * (1.0 - wallBMask), wallW * wallBMask, ceilW);
+  // five scalars, not an array: Mali (ANGLE -> native GLES) rejects the array
+  // constructor float[5](...) with "S0032: no default precision defined for
+  // variable 'float[5]'" - no array constructors anywhere (test:shaders)
+  float slotW0 = floorW * (1.0 - floorBMask), slotW1 = floorW * floorBMask;
+  float slotW2 = wallW * (1.0 - wallBMask), slotW3 = wallW * wallBMask, slotW4 = ceilW;
 
 #ifdef DM_FLAT_MAT
   // ---- flat tones: every region weighted in, constant indices only ---------
@@ -161,13 +165,13 @@ export const MAT_FRAGMENT = /* glsl */ `
   vec3 cF = (uFlat[0] * vRegA.x + uFlat[3] * vRegA.y + uFlat[6] * vRegA.z + uFlat[9] * vRegA.w + uFlat[12] * vRegB.x + uFlat[15] * vRegB.y) / rs;
   vec3 cW = (uFlat[1] * vRegA.x + uFlat[4] * vRegA.y + uFlat[7] * vRegA.z + uFlat[10] * vRegA.w + uFlat[13] * vRegB.x + uFlat[16] * vRegB.y) / rs;
   vec3 cC = (uFlat[2] * vRegA.x + uFlat[5] * vRegA.y + uFlat[8] * vRegA.z + uFlat[11] * vRegA.w + uFlat[14] * vRegB.x + uFlat[17] * vRegB.y) / rs;
-  vec3 albedo = cF * (slotW[0] + slotW[1] * 0.85) + cW * (slotW[2] + slotW[3] * 1.1) + cC * slotW[4];
+  vec3 albedo = cF * (slotW0 + slotW1 * 0.85) + cW * (slotW2 + slotW3 * 1.1) + cC * slotW4;
   albedo *= mix(0.8, 1.15, dmNoise(wp * 0.9));   // a little grain in place of the texture
   vec4 nX4 = vec4(0.5, 0.5, 0.85, 1.0), nY4 = nX4, nZ4 = nX4;
 #else
   // side projections show walls / ceiling; where those fade out (gentle floor
   // slopes) the floor layers fade in there instead (continuous: no seam line)
-  float sideSum = slotW[2] + slotW[3] + slotW[4];
+  float sideSum = slotW2 + slotW3 + slotW4;
   float floorSide = 1.0 - smoothstep(0.0, 0.08, sideSum);
 
   // ---- regions -> the two strongest regions --------------------------------
@@ -221,11 +225,11 @@ export const MAT_FRAGMENT = /* glsl */ `
 #if defined(DM_LITE_MAT)
   // ---- the palette's two strongest slots, anti-tiling scale by dither --------
   int s1 = 0, s2 = 0;
-  float w1 = slotW[0], w2 = -1.0;
-  dmTop2(slotW[1], 1, s1, w1, s2, w2);
-  dmTop2(slotW[2], 2, s1, w1, s2, w2);
-  dmTop2(slotW[3], 3, s1, w1, s2, w2);
-  dmTop2(slotW[4], 4, s1, w1, s2, w2);
+  float w1 = slotW0, w2 = -1.0;
+  dmTop2(slotW1, 1, s1, w1, s2, w2);
+  dmTop2(slotW2, 2, s1, w1, s2, w2);
+  dmTop2(slotW3, 3, s1, w1, s2, w2);
+  dmTop2(slotW4, 4, s1, w1, s2, w2);
   w2 = max(w2, 0.0);
   if (w2 < 0.06 * (w1 + w2)) w2 = 0.0;
   int L1 = dmLayerOf(pal, s1), L2 = dmLayerOf(pal, s2);
@@ -250,40 +254,40 @@ export const MAT_FRAGMENT = /* glsl */ `
   int l0 = int(PL4.x + 0.5), l1 = int(PL4.y + 0.5), l2 = int(PL4.z + 0.5), l3 = int(PL4.w + 0.5);
   int l4 = int(uPalC[pal].x + 0.5);
   if (bw.y > 0.0) {
-    dmAcc(l0, slotW[0], uvY, gYx, gYy, rMix, aY, nY4, sY);
-    dmAcc(l1, slotW[1], uvY, gYx, gYy, rMix, aY, nY4, sY);
-    dmAcc(l2, slotW[2], uvY, gYx, gYy, rMix, aY, nY4, sY);
-    dmAcc(l3, slotW[3], uvY, gYx, gYy, rMix, aY, nY4, sY);
-    dmAcc(l4, slotW[4], uvY, gYx, gYy, rMix, aY, nY4, sY);
+    dmAcc(l0, slotW0, uvY, gYx, gYy, rMix, aY, nY4, sY);
+    dmAcc(l1, slotW1, uvY, gYx, gYy, rMix, aY, nY4, sY);
+    dmAcc(l2, slotW2, uvY, gYx, gYy, rMix, aY, nY4, sY);
+    dmAcc(l3, slotW3, uvY, gYx, gYy, rMix, aY, nY4, sY);
+    dmAcc(l4, slotW4, uvY, gYx, gYy, rMix, aY, nY4, sY);
   }
   if (bw.x > 0.0) {
-    dmAcc(l0, slotW[0] * floorSide, uvX, gXx, gXy, rMix, aX, nX4, sX);
-    dmAcc(l1, slotW[1] * floorSide, uvX, gXx, gXy, rMix, aX, nX4, sX);
-    dmAcc(l2, slotW[2], uvX, gXx, gXy, rMix, aX, nX4, sX);
-    dmAcc(l3, slotW[3], uvX, gXx, gXy, rMix, aX, nX4, sX);
-    dmAcc(l4, slotW[4], uvX, gXx, gXy, rMix, aX, nX4, sX);
+    dmAcc(l0, slotW0 * floorSide, uvX, gXx, gXy, rMix, aX, nX4, sX);
+    dmAcc(l1, slotW1 * floorSide, uvX, gXx, gXy, rMix, aX, nX4, sX);
+    dmAcc(l2, slotW2, uvX, gXx, gXy, rMix, aX, nX4, sX);
+    dmAcc(l3, slotW3, uvX, gXx, gXy, rMix, aX, nX4, sX);
+    dmAcc(l4, slotW4, uvX, gXx, gXy, rMix, aX, nX4, sX);
   }
   if (bw.z > 0.0) {
-    dmAcc(l0, slotW[0] * floorSide, uvZ, gZx, gZy, rMix, aZ, nZ4, sZ);
-    dmAcc(l1, slotW[1] * floorSide, uvZ, gZx, gZy, rMix, aZ, nZ4, sZ);
-    dmAcc(l2, slotW[2], uvZ, gZx, gZy, rMix, aZ, nZ4, sZ);
-    dmAcc(l3, slotW[3], uvZ, gZx, gZy, rMix, aZ, nZ4, sZ);
-    dmAcc(l4, slotW[4], uvZ, gZx, gZy, rMix, aZ, nZ4, sZ);
+    dmAcc(l0, slotW0 * floorSide, uvZ, gZx, gZy, rMix, aZ, nZ4, sZ);
+    dmAcc(l1, slotW1 * floorSide, uvZ, gZx, gZy, rMix, aZ, nZ4, sZ);
+    dmAcc(l2, slotW2, uvZ, gZx, gZy, rMix, aZ, nZ4, sZ);
+    dmAcc(l3, slotW3, uvZ, gZx, gZy, rMix, aZ, nZ4, sZ);
+    dmAcc(l4, slotW4, uvZ, gZx, gZy, rMix, aZ, nZ4, sZ);
   }
 #else
   // ---- slot entries of up to 4 palettes (A main / alt, B main / alt), merged by layer
   float pw0 = (1.0 - palMix) * (1.0 - vA), pw1 = (1.0 - palMix) * vA;
   float pw2 = palMix * (1.0 - vB), pw3 = palMix * vB;
-  int eL[DM_ENTRIES];
-  float eW[DM_ENTRIES];
-  float eF[DM_ENTRIES]; // 1 = floor entry (top projection; sides only via floorSide)
+  DM_P int eL[DM_ENTRIES];
+  DM_P float eW[DM_ENTRIES];
+  DM_P float eF[DM_ENTRIES]; // 1 = floor entry (top projection; sides only via floorSide)
   int ne = 0;
   for (int q = 0; q < 4; q++) {
     float pw = q == 0 ? pw0 : q == 1 ? pw1 : q == 2 ? pw2 : pw3;
     if (pw <= 0.0) continue;
     int pi = 2 * (q < 2 ? regA : regB) + (q == 1 || q == 3 ? 1 : 0);
     for (int slot = 0; slot < 5; slot++) {
-      float sw = slot == 0 ? slotW[0] : slot == 1 ? slotW[1] : slot == 2 ? slotW[2] : slot == 3 ? slotW[3] : slotW[4];
+      float sw = slot == 0 ? slotW0 : slot == 1 ? slotW1 : slot == 2 ? slotW2 : slot == 3 ? slotW3 : slotW4;
       float w = pw * sw;
       if (w <= 0.0) continue;
       int L = dmLayerOf(pi, slot);
