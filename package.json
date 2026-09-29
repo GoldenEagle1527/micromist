@@ -29,6 +29,7 @@
     "test:regionweights": "esbuild scripts/deep-march-regionweights-test.ts --bundle --platform=node --outfile=node_modules/.cache/dm-regionweights-test.cjs --log-level=warning && node node_modules/.cache/dm-regionweights-test.cjs",
     "test:refine": "esbuild scripts/deep-march-refine-test.ts --bundle --platform=node --outfile=node_modules/.cache/dm-refine-test.cjs --log-level=warning && node node_modules/.cache/dm-refine-test.cjs",
     "test:audio": "esbuild scripts/deep-march-audio-test.ts --bundle --platform=node --outfile=node_modules/.cache/dm-audio-test.cjs --define:import.meta.env.BASE_URL='\"/\"' --log-level=warning && node node_modules/.cache/dm-audio-test.cjs",
+    "test:sfx": "node scripts/deep-march-sfx-sync-test.mjs",
     "test:regions": "esbuild scripts/deep-march-regions-test.ts --bundle --platform=node --outfile=node_modules/.cache/dm-regions-test.cjs --log-level=warning && node node_modules/.cache/dm-regions-test.cjs",
     "cf-typegen": "wrangler types --include-runtime false",
     "deploy:staging": "npm run build && node scripts/patch-staging-wrangler.mjs && wrangler deploy"
