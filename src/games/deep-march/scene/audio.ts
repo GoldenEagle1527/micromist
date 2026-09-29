@@ -15,9 +15,13 @@
  * file is skipped quietly and that sound is simply silent. Loading never blocks
  * the dive.
  *
- * Pass an AudioContext created inside the dive-start click so playback is
- * allowed. ?audio=0 skips the mixer entirely.
+ * Pass the shared AudioContext acquired inside the dive-start click
+ * (audioContext.ts) so playback is allowed; AudioLifecycle (audioLifecycle.ts)
+ * keeps it running across gestures, background / iOS interruptions and GPU loss.
+ * ?audio=0 skips the mixer entirely.
  */
+import { AudioLifecycle, type HoldReason, type LifecycleEnv } from "./audioLifecycle";
+
 const BASE = `${import.meta.env.BASE_URL}deep-march/sfx/`;
 
 const CLIPS = {
@@ -36,28 +40,31 @@ export type ShotId = "sonar" | "switch" | "mode" | "bump" | "warn";
 export type ShotOpts = { gain?: number; rate?: number; lowpass?: number };
 
 export type DiveAudio = {
-  unlock: () => void;
+  /** Keep audio stopped for `reason` (tab hidden is tracked automatically). */
+  hold: (reason: HoldReason, on: boolean) => void;
   setLoop: (id: LoopId, gain: number) => void;
   /** Ease loop gains toward the targets set this frame. */
   tick: (dt: number) => void;
   play: (id: ShotId, opts?: ShotOpts) => void;
-  suspend: () => void;
-  resume: () => void;
   dispose: () => void;
 };
 
 const noop: DiveAudio = {
-  unlock: () => {},
+  hold: () => {},
   setLoop: () => {},
   tick: () => {},
   play: () => {},
-  suspend: () => {},
-  resume: () => {},
   dispose: () => {},
 };
 
-export function createDiveAudio(ctx: AudioContext | null): DiveAudio {
+function browserEnv(): LifecycleEnv | null {
+  if (typeof window === "undefined" || typeof document === "undefined") return null;
+  return { win: window, doc: document, isHidden: () => document.hidden };
+}
+
+export function createDiveAudio(ctx: AudioContext | null, env: LifecycleEnv | null = browserEnv()): DiveAudio {
   if (!ctx) return noop;
+  const lifecycle = env ? new AudioLifecycle(ctx, env) : null;
 
   const master = ctx.createGain();
   master.gain.value = 0.85;
@@ -95,9 +102,7 @@ export function createDiveAudio(ctx: AudioContext | null): DiveAudio {
   };
 
   return {
-    unlock: () => {
-      if (ctx.state === "suspended") void ctx.resume();
-    },
+    hold: (reason, on) => lifecycle?.hold(reason, on),
     setLoop: (id, gain) => {
       targets[id] = gain;
     },
@@ -136,14 +141,9 @@ export function createDiveAudio(ctx: AudioContext | null): DiveAudio {
       };
       sources.push(src);
     },
-    suspend: () => {
-      if (ctx.state === "running") void ctx.suspend();
-    },
-    resume: () => {
-      if (alive && ctx.state === "suspended") void ctx.resume();
-    },
     dispose: () => {
       alive = false;
+      lifecycle?.dispose();
       if (ctx.state === "closed") return;
       for (const src of sources) {
         try {
