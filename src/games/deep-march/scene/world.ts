@@ -20,6 +20,7 @@ import { FramePacer } from "./framePacer";
 import { TerrainOcclusion } from "./occlusion";
 import { createParticleLightUniforms } from "./particleLight";
 import { SURVIVAL_TUNING, createSurvival, type LightMode, type LightState } from "../survival";
+import { createDiveAudio } from "./audio";
 
 export type HudLabels = {
   chunks: string;
@@ -45,6 +46,8 @@ export type DeepMarchOptions = {
   invertY: boolean;
   panel: boolean;
   labels: HudLabels;
+  /** Created inside the dive-start click so the browser allows playback. Null skips audio. */
+  audioContext?: AudioContext | null;
 };
 
 export type Telemetry = {
@@ -220,6 +223,17 @@ void main() {
   // Survival layer (battery, gear, light modes) and the scene side of the lights.
   const survival = createSurvival();
   const lights = survival.lights;
+  const audio = createDiveAudio(opts.audioContext ?? null);
+  const armAudio = () => audio.unlock();
+  window.addEventListener("pointerdown", armAudio);
+  window.addEventListener("keydown", armAudio);
+  const lowCut = SURVIVAL_TUNING.battery.lowFraction * SURVIVAL_TUNING.battery.capacity;
+  survival.resources.on("changed", "battery", (e) => {
+    if (e.prev > lowCut && e.value <= lowCut) audio.play("warn", { gain: 0.4, rate: 0.92 });
+  });
+  survival.resources.on("depleted", "battery", () => {
+    audio.play("warn", { gain: 0.55, rate: 0.72 });
+  });
   const rig = new LampRig(camera, fogVis);
   // SONAR mode: pulse scheduler + seabed-shader uniforms (sonar.ts)
   const sonarPulses = new SonarPulses(lowSpec ? SONAR_TUNING.maxPulsesLow : SONAR_TUNING.maxPulses);
@@ -411,8 +425,19 @@ void main() {
   const lightParam = new URLSearchParams(window.location.search).get("light");
   if (lightParam === "off") lights.setOn(false);
   else if (lightParam === "beam" || lightParam === "high" || lightParam === "sonar") lights.select(lightParam);
-  const toggleLamp = () => lights.toggle();
-  const cycleLight = () => lights.cycle();
+  const toggleLamp = () => {
+    const before = lights.state();
+    const on = lights.toggle();
+    if (on !== before.on) audio.play("switch", { gain: on ? 0.5 : 0.32, rate: on ? 1 : 0.88 });
+    else if (before.locked) audio.play("warn", { gain: 0.28, rate: 1.2 });
+    return on;
+  };
+  const cycleLight = () => {
+    const before = lights.state().mode;
+    const mode = lights.cycle();
+    if (mode !== before) audio.play("mode", { gain: 0.42 });
+    return mode;
+  };
   const input = new InputController(renderer.domElement, {
     sensitivity: opts.sensitivity,
     invertY: opts.invertY,
@@ -420,7 +445,10 @@ void main() {
     onLightCycle: cycleLight,
     onLightSelect: (i) => {
       const m = lights.available()[i];
-      if (m) lights.select(m);
+      if (!m) return;
+      const before = lights.state().mode;
+      lights.select(m);
+      if (lights.state().mode !== before) audio.play("mode", { gain: 0.42 });
     },
     onLockChange: () => updatePrompt(),
   });
@@ -444,6 +472,7 @@ void main() {
   let ready = false;
   let diveRequested = false;
   let terrainReady = false;
+  let hadContact = false;
   let raf = 0;
   let last = performance.now();
   let hudTimer = 0;
@@ -464,6 +493,11 @@ void main() {
     if (ready) {
       diver.update(dt, input.move());
       if (diver.lastTicks > 0) input.consumePulse();
+      const touching = diver.contact !== null;
+      if (touching && !hadContact) {
+        audio.play("bump", { gain: 0.22 + Math.min(0.35, diver.speed / 24), rate: 0.82, lowpass: 480 });
+      }
+      hadContact = touching;
     } else {
       // loading gate: every footprint in view drawn + level 0 around the diver, all
       // materials on the GPU, programs compiled; then the loading screen starts the dive
@@ -513,7 +547,12 @@ void main() {
     snow.setFog(env.fogK);
     // SONAR: pulses from the diver while the mode is on; plankton dimmed underneath
     const ls = lights.state();
-    sonarPulses.update(now / 1000, ls.on && ls.mode === "sonar", camera.position);
+    const pings = sonarPulses.update(now / 1000, ls.on && ls.mode === "sonar", camera.position);
+    if (pings > 0) audio.play("sonar", { gain: 0.48 });
+    const moving = Math.min(1, Math.max(0, (diver.speed - 0.6) / 6));
+    audio.setLoop("ambience", 0.4);
+    audio.setLoop("swim", ready ? moving * (diver.state === "swim" ? 0.5 : 0.2) : 0);
+    audio.tick(dt);
     sonar.uSonar.value = rig.sonar;
     snow.setDim(1 - 0.85 * rig.sonar);
 
@@ -545,7 +584,11 @@ void main() {
   // halts terrain streaming and resets the pacing history on return).
   const onVisibility = () => {
     cancelAnimationFrame(raf);
-    if (document.hidden) return;
+    if (document.hidden) {
+      audio.suspend();
+      return;
+    }
+    audio.resume();
     last = performance.now();
     pacer.reset(last);
     raf = requestAnimationFrame(frame);
@@ -637,6 +680,9 @@ void main() {
     destroy: () => {
       cancelAnimationFrame(raf);
       document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("pointerdown", armAudio);
+      window.removeEventListener("keydown", armAudio);
+      audio.dispose();
       ro.disconnect();
       input.dispose();
       window.removeEventListener("keydown", onDebugKey);

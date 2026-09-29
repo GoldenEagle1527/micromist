@@ -92,15 +92,20 @@ export class SonarPulses {
     return this.list.length;
   }
 
-  /** time: seconds (monotonic); active: sonar selected and on; origin: diver position. */
-  update(time: number, active: boolean, origin: THREE.Vector3) {
+  /**
+   * time: seconds (monotonic); active: sonar selected and on; origin: diver position.
+   * Returns how many pulses were emitted this call (a hitch can bunch several).
+   */
+  update(time: number, active: boolean, origin: THREE.Vector3): number {
     const T = this.tuning;
     if (active && !this.wasActive) this.next = time; // first ping right away
     this.wasActive = active;
+    let emitted = 0;
     if (active) {
       while (time >= this.next) {
         this.list.push({ x: origin.x, y: origin.y, z: origin.z, t0: this.next });
         this.next += T.period;
+        emitted++;
       }
     }
     // retire expired pulses, and the oldest beyond capacity
@@ -116,6 +121,7 @@ export class SonarPulses {
         this.amp[i] = 0;
       }
     }
+    return emitted;
   }
 
   clear() {
