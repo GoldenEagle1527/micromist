@@ -8,6 +8,7 @@ import type { DeepMarchDict } from "./i18n";
 import { isTouchDevice, loadSettings, panelEnabled, randomSeed, saveSettings } from "./settings";
 import { ControlPanel, type PanelLabels } from "./ui/ControlPanel";
 import { viewRotation, type Rotation } from "./viewRotation";
+import { acquireAudioContext, audioDisabledByUrl, closeAudioContext, releaseAudioContext } from "./scene/audioContext";
 import { LoadingScreen, type LoadingLabels } from "./ui/loading/LoadingScreen";
 
 /** Best effort: fullscreen + landscape lock (Android Chrome). Rejections are expected elsewhere (iOS). */
@@ -109,11 +110,11 @@ export function DeepMarchGame() {
   const [loadingOn, setLoadingOn] = useState(true);
   const hostRef = useRef<HTMLDivElement | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
+  // one AudioContext per page session (audioContext.ts): closed when the game unmounts
   useEffect(() => {
     return () => {
-      const ctx = audioCtxRef.current;
       audioCtxRef.current = null;
-      void ctx?.close();
+      closeAudioContext();
     };
   }, []);
   const [touch] = useState(isTouchDevice);
@@ -152,6 +153,8 @@ export function DeepMarchGame() {
       clearTimeout(timer);
       setGame(null);
       g?.destroy();
+      // after the world's audio lifecycle is gone (it would resume it): suspended, reused next dive
+      releaseAudioContext();
     };
     // Settings/labels are read once per dive; the panel toggle is pushed via setPanelMode.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -204,20 +207,13 @@ export function DeepMarchGame() {
     persist({ seed: s, sensitivity, invertY, panel: panelOn });
     if (touch) void enterLandscape();
     setLoadingOn(true);
-    if (new URLSearchParams(window.location.search).get("audio") !== "0") {
-      const ctx = new AudioContext();
-      void ctx.resume();
-      audioCtxRef.current = ctx;
-    } else {
-      audioCtxRef.current = null;
-    }
+    // inside the click: acquire (or reuse) the shared context and resume it; never throws
+    audioCtxRef.current = audioDisabledByUrl(window.location.search) ? null : acquireAudioContext();
     setScreen("playing");
   }, [seed, sensitivity, invertY, panelOn, persist, touch]);
   const back = useCallback(() => {
     leaveLandscape();
-    const ctx = audioCtxRef.current;
     audioCtxRef.current = null;
-    void ctx?.close();
     setScreen("setup");
   }, []);
 

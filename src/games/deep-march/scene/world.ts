@@ -224,9 +224,6 @@ void main() {
   const survival = createSurvival();
   const lights = survival.lights;
   const audio = createDiveAudio(opts.audioContext ?? null);
-  const armAudio = () => audio.unlock();
-  window.addEventListener("pointerdown", armAudio);
-  window.addEventListener("keydown", armAudio);
   const lowCut = SURVIVAL_TUNING.battery.lowFraction * SURVIVAL_TUNING.battery.capacity;
   survival.resources.on("changed", "battery", (e) => {
     if (e.prev > lowCut && e.value <= lowCut) audio.play("warn", { gain: 0.4, rate: 0.92 });
@@ -314,11 +311,13 @@ void main() {
   const onContextLost = (e: Event) => {
     e.preventDefault(); // allow three to restore
     gpuLost = true;
+    audio.hold("gpu", true);
     console.error("[deep-march] WebGL context lost");
     updateAlert();
   };
   const onContextRestored = () => {
     gpuLost = false;
+    audio.hold("gpu", false);
     updateAlert();
   };
   renderer.domElement.addEventListener("webglcontextlost", onContextLost);
@@ -583,12 +582,9 @@ void main() {
   // Nothing to draw while the tab is hidden (rAF mostly stops anyway; this also
   // halts terrain streaming and resets the pacing history on return).
   const onVisibility = () => {
+    // (audio follows visibility on its own: audioLifecycle.ts)
     cancelAnimationFrame(raf);
-    if (document.hidden) {
-      audio.suspend();
-      return;
-    }
-    audio.resume();
+    if (document.hidden) return;
     last = performance.now();
     pacer.reset(last);
     raf = requestAnimationFrame(frame);
@@ -680,8 +676,6 @@ void main() {
     destroy: () => {
       cancelAnimationFrame(raf);
       document.removeEventListener("visibilitychange", onVisibility);
-      window.removeEventListener("pointerdown", armAudio);
-      window.removeEventListener("keydown", armAudio);
       audio.dispose();
       ro.disconnect();
       input.dispose();
