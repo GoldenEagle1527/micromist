@@ -1,21 +1,22 @@
 /**
- * Pre-dive loading screen: the real initialization pipeline of a dive, step by step
- * (loadingModel.ts), with the seed's region map drawn top to bottom as it is
- * computed (regionMap.ts). All progress comes from the world (DeepMarchHandle.loading):
- * spawn search, texture bytes / layers, terrain gate items, system check. When
- * everything is in, "Begin dive" starts the simulation and the screen fades out.
+ * Pre-dive loading screen: the real initialization pipeline of a dive, one compact
+ * row per registered step (steps/index.ts), a focus card with the lines of the step
+ * that matters now, a diagnostics drawer (GPU facts, logs, formats; opens by itself
+ * on an error), the seed's region map drawn as it is computed (regionMap.ts) and a
+ * total progress bar that always stays on screen. All progress comes from the world
+ * (DeepMarchHandle.loading). When everything is in, "Begin dive" starts the
+ * simulation and the screen fades out (gate: loadingGate.ts).
  */
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import "./loading.css";
 import type { DeepMarchHandle, LoadingSnapshot } from "../../scene/world";
-import { LAYERS } from "../../scene/materialCatalog";
-import { REGION_COLORS, REGION_KEYS, type RegionKey } from "../../terrain/regions";
-import type { LightMode } from "../../survival";
-import type { LoadingDict } from "./i18n";
-import { LoadingModel, STEPS, formatMB, type StepId } from "./loadingModel";
+import { REGION_COLORS, REGION_KEYS } from "../../terrain/regions";
+import { applyStep, canBeginDive } from "./loadingGate";
+import { LoadingModel } from "./loadingModel";
 import { REGION_MAP, RegionMapRaster, hexToRgb, mapSpec } from "./regionMap";
+import { LOADING_STEPS, type LoadingLabels, type StepAction, type StepContext, type StepEval } from "./steps";
 
-export type LoadingLabels = LoadingDict & { regionNames: Record<RegionKey, string>; lightModes: Record<LightMode, string> };
+export type { LoadingLabels } from "./steps";
 
 type Props = {
   game: DeepMarchHandle | null;
@@ -36,13 +37,21 @@ const COLORS = REGION_COLORS.map(hexToRgb);
 type View = { snap: LoadingSnapshot | null; mapRows: number; phase: "loading" | "begin" | "fade" };
 
 export function LoadingScreen({ game, seedText, seed, labels: L, onDone }: Props) {
-  const model = useRef(new LoadingModel()).current;
+  const model = useRef(new LoadingModel(LOADING_STEPS)).current;
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const listRef = useRef<HTMLOListElement | null>(null);
   const [view, setView] = useState<View>({ snap: null, mapRows: 0, phase: "loading" });
   const onDoneRef = useRef(onDone);
   onDoneRef.current = onDone;
   // after a shader error: the player chose to dive anyway (the error stays listed)
   const forceRef = useRef(false);
+  // latest labels for the loop's step evaluation (language may switch mid-load)
+  const ctxRef = useRef<Omit<StepContext, "mapRows" | "mapSize">>({ L, seedText, seed });
+  ctxRef.current = { L, seedText, seed };
+  // a row the player tapped: its lines stay in the focus card (null = follow the pipeline)
+  const [pinned, setPinned] = useState<string | null>(null);
+  // diagnostics drawer: null = automatic (open while a step is in error)
+  const [diagOpen, setDiagOpen] = useState<boolean | null>(null);
 
   useEffect(() => {
     let raf = 0;
@@ -53,14 +62,11 @@ export function LoadingScreen({ game, seedText, seed, labels: L, onDone }: Props
     let lastUi = 0;
     let shownPhase: View["phase"] = "loading";
     let doneTimer = 0;
-    model.start("coords");
     const frame = (now: number) => {
       raf = requestAnimationFrame(frame);
       const snap = game?.loading() ?? null;
+      // region map, computed in time slices and drawn as rows arrive
       if (snap) {
-        // 1. coordinates: the world exists = seed read and entry point found
-        model.complete("coords");
-        // 2. region map, computed in time slices and drawn as rows arrive
         if (!raster) {
           raster = new RegionMapRaster(snap.regions, mapSpec(snap.spawn.x, snap.spawn.z));
           const c = canvasRef.current;
@@ -78,33 +84,13 @@ export function LoadingScreen({ game, seedText, seed, labels: L, onDone }: Props
             raster.paintRows(img.data, y0, raster.rows, COLORS);
             c.putImageData(img, 0, 0, 0, y0, REGION_MAP.size, raster.rows - y0);
           }
-          model.report("regions", raster.rows, REGION_MAP.size);
-          if (raster.done) model.complete("regions");
         }
-        // 3. materials: bytes of all 22 layers, then the GPU upload
-        const m = snap.materials;
-        if (m.ready) model.complete("materials");
-        else {
-          model.report("materials", m.bytes, m.totalBytes);
-          if (m.error) model.fail("materials");
-          else model.recover("materials");
-        }
-        // 4. terrain gate around the spawn
-        if (snap.terrain.ready) model.complete("terrain");
-        else model.report("terrain", snap.terrain.done, Math.max(1, snap.terrain.total));
-        // 5. system check
-        const s = snap.system;
-        const broken = !!s.shaderError || s.gpuLost;
-        const ok = [s.battery > 0, s.lamps.length > 0, s.sonar, s.shaders && !broken].filter(Boolean).length;
-        if (ok === 4) model.complete("system");
-        else {
-          model.report("system", ok, 4);
-          if (broken) model.fail("system");
-          else model.recover("system");
-        }
+      }
+      const ctx: StepContext = { ...ctxRef.current, mapRows: raster?.rows ?? 0, mapSize: REGION_MAP.size };
+      for (const def of LOADING_STEPS) applyStep(model, def.id, def.evaluate(snap, ctx));
+      if (snap) {
         // begin dive → fade (or, after a shader error, once the player chose to dive anyway)
-        const forced = forceRef.current && !s.gpuLost && s.shaders && snap.terrain.ready && snap.materials.ready && STEPS.every((id) => id === "system" || model.status[id] === "done");
-        if (phase === "loading" && ((model.allDone() && snap.loaded) || forced)) {
+        if (phase === "loading" && canBeginDive(model, LOADING_STEPS, snap, forceRef.current)) {
           phase = "begin";
           beginAt = now;
           game?.startDive();
@@ -130,43 +116,34 @@ export function LoadingScreen({ game, seedText, seed, labels: L, onDone }: Props
   }, [game]);
 
   const snap = view.snap;
-  const pct = (f: number) => Math.floor(f * 100);
-  const detail = (id: StepId): string[] => {
-    switch (id) {
-      case "coords":
-        return [L.seed(seedText, (seed >>> 0).toString(16).padStart(8, "0")), snap ? L.spawnFix(Math.round(snap.spawn.x), Math.round(snap.spawn.z), Math.round(100 - snap.spawn.y)) : L.locating];
-      case "regions":
-        return [L.mapProgress(pct(view.mapRows / REGION_MAP.size), (REGION_MAP.span / 1000).toFixed(1))];
-      case "materials": {
-        const m = snap?.materials;
-        if (!m) return [L.connecting];
-        const lines = [L.materialCount(m.done, m.total, formatMB(m.bytes), formatMB(m.totalBytes))];
-        if (m.done === m.total && !m.ready) lines.push(L.uploading);
-        else if (m.last >= 0) lines.push(L.laying(L.materialNames[LAYERS[m.last].key] ?? LAYERS[m.last].key));
-        else lines.push(L.connecting);
-        if (m.fellBack) lines.push(L.fallback);
-        if (m.retrying > 0 && !m.error) lines.push(L.retrying(m.retrying));
-        if (m.error) lines.push(L.failed(m.error));
-        return lines;
-      }
-      case "terrain":
-        if (!snap || snap.terrain.total === 0) return [L.terrainPlanning];
-        return [L.terrain(snap.terrain.ready ? 100 : pct(Math.min(0.99, snap.terrain.done / snap.terrain.total)))];
-      case "system": {
-        if (!snap) return [];
-        const s = snap.system;
-        return [
-          `${s.battery > 0 ? "✓" : "·"} ${L.battery(Math.round(s.battery * 100))}`,
-          `${s.lamps.length ? "✓" : "·"} ${L.lamps(s.lamps.map((m) => L.lightModes[m]).join(" · "))}`,
-          `${s.sonar ? "✓" : "·"} ${L.sonar}`,
-          s.gpuLost ? `✗ ${L.gpuLost}` : s.shaderError ? `✗ ${L.shaderError(s.shaderError)}` : `${s.shaders ? "✓" : "·"} ${L.shaders}`,
-          L.gpu(s.gpu.renderer, s.gpu.textureUnits, s.gpu.fragmentVectors, s.gpu.highp),
-        ];
-      }
-    }
-  };
+  const ctx: StepContext = { L, seedText, seed, mapRows: view.mapRows, mapSize: REGION_MAP.size };
+  const evals = new Map<string, StepEval>(LOADING_STEPS.map((d) => [d.id, d.evaluate(snap, ctx)]));
+  const auto = model.focus();
+  const focus = pinned ?? auto;
+  const focusDef = LOADING_STEPS.find((d) => d.id === focus) ?? null;
+  const focusEval = focusDef ? evals.get(focusDef.id) : undefined;
+  const anyError = LOADING_STEPS.some((d) => model.status[d.id] === "error");
+  const actions = [...new Set(LOADING_STEPS.flatMap((d) => evals.get(d.id)?.actions ?? []))];
+  const diag = LOADING_STEPS.flatMap((d) => (evals.get(d.id)?.diag ?? []).map((e) => ({ step: d.id, ...e })));
   const overall = model.overall();
+  const pct = (f: number) => Math.floor(f * 100);
   const mapHalf = view.mapRows >= REGION_MAP.size / 2;
+
+  // keep the focused row in view when the list scrolls (many steps / very short screens);
+  // scrollTop only: scrollIntoView would also scroll the rotated immersive stage
+  useLayoutEffect(() => {
+    const list = listRef.current;
+    const row = list?.querySelector<HTMLElement>(`[data-step="${focus ?? ""}"]`);
+    if (!list || !row) return;
+    const top = row.offsetTop - list.offsetTop;
+    if (top < list.scrollTop) list.scrollTop = top;
+    else if (top + row.offsetHeight > list.scrollTop + list.clientHeight) list.scrollTop = top + row.offsetHeight - list.clientHeight;
+  }, [focus]);
+
+  const runAction = (a: StepAction) => {
+    if (a === "retryMaterials") game?.retryMaterials();
+    else forceRef.current = true;
+  };
 
   return (
     <div className="dm-load" data-phase={view.phase} role="status" aria-live="polite">
@@ -176,43 +153,68 @@ export function LoadingScreen({ game, seedText, seed, labels: L, onDone }: Props
           <span className="dm-load-sub">{L.subtitle}</span>
         </header>
         <div className="dm-load-body">
-          <ol className="dm-load-steps">
-            {STEPS.map((id, k) => (
-              <li key={id} className="dm-load-step" data-status={model.status[id]}>
-                <div className="dm-load-step-row">
-                  <span className="dm-load-idx">{String(k + 1).padStart(2, "0")}</span>
-                  <span className="dm-load-name">{L.steps[id]}</span>
-                  <span className="dm-load-st">{L.status[model.status[id]]}</span>
-                </div>
-                <div className="dm-load-bar">
-                  <i style={{ width: `${model.progress[id] * 100}%` }} />
-                </div>
-                {model.status[id] !== "pending" && (
-                  <div className="dm-load-detail">
-                    {detail(id).map((line) => (
-                      <div key={line}>{line}</div>
-                    ))}
-                    {id === "materials" && snap?.materials.error && (
-                      <button type="button" className="dm-load-retry" onClick={() => game?.retryMaterials()}>
-                        {L.retry}
-                      </button>
-                    )}
-                    {id === "system" && snap?.system.shaderError && !snap.system.gpuLost && (
-                      <button
-                        type="button"
-                        className="dm-load-retry"
-                        onClick={() => {
-                          forceRef.current = true;
-                        }}
-                      >
-                        {L.diveAnyway}
-                      </button>
-                    )}
-                  </div>
+          <div className="dm-load-col">
+            <ol className="dm-load-steps" ref={listRef}>
+              {LOADING_STEPS.map((d, k) => {
+                const st = model.status[d.id];
+                const p = model.progress[d.id];
+                return (
+                  <li key={d.id} data-step={d.id} data-status={st} data-focus={d.id === focus || undefined} data-optional={!d.required || undefined}>
+                    <button type="button" className="dm-load-step" aria-pressed={pinned === d.id} onClick={() => setPinned((cur) => (cur === d.id ? null : d.id))}>
+                      <span className="dm-load-idx">{String(k + 1).padStart(2, "0")}</span>
+                      <span className="dm-load-name">{L.steps[d.id]}</span>
+                      <span className="dm-load-bar" aria-hidden="true">
+                        <i style={{ width: `${p * 100}%` }} />
+                      </span>
+                      <span className="dm-load-st">{st === "active" && p > 0 ? `${pct(p)}%` : L.status[st]}</span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ol>
+            <section className="dm-load-focus" data-status={focusDef ? model.status[focusDef.id] : "done"}>
+              <div className="dm-load-focus-head">
+                {focusDef ? (
+                  <>
+                    <span className="dm-load-focus-tag">{L.now}</span>
+                    <span className="dm-load-focus-name">{L.steps[focusDef.id]}</span>
+                  </>
+                ) : (
+                  <span className="dm-load-focus-name">{L.allReady}</span>
                 )}
-              </li>
-            ))}
-          </ol>
+              </div>
+              <div className="dm-load-focus-lines">
+                {(focusEval?.lines ?? []).map((line) => (
+                  <div key={line} className="dm-load-line" title={line}>
+                    {line}
+                  </div>
+                ))}
+              </div>
+              {actions.length > 0 && (
+                <div className="dm-load-actions">
+                  {actions.map((a) => (
+                    <button key={a} type="button" className="dm-load-retry" onClick={() => runAction(a)}>
+                      {a === "retryMaterials" ? L.retry : L.diveAnyway}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </section>
+            <details className="dm-load-diag" open={diagOpen ?? anyError} onToggle={(e) => {
+              const open = e.currentTarget.open;
+              if (open !== (diagOpen ?? anyError)) setDiagOpen(open);
+            }}>
+              <summary>{L.diagnostics}</summary>
+              <dl>
+                {diag.map((e) => (
+                  <div key={`${e.step}:${e.label}`} className="dm-load-diag-row">
+                    <dt>{e.label}</dt>
+                    <dd>{e.value}</dd>
+                  </div>
+                ))}
+              </dl>
+            </details>
+          </div>
           <figure className="dm-load-map">
             <div className="dm-load-mapbox">
               <canvas ref={canvasRef} width={REGION_MAP.size} height={REGION_MAP.size} />
@@ -222,14 +224,14 @@ export function LoadingScreen({ game, seedText, seed, labels: L, onDone }: Props
             <figcaption className="dm-load-legend">
               <span className="dm-load-legend-title">{L.legend}</span>
               {REGION_KEYS.map((k, i) => (
-                <span key={k} className="dm-load-key">
+                <span key={k} className="dm-load-key" title={L.regionNames[k]}>
                   <i style={{ background: REGION_COLORS[i] }} />
-                  {L.regionNames[k]}
+                  <span className="dm-load-key-name">{L.regionNames[k]}</span>
                 </span>
               ))}
-              <span className="dm-load-key">
+              <span className="dm-load-key" title={L.spawn}>
                 <i className="dm-load-key-spawn" />
-                {L.spawn}
+                <span className="dm-load-key-name">{L.spawn}</span>
               </span>
             </figcaption>
           </figure>
