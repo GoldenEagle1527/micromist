@@ -21,6 +21,7 @@ import { TerrainOcclusion } from "./occlusion";
 import { createParticleLightUniforms } from "./particleLight";
 import { SURVIVAL_TUNING, createSurvival, type LightMode, type LightState } from "../survival";
 import { createDiveAudio, type AudioStatus } from "./audio";
+import { BumpCue, CueLimiter } from "./audioCues";
 
 export type HudLabels = {
   chunks: string;
@@ -229,12 +230,16 @@ void main() {
   const survival = createSurvival();
   const lights = survival.lights;
   const audio = createDiveAudio(opts.audioContext ?? null);
+  // cue timing (audioCues.ts): bump by impact with cooldown, rate limits for UI sounds
+  const bumpCue = new BumpCue();
+  const cues = new CueLimiter();
+  const cueNow = () => performance.now() / 1000;
   const lowCut = SURVIVAL_TUNING.battery.lowFraction * SURVIVAL_TUNING.battery.capacity;
   survival.resources.on("changed", "battery", (e) => {
-    if (e.prev > lowCut && e.value <= lowCut) audio.play("warn", { gain: 0.4, rate: 0.92 });
+    if (e.prev > lowCut && e.value <= lowCut && cues.allow("warn", cueNow())) audio.play("warn", { gain: 0.4, rate: 0.92 });
   });
   survival.resources.on("depleted", "battery", () => {
-    audio.play("warn", { gain: 0.55, rate: 0.72 });
+    if (cues.allow("warn", cueNow())) audio.play("warn", { gain: 0.55, rate: 0.72 });
   });
   const rig = new LampRig(camera, fogVis);
   // SONAR mode: pulse scheduler + seabed-shader uniforms (sonar.ts)
@@ -432,14 +437,15 @@ void main() {
   const toggleLamp = () => {
     const before = lights.state();
     const on = lights.toggle();
-    if (on !== before.on) audio.play("switch", { gain: on ? 0.5 : 0.32, rate: on ? 1 : 0.88 });
-    else if (before.locked) audio.play("warn", { gain: 0.28, rate: 1.2 });
+    if (on !== before.on) {
+      if (cues.allow("switch", cueNow())) audio.play("switch", { gain: on ? 0.5 : 0.32, rate: on ? 1 : 0.88 });
+    } else if (before.locked && cues.allow("warn", cueNow())) audio.play("warn", { gain: 0.28, rate: 1.2 });
     return on;
   };
   const cycleLight = () => {
     const before = lights.state().mode;
     const mode = lights.cycle();
-    if (mode !== before) audio.play("mode", { gain: 0.42 });
+    if (mode !== before && cues.allow("mode", cueNow())) audio.play("mode", { gain: 0.42 });
     return mode;
   };
   const input = new InputController(renderer.domElement, {
@@ -452,7 +458,7 @@ void main() {
       if (!m) return;
       const before = lights.state().mode;
       lights.select(m);
-      if (lights.state().mode !== before) audio.play("mode", { gain: 0.42 });
+      if (lights.state().mode !== before && cues.allow("mode", cueNow())) audio.play("mode", { gain: 0.42 });
     },
     onLockChange: () => updatePrompt(),
   });
@@ -476,7 +482,6 @@ void main() {
   let ready = false;
   let diveRequested = false;
   let terrainReady = false;
-  let hadContact = false;
   let raf = 0;
   let last = performance.now();
   let hudTimer = 0;
@@ -497,11 +502,8 @@ void main() {
     if (ready) {
       diver.update(dt, input.move());
       if (diver.lastTicks > 0) input.consumePulse();
-      const touching = diver.contact !== null;
-      if (touching && !hadContact) {
-        audio.play("bump", { gain: 0.22 + Math.min(0.35, diver.speed / 24), rate: 0.82, lowpass: 480 });
-      }
-      hadContact = touching;
+      const bump = bumpCue.update(dt, diver.impact, diver.contact !== null);
+      if (bump) audio.play("bump", { gain: bump.gain, rate: bump.rate, lowpass: 480 });
     } else {
       // loading gate: every footprint in view drawn + level 0 around the diver, all
       // materials on the GPU, programs compiled, sounds settled (loaded, missing or
@@ -553,7 +555,7 @@ void main() {
     // SONAR: pulses from the diver while the mode is on; plankton dimmed underneath
     const ls = lights.state();
     const pings = sonarPulses.update(now / 1000, ls.on && ls.mode === "sonar", camera.position);
-    if (pings > 0) audio.play("sonar", { gain: 0.48 });
+    if (pings > 0 && cues.allow("sonar", now / 1000)) audio.play("sonar", { gain: 0.48 });
     const moving = Math.min(1, Math.max(0, (diver.speed - 0.6) / 6));
     audio.setLoop("ambience", 0.4);
     audio.setLoop("swim", ready ? moving * (diver.state === "swim" ? 0.5 : 0.2) : 0);

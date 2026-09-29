@@ -12,6 +12,7 @@ import { createDiveAudio, fetchBytes, type AudioStatus } from "../src/games/deep
 import { CLIP_IDS, FORMAT_MIME, formatOrder, loopPoints, parseManifest, type SfxManifest } from "../src/games/deep-march/scene/audioManifest";
 import { acquireAudioContext, audioContextCtor, audioDisabledByUrl, closeAudioContext, releaseAudioContext, sharedAudioContext } from "../src/games/deep-march/scene/audioContext";
 import { AudioLifecycle, UNLOCK_EVENTS, type LifecycleEnv } from "../src/games/deep-march/scene/audioLifecycle";
+import { BUMP_TUNING, BumpCue, CUE_INTERVAL, CueLimiter } from "../src/games/deep-march/scene/audioCues";
 import { FakeAudioContext, flush } from "./lib/fakeAudio";
 
 let failed = 0;
@@ -264,6 +265,9 @@ async function main() {
   console.info = origInfo;
   check("no unhandled rejections anywhere", rejections.length === 0, `${rejections.length}`);
 
+  console.log("cues");
+  cueChecks();
+
   console.log("lifecycle + context");
   await lifecycleChecks();
   await contextChecks();
@@ -473,6 +477,69 @@ async function contextChecks() {
       return false;
     }
   })());
+}
+
+/** Run a bump cue over frames: each frame [dt, impact, touching]. Returns the sounds with times. */
+function bumps(frames: [number, number, boolean][], rng = () => 0.5) {
+  const cue = new BumpCue(BUMP_TUNING, rng);
+  const out: { t: number; gain: number; rate: number }[] = [];
+  let t = 0;
+  for (const [dt, impact, touching] of frames) {
+    t += dt;
+    const s = cue.update(dt, impact, touching);
+    if (s) out.push({ t, ...s });
+  }
+  return out;
+}
+const hold = (seconds: number, impact: number, touching: boolean, dt = 1 / 30): [number, number, boolean][] => Array.from({ length: Math.round(seconds / dt) }, () => [dt, impact, touching]);
+
+function cueChecks() {
+  // head-on hit, then 3 s sliding along the wall (contact kept, tiny normal speeds)
+  const slide = bumps([[1 / 30, 3, true], ...hold(3, 0.3, true)]);
+  check("slide along a wall after a hit: one bump", slide.length === 1, `${slide.length}`);
+  // grinding a bumpy wall: repeated moderate impacts while touching
+  const grind: [number, number, boolean][] = [[1 / 30, 2, true]];
+  // (2 → 2.5: not "clearly harder")
+  for (let k = 0; k < 20; k++) grind.push(...hold(0.2, 0, true).slice(0, 5), [1 / 30, 2.5, true]);
+  const g = bumps(grind);
+  check("grinding along rough rock (contact kept): one bump", g.length === 1, `${g.length}`);
+  // contact flicker (the old null → contact trigger): short gaps < rearm
+  const flick: [number, number, boolean][] = [];
+  for (let k = 0; k < 15; k++) flick.push([1 / 30, 2, true], ...hold(0.2, 0, false));
+  const f = bumps(flick);
+  check("contact flicker with short gaps: no bump spam", f.length === 1, `${f.length}`);
+  // two separate head-on hits with open water between
+  const two = bumps([[1 / 30, 4, true], ...hold(0.3, 0, true), ...hold(1, 0, false), [1 / 30, 4, true]]);
+  check("two hits with open water between: two bumps", two.length === 2, `${two.length}`);
+  // bounce back in quickly (within the cooldown)
+  const quick = bumps([[1 / 30, 4, true], ...hold(0.45, 0, false), [1 / 30, 4, true]]);
+  check("second hit inside the cooldown: silent", quick.length === 1, `${quick.length}`);
+  // still touching but a clearly harder hit after the cooldown
+  const harder = bumps([[1 / 30, 2, true], ...hold(0.8, 0.1, true), [1 / 30, 4, true]]);
+  check("clearly harder hit while in contact: plays", harder.length === 2, `${harder.length}`);
+  // full-speed glide parallel to the wall: no normal speed
+  check("full-speed glide along a wall (no normal speed): silent", bumps([...hold(2, 0, true)]).length === 0);
+  check("gentle touch below the threshold: silent", bumps([[1 / 30, BUMP_TUNING.minImpact * 0.9, true]]).length === 0);
+  // pushing into rock from a standstill: one tick of hover thrust (0.02 blocks/tick) per tick
+  const thrust = 0.02 * 1.25 * 2.25 * 20;
+  check(`pushing into rock from rest (${thrust.toFixed(2)} u/s per tick): silent`, bumps([...hold(2, thrust, true)]).length === 0);
+  // loudness follows the impact
+  const gains = [1.6, 3, 5, 8, 12].map((v) => bumps([[1 / 30, v, true]])[0]?.gain ?? -1);
+  check("gain grows with impact, within limits", gains.every((x, i) => i === 0 || x >= gains[i - 1]) && gains[0] >= BUMP_TUNING.minGain && gains[4] === BUMP_TUNING.maxGain, gains.map((x) => x.toFixed(2)).join(" "));
+  const lo = bumps([[1 / 30, 3, true]], () => 0)[0].rate;
+  const hi = bumps([[1 / 30, 3, true]], () => 0.999999)[0].rate;
+  check("playback rate varies ±5 %", Math.abs(lo - BUMP_TUNING.rate * 0.95) < 1e-6 && Math.abs(hi - BUMP_TUNING.rate * 1.05) < 1e-5);
+  // light switch mashing
+  const lim = new CueLimiter();
+  let plays = 0;
+  for (let k = 0; k < 10; k++) if (lim.allow("switch", k * 0.05)) plays++;
+  check(`switch mashed every 50 ms for 0.5 s: rate-limited (${plays} plays)`, plays === 4);
+  const lim2 = new CueLimiter();
+  let normal = 0;
+  for (let k = 0; k < 5; k++) if (lim2.allow("switch", k * 0.3)) normal++;
+  check("switch toggled at a normal pace: every press plays", normal === 5);
+  const lim3 = new CueLimiter();
+  check("cues are limited independently", lim3.allow("switch", 0) && lim3.allow("mode", 0) && !lim3.allow("switch", 0.01) && lim3.allow("warn", 0.01) && !lim3.allow("warn", CUE_INTERVAL.warn - 0.01));
 }
 
 void main();
