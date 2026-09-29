@@ -37,3 +37,11 @@ Files live in `materials/` as `<key>_a1024.ktx2`, `<key>_a512.ktx2`, `<key>_n512
 - `*_n512.ktx2`: R,G = OpenGL tangent-space normal XY (Z is rebuilt in the shader); B = roughness. KTX2 UASTC + RDO + zstd, linear, full mips.
 - `*_a512.webp` / `*_n512.webp`: same content as WebP for the fallback path when KTX2 transcoding / compressed texture arrays are unavailable.
 - `gravel` uses ambientCG Gravel036S (the Gravel036 set is no longer published; 036S is the same material).
+
+## Sound effects (not included)
+
+The dive sound effects (`public/deep-march/sfx/*.wav`: ambience, swim, sonar, switch, mode, bump, warn) are cut from **Universal Sound FX**, a purchased commercial pack. The pack is licensed for use in the game, not for redistributing the audio files, so they are **not part of this open-source repository** (`public/deep-march/sfx/` is git-ignored) and are not covered by the MIT licence.
+
+Without them the game runs silent: every clip is optional and a missing file is skipped quietly (see `scene/audio.ts`); it never blocks the dive.
+
+To build with sound, put your own licensed clips (22 kHz 16-bit PCM WAV, names above) in `public/deep-march/sfx/`. `npm run build` (and so `deploy` / `deploy:staging`) runs `scripts/sfx-sync.mjs` first, which copies any missing clips from `$MICROMIST_PRIVATE_SFX` (default `/home/box/micromist-private/deep-march/sfx`) and prints a warning if some are still missing.
