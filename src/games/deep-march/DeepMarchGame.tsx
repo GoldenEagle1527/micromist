@@ -101,6 +101,14 @@ export function DeepMarchGame() {
   const [panelOn, setPanelOn] = useState(() => panelEnabled(loadSettings()));
   const [game, setGame] = useState<DeepMarchHandle | null>(null);
   const hostRef = useRef<HTMLDivElement | null>(null);
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  useEffect(() => {
+    return () => {
+      const ctx = audioCtxRef.current;
+      audioCtxRef.current = null;
+      void ctx?.close();
+    };
+  }, []);
   const [touch] = useState(isTouchDevice);
 
   const persist = useCallback(
@@ -121,6 +129,7 @@ export function DeepMarchGame() {
       invertY,
       panel: panelOn,
       labels: hudLabels(dm),
+      audioContext: audioCtxRef.current,
     });
     setGame(g);
     return () => {
@@ -177,10 +186,20 @@ export function DeepMarchGame() {
     setSeed(s);
     persist({ seed: s, sensitivity, invertY, panel: panelOn });
     if (touch) void enterLandscape();
+    if (new URLSearchParams(window.location.search).get("audio") !== "0") {
+      const ctx = new AudioContext();
+      void ctx.resume();
+      audioCtxRef.current = ctx;
+    } else {
+      audioCtxRef.current = null;
+    }
     setScreen("playing");
   }, [seed, sensitivity, invertY, panelOn, persist, touch]);
   const back = useCallback(() => {
     leaveLandscape();
+    const ctx = audioCtxRef.current;
+    audioCtxRef.current = null;
+    void ctx?.close();
     setScreen("setup");
   }, []);
 
