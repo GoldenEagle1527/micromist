@@ -81,6 +81,11 @@ export class DiverController {
   lastTicks = 0;
   /** Total ticks simulated (20 per simulated second). */
   totalTicks = 0;
+  /**
+   * Strongest speed along a contact normal removed by collisions during the last
+   * update(), in world units per second (0 = no real impact; grazing is ~0).
+   */
+  impact = 0;
 
   private acc = 0;
   private blockSprint = false;
@@ -137,6 +142,7 @@ export class DiverController {
 
   update(dt: number, input: DiverInput) {
     this.contactTimer = Math.max(0, this.contactTimer - dt);
+    this.impact = 0;
     this.acc += dt;
     const step = 1 / DIVER.tickRate;
     let ticks = 0;
@@ -311,6 +317,8 @@ export class DiverController {
       p.z += nz * push;
       const vn = this.velocity.x * nx + this.velocity.y * ny + this.velocity.z * nz;
       if (vn < 0) {
+        const hit = -vn * DIVER.blockSize * DIVER.speedScale * DIVER.tickRate;
+        if (hit > this.impact) this.impact = hit;
         this.velocity.x -= nx * vn;
         this.velocity.y -= ny * vn;
         this.velocity.z -= nz * vn;
