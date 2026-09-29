@@ -25,3 +25,7 @@ Thumbs.db
 .idea
 .vscode/*
 !.vscode/extensions.json
+
+# Licensed deep-march sound effects (purchased pack, not redistributable).
+# Keep local copies here for builds; see src/games/deep-march/assets/CREDITS.md
+public/deep-march/sfx/

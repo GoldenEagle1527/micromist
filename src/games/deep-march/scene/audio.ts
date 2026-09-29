@@ -9,6 +9,12 @@
  *   bump     — IMPACT_Concrete_Slab_on_Concrete_Slab_Deep (low-passed)
  *   warn     — NOTIFICATION_Digital_05
  *
+ * The clips are a purchased, licensed pack and are NOT in the open-source repo
+ * (public/deep-march/sfx/ is git-ignored; see assets/CREDITS.md). Every clip is
+ * optional: a missing, non-audio (e.g. SPA index.html fallback) or undecodable
+ * file is skipped quietly and that sound is simply silent. Loading never blocks
+ * the dive.
+ *
  * Pass an AudioContext created inside the dive-start click so playback is
  * allowed. ?audio=0 skips the mixer entirely.
  */
@@ -62,39 +68,30 @@ export function createDiveAudio(ctx: AudioContext | null): DiveAudio {
   const loops = new Map<LoopId, GainNode>();
   const sources: AudioBufferSourceNode[] = [];
   let alive = true;
-  let started = false;
 
-  void (async () => {
-    await Promise.all(
-      (Object.keys(CLIPS) as (keyof typeof CLIPS)[]).map(async (id) => {
-        const res = await fetch(BASE + CLIPS[id]);
-        if (!res.ok) throw new Error(`${CLIPS[id]} ${res.status}`);
-        if (!alive) return;
-        buffers.set(id, await ctx.decodeAudioData(await res.arrayBuffer()));
-      }),
-    );
-  })().catch((err) => {
-    console.warn("deep-march audio:", err);
-  });
+  // Each clip loads on its own: one missing file never takes the others down.
+  let missing = 0;
+  for (const id of Object.keys(CLIPS) as (keyof typeof CLIPS)[]) {
+    void loadClip(ctx, BASE + CLIPS[id]).then((buf) => {
+      if (!alive) return;
+      if (buf) buffers.set(id, buf);
+      else if (missing++ === 0) console.info("deep-march audio: sound files not found, playing silent");
+    });
+  }
 
-  const startLoops = () => {
-    if (started || !alive) return;
-    const amb = buffers.get("ambience");
-    const swim = buffers.get("swim");
-    if (!amb || !swim) return;
-    started = true;
-    for (const [id, buf] of [["ambience", amb], ["swim", swim]] as const) {
-      const gain = ctx.createGain();
-      gain.gain.value = 0;
-      gain.connect(master);
-      const src = ctx.createBufferSource();
-      src.buffer = buf;
-      src.loop = true;
-      src.connect(gain);
-      src.start();
-      sources.push(src);
-      loops.set(id, gain);
-    }
+  const startLoop = (id: LoopId) => {
+    const buf = buffers.get(id);
+    if (!buf || loops.has(id) || !alive) return;
+    const gain = ctx.createGain();
+    gain.gain.value = 0;
+    gain.connect(master);
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    src.loop = true;
+    src.connect(gain);
+    src.start();
+    sources.push(src);
+    loops.set(id, gain);
   };
 
   return {
@@ -105,9 +102,9 @@ export function createDiveAudio(ctx: AudioContext | null): DiveAudio {
       targets[id] = gain;
     },
     tick: (dt) => {
-      if (!started) {
-        if (buffers.has("ambience")) startLoops();
-        return;
+      if (loops.size < 2) {
+        startLoop("ambience");
+        startLoop("swim");
       }
       const k = 1 - Math.exp(-dt * 4);
       for (const [id, node] of loops) {
@@ -163,4 +160,24 @@ export function createDiveAudio(ctx: AudioContext | null): DiveAudio {
       }
     },
   };
+}
+
+/**
+ * Fetch + decode one clip. Resolves null (never rejects) when the file is absent,
+ * is not audio (an SPA fallback serves index.html with 200), or fails to decode.
+ */
+export async function loadClip(
+  ctx: Pick<BaseAudioContext, "decodeAudioData">,
+  url: string,
+  fetcher: (url: string) => Promise<Response> = (u) => fetch(u),
+): Promise<AudioBuffer | null> {
+  try {
+    const res = await fetcher(url);
+    if (!res.ok) return null;
+    const type = res.headers.get("content-type") ?? "";
+    if (type.startsWith("text/")) return null;
+    return await ctx.decodeAudioData(await res.arrayBuffer());
+  } catch {
+    return null;
+  }
 }
