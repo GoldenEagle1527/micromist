@@ -2,7 +2,7 @@
 import { useCallback, useState } from "react";
 import type { DeepMarchHandle } from "../scene/world";
 import { ActionFan } from "./ActionFan";
-import { IconExit, IconFlip, IconPanel } from "./icons";
+import { IconExit, IconFlip, IconMute, IconPanel, IconSound } from "./icons";
 import { LookPad } from "./LookPad";
 import { MoveDial } from "./MoveDial";
 import { Readout, type ReadoutLabels } from "./Readout";
@@ -19,6 +19,8 @@ export type PanelLabels = ReadoutLabels & {
   hidePanel: string;
   exit: string;
   flip: string;
+  mute: string;
+  unmute: string;
 };
 
 export function ControlPanel({
@@ -27,6 +29,8 @@ export function ControlPanel({
   onTogglePanel,
   onExit,
   onFlip,
+  muted,
+  onToggleMute,
   labels,
 }: {
   game: DeepMarchHandle | null;
@@ -36,6 +40,9 @@ export function ControlPanel({
   onExit?: () => void;
   /** Flip the rotated portrait fallback by 180°. */
   onFlip?: () => void;
+  /** Sound state; undefined hides the mute button (?audio=0 / no Web Audio). */
+  muted?: boolean;
+  onToggleMute?: () => void;
   labels: PanelLabels;
 }) {
   const tel = useTelemetry(game);
@@ -66,6 +73,18 @@ export function ControlPanel({
         {onFlip ? (
           <button type="button" className="dm-hud-btn dm-flip-btn" onClick={onFlip} aria-label={labels.flip} title={labels.flip}>
             <IconFlip />
+          </button>
+        ) : null}
+        {muted !== undefined && onToggleMute ? (
+          <button
+            type="button"
+            className={`dm-hud-btn dm-mute-btn${muted ? " on" : ""}`}
+            onClick={onToggleMute}
+            aria-label={muted ? labels.unmute : labels.mute}
+            aria-pressed={muted}
+            title={`${muted ? labels.unmute : labels.mute} (M)`}
+          >
+            {muted ? <IconMute /> : <IconSound />}
           </button>
         ) : null}
         <button

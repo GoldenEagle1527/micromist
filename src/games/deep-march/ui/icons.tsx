@@ -60,3 +60,21 @@ export function IconFlip() {
     </svg>
   );
 }
+/** Speaker with waves (sound on) / crossed (muted). */
+const SPEAKER = "M -9 -3 L -5 -3 L 0 -8 L 0 8 L -5 3 L -9 3 Z";
+export function IconSound() {
+  return (
+    <svg viewBox="-12 -12 24 24" aria-hidden="true">
+      <path d={SPEAKER} fill="none" />
+      <path d="M 3.5 -3.5 A 5 5 0 0 1 3.5 3.5 M 6 -7 A 10 10 0 0 1 6 7" fill="none" />
+    </svg>
+  );
+}
+export function IconMute() {
+  return (
+    <svg viewBox="-12 -12 24 24" aria-hidden="true">
+      <path d={SPEAKER} fill="none" />
+      <path d="M 3 -4 L 10 4 M 10 -4 L 3 4" fill="none" />
+    </svg>
+  );
+}

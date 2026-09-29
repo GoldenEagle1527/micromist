@@ -55,6 +55,8 @@ export type DiveAudio = {
   /** Ease loop gains toward the targets set this frame. */
   tick: (dt: number) => void;
   play: (id: ShotId, opts?: ShotOpts) => void;
+  /** Master volume 0..1 and mute (muted also suspends the context: no stream, no battery). */
+  setSound: (s: { muted: boolean; volume: number }) => void;
   status: () => AudioStatus;
   dispose: () => void;
 };
@@ -67,10 +69,15 @@ export type DiveAudioOptions = {
   /** Per file attempt (fetch + body). */
   clipTimeoutMs?: number;
   base?: string;
+  /** Initial volume / mute (settings.ts). */
+  sound?: { muted: boolean; volume: number };
 };
 
 export const CLIP_TIMEOUT_MS = 10_000;
-const MASTER_GAIN = 0.85;
+/** Mixer headroom: volume 1 = this master gain. */
+const MASTER_GAIN = 1;
+/** Volume changes ease in over ~this time constant (no clicks). */
+const VOLUME_TC = 0.04;
 
 const OFF: AudioStatus = { state: "off", settled: true, late: false, done: 0, failed: 0, total: 0, bytes: 0, totalBytes: 0, format: null, missing: [] };
 
@@ -79,6 +86,7 @@ const noop: DiveAudio = {
   setLoop: () => {},
   tick: () => {},
   play: () => {},
+  setSound: () => {},
   status: () => OFF,
   dispose: () => {},
 };
@@ -100,6 +108,8 @@ function browserCanPlay(): ((mime: string) => string) | null {
 
 type Loaded = { buf: AudioBuffer; start: number; end: number };
 
+const clampVolume = (v: number) => (Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : 0.85);
+
 export function createDiveAudio(ctx: AudioContext | null, opts: DiveAudioOptions = {}): DiveAudio {
   if (!ctx) return noop;
   const env = opts.env === undefined ? browserEnv() : opts.env;
@@ -109,8 +119,10 @@ export function createDiveAudio(ctx: AudioContext | null, opts: DiveAudioOptions
   const clipTimeout = opts.clipTimeoutMs ?? CLIP_TIMEOUT_MS;
 
   const master = ctx.createGain();
-  master.gain.value = MASTER_GAIN;
+  let sound = { muted: opts.sound?.muted ?? false, volume: clampVolume(opts.sound?.volume ?? 0.85) };
+  master.gain.value = sound.muted ? 0 : sound.volume * MASTER_GAIN;
   master.connect(ctx.destination);
+  lifecycle?.hold("muted", sound.muted);
 
   const buffers = new Map<ClipId, Loaded>();
   const targets: Record<LoopId, number> = { ambience: 0, swim: 0 };
@@ -241,6 +253,18 @@ export function createDiveAudio(ctx: AudioContext | null, opts: DiveAudioOptions
         if (i >= 0) sources.splice(i, 1);
       };
       sources.push(src);
+    },
+    setSound: (next) => {
+      sound = { muted: next.muted, volume: clampVolume(next.volume) };
+      const target = sound.muted ? 0 : sound.volume * MASTER_GAIN;
+      try {
+        master.gain.cancelScheduledValues(ctx.currentTime);
+        master.gain.setTargetAtTime(target, ctx.currentTime, VOLUME_TC);
+      } catch {
+        master.gain.value = target;
+      }
+      // muted: suspend (unmuting happens in the button / key gesture, so resume is allowed)
+      lifecycle?.hold("muted", sound.muted);
     },
     status,
     dispose: () => {

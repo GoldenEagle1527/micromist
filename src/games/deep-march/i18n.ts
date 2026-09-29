@@ -64,6 +64,11 @@ export type DeepMarchDict = {
   hidePanel: string;
   exit: string;
   flip: string;
+  /** Sound: setup toggle + volume, HUD mute button. */
+  soundToggle: string;
+  volume: string;
+  mute: string;
+  unmute: string;
   seedNow: (seed: string) => string;
 };
 
@@ -84,7 +89,7 @@ export const deepMarchEn: DeepMarchDict = {
     "Mouse — look (click the view to capture the mouse, Esc releases)",
     "WASD / arrows — move along your heading · Space — swim up · Shift — sink",
     "Double-tap W, or hold W and press Ctrl / R — swim fast toward where you look",
-    "Release W to stop swimming · F — lights on / off · L — next light mode · 1 / 2 / 3 — beam / high beam / sonar",
+    "Release W to stop swimming · F — lights on / off · L — next light mode · 1 / 2 / 3 — beam / high beam / sonar · M — mute / unmute",
     "Lights run on the battery (beam drains least, sonar most); it slowly recharges while the lights are off",
     "Touch panel: left dial moves (push to the outer SWIM arc to swim), right fan = up / down / swim / lamp / light mode, drag elsewhere to look",
   ],
@@ -155,6 +160,10 @@ export const deepMarchEn: DeepMarchDict = {
   hidePanel: "Hide control panel",
   exit: "Exit dive",
   flip: "Flip view 180°",
+  soundToggle: "Sound effects",
+  volume: "Volume",
+  mute: "Mute",
+  unmute: "Unmute",
   seedNow: (seed) => `Seed ${seed}`,
 };
 
@@ -174,7 +183,7 @@ export const deepMarchZh: DeepMarchDict = {
     "鼠标 — 转动视角（点击画面锁定鼠标，Esc 释放）",
     "WASD / 方向键 — 沿朝向移动 · 空格 — 上浮 · Shift — 下沉",
     "双击 W，或按住 W 再按 Ctrl / R — 朝视线方向快速游泳",
-    "松开 W 停止游泳 · F — 开关灯光 · L — 切换灯光模式 · 1 / 2 / 3 — 光束 / 远光 / 声呐",
+    "松开 W 停止游泳 · F — 开关灯光 · L — 切换灯光模式 · 1 / 2 / 3 — 光束 / 远光 / 声呐 · M — 静音 / 取消静音",
     "灯光消耗电池（光束最省电，声呐最耗电）；关灯时电池会缓慢回充",
     "触屏面板：左侧摇盘移动（推到外圈「游泳」弧区即游泳），右侧扇形按钮为上浮 / 下沉 / 游泳 / 头灯 / 灯光模式，拖动其余画面转动视角",
   ],
@@ -245,5 +254,9 @@ export const deepMarchZh: DeepMarchDict = {
   hidePanel: "隐藏操控面板",
   exit: "退出下潜",
   flip: "画面翻转 180°",
+  soundToggle: "音效",
+  volume: "音量",
+  mute: "静音",
+  unmute: "取消静音",
   seedNow: (seed) => `种子 ${seed}`,
 };
