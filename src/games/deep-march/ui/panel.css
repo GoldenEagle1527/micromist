@@ -351,6 +351,11 @@
   box-shadow: 0 0 8px rgb(98 243 255 / 0.45), inset 0 0 6px rgb(98 243 255 / 0.25);
 }
 
+.dm-mute-btn.on {
+  color: var(--hud-warn);
+  border-color: var(--hud-warn);
+}
+
 /* ---- look pad ---- */
 .dm-lookpad {
   position: absolute;

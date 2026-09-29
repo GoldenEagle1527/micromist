@@ -49,6 +49,10 @@ export type DeepMarchOptions = {
   labels: HudLabels;
   /** Created inside the dive-start click so the browser allows playback. Null skips audio. */
   audioContext?: AudioContext | null;
+  /** Initial volume / mute (settings.ts); later changes via handle.setSound. */
+  sound?: { muted: boolean; volume: number };
+  /** M key: the page owns (and persists) the mute state. */
+  onMuteToggle?: () => void;
 };
 
 export type Telemetry = {
@@ -125,6 +129,8 @@ export type DeepMarchHandle = {
   /** Next available light mode (turns the light on). */
   cycleLight: () => LightMode;
   toggleSwimLatch: () => boolean;
+  /** Master volume 0..1 / mute. */
+  setSound: (s: { muted: boolean; volume: number }) => void;
   telemetry: () => Telemetry;
 };
 
@@ -229,7 +235,7 @@ void main() {
   // Survival layer (battery, gear, light modes) and the scene side of the lights.
   const survival = createSurvival();
   const lights = survival.lights;
-  const audio = createDiveAudio(opts.audioContext ?? null);
+  const audio = createDiveAudio(opts.audioContext ?? null, { sound: opts.sound });
   // cue timing (audioCues.ts): bump by impact with cooldown, rate limits for UI sounds
   const bumpCue = new BumpCue();
   const cues = new CueLimiter();
@@ -460,6 +466,7 @@ void main() {
       lights.select(m);
       if (lights.state().mode !== before && cues.allow("mode", cueNow())) audio.play("mode", { gain: 0.42 });
     },
+    onMuteToggle: () => opts.onMuteToggle?.(),
     onLockChange: () => updatePrompt(),
   });
   input.panelMode = opts.panel;
@@ -676,6 +683,7 @@ void main() {
       input.panel.swimLatch = !input.panel.swimLatch;
       return input.panel.swimLatch;
     },
+    setSound: (s) => audio.setSound(s),
     telemetry: () => ({
       depth: 100 - diver.position.y,
       heading: ((((-diver.yaw * 180) / Math.PI) % 360) + 360) % 360,

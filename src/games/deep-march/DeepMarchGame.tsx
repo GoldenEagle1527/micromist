@@ -5,7 +5,7 @@ import { useLocale } from "../../i18n";
 import { seedFromString } from "./terrain/noise";
 import { createDeepMarch, type DeepMarchHandle, type HudLabels } from "./scene/world";
 import type { DeepMarchDict } from "./i18n";
-import { isTouchDevice, loadSettings, panelEnabled, randomSeed, saveSettings } from "./settings";
+import { isTouchDevice, loadSettings, panelEnabled, randomSeed, saveSettings, type SoundSettings } from "./settings";
 import { ControlPanel, type PanelLabels } from "./ui/ControlPanel";
 import { viewRotation, type Rotation } from "./viewRotation";
 import { acquireAudioContext, audioDisabledByUrl, closeAudioContext, releaseAudioContext } from "./scene/audioContext";
@@ -94,6 +94,8 @@ function panelLabels(dm: DeepMarchDict): PanelLabels {
     hidePanel: dm.hidePanel,
     exit: dm.exit,
     flip: dm.flip,
+    mute: dm.mute,
+    unmute: dm.unmute,
   };
 }
 
@@ -106,6 +108,9 @@ export function DeepMarchGame() {
   const [sensitivity, setSensitivity] = useState(() => loadSettings().sensitivity);
   const [invertY, setInvertY] = useState(() => loadSettings().invertY);
   const [panelOn, setPanelOn] = useState(() => panelEnabled(loadSettings()));
+  const [sound, setSound] = useState<SoundSettings>(() => loadSettings().sound);
+  /** This dive has an audio context (false: ?audio=0 or no Web Audio) → no mute button. */
+  const [audioOn, setAudioOn] = useState(false);
   const [game, setGame] = useState<DeepMarchHandle | null>(null);
   const [loadingOn, setLoadingOn] = useState(true);
   const hostRef = useRef<HTMLDivElement | null>(null);
@@ -120,7 +125,7 @@ export function DeepMarchGame() {
   const [touch] = useState(isTouchDevice);
 
   const persist = useCallback(
-    (patch: Partial<{ seed: string; panel: boolean; sensitivity: number; invertY: boolean }>) => {
+    (patch: Partial<{ seed: string; panel: boolean; sensitivity: number; invertY: boolean; sound: SoundSettings }>) => {
       const cur = loadSettings();
       saveSettings({ ...cur, ...patch });
     },
@@ -144,6 +149,8 @@ export function DeepMarchGame() {
           panel: panelOn,
           labels: hudLabels(dm),
           audioContext: audioCtxRef.current,
+          sound: soundRef.current,
+          onMuteToggle: () => toggleMuteRef.current(),
         });
         setGame(g);
       }, 0);
@@ -159,6 +166,29 @@ export function DeepMarchGame() {
     // Settings/labels are read once per dive; the panel toggle is pushed via setPanelMode.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [screen]);
+
+  // Volume / mute: live into the running dive, persisted
+  const soundRef = useRef(sound);
+  soundRef.current = sound;
+  useEffect(() => {
+    game?.setSound(sound);
+  }, [game, sound]);
+  const changeSound = useCallback(
+    (next: SoundSettings) => {
+      setSound(next);
+      persist({ sound: next });
+    },
+    [persist],
+  );
+  const toggleMute = useCallback(() => {
+    const next = { ...soundRef.current, muted: !soundRef.current.muted };
+    soundRef.current = next;
+    // apply now, inside the click / key gesture (unmuting resumes the context)
+    game?.setSound(next);
+    changeSound(next);
+  }, [game, changeSound]);
+  const toggleMuteRef = useRef(toggleMute);
+  toggleMuteRef.current = toggleMute;
 
   // Language switches mid-dive: push the new strings into the canvas overlay / debug legend.
   useEffect(() => {
@@ -204,13 +234,14 @@ export function DeepMarchGame() {
   const start = useCallback(() => {
     const s = seed.trim() || "1";
     setSeed(s);
-    persist({ seed: s, sensitivity, invertY, panel: panelOn });
+    persist({ seed: s, sensitivity, invertY, panel: panelOn, sound });
     if (touch) void enterLandscape();
     setLoadingOn(true);
     // inside the click: acquire (or reuse) the shared context and resume it; never throws
     audioCtxRef.current = audioDisabledByUrl(window.location.search) ? null : acquireAudioContext();
+    setAudioOn(audioCtxRef.current !== null);
     setScreen("playing");
-  }, [seed, sensitivity, invertY, panelOn, persist, touch]);
+  }, [seed, sensitivity, invertY, panelOn, sound, persist, touch]);
   const back = useCallback(() => {
     leaveLandscape();
     audioCtxRef.current = null;
@@ -285,6 +316,24 @@ export function DeepMarchGame() {
               <small className="dm-check-hint">{dm.panelToggleHint}</small>
             </span>
           </label>
+          <label className="dm-check">
+            <input type="checkbox" checked={!sound.muted} onChange={(e) => changeSound({ ...sound, muted: !e.target.checked })} />
+            <span>{dm.soundToggle}</span>
+          </label>
+          <label className="dm-field">
+            <span>
+              {dm.volume} <b className="dm-sens-val">{Math.round(sound.volume * 100)}%</b>
+            </span>
+            <input
+              type="range"
+              min={0}
+              max={1}
+              step={0.05}
+              value={sound.volume}
+              disabled={sound.muted}
+              onChange={(e) => changeSound({ ...sound, volume: Number(e.target.value) })}
+            />
+          </label>
           <div className="row">
             <button type="button" className="primary" onClick={start}>
               {dm.start}
@@ -315,6 +364,8 @@ export function DeepMarchGame() {
               onTogglePanel={togglePanel}
               onExit={back}
               onFlip={rot !== 0 ? () => setFlip((f) => !f) : undefined}
+              muted={audioOn ? sound.muted : undefined}
+              onToggleMute={toggleMute}
               labels={panelLabels(dm)}
             />
           </div>
@@ -339,6 +390,8 @@ export function DeepMarchGame() {
           game={game}
           panelOn={panelOn}
           onTogglePanel={togglePanel}
+          muted={audioOn ? sound.muted : undefined}
+          onToggleMute={toggleMute}
           labels={panelLabels(dm)}
         />
       </div>

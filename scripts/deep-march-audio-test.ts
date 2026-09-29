@@ -4,6 +4,7 @@
  *   decode fallback, streamed byte progress, timeouts, missing / partial / broken
  *   files → quiet silence (the sfx pack is licensed and never in the repo);
  * - gapless loop points from the source frame count and codec priming / padding;
+ * - volume / mute (settings validation, master gain, mute suspends the context);
  * - AudioLifecycle (gestures, visibility, iOS interruption, GPU hold) and the shared
  *   AudioContext (never throws, webkit fallback, no duplicates).
  * Run: npm run test:audio
@@ -13,6 +14,7 @@ import { CLIP_IDS, FORMAT_MIME, formatOrder, loopPoints, parseManifest, type Sfx
 import { acquireAudioContext, audioContextCtor, audioDisabledByUrl, closeAudioContext, releaseAudioContext, sharedAudioContext } from "../src/games/deep-march/scene/audioContext";
 import { AudioLifecycle, UNLOCK_EVENTS, type LifecycleEnv } from "../src/games/deep-march/scene/audioLifecycle";
 import { BUMP_TUNING, BumpCue, CUE_INTERVAL, CueLimiter } from "../src/games/deep-march/scene/audioCues";
+import { DEFAULT_SOUND, parseSound } from "../src/games/deep-march/settings";
 import { FakeAudioContext, flush } from "./lib/fakeAudio";
 
 let failed = 0;
@@ -267,6 +269,9 @@ async function main() {
 
   console.log("cues");
   cueChecks();
+
+  console.log("volume / mute");
+  await soundChecks();
 
   console.log("lifecycle + context");
   await lifecycleChecks();
@@ -543,3 +548,73 @@ function cueChecks() {
 }
 
 void main();
+
+async function soundChecks() {
+  // settings validation
+  check("sound defaults: on, 85 %", parseSound(undefined).muted === false && parseSound(undefined).volume === DEFAULT_SOUND.volume && DEFAULT_SOUND.volume === 0.85);
+  check("stored sound kept", JSON.stringify(parseSound({ muted: true, volume: 0.4 })) === JSON.stringify({ muted: true, volume: 0.4 }));
+  check(
+    "odd stored sound → sane values",
+    parseSound({ muted: "yes", volume: 7 }).muted === false &&
+      parseSound({ volume: 7 }).volume === 1 &&
+      parseSound({ volume: -1 }).volume === 0 &&
+      parseSound({ volume: Number.NaN }).volume === DEFAULT_SOUND.volume &&
+      parseSound({ volume: "0.5" }).volume === DEFAULT_SOUND.volume &&
+      parseSound(null).volume === DEFAULT_SOUND.volume &&
+      parseSound({ volume: 0.333333 }).volume === 0.33,
+  );
+  // mixer: master gain follows volume, mute = 0 gain + suspended context, unmute resumes
+  {
+    const ctx = new FakeAudioContext();
+    const { env, doc } = lifecycleEnv();
+    const a = createDiveAudio(ctx as unknown as AudioContext, { env, fetcher: async () => resp(404, "text/plain", ""), canPlayType: null, base: "/sfx/", sound: { muted: false, volume: 0.5 } });
+    await flush();
+    const master = ctx.gains[0];
+    check("initial volume on the master gain", Math.abs(master.gain.value - 0.5) < 1e-9, `${master.gain.value}`);
+    check("unmuted: context running", ctx.state === "running");
+    a.setSound({ muted: false, volume: 0.2 });
+    check("volume change reaches the master gain", Math.abs(master.gain.value - 0.2) < 1e-9);
+    a.setSound({ muted: true, volume: 0.2 });
+    await flush();
+    check("mute: gain 0 and context suspended", master.gain.value === 0 && ctx.state === "suspended");
+    const sus = ctx.suspends;
+    a.setSound({ muted: true, volume: 0.6 });
+    await flush();
+    check("volume change while muted stays silent", master.gain.value === 0 && ctx.state === "suspended" && ctx.suspends === sus);
+    a.setSound({ muted: false, volume: 0.6 });
+    await flush();
+    check("unmute (in the key / button gesture): resumed at the new volume", ctx.state === "running" && Math.abs(master.gain.value - 0.6) < 1e-9);
+    a.setSound({ muted: false, volume: Number.NaN });
+    check("bad volume ignored (clamped to the default)", Number.isFinite(master.gain.value));
+    a.setSound({ muted: false, volume: 3 });
+    check("volume clamped to 1", master.gain.value === 1);
+    doc.set(true);
+    await flush();
+    a.setSound({ muted: true, volume: 1 });
+    a.setSound({ muted: false, volume: 1 });
+    await flush();
+    check("unmute while the page is hidden: stays suspended", ctx.state === "suspended");
+    doc.set(false);
+    await flush();
+    check("page back: running again", ctx.state === "running");
+    a.dispose();
+  }
+  {
+    const ctx = new FakeAudioContext();
+    const { env } = lifecycleEnv();
+    const a = createDiveAudio(ctx as unknown as AudioContext, { env, fetcher: async () => resp(404, "text/plain", ""), canPlayType: null, base: "/sfx/", sound: { muted: true, volume: 0.85 } });
+    await flush();
+    check("dive started muted: gain 0, context suspended", ctx.gains[0].gain.value === 0 && ctx.state === "suspended");
+    a.dispose();
+  }
+  {
+    const a = createDiveAudio(null);
+    let threw = false;
+    try {
+      a.setSound({ muted: true, volume: 0.1 });
+    } catch {
+      threw = true;
+    }
+    check("?audio=0 / no Web Audio: setSound is a harmless no-op", !threw && a.status().state === "off");
+  }
+}

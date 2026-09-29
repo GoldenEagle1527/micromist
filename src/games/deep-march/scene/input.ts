@@ -1,13 +1,13 @@
 /**
  * Diver input: keyboard (WASD / arrows, Space, Shift, sprint = double-tap W /
- * Ctrl / R; lights: F on/off, L cycle, 1-3 mode), mouse-look via pointer lock (desktop, panel off), drag-look on
+ * Ctrl / R; lights: F on/off, L cycle, 1-3 mode; M mute), mouse-look via pointer lock (desktop, panel off), drag-look on
  * touch, plus analog state pushed in by the sci-fi control panel.
  */
 import type { DiverInput } from "./diver";
 import { screenDelta } from "../viewRotation";
 
 const HANDLED = new Set([
-  "KeyW", "KeyA", "KeyS", "KeyD", "KeyR", "KeyF", "KeyL", "Digit1", "Digit2", "Digit3",
+  "KeyW", "KeyA", "KeyS", "KeyD", "KeyR", "KeyF", "KeyL", "KeyM", "Digit1", "Digit2", "Digit3",
   "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight",
   "ShiftLeft", "ShiftRight", "Space", "ControlLeft", "ControlRight",
 ]);
@@ -27,6 +27,8 @@ export type InputOptions = {
   onLightCycle?: () => void;
   /** 1 / 2 / 3: light mode by index. */
   onLightSelect?: (index: number) => void;
+  /** M: mute / unmute. */
+  onMuteToggle?: () => void;
 };
 
 export type PanelInput = {
@@ -84,6 +86,10 @@ export class InputController {
     }
     if (e.code === "KeyL") {
       if (!e.repeat) this.opts.onLightCycle?.();
+      return;
+    }
+    if (e.code === "KeyM") {
+      if (!e.repeat) this.opts.onMuteToggle?.();
       return;
     }
     if (e.code.startsWith("Digit")) {
