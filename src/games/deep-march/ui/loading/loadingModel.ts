@@ -80,7 +80,8 @@ export class LoadingModel {
   overall(): number {
     let s = 0;
     for (const id of this.ids) s += this.share[id] * this.progress[id];
-    return Math.min(1, s);
+    // normalized shares may sum to 1 − ε in floating point
+    return this.allDone() ? 1 : Math.min(1, s);
   }
 
   /** Every step done or warned. */

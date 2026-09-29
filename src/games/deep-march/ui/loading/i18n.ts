@@ -2,7 +2,7 @@
 import type { StepStatus } from "./loadingModel";
 
 /** Registered loading steps (steps/index.ts) that need a row name. */
-export type StepId = "coords" | "regions" | "materials" | "terrain" | "system";
+export type StepId = "coords" | "regions" | "materials" | "terrain" | "system" | "audio";
 
 export type LoadingDict = {
   title: string;
@@ -37,6 +37,13 @@ export type LoadingDict = {
   /** Focus card: current step prefix. */
   now: string;
   diagnostics: string;
+  /** Audio step. */
+  audioCount: (done: number, total: number, kb: string, totalKb: string) => string;
+  audioOff: string;
+  audioSilent: string;
+  audioPartial: (clips: string) => string;
+  audioLate: string;
+  audioConnecting: string;
   diag: {
     spawn: string;
     texPath: string;
@@ -45,6 +52,8 @@ export type LoadingDict = {
     limits: string;
     limitsValue: (units: number, vectors: number, highp: boolean) => string;
     shaderLog: string;
+    audioFormat: string;
+    audioMissing: string;
   };
   diveAnyway: string;
   overall: string;
@@ -61,6 +70,7 @@ export const loadingEn: LoadingDict = {
     materials: "Laying seabed materials",
     terrain: "Surveying terrain around spawn",
     system: "System check",
+    audio: "Tuning audio systems",
   },
   status: { pending: "WAIT", active: "RUN", done: "OK", warn: "WARN", error: "ERR" },
   seed: (text, hash) => `Seed ${text} · #${hash}`,
@@ -88,6 +98,12 @@ export const loadingEn: LoadingDict = {
   allReady: "All systems ready",
   now: "Now",
   diagnostics: "Diagnostics",
+  audioCount: (d, t, kb, tkb) => `${d}/${t} sounds · ${kb} / ${tkb} KB`,
+  audioOff: "Sound off",
+  audioSilent: "Sound files not found — diving silent",
+  audioPartial: (clips) => `Some sounds missing (${clips})`,
+  audioLate: "Still loading in the background",
+  audioConnecting: "Connecting to the sound store…",
   diag: {
     spawn: "Entry point (x, y, z)",
     texPath: "Texture format",
@@ -96,6 +112,8 @@ export const loadingEn: LoadingDict = {
     limits: "Limits",
     limitsValue: (u, v, h) => `texture units ${u} · fragment uniforms ${v} · highp ${h ? "yes" : "no"}`,
     shaderLog: "Shader log",
+    audioFormat: "Sound format",
+    audioMissing: "Missing sounds",
   },
   diveAnyway: "Dive anyway",
   overall: "Overall",
@@ -135,6 +153,7 @@ export const loadingZh: LoadingDict = {
     materials: "铺设海床材质",
     terrain: "测绘出生点周边地形",
     system: "系统自检",
+    audio: "调校声学系统",
   },
   status: { pending: "等待", active: "进行", done: "完成", warn: "注意", error: "错误" },
   seed: (text, hash) => `种子 ${text} · #${hash}`,
@@ -162,6 +181,12 @@ export const loadingZh: LoadingDict = {
   allReady: "全部系统就绪",
   now: "当前",
   diagnostics: "诊断详情",
+  audioCount: (d, t, kb, tkb) => `${d}/${t} 段音效 · ${kb} / ${tkb} KB`,
+  audioOff: "声音已关闭",
+  audioSilent: "未找到音效文件，静音下潜",
+  audioPartial: (clips) => `部分音效缺失（${clips}）`,
+  audioLate: "仍在后台加载",
+  audioConnecting: "正在连接音效库…",
   diag: {
     spawn: "入水点 (x, y, z)",
     texPath: "纹理格式",
@@ -170,6 +195,8 @@ export const loadingZh: LoadingDict = {
     limits: "限制",
     limitsValue: (u, v, h) => `纹理单元 ${u} · 片元 uniform ${v} · highp ${h ? "支持" : "不支持"}`,
     shaderLog: "着色器日志",
+    audioFormat: "音效格式",
+    audioMissing: "缺失音效",
   },
   diveAnyway: "仍然下潜",
   overall: "总进度",

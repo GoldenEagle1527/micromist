@@ -35,10 +35,12 @@ export class FakeSource extends FakeNode {
   loopEnd = 0;
   playbackRate = new FakeParam(1);
   started = 0;
+  startArgs: number[] = [];
   stopped = 0;
   onended: (() => void) | null = null;
-  start() {
+  start(...args: number[]) {
     this.started++;
+    this.startArgs = args;
   }
   stop() {
     this.stopped++;

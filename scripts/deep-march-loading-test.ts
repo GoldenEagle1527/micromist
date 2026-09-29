@@ -31,7 +31,7 @@ console.log("loading model");
   const model0 = new LoadingModel(LOADING_STEPS);
   const w = STEPS.reduce((s, id) => s + model0.weight(id), 0);
   check(Math.abs(w - 1) < 1e-9, `normalized step weights sum to 1 (${w})`);
-  check(STEPS.slice(0, 5).join() === "coords,regions,materials,terrain,system", "registry starts with the 5 base steps in order");
+  check(STEPS.join() === "coords,regions,materials,terrain,system,audio", "registry order: coords, regions, materials, terrain, system, audio");
   check(new Set(STEPS).size === STEPS.length, "step ids unique");
   // relative weights: adding a step rescales the others, never needs retuning
   const extra = new LoadingModel([...LOADING_STEPS, { id: "extra", weight: 25 }]);
@@ -91,12 +91,13 @@ console.log("loading steps + dive gate");
     lightModes: { beam: "Beam", high: "High", sonar: "Sonar" },
   });
   const LONG_GPU = "ANGLE (Qualcomm, Adreno (TM) 650, OpenGL ES 3.2 V@0502.0 (GIT@35f8e2e, I2e7e0f1d23, 1601883186) (Date:10/05/20))";
-  const snapOf = (o: Partial<{ mat: Partial<LoadingSnapshot["materials"]>; terrain: Partial<LoadingSnapshot["terrain"]>; sys: Partial<LoadingSnapshot["system"]>; loaded: boolean; extra: Record<string, unknown> }> = {}): LoadingSnapshot => {
+  const snapOf = (o: Partial<{ mat: Partial<LoadingSnapshot["materials"]>; terrain: Partial<LoadingSnapshot["terrain"]>; sys: Partial<LoadingSnapshot["system"]>; audio: Partial<LoadingSnapshot["audio"]>; loaded: boolean; extra: Record<string, unknown> }> = {}): LoadingSnapshot => {
+    const audio = { state: "ready", settled: true, late: false, done: 7, failed: 0, total: 7, bytes: 146e3, totalBytes: 146e3, format: "webm", missing: [], ...o.audio } as LoadingSnapshot["audio"];
     const materials = { path: "ktx2", done: 22, total: 22, bytes: 13e6, totalBytes: 13e6, last: 21, failed: 0, fellBack: false, retrying: 0, ready: true, error: null, ...o.mat } as LoadingSnapshot["materials"];
     const terrain = { done: 10, total: 10, ready: true, ...o.terrain };
     const system = { battery: 1, lamps: ["beam"], sonar: true, shaders: true, shaderError: null, gpu: { renderer: LONG_GPU, textureUnits: 16, fragmentVectors: 1024, highp: true }, gpuLost: false, ...o.sys } as LoadingSnapshot["system"];
-    const loaded = o.loaded ?? (terrain.ready && materials.ready && system.shaders && !system.shaderError && !system.gpuLost);
-    return { seed: 1, spawn: { x: 1, y: 60, z: 2 }, regions: null as unknown as LoadingSnapshot["regions"], materials, terrain, system, loaded, diving: false, ...o.extra } as LoadingSnapshot;
+    const loaded = o.loaded ?? (terrain.ready && materials.ready && system.shaders && !system.shaderError && !system.gpuLost && audio.settled);
+    return { seed: 1, spawn: { x: 1, y: 60, z: 2 }, regions: null as unknown as LoadingSnapshot["regions"], materials, terrain, system, audio, loaded, diving: false, ...o.extra } as LoadingSnapshot;
   };
   const run = (snap: LoadingSnapshot | null, mapRows = 256, dict = loadingEn) => {
     const model = new LoadingModel(LOADING_STEPS);
@@ -174,6 +175,34 @@ console.log("loading steps + dive gate");
     const snap = snapOf({ loaded: false });
     const { model } = run(snap);
     check(model.allDone() && !canBeginDive(model, LOADING_STEPS, snap, false), "steps settled but world not loaded → wait");
+  }
+  // audio: optional step
+  check(LOADING_STEPS.find((d) => d.id === "audio")?.required === false, "audio step registered as optional");
+  {
+    const snap = snapOf({ audio: { state: "loading", settled: false, done: 3, bytes: 60e3 } });
+    const { model, evals } = run(snap);
+    check(model.status.audio === "active" && model.progress.audio > 0.3 && model.progress.audio < 0.5 && !canBeginDive(model, LOADING_STEPS, snap, false), "audio loading → byte progress, dive waits");
+    check(!canBeginDive(model, LOADING_STEPS, snap, true), "dive anyway also waits for the (short) audio gate");
+    check(evals.get("audio")!.lines[0].includes("3/7"), "audio focus line counts clips");
+  }
+  for (const [name, a] of [
+    ["files missing (silent)", { state: "silent", done: 0, failed: 7, missing: ["ambience"] }],
+    ["some missing (partial)", { state: "partial", done: 5, failed: 2, missing: ["bump", "warn"] }],
+    ["world stopped waiting (late)", { state: "loading", settled: true, late: true, done: 4 }],
+  ] as const) {
+    const snap = snapOf({ audio: a as Partial<LoadingSnapshot["audio"]> });
+    const { model } = run(snap);
+    check(model.status.audio === "warn" && canBeginDive(model, LOADING_STEPS, snap, false), `audio ${name} → warn, dive starts`);
+  }
+  {
+    const snap = snapOf({ audio: { state: "off", settled: true, done: 0, total: 0, totalBytes: 0, bytes: 0 } });
+    const { model, evals } = run(snap);
+    check(model.status.audio === "done" && evals.get("audio")!.lines[0] === loadingEn.audioOff && canBeginDive(model, LOADING_STEPS, snap, false), "audio off (?audio=0) → done, dive starts");
+  }
+  {
+    const snap = snapOf({ audio: { missing: [] } });
+    const { evals } = run(snap);
+    check((evals.get("audio")!.diag ?? []).some((e) => e.value === "Opus (WebM)"), "audio format in diagnostics");
   }
   // zh strings flow through
   {
