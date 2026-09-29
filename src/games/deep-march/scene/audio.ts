@@ -21,7 +21,8 @@
  * Pass the shared AudioContext acquired inside the dive-start click
  * (audioContext.ts) so playback is allowed; AudioLifecycle (audioLifecycle.ts)
  * keeps it running across gestures, background / iOS interruptions and GPU loss.
- * ?audio=0 skips the mixer entirely.
+ * Volume / mute come from settings.ts via setSound (mute also suspends the
+ * context); ?audio=0 skips the mixer entirely.
  */
 import { AudioLifecycle, type HoldReason, type LifecycleEnv } from "./audioLifecycle";
 import { CLIP_IDS, formatOrder, loopPoints, parseManifest, type ClipId, type SfxClip, type SfxFile, type SfxFormat, type SfxManifest } from "./audioManifest";
