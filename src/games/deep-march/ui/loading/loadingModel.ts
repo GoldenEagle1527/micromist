@@ -1,66 +1,97 @@
 /**
- * Loading-screen step model (pure, node-tested): the five real initialization
- * steps, their status (pending / active / done / error), monotonic progress and the
- * weighted overall bar. Steps may run in parallel (textures download while the map
- * and terrain are built); the UI lists them in order.
+ * Loading-screen step model (pure, node-tested): status per registered step
+ * (pending / active / done / warn / error), monotonic progress and the weighted
+ * overall bar. Steps come from the registry (steps/index.ts); weights are relative
+ * and normalized here, so adding a step never needs the others retuned. Steps may
+ * run in parallel (textures download while the map and terrain are built); the UI
+ * lists them in registry order.
  */
-export type StepId = "coords" | "regions" | "materials" | "terrain" | "system";
-export type StepStatus = "pending" | "active" | "done" | "error";
+export type StepStatus = "pending" | "active" | "done" | "warn" | "error";
 
-export const STEPS: readonly StepId[] = ["coords", "regions", "materials", "terrain", "system"];
-
-/** Share of the overall bar (sums to 1; roughly the time each step takes). */
-export const STEP_WEIGHT: Readonly<Record<StepId, number>> = { coords: 0.04, regions: 0.12, materials: 0.5, terrain: 0.29, system: 0.05 };
+/** What the model needs to know about a step. */
+export type StepSpec = {
+  readonly id: string;
+  /** Relative share of the overall bar (roughly the time the step takes). */
+  readonly weight: number;
+};
 
 /** Progress shown for a step that reports full completion but isn't confirmed done yet. */
 const UNCONFIRMED_MAX = 0.99;
 
-const record = <T,>(v: T): Record<StepId, T> => ({ coords: v, regions: v, materials: v, terrain: v, system: v });
+/** Finished for the gate: done, or done with a warning (optional step that fell back). */
+export const settled = (s: StepStatus) => s === "done" || s === "warn";
 
 export class LoadingModel {
-  readonly status: Record<StepId, StepStatus> = record<StepStatus>("pending");
-  readonly progress: Record<StepId, number> = record(0);
+  readonly ids: readonly string[];
+  readonly status: Record<string, StepStatus> = {};
+  readonly progress: Record<string, number> = {};
+  private readonly share: Record<string, number> = {};
+
+  constructor(steps: readonly StepSpec[]) {
+    this.ids = steps.map((s) => s.id);
+    const sum = steps.reduce((s, d) => s + Math.max(0, d.weight), 0);
+    for (const d of steps) {
+      this.status[d.id] = "pending";
+      this.progress[d.id] = 0;
+      this.share[d.id] = sum > 0 ? Math.max(0, d.weight) / sum : 1 / steps.length;
+    }
+  }
+
+  /** Normalized share of the overall bar (all shares sum to 1). */
+  weight(id: string): number {
+    return this.share[id] ?? 0;
+  }
 
   /** Step `id` has done / total units of real work (never goes backwards). */
-  report(id: StepId, done: number, total: number) {
-    if (this.status[id] === "done") return;
+  report(id: string, done: number, total: number) {
+    if (settled(this.status[id])) return;
     if (this.status[id] === "pending") this.status[id] = "active";
     const f = total > 0 ? Math.min(UNCONFIRMED_MAX, Math.max(0, done / total)) : 0;
     if (f > this.progress[id]) this.progress[id] = f;
   }
 
   /** Mark a step started without measurable progress yet. */
-  start(id: StepId) {
+  start(id: string) {
     if (this.status[id] === "pending") this.status[id] = "active";
   }
 
-  complete(id: StepId) {
+  complete(id: string) {
+    if (this.status[id] === "warn") return;
     this.status[id] = "done";
     this.progress[id] = 1;
   }
 
-  fail(id: StepId) {
-    if (this.status[id] !== "done") this.status[id] = "error";
+  /** Finished, but degraded (e.g. sounds missing → silent dive). Counts as settled. */
+  warn(id: string) {
+    if (this.status[id] === "done") return;
+    this.status[id] = "warn";
+    this.progress[id] = 1;
+  }
+
+  fail(id: string) {
+    if (!settled(this.status[id])) this.status[id] = "error";
   }
 
   /** Error cleared (e.g. retry started): back to active, progress kept. */
-  recover(id: StepId) {
+  recover(id: string) {
     if (this.status[id] === "error") this.status[id] = "active";
   }
 
   overall(): number {
     let s = 0;
-    for (const id of STEPS) s += STEP_WEIGHT[id] * this.progress[id];
+    for (const id of this.ids) s += this.share[id] * this.progress[id];
     return Math.min(1, s);
   }
 
+  /** Every step done or warned. */
   allDone(): boolean {
-    return STEPS.every((id) => this.status[id] === "done");
+    return this.ids.every((id) => settled(this.status[id]));
   }
 
-  /** The step to headline: first error, else first active, else first pending (null = all done). */
-  focus(): StepId | null {
-    return STEPS.find((id) => this.status[id] === "error") ?? STEPS.find((id) => this.status[id] === "active") ?? STEPS.find((id) => this.status[id] === "pending") ?? null;
+  /** The step to headline: first error, else first active, else first pending (null = all settled). */
+  focus(): string | null {
+    const find = (s: StepStatus) => this.ids.find((id) => this.status[id] === s);
+    return find("error") ?? find("active") ?? find("pending") ?? null;
   }
 }
 

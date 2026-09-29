@@ -1,5 +1,8 @@
 /** Loading-screen strings (zh / en); plugged into the deep-march dictionary as `loading`. */
-import type { StepId, StepStatus } from "./loadingModel";
+import type { StepStatus } from "./loadingModel";
+
+/** Registered loading steps (steps/index.ts) that need a row name. */
+export type StepId = "coords" | "regions" | "materials" | "terrain" | "system";
 
 export type LoadingDict = {
   title: string;
@@ -26,9 +29,23 @@ export type LoadingDict = {
   lamps: (modes: string) => string;
   sonar: string;
   shaders: string;
-  gpu: (renderer: string, units: number, vectors: number, highp: boolean) => string;
-  shaderError: (msg: string) => string;
+  /** One-line shader failure for the focus card (the full log is in the diagnostics). */
+  shaderErrorShort: string;
   gpuLost: string;
+  /** Focus card heading when every step is settled. */
+  allReady: string;
+  /** Focus card: current step prefix. */
+  now: string;
+  diagnostics: string;
+  diag: {
+    spawn: string;
+    texPath: string;
+    texError: string;
+    gpu: string;
+    limits: string;
+    limitsValue: (units: number, vectors: number, highp: boolean) => string;
+    shaderLog: string;
+  };
   diveAnyway: string;
   overall: string;
   begin: string;
@@ -45,7 +62,7 @@ export const loadingEn: LoadingDict = {
     terrain: "Surveying terrain around spawn",
     system: "System check",
   },
-  status: { pending: "WAIT", active: "RUN", done: "OK", error: "ERR" },
+  status: { pending: "WAIT", active: "RUN", done: "OK", warn: "WARN", error: "ERR" },
   seed: (text, hash) => `Seed ${text} · #${hash}`,
   locating: "Locating the entry point…",
   spawnFix: (x, z, depth) => `Entry fix X ${x} · Z ${z} · depth ${depth} m`,
@@ -66,9 +83,20 @@ export const loadingEn: LoadingDict = {
   lamps: (modes) => `Lamps: ${modes}`,
   sonar: "Sonar ready",
   shaders: "Seabed shaders compiled",
-  gpu: (r, u, v, h) => `GPU: ${r} · texture units ${u} · fragment uniforms ${v} · highp ${h ? "yes" : "no"}`,
-  shaderError: (msg) => `Shader error: ${msg}`,
+  shaderErrorShort: "Shader error — see Diagnostics",
   gpuLost: "Graphics context lost (GPU reset) — reload the page",
+  allReady: "All systems ready",
+  now: "Now",
+  diagnostics: "Diagnostics",
+  diag: {
+    spawn: "Entry point (x, y, z)",
+    texPath: "Texture format",
+    texError: "Texture error",
+    gpu: "GPU",
+    limits: "Limits",
+    limitsValue: (u, v, h) => `texture units ${u} · fragment uniforms ${v} · highp ${h ? "yes" : "no"}`,
+    shaderLog: "Shader log",
+  },
   diveAnyway: "Dive anyway",
   overall: "Overall",
   begin: "Begin dive",
@@ -108,7 +136,7 @@ export const loadingZh: LoadingDict = {
     terrain: "测绘出生点周边地形",
     system: "系统自检",
   },
-  status: { pending: "等待", active: "进行", done: "完成", error: "错误" },
+  status: { pending: "等待", active: "进行", done: "完成", warn: "注意", error: "错误" },
   seed: (text, hash) => `种子 ${text} · #${hash}`,
   locating: "正在定位入水点…",
   spawnFix: (x, z, depth) => `入水点 X ${x} · Z ${z} · 深度 ${depth} 米`,
@@ -129,9 +157,20 @@ export const loadingZh: LoadingDict = {
   lamps: (modes) => `灯光：${modes}`,
   sonar: "声呐就绪",
   shaders: "海床着色器已编译",
-  gpu: (r, u, v, h) => `GPU：${r} · 纹理单元 ${u} · 片元 uniform ${v} · highp ${h ? "支持" : "不支持"}`,
-  shaderError: (msg) => `着色器错误：${msg}`,
+  shaderErrorShort: "着色器错误（详见诊断详情）",
   gpuLost: "图形上下文丢失（GPU 重置）— 请刷新页面",
+  allReady: "全部系统就绪",
+  now: "当前",
+  diagnostics: "诊断详情",
+  diag: {
+    spawn: "入水点 (x, y, z)",
+    texPath: "纹理格式",
+    texError: "纹理错误",
+    gpu: "GPU",
+    limits: "限制",
+    limitsValue: (u, v, h) => `纹理单元 ${u} · 片元 uniform ${v} · highp ${h ? "支持" : "不支持"}`,
+    shaderLog: "着色器日志",
+  },
   diveAnyway: "仍然下潜",
   overall: "总进度",
   begin: "开始下潜",

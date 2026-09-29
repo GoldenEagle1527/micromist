@@ -1,17 +1,23 @@
 /**
  * Loading screen tests (node):
  * - LoadingModel: step status transitions, monotonic progress, completion only when
- *   confirmed, error / recover, weighted overall bar, focus order;
+ *   confirmed, error / recover / warn, normalized weights, overall bar, focus order;
+ * - step registry + dive gate: per-step evaluation of snapshots, diagnostics vs focus
+ *   lines, automatic start, "Dive anyway" rules (shader error / GPU lost / waits);
  * - region map rasterization: deterministic per seed (fresh fields → identical
  *   pixels), independent of how rows are sliced, differs between seeds, spawn at
  *   the centre, pixel ↔ world mapping, time per row (UI budget).
  * Run: npm run test:loading
  */
-import { LoadingModel, STEPS, STEP_WEIGHT, formatMB } from "../src/games/deep-march/ui/loading/loadingModel";
+import { LoadingModel, formatMB, settled } from "../src/games/deep-march/ui/loading/loadingModel";
+import { applyStep, canBeginDive } from "../src/games/deep-march/ui/loading/loadingGate";
+import { LOADING_STEPS, type LoadingLabels, type StepContext } from "../src/games/deep-march/ui/loading/steps";
+import { loadingEn, loadingZh } from "../src/games/deep-march/ui/loading/i18n";
+import type { LoadingSnapshot } from "../src/games/deep-march/scene/world";
 import { REGION_MAP, RegionMapRaster, hexToRgb, mapSpec, pixelToWorld, worldToPixel } from "../src/games/deep-march/ui/loading/regionMap";
 import { createDensityField } from "../src/games/deep-march/terrain/density";
 import { TERRAIN } from "../src/games/deep-march/terrain/config";
-import { REGION_COLORS, REGION_COUNT } from "../src/games/deep-march/terrain/regions";
+import { REGION_COLORS, REGION_COUNT, REGION_KEYS } from "../src/games/deep-march/terrain/regions";
 
 let fails = 0;
 const check = (ok: boolean, msg: string) => {
@@ -21,10 +27,18 @@ const check = (ok: boolean, msg: string) => {
 
 console.log("loading model");
 {
-  const w = STEPS.reduce((s, id) => s + STEP_WEIGHT[id], 0);
-  check(Math.abs(w - 1) < 1e-9, `step weights sum to 1 (${w})`);
-  check(STEPS.join() === "coords,regions,materials,terrain,system", "5 steps in order");
-  const m = new LoadingModel();
+  const STEPS = LOADING_STEPS.map((d) => d.id);
+  const model0 = new LoadingModel(LOADING_STEPS);
+  const w = STEPS.reduce((s, id) => s + model0.weight(id), 0);
+  check(Math.abs(w - 1) < 1e-9, `normalized step weights sum to 1 (${w})`);
+  check(STEPS.slice(0, 5).join() === "coords,regions,materials,terrain,system", "registry starts with the 5 base steps in order");
+  check(new Set(STEPS).size === STEPS.length, "step ids unique");
+  // relative weights: adding a step rescales the others, never needs retuning
+  const extra = new LoadingModel([...LOADING_STEPS, { id: "extra", weight: 25 }]);
+  const sumExtra = [...STEPS, "extra"].reduce((s, id) => s + extra.weight(id), 0);
+  const ratio = extra.weight("materials") / extra.weight("terrain");
+  check(Math.abs(sumExtra - 1) < 1e-9 && Math.abs(ratio - model0.weight("materials") / model0.weight("terrain")) < 1e-9, "adding a step: shares renormalize, ratios kept");
+  const m = new LoadingModel(LOADING_STEPS);
   check(STEPS.every((id) => m.status[id] === "pending" && m.progress[id] === 0) && m.overall() === 0, "all pending at 0");
   check(m.focus() === "coords", "focus: first pending");
   m.report("materials", 5, 10);
@@ -45,13 +59,18 @@ console.log("loading model");
   m.fail("materials");
   check(m.status.materials === "done" && m.progress.materials === 1, "done is final");
   const before = m.overall();
-  check(Math.abs(before - (STEP_WEIGHT.materials + STEP_WEIGHT.terrain * 0)) < 1e-9, `overall = weighted sum (${before.toFixed(3)})`);
+  check(Math.abs(before - m.weight("materials")) < 1e-9, `overall = weighted sum (${before.toFixed(3)})`);
   check(!m.allDone(), "not all done");
+  // warn: settled, final, full progress
+  m.warn("terrain");
+  m.fail("terrain");
+  m.complete("terrain");
+  check(m.status.terrain === "warn" && m.progress.terrain === 1 && settled("warn") && !settled("error"), "warn is settled and final");
   for (const id of STEPS) m.complete(id);
-  check(m.allDone() && m.overall() === 1 && m.focus() === null, "all done → overall 1, no focus");
+  check(m.allDone() && m.overall() === 1 && m.focus() === null, "all settled → overall 1, no focus");
   check(formatMB(11436569) === "11.4" && formatMB(0) === "0.0", "MB formatting");
   // overall is monotonic for any interleaving of monotonic reports
-  const m2 = new LoadingModel();
+  const m2 = new LoadingModel(LOADING_STEPS);
   let prev = 0, mono = true;
   for (let k = 0; k <= 100; k++) {
     m2.report("regions", k, 100);
@@ -62,6 +81,105 @@ console.log("loading model");
     prev = o;
   }
   check(mono && prev < 1, `overall monotonic under growing totals (${prev.toFixed(3)})`);
+}
+
+console.log("loading steps + dive gate");
+{
+  const L = (dict: typeof loadingEn): LoadingLabels => ({
+    ...dict,
+    regionNames: Object.fromEntries(REGION_KEYS.map((k) => [k, k])) as LoadingLabels["regionNames"],
+    lightModes: { beam: "Beam", high: "High", sonar: "Sonar" },
+  });
+  const LONG_GPU = "ANGLE (Qualcomm, Adreno (TM) 650, OpenGL ES 3.2 V@0502.0 (GIT@35f8e2e, I2e7e0f1d23, 1601883186) (Date:10/05/20))";
+  const snapOf = (o: Partial<{ mat: Partial<LoadingSnapshot["materials"]>; terrain: Partial<LoadingSnapshot["terrain"]>; sys: Partial<LoadingSnapshot["system"]>; loaded: boolean; extra: Record<string, unknown> }> = {}): LoadingSnapshot => {
+    const materials = { path: "ktx2", done: 22, total: 22, bytes: 13e6, totalBytes: 13e6, last: 21, failed: 0, fellBack: false, retrying: 0, ready: true, error: null, ...o.mat } as LoadingSnapshot["materials"];
+    const terrain = { done: 10, total: 10, ready: true, ...o.terrain };
+    const system = { battery: 1, lamps: ["beam"], sonar: true, shaders: true, shaderError: null, gpu: { renderer: LONG_GPU, textureUnits: 16, fragmentVectors: 1024, highp: true }, gpuLost: false, ...o.sys } as LoadingSnapshot["system"];
+    const loaded = o.loaded ?? (terrain.ready && materials.ready && system.shaders && !system.shaderError && !system.gpuLost);
+    return { seed: 1, spawn: { x: 1, y: 60, z: 2 }, regions: null as unknown as LoadingSnapshot["regions"], materials, terrain, system, loaded, diving: false, ...o.extra } as LoadingSnapshot;
+  };
+  const run = (snap: LoadingSnapshot | null, mapRows = 256, dict = loadingEn) => {
+    const model = new LoadingModel(LOADING_STEPS);
+    const ctx: StepContext = { L: L(dict), seedText: "1", seed: 1, mapRows, mapSize: 256 };
+    const evals = LOADING_STEPS.map((d) => [d.id, d.evaluate(snap, ctx)] as const);
+    for (const [id, ev] of evals) applyStep(model, id, ev);
+    return { model, evals: new Map(evals) };
+  };
+  for (const [name, dict] of [["en", loadingEn], ["zh", loadingZh]] as const) {
+    check(LOADING_STEPS.every((d) => typeof dict.steps[d.id] === "string" && dict.steps[d.id].length > 0), `${name}: every registered step has a name`);
+    check(["pending", "active", "done", "warn", "error"].every((s) => (dict.status as Record<string, string>)[s]), `${name}: every status has a label`);
+  }
+  // no world yet: coordinates active, everything else pending
+  {
+    const { model } = run(null, 0);
+    check(model.status.coords === "active" && LOADING_STEPS.slice(1).every((d) => model.status[d.id] === "pending"), "no world: coords active, rest pending");
+  }
+  // all in → gate opens
+  {
+    const snap = snapOf();
+    const { model, evals } = run(snap);
+    check(model.allDone() && canBeginDive(model, LOADING_STEPS, snap, false), "everything loaded → begin dive");
+    const sys = evals.get("system")!;
+    check(sys.lines.every((l) => !l.includes(LONG_GPU)) && (sys.diag ?? []).some((e) => e.value === LONG_GPU), "GPU renderer string only in diagnostics, not in the focus lines");
+    check(sys.lines.length <= 3, `system focus lines ≤ 3 (${sys.lines.length})`);
+  }
+  // map not finished → no gate
+  {
+    const snap = snapOf();
+    const { model } = run(snap, 100);
+    check(model.status.regions === "active" && !canBeginDive(model, LOADING_STEPS, snap, false), "map still drawing → wait");
+  }
+  // materials missing → no gate, force does nothing
+  {
+    const snap = snapOf({ mat: { ready: false, done: 10, bytes: 5e6 } });
+    const { model } = run(snap);
+    check(!canBeginDive(model, LOADING_STEPS, snap, false) && !canBeginDive(model, LOADING_STEPS, snap, true), "textures still loading → wait (dive anyway can't skip it)");
+  }
+  // materials failed → error + retry action
+  {
+    const snap = snapOf({ mat: { ready: false, error: "404", done: 21 } });
+    const { model, evals } = run(snap);
+    check(model.status.materials === "error" && (evals.get("materials")!.actions ?? []).includes("retryMaterials") && !canBeginDive(model, LOADING_STEPS, snap, true), "texture failure → error + retry, no dive");
+  }
+  // shader error: blocked normally; "dive anyway" starts it
+  {
+    const snap = snapOf({ sys: { shaderError: "program: link failed" } });
+    const { model, evals } = run(snap);
+    const sys = evals.get("system")!;
+    check(model.status.system === "error" && (sys.actions ?? []).includes("diveAnyway"), "shader error → error + dive-anyway action");
+    check((sys.diag ?? []).some((e) => e.value === "program: link failed") && sys.lines.every((l) => !l.includes("link failed")), "full shader log in diagnostics only");
+    check(!canBeginDive(model, LOADING_STEPS, snap, false), "shader error → no automatic start");
+    check(canBeginDive(model, LOADING_STEPS, snap, true), "shader error + dive anyway → start");
+  }
+  // shader error while terrain still loading: dive anyway waits for terrain
+  {
+    const snap = snapOf({ sys: { shaderError: "x" }, terrain: { ready: false, done: 3 } });
+    const { model } = run(snap);
+    check(!canBeginDive(model, LOADING_STEPS, snap, true), "dive anyway still waits for terrain");
+  }
+  // GPU lost: never
+  {
+    const snap = snapOf({ sys: { gpuLost: true } });
+    const { model, evals } = run(snap);
+    check(model.status.system === "error" && !(evals.get("system")!.actions ?? []).includes("diveAnyway") && !canBeginDive(model, LOADING_STEPS, snap, true), "GPU lost → error, no dive-anyway");
+  }
+  // programs not checked yet: dive anyway not allowed
+  {
+    const snap = snapOf({ sys: { shaders: false, shaderError: "x" } });
+    const { model } = run(snap);
+    check(!canBeginDive(model, LOADING_STEPS, snap, true), "programs not checked yet → dive anyway waits");
+  }
+  // world says not loaded although steps look done → wait (world gate is authoritative)
+  {
+    const snap = snapOf({ loaded: false });
+    const { model } = run(snap);
+    check(model.allDone() && !canBeginDive(model, LOADING_STEPS, snap, false), "steps settled but world not loaded → wait");
+  }
+  // zh strings flow through
+  {
+    const { evals } = run(snapOf(), 256, loadingZh);
+    check(evals.get("terrain")!.lines[0] === loadingZh.terrain(100), "zh lines");
+  }
 }
 
 console.log("region map");
