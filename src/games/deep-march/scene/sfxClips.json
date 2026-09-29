@@ -1,0 +1,12 @@
+{
+  "$comment": "Dive sound clips (ids, loop flag). Shared by scene/audio.ts and scripts/sfx-sync.mjs. The audio files themselves are a licensed pack and never live in git.",
+  "clips": {
+    "ambience": { "loop": true },
+    "swim": { "loop": true },
+    "sonar": { "loop": false },
+    "switch": { "loop": false },
+    "mode": { "loop": false },
+    "bump": { "loop": false },
+    "warn": { "loop": false }
+  }
+}

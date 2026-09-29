@@ -20,7 +20,7 @@ import { FramePacer } from "./framePacer";
 import { TerrainOcclusion } from "./occlusion";
 import { createParticleLightUniforms } from "./particleLight";
 import { SURVIVAL_TUNING, createSurvival, type LightMode, type LightState } from "../survival";
-import { createDiveAudio } from "./audio";
+import { createDiveAudio, type AudioStatus } from "./audio";
 
 export type HudLabels = {
   chunks: string;
@@ -73,6 +73,9 @@ export type Telemetry = {
   z: number;
 };
 
+/** Longest the dive waits for sounds once terrain, textures and shaders are in. */
+export const AUDIO_GRACE_MS = 5000;
+
 /** Raw initialization state for the loading screen (ui/loading), polled per frame. */
 export type LoadingSnapshot = {
   seed: number;
@@ -95,6 +98,8 @@ export type LoadingSnapshot = {
     /** WebGL context lost (GPU reset / out of memory). */
     gpuLost: boolean;
   };
+  /** Sound clips (optional: settles on failure / timeout, never holds the dive for long). */
+  audio: AudioStatus;
   /** Everything above is ready: the dive can start (startDive). */
   loaded: boolean;
   /** The dive started (simulation running). */
@@ -499,9 +504,10 @@ void main() {
       hadContact = touching;
     } else {
       // loading gate: every footprint in view drawn + level 0 around the diver, all
-      // materials on the GPU, programs compiled; then the loading screen starts the dive
+      // materials on the GPU, programs compiled, sounds settled (loaded, missing or
+      // timed out: audio.ts); then the loading screen starts the dive
       if (!terrainReady) terrainReady = chunks.nearReady(diver.position, 14) && chunks.coverageComplete(diver.position);
-      if (diveRequested && terrainReady && texturesReady && shadersReady) {
+      if (diveRequested && terrainReady && texturesReady && shadersReady && audioGate().settled) {
         ready = true;
         chunks.loading = false;
         updatePrompt();
@@ -591,6 +597,21 @@ void main() {
   };
   document.addEventListener("visibilitychange", onVisibility);
 
+  // Sounds are optional: once everything else is in, wait at most AUDIO_GRACE_MS for
+  // them; slow clips keep loading and play when they arrive.
+  let restReadyAt = -1;
+  const audioGate = (): AudioStatus => {
+    const s = audio.status();
+    if (s.settled) return s;
+    const rest = terrainReady && texturesReady && shadersReady;
+    if (!rest) {
+      restReadyAt = -1;
+      return s;
+    }
+    const t = performance.now();
+    if (restReadyAt < 0) restReadyAt = t;
+    return t - restReadyAt >= AUDIO_GRACE_MS ? { ...s, settled: true, late: true } : s;
+  };
   let terrainProgressAt = -1e9;
   let terrainProgress = { done: 0, total: 0 };
   const systemState = () => {
@@ -616,6 +637,7 @@ void main() {
       const tp = terrainProgress;
       const system = systemState();
       const mat = materials.status();
+      const snd = audioGate();
       return {
         seed: opts.seed,
         spawn: { x: spawnAt.x, y: spawnAt.y, z: spawnAt.z },
@@ -623,7 +645,8 @@ void main() {
         materials: mat,
         terrain: { done: tp.done, total: tp.total, ready: terrainReady },
         system,
-        loaded: terrainReady && mat.ready && system.shaders && !system.shaderError && !system.gpuLost,
+        audio: snd,
+        loaded: terrainReady && mat.ready && system.shaders && !system.shaderError && !system.gpuLost && snd.settled,
         diving: ready,
       };
     },
