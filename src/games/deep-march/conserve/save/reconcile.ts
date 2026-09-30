@@ -12,7 +12,8 @@ import type { PoolVectors } from "../ledger/particleLedger";
 import { PARTICLE_TYPES, type ParticleType } from "../particles/particleTypes";
 import type { ReadonlyParticleVector } from "../particles/particleVector";
 
-export type RepairCause = "sanitized" | "deficit" | "excess";
+/** caches: `delta` particles of the lost pool that no cache claims, moved to the suspended pool (reconcileCaches.ts). */
+export type RepairCause = "sanitized" | "deficit" | "excess" | "caches";
 /** One correction: `delta` particles of `type` added to (> 0) or removed from (< 0) `pool`. */
 export type Repair = { type: ParticleType; pool: PoolId; delta: number; cause: RepairCause };
 export type Reconciled = { pools: PoolVectors; repairs: Repair[] };

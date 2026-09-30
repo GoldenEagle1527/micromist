@@ -85,6 +85,44 @@ export const WALL = {
   mBreak: 0.78,
 } as const;
 
+/**
+ * Resource nodes (§3.3, §7.1; M4): each kind's node share of a site is cut into
+ * nodes of minSize … maxSize particles (about meanSize each, sizes jittered by
+ * weight base + span · hash, summing exactly to the share). A share smaller than
+ * minSize makes no node: it stays in the site's terrain body (still in W).
+ * Node id = site · perSite + ordinal (the save's harvested bitset, §10.1).
+ */
+export const NODES = {
+  minSize: 20,
+  meanSize: 50,
+  maxSize: 80,
+  perSite: 64,
+  jitterBase: 0.7,
+  jitterSpan: 0.6,
+} as const;
+
+/** Where a kind's nodes grow (§3.4 table); the scene turns this into a surface search. */
+export type NodeSurface = "floor" | "ledge" | "wall" | "sheltered" | "rock";
+export const NODE_SURFACE: Readonly<Record<ParticleType, NodeSurface>> = {
+  lithic: "rock",
+  silica: "floor",
+  lumen: "ledge",
+  ferro: "wall",
+  voltite: "ledge",
+  resonite: "sheltered",
+  abyssal: "sheltered",
+};
+
+/**
+ * The diver's particle tank (plan M4: 200 in the MVP) and the absorb rates: a
+ * whole node drains in absorbSeconds of holding (a partial one sooner); a lost
+ * cache empties at cacheRate particles / s. Both stop when the tank is full.
+ */
+export const TANK = { capacity: 200, absorbSeconds: 2, cacheRate: 100 } as const;
+
+/** Lost caches (§7.4, G12): at most `max`; one more sends the oldest to the suspended pool. */
+export const CACHES = { max: 5 } as const;
+
 export const SAVE = {
   /** The single MVP save slot (G11: 1 slot until phase 4). */
   slotId: "main",
