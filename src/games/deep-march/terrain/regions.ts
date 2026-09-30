@@ -86,6 +86,10 @@ export type RegionField = {
   coresOf: (r: number, max: number) => { x: number; z: number; edge: number }[];
   /** Region the diver spawns in for this seed (uniform over all 6). */
   spawnRegion: () => number;
+  /** The domain warp: sample() finds sites around warp(x, z) (frozenZone.ts). */
+  warp: (x: number, z: number, out: { x: number; z: number }) => void;
+  /** Site of grid cell (cx, cz) (warped space) and its layout index (−1: seeded, outside the layout). */
+  siteOf: (cx: number, cz: number, out: { x: number; z: number; li: number }) => void;
 };
 
 export function createRegionSample(): RegionSample {
@@ -361,7 +365,18 @@ export function createRegionField(seed: number, layout: SiteLayout | null = null
   /** Spawn region: uniform over the 6 regions, drawn from the seed. */
   const spawnRegion = () => Math.min(REGION_COUNT - 1, Math.floor(hash(seed, 7, 13, 97) * REGION_COUNT));
 
-  const f: RegionField = { seed, layout, sample, regionAt, maskInRect, coresOf, spawnRegion };
+  const warp = (x: number, z: number, out: { x: number; z: number }) => {
+    out.x = warpX(x, z);
+    out.z = warpZ(x, z);
+  };
+  const siteOf = (cx: number, cz: number, out: { x: number; z: number; li: number }) => {
+    const sl = site(cx, cz);
+    out.x = mX[sl];
+    out.z = mZ[sl];
+    out.li = layout ? layoutIndex(layout, cx, cz) : -1;
+  };
+
+  const f: RegionField = { seed, layout, sample, regionAt, maskInRect, coresOf, spawnRegion, warp, siteOf };
   if (layout) layoutCache.set(layout, f);
   else fieldCache.set(seed, f);
   return f;
@@ -386,5 +401,15 @@ export function scaleRegionField(base: RegionField, S: number): RegionField {
     maskInRect: (x0, z0, x1, z1) => base.maskInRect(x0 * inv, z0 * inv, x1 * inv, z1 * inv),
     coresOf: (r, max) => base.coresOf(r, max).map((c) => ({ x: c.x * S, z: c.z * S, edge: c.edge * S })),
     spawnRegion: base.spawnRegion,
+    warp: (x, z, out) => {
+      base.warp(x * inv, z * inv, out);
+      out.x *= S;
+      out.z *= S;
+    },
+    siteOf: (cx, cz, out) => {
+      base.siteOf(cx, cz, out);
+      out.x *= S;
+      out.z *= S;
+    },
   };
 }

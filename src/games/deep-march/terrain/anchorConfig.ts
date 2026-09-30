@@ -46,3 +46,29 @@ export const OPEN_WATER = {
   shellStep: 1,
   shells: 12,
 } as const;
+
+/**
+ * Building ground (groundProbe.ts, conserve base M5): aim ray, floor scans of the
+ * footprint, the slope / roughness / clearance tests, metres and degrees.
+ */
+export const GROUND = {
+  /** Aim ray from the eye: reach and march step. */
+  reach: 48,
+  rayStep: 0.5,
+  refine: 10,
+  /** Floor scan step, and how far above / below the aimed point a floor may be. */
+  scanStep: 0.75,
+  scanAbove: 3,
+  scanBelow: 14,
+  /** Footprint samples: points on the rim and on the half-radius circle. */
+  rimPoints: 8,
+  /** Best-fit plane residual allowed (bumps / holes under the footprint). */
+  roughness: 2.5,
+  /** Deepest dip under the footprint the building's skirt can cover. */
+  skirt: 6,
+  /** Clearance columns (centre + 4 at this fraction of the radius), sample step. */
+  clearanceAt: 0.7,
+  clearanceStep: 2,
+  /** Dominant region weight at the footprint centre (not on a biome blend). */
+  regionMin: 0.6,
+} as const;
