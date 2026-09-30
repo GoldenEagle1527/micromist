@@ -90,7 +90,8 @@ const Compass = memo(function Compass({ heading }: { heading: number }) {
   );
 });
 
-export function Readout({ tel, labels }: { tel: Telemetry | null; labels: ReadoutLabels }) {
+/** `extra`: mode gauges under the battery (conserve: the particle tank). */
+export function Readout({ tel, labels, extra }: { tel: Telemetry | null; labels: ReadoutLabels; extra?: ReactNode }) {
   if (!tel) return null;
   const swim = tel.state === "swim";
   const contact =
@@ -128,6 +129,7 @@ export function Readout({ tel, labels }: { tel: Telemetry | null; labels: Readou
           </div>
         </div>
         <BatteryGauge tel={tel} labels={labels} />
+        {extra}
         {tel.region ? (
           <div className="dm-region" data-region={tel.region} title={labels.regionTitle}>
             <i style={{ background: REGION_COLORS[REGION_KEYS.indexOf(tel.region)] }} />

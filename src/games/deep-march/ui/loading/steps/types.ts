@@ -9,7 +9,12 @@ import type { LightMode } from "../../../survival";
 import type { LoadingDict, StepId } from "../i18n";
 import type { StepSpec } from "../loadingModel";
 
-export type LoadingLabels = LoadingDict & { regionNames: Record<RegionKey, string>; lightModes: Record<LightMode, string> };
+export type LoadingLabels = LoadingDict & {
+  regionNames: Record<RegionKey, string>;
+  lightModes: Record<LightMode, string>;
+  /** Map legend for lost caches (conserve; shown only when there are any). */
+  mapCache?: string;
+};
 
 /** What a step sees besides the snapshot. */
 export type StepContext = {

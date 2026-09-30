@@ -67,7 +67,7 @@ function hudLabels(dm: DeepMarchDict): HudLabels {
 }
 
 function loadingLabels(dm: DeepMarchDict): LoadingLabels {
-  return { ...dm.loading, regionNames: dm.regionNames, lightModes: dm.lightModes };
+  return { ...dm.loading, regionNames: dm.regionNames, lightModes: dm.lightModes, mapCache: dm.expedition.mapCache };
 }
 
 function panelLabels(dm: DeepMarchDict): PanelLabels {
@@ -100,6 +100,7 @@ function panelLabels(dm: DeepMarchDict): PanelLabels {
     flip: dm.flip,
     mute: dm.mute,
     unmute: dm.unmute,
+    expedition: dm.expedition,
   };
 }
 
@@ -351,7 +352,10 @@ export function DeepMarchGame() {
           {dm.backSetup}
         </button>
         <span className="dm-seed-tag">{dm.seedNow(diveSeed ?? seed)}</span>
-        <p className="hint dm-play-hint">{panelOn ? dm.hintPanel : dm.hint}</p>
+        <p className="hint dm-play-hint">
+          {panelOn ? dm.hintPanel : dm.hint}
+          {diveExpedition ? (panelOn ? dm.expedition.hintPanel : dm.expedition.hint) : null}
+        </p>
       </div>
       <div ref={hostRef} className="game-stage dm-stage" aria-label={dm.stageAria}>
         {loadingScreen}
