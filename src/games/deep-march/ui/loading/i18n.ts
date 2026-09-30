@@ -1,8 +1,9 @@
 /** Loading-screen strings (zh / en); plugged into the deep-march dictionary as `loading`. */
 import type { StepStatus } from "./loadingModel";
+import { worldSaveEn, worldSaveZh, type WorldSaveDict } from "./worldSaveI18n";
 
 /** Registered loading steps (steps/index.ts) that need a row name. */
-export type StepId = "coords" | "regions" | "materials" | "terrain" | "system" | "audio";
+export type StepId = "worldSave" | "coords" | "regions" | "materials" | "terrain" | "system" | "audio";
 
 export type LoadingDict = {
   title: string;
@@ -59,12 +60,15 @@ export type LoadingDict = {
   overall: string;
   begin: string;
   materialNames: Record<string, string>;
+  /** Conserve mode only: the "world save" step. */
+  world: WorldSaveDict;
 };
 
 export const loadingEn: LoadingDict = {
   title: "PRE-DIVE SEQUENCE",
   subtitle: "Diver systems initializing",
   steps: {
+    worldSave: "Reading the world save",
     coords: "Reading sea coordinates",
     regions: "Charting regions",
     materials: "Laying seabed materials",
@@ -142,12 +146,14 @@ export const loadingEn: LoadingDict = {
     algae: "Algae-covered rock",
     lichen: "Encrusted rock",
   },
+  world: worldSaveEn,
 };
 
 export const loadingZh: LoadingDict = {
   title: "下潜准备程序",
   subtitle: "潜水员系统初始化",
   steps: {
+    worldSave: "读取世界存档",
     coords: "读取海域坐标",
     regions: "绘制海域大区图",
     materials: "铺设海床材质",
@@ -225,4 +231,5 @@ export const loadingZh: LoadingDict = {
     algae: "藻覆岩",
     lichen: "结壳岩",
   },
+  world: worldSaveZh,
 };

@@ -14,7 +14,7 @@ import { REGION_COLORS, REGION_KEYS } from "../../terrain/regions";
 import { applyStep, canBeginDive } from "./loadingGate";
 import { LoadingModel } from "./loadingModel";
 import { REGION_MAP, RegionMapRaster, hexToRgb, mapSpec } from "./regionMap";
-import { LOADING_STEPS, type LoadingLabels, type StepAction, type StepContext, type StepEval } from "./steps";
+import { LOADING_STEPS, type LoadingLabels, type LoadingStepDef, type StepAction, type StepContext, type StepEval } from "./steps";
 
 export type { LoadingLabels } from "./steps";
 
@@ -23,6 +23,8 @@ type Props = {
   seedText: string;
   seed: number;
   labels: LoadingLabels;
+  /** Steps of this dive (fixed for the screen's lifetime); default: the shared registry. Conserve mode prepends its world-save step. */
+  steps?: readonly LoadingStepDef[];
   /** The screen has faded out (unmount it). */
   onDone: () => void;
 };
@@ -36,8 +38,9 @@ const COLORS = REGION_COLORS.map(hexToRgb);
 
 type View = { snap: LoadingSnapshot | null; mapRows: number; phase: "loading" | "begin" | "fade" };
 
-export function LoadingScreen({ game, seedText, seed, labels: L, onDone }: Props) {
-  const model = useRef(new LoadingModel(LOADING_STEPS)).current;
+export function LoadingScreen({ game, seedText, seed, labels: L, steps: stepsProp = LOADING_STEPS, onDone }: Props) {
+  const steps = useRef(stepsProp).current;
+  const model = useRef(new LoadingModel(steps)).current;
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const listRef = useRef<HTMLOListElement | null>(null);
   const [view, setView] = useState<View>({ snap: null, mapRows: 0, phase: "loading" });
@@ -87,10 +90,10 @@ export function LoadingScreen({ game, seedText, seed, labels: L, onDone }: Props
         }
       }
       const ctx: StepContext = { ...ctxRef.current, mapRows: raster?.rows ?? 0, mapSize: REGION_MAP.size };
-      for (const def of LOADING_STEPS) applyStep(model, def.id, def.evaluate(snap, ctx));
+      for (const def of steps) applyStep(model, def.id, def.evaluate(snap, ctx));
       if (snap) {
         // begin dive → fade (or, after a shader error, once the player chose to dive anyway)
-        if (phase === "loading" && canBeginDive(model, LOADING_STEPS, snap, forceRef.current)) {
+        if (phase === "loading" && canBeginDive(model, steps, snap, forceRef.current)) {
           phase = "begin";
           beginAt = now;
           game?.startDive();
@@ -117,14 +120,14 @@ export function LoadingScreen({ game, seedText, seed, labels: L, onDone }: Props
 
   const snap = view.snap;
   const ctx: StepContext = { L, seedText, seed, mapRows: view.mapRows, mapSize: REGION_MAP.size };
-  const evals = new Map<string, StepEval>(LOADING_STEPS.map((d) => [d.id, d.evaluate(snap, ctx)]));
+  const evals = new Map<string, StepEval>(steps.map((d) => [d.id, d.evaluate(snap, ctx)]));
   const auto = model.focus();
   const focus = pinned ?? auto;
-  const focusDef = LOADING_STEPS.find((d) => d.id === focus) ?? null;
+  const focusDef = steps.find((d) => d.id === focus) ?? null;
   const focusEval = focusDef ? evals.get(focusDef.id) : undefined;
-  const anyError = LOADING_STEPS.some((d) => model.status[d.id] === "error");
-  const actions = [...new Set(LOADING_STEPS.flatMap((d) => evals.get(d.id)?.actions ?? []))];
-  const diag = LOADING_STEPS.flatMap((d) => (evals.get(d.id)?.diag ?? []).map((e) => ({ step: d.id, ...e })));
+  const anyError = steps.some((d) => model.status[d.id] === "error");
+  const actions = [...new Set(steps.flatMap((d) => evals.get(d.id)?.actions ?? []))];
+  const diag = steps.flatMap((d) => (evals.get(d.id)?.diag ?? []).map((e) => ({ step: d.id, ...e })));
   const overall = model.overall();
   const pct = (f: number) => Math.floor(f * 100);
   const mapHalf = view.mapRows >= REGION_MAP.size / 2;
@@ -155,7 +158,7 @@ export function LoadingScreen({ game, seedText, seed, labels: L, onDone }: Props
         <div className="dm-load-body">
           <div className="dm-load-col">
             <ol className="dm-load-steps" ref={listRef}>
-              {LOADING_STEPS.map((d, k) => {
+              {steps.map((d, k) => {
                 const st = model.status[d.id];
                 const p = model.progress[d.id];
                 return (

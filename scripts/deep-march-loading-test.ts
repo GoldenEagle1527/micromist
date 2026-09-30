@@ -4,6 +4,9 @@
  *   confirmed, error / recover / warn, normalized weights, overall bar, focus order;
  * - step registry + dive gate: per-step evaluation of snapshots, diagnostics vs focus
  *   lines, automatic start, "Dive anyway" rules (shader error / GPU lost / waits);
+ * - conserve mode: the "world save" step leads the list (free-dive registry unchanged),
+ *   new / continued / repaired saves settle it, unreadable / annihilated / missing
+ *   block the dive (no "dive anyway"), zh / en strings complete;
  * - region map rasterization: deterministic per seed (fresh fields → identical
  *   pixels), independent of how rows are sliced, differs between seeds, spawn at
  *   the centre, pixel ↔ world mapping, time per row (UI budget).
@@ -11,7 +14,11 @@
  */
 import { LoadingModel, formatMB, settled } from "../src/games/deep-march/ui/loading/loadingModel";
 import { applyStep, canBeginDive } from "../src/games/deep-march/ui/loading/loadingGate";
-import { LOADING_STEPS, type LoadingLabels, type StepContext } from "../src/games/deep-march/ui/loading/steps";
+import { LOADING_STEPS, type LoadingLabels, type LoadingStepDef, type StepContext } from "../src/games/deep-march/ui/loading/steps";
+import { withWorldSaveStep } from "../src/games/deep-march/conserve/loading/worldSaveStep";
+import { createMemoryBackend } from "../src/games/deep-march/conserve/save/saveBackend";
+import { openConserveSession } from "../src/games/deep-march/conserve/session/openSession";
+import { seedFromString } from "../src/games/deep-march/terrain/noise";
 import { loadingEn, loadingZh } from "../src/games/deep-march/ui/loading/i18n";
 import type { LoadingSnapshot } from "../src/games/deep-march/scene/world";
 import { REGION_MAP, RegionMapRaster, hexToRgb, mapSpec, pixelToWorld, worldToPixel } from "../src/games/deep-march/ui/loading/regionMap";
@@ -208,6 +215,46 @@ console.log("loading steps + dive gate");
   {
     const { evals } = run(snapOf(), 256, loadingZh);
     check(evals.get("terrain")!.lines[0] === loadingZh.terrain(100), "zh lines");
+  }
+
+  // conserve mode: "world save" step first, the shared registry unchanged after it
+  {
+    const runSteps = (steps: readonly LoadingStepDef[], snap: LoadingSnapshot | null, dict = loadingEn) => {
+      const model = new LoadingModel(steps);
+      const ctx: StepContext = { L: L(dict), seedText: "1", seed: 1, mapRows: 256, mapSize: 256 };
+      const evals = new Map(steps.map((d) => [d.id, d.evaluate(snap, ctx)] as const));
+      for (const [id, ev] of evals) applyStep(model, id, ev);
+      return { model, evals };
+    };
+    const backend = createMemoryBackend();
+    const opened = openConserveSession({ backend, intent: { kind: "new", seedText: "reef" }, hashSeed: seedFromString });
+    if (!opened.ok) throw new Error("conserve session did not open");
+    const steps = withWorldSaveStep(LOADING_STEPS, opened.session.report);
+    check(steps.map((d) => d.id).join() === `worldSave,${LOADING_STEPS.map((d) => d.id).join()}` && LOADING_STEPS.length === 6, "conserve: worldSave first, then the 6 shared steps (free-dive registry unchanged)");
+    const snap = snapOf();
+    const created = runSteps(steps, snap);
+    const ws = created.evals.get("worldSave")!;
+    check(created.model.status.worldSave === "done" && ws.lines[0] === loadingEn.world.created("reef") && ws.lines[1] === loadingEn.world.ledger("100,000"), "new world: done, seed + conserved ledger lines");
+    check((ws.diag ?? []).some((e) => e.value === "save/main") && (ws.diag ?? []).some((e) => e.value === "99,320 · 0 · 680 · 0 · 0"), "diagnostics: slot key, pool totals W · P · B · S · L");
+    check(canBeginDive(created.model, steps, snap, false), "world save done + everything loaded → begin dive");
+    check(runSteps(steps, null).model.status.worldSave === "done", "settled before the world exists (the seed comes from the save)");
+    opened.session.close();
+    const tampered = structuredClone(backend.read("save/main")) as { ledger: { world: number[] } };
+    tampered.ledger.world[0] -= 12;
+    const repaired = openConserveSession({ backend: createMemoryBackend({ "save/main": tampered }), intent: { kind: "continue" }, hashSeed: seedFromString });
+    if (!repaired.ok) throw new Error("repaired session did not open");
+    const rep = runSteps(withWorldSaveStep(LOADING_STEPS, repaired.session.report), snap, loadingZh).evals.get("worldSave")!;
+    check(rep.state === "done" && rep.lines[0] === loadingZh.world.continued("reef", 1, 0) && rep.lines[2] === loadingZh.world.repaired("12"), "continued + repaired (zh): repair line shown");
+    for (const [kind, line] of [["ended", loadingEn.world.ended], ["unreadable", loadingEn.world.unreadable], ["missing", loadingEn.world.missing]] as const) {
+      const blockedSteps = withWorldSaveStep(LOADING_STEPS, { kind, slotKey: "save/main", reason: "test" });
+      const r = runSteps(blockedSteps, snap);
+      check(r.model.status.worldSave === "error" && r.evals.get("worldSave")!.lines[0] === line && !canBeginDive(r.model, blockedSteps, snap, false) && !canBeginDive(r.model, blockedSteps, snap, true), `${kind}: error, no dive (not even "dive anyway")`);
+    }
+    for (const [name, dict] of [["en", loadingEn], ["zh", loadingZh]] as const) {
+      const w = dict.world;
+      const strings = [dict.steps.worldSave, w.created("1"), w.continued("1", 2, 3), w.ledger("1"), w.ledgerBroken, w.repaired("1"), w.unreadable, w.ended, w.missing, ...Object.values(w.diag).map((v) => (typeof v === "function" ? v(1, 1, "1") : v))];
+      check(strings.every((x) => typeof x === "string" && x.length > 0), `${name}: every world-save string present`);
+    }
   }
 }
 
