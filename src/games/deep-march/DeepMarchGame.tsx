@@ -1,109 +1,21 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import "./deep-march.css";
 import { useLocale } from "../../i18n";
 import { seedFromString } from "./terrain/noise";
-import { createDeepMarch, type DeepMarchHandle, type HudLabels } from "./scene/world";
-import type { DeepMarchDict } from "./i18n";
+import { createDeepMarch, type DeepMarchHandle } from "./scene/world";
 import { isTouchDevice, loadSettings, panelEnabled, saveSettings, type SoundSettings } from "./settings";
-import { ControlPanel, type PanelLabels } from "./ui/ControlPanel";
-import { viewRotation, type Rotation } from "./viewRotation";
+import { ControlPanel } from "./ui/ControlPanel";
 import { acquireAudioContext, audioDisabledByUrl, closeAudioContext, releaseAudioContext } from "./scene/audioContext";
-import { LoadingScreen, type LoadingLabels } from "./ui/loading/LoadingScreen";
+import { LoadingScreen } from "./ui/loading/LoadingScreen";
 import type { OpenIntent } from "./conserve";
 import type { GameMode } from "./modes/gameMode";
 import { useConserveDive } from "./modes/useConserveDive";
 import { SetupScreen, type SetupValues } from "./ui/setup/SetupScreen";
-
-/** Best effort: fullscreen + landscape lock (Android Chrome). Rejections are expected elsewhere (iOS). */
-async function enterLandscape(): Promise<void> {
-  try {
-    const el = document.documentElement;
-    if (!document.fullscreenElement && typeof el.requestFullscreen === "function") {
-      await el.requestFullscreen({ navigationUI: "hide" });
-    }
-  } catch {
-    /* not allowed / unsupported */
-  }
-  try {
-    const o = screen.orientation as ScreenOrientation & { lock?: (o: string) => Promise<void> };
-    await o?.lock?.("landscape");
-  } catch {
-    /* iOS Safari, desktop, or not fullscreen */
-  }
-}
-
-function leaveLandscape(): void {
-  try {
-    screen.orientation?.unlock?.();
-  } catch {
-    /* ignore */
-  }
-  if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
-}
-
-function viewportSize() {
-  return { w: window.innerWidth, h: window.innerHeight };
-}
+import { hudLabels, loadingLabels, panelLabels } from "./gameLabels";
+import { enterLandscape, leaveLandscape, useImmersive } from "./useImmersive";
 
 type Screen = "setup" | "playing";
-
-function hudLabels(dm: DeepMarchDict): HudLabels {
-  return {
-    chunks: dm.hudChunks,
-    floaters: dm.hudFloaters,
-    tris: dm.hudTris,
-    mainThread: dm.hudMainThread,
-    classify: dm.hudClassify,
-    spawnDebugTitle: dm.spawnDebugTitle,
-    surfaceTypes: dm.surfaceTypes,
-    regionDebugTitle: dm.regionDebugTitle,
-    regionNames: dm.regionNames,
-    regionEdge: dm.regionEdge,
-    lockPrompt: dm.lockPrompt,
-    gpuLost: dm.gpuLost,
-    shaderFailed: dm.shaderFailed,
-  };
-}
-
-function loadingLabels(dm: DeepMarchDict): LoadingLabels {
-  return { ...dm.loading, regionNames: dm.regionNames, lightModes: dm.lightModes, mapCache: dm.expedition.mapCache };
-}
-
-function panelLabels(dm: DeepMarchDict): PanelLabels {
-  return {
-    depth: dm.hudDepth,
-    speed: dm.hudSpeed,
-    heading: dm.hudHeading,
-    stateSwim: dm.stateSwim,
-    stateHover: dm.stateHover,
-    contactFloor: dm.hudGrounded,
-    contactCeiling: dm.hudCeiling,
-    contactWall: dm.hudScrape,
-    terrainTitle: dm.hudTerrain,
-    terrain: dm.terrainKinds,
-    regionTitle: dm.hudRegion,
-    regions: dm.regionNames,
-    battery: dm.hudBattery,
-    lightOff: dm.lightOff,
-    lightModes: dm.lightModes,
-    batteryEmpty: dm.batteryEmpty,
-    batteryCharging: dm.batteryCharging,
-    btnUp: dm.btnUp,
-    btnDown: dm.btnDown,
-    btnSwim: dm.btnSwim,
-    btnLamp: dm.btnLamp,
-    dialMove: dm.dialMove,
-    showPanel: dm.showPanel,
-    hidePanel: dm.hidePanel,
-    exit: dm.exit,
-    flip: dm.flip,
-    mute: dm.mute,
-    unmute: dm.unmute,
-    expedition: dm.expedition,
-    base: dm.base,
-  };
-}
 
 export function DeepMarchGame() {
   const { t } = useLocale();
@@ -221,39 +133,7 @@ export function DeepMarchGame() {
 
   // Immersive landscape play on touch devices; portrait falls back to a CSS-rotated play area.
   const immersive = touch && screen === "playing";
-  const [vp, setVp] = useState(viewportSize);
-  const [flip, setFlip] = useState(false);
-  useEffect(() => {
-    if (!immersive) return;
-    const onResize = () => setVp(viewportSize());
-    onResize();
-    window.addEventListener("resize", onResize);
-    window.addEventListener("orientationchange", onResize);
-    window.visualViewport?.addEventListener("resize", onResize);
-    document.documentElement.classList.add("dm-immersive-on");
-    return () => {
-      window.removeEventListener("resize", onResize);
-      window.removeEventListener("orientationchange", onResize);
-      window.visualViewport?.removeEventListener("resize", onResize);
-      document.documentElement.classList.remove("dm-immersive-on");
-      leaveLandscape();
-    };
-  }, [immersive]);
-  const rot: Rotation = immersive && vp.h > vp.w ? (flip ? -90 : 90) : 0;
-  useLayoutEffect(() => {
-    viewRotation.deg = rot;
-    viewRotation.w = vp.w;
-    viewRotation.h = vp.h;
-    return () => {
-      viewRotation.deg = 0;
-    };
-  }, [rot, vp.w, vp.h]);
-  const rotorStyle: CSSProperties | undefined =
-    rot === 90
-      ? { width: vp.h, height: vp.w, transform: `translateX(${vp.w}px) rotate(90deg)` }
-      : rot === -90
-        ? { width: vp.h, height: vp.w, transform: `translateY(${vp.h}px) rotate(-90deg)` }
-        : undefined;
+  const { rot, rotorStyle, flip } = useImmersive(immersive);
 
   const start = useCallback((conserveIntent: OpenIntent | null) => {
     const s = seed.trim() || "1";
@@ -337,7 +217,7 @@ export function DeepMarchGame() {
               panelOn={panelOn}
               onTogglePanel={togglePanel}
               onExit={back}
-              onFlip={rot !== 0 ? () => setFlip((f) => !f) : undefined}
+              onFlip={rot !== 0 ? flip : undefined}
               muted={audioOn ? sound.muted : undefined}
               onToggleMute={toggleMute}
               labels={panelLabels(dm)}
