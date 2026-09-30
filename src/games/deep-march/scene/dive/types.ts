@@ -82,7 +82,8 @@ export type Telemetry = {
   /** Active sonar: unit equipped, ready, cooldown (survival/sonarPing.ts). */
   sonar: SonarState;
   /** Sonar observation mode (N) and the points recorded so far. */
-  scan: { observe: boolean; points: number };
+  /** Sonar observation mode on; surveyed seabed in the scan record (m²). */
+  scan: { observe: boolean; area: number };
   battery: { value: number; capacity: number; ratio: number; rate: number; low: boolean };
   swimLatch: boolean;
   ready: boolean;
@@ -110,8 +111,8 @@ export type LoadingSnapshot = {
     battery: number;
     lamps: LightMode[];
     sonar: boolean;
-    /** Points in the sonar scan record the dive starts with (conserve: from the save). */
-    scanPoints?: number;
+    /** Surveyed seabed (m²) in the sonar scan record the dive starts with (conserve: from the save). */
+    scanArea?: number;
     /** Program compile / link check finished. */
     shaders: boolean;
     /** A program failed to build: program / fragment / vertex info logs. */

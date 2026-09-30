@@ -16,11 +16,12 @@ export type SonarHudLabels = {
   /** Banner while observing: title and what the player is looking at. */
   observeOn: string;
   observeHint: string;
-  /** Recorded points (followed by the count). */
+  /** Surveyed seabed (followed by km²). */
   recorded: string;
 };
 
-const kilo = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(n >= 10_000 ? 0 : 1)}k` : `${n}`);
+/** Surveyed seabed, m² → km² for the strip. */
+const km2 = (m2: number) => (m2 <= 0 ? "0" : m2 < 10_000 ? "<0.01" : (m2 / 1e6).toFixed(2));
 
 export function SonarGauge({ tel, labels, onObserve }: { tel: Telemetry; labels: SonarHudLabels; onObserve?: () => void }) {
   const s = tel.sonar;
@@ -39,7 +40,7 @@ export function SonarGauge({ tel, labels, onObserve }: { tel: Telemetry; labels:
       </div>
       <div className="dm-sonar-foot">
         <small>
-          {labels.recorded} {kilo(tel.scan.points)}
+          {labels.recorded} {km2(tel.scan.area)} km²
         </small>
         {onObserve ? (
           <button type="button" className={`dm-sonar-observe${on ? " on" : ""}`} onClick={onObserve} aria-pressed={on} title={`${labels.observeOn} (N)`}>

@@ -142,7 +142,7 @@ export function startDiveLoop(p: DiveParts): { stop: () => void } {
     world(now, dt, rawDt * 1000);
     sonarAndSound(now, dt);
     // observation mode draws the scan record instead of the live world
-    const observed = p.scanner.frame({ time: now / 1000, nowMs: now, camera: p.camera, renderer: p.renderer, allowed: p.gate.ready && !(p.tide?.active() ?? false) });
+    const observed = p.scanner.frame({ time: now / 1000, nowMs: now, camera: p.camera, allowed: p.gate.ready && !(p.tide?.active() ?? false) });
     p.renderer.render(observed ?? p.scene, p.camera);
     if (p.pacer.frameDone(performance.now())) {
       p.renderer.setPixelRatio(p.pacer.ratio);

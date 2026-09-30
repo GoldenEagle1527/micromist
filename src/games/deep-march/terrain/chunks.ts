@@ -566,13 +566,17 @@ export class ChunkManager {
     n.fadeMat.fade.set(0, dir);
     n.mesh.material = n.fadeMat.material;
     n.mesh.visible = true;
+    n.mesh.userData.fadeDir = dir; // the sonar scan skips meshes dissolving away
     this.fading.add(n);
   }
 
   private endFade(n: Node) {
     this.fading.delete(n);
     n.fade = 0;
-    if (n.mesh) n.mesh.material = this.material;
+    if (n.mesh) {
+      n.mesh.material = this.material;
+      delete n.mesh.userData.fadeDir;
+    }
     if (n.fadeMat) {
       this.fadePool.push(n.fadeMat);
       n.fadeMat = null;
