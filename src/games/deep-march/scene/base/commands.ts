@@ -1,7 +1,7 @@
 /**
  * The base's commands (keys and HUD buttons → the port and build mode): what
  * each does, the cue it plays and the notice it leaves. Storage moves only at
- * the base (inside the protection radius).
+ * the base (inside the protection radius); 唤潮 too.
  */
 import type { BasePort, BaseView } from "../../conserve";
 import type { DiveAudio } from "../audio";
@@ -15,6 +15,8 @@ export type CommandContext = {
   view: BaseView;
   atBase: boolean;
   panel: boolean;
+  /** 唤潮: start the tide's warning (false: not ready or already running). */
+  callTide: () => boolean;
 };
 
 export type CommandResult = { notice: BaseNotice | null; panel: boolean };
@@ -48,7 +50,11 @@ export function runCommand(cmd: BaseCommand, c: CommandContext): CommandResult {
       const b = c.view.buildings.find((x) => x.id === cmd.id);
       return done(b && port.demolish(cmd.id).ok ? { kind: "demolished", structure: b.kind } : null);
     }
-    case "tide":
-      return done({ kind: "tide" });
+    case "tide": {
+      // only at the base (the dome is its protection radius); the panel closes on success
+      const ok = c.atBase && c.callTide();
+      audio.play(ok ? "mode" : "warn", ok ? { gain: 0.6, rate: 0.5 } : { gain: 0.3, rate: 1.2 });
+      return ok ? done({ kind: "tide", ok }, false) : done({ kind: "tide", ok, away: !c.atBase });
+    }
   }
 }

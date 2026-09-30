@@ -1,7 +1,8 @@
 /**
  * URL switches of the dive (debugging, screenshots, comparisons), read once:
  * ?dpr ?lodNear ?refine=0 ?bricks=0 ?wasm=0|1 ?fog ?detail=0 ?occ=0
- * ?debugSpawns=1 ?at=x,y,z,yawDeg,pitchDeg ?light=off|beam|high|sonar.
+ * ?debugSpawns=1 ?at=x,y,z,yawDeg,pitchDeg ?light=off|beam|high|sonar
+ * ?tide=simple (conserve: always the 浊潮 murk instead of the tide's show).
  */
 import { terrainForDevice, type TerrainSettings } from "../../terrain/config";
 
@@ -19,6 +20,7 @@ export type DiveParams = {
   debugSpawns: boolean;
   at: string | null;
   light: string | null;
+  tideSimple: boolean;
 };
 
 export function readDiveParams(search: string): DiveParams {
@@ -36,6 +38,7 @@ export function readDiveParams(search: string): DiveParams {
     debugSpawns: qs.get("debugSpawns") === "1",
     at: qs.get("at"),
     light: qs.get("light"),
+    tideSimple: qs.get("tide") === "simple",
   };
 }
 

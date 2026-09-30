@@ -9,7 +9,7 @@
  */
 import * as THREE from "three";
 import { SEA_COLORS } from "../../terrain/config";
-import { FOG_GLSL, FOG_TUNING, createFogUniforms, type FogUniforms } from "../fog";
+import { FOG_GLSL, FOG_TUNING, createFogUniforms, fogK, type FogUniforms } from "../fog";
 import type { LampRig } from "../lampRig";
 import type { MarineSnow } from "../particles";
 import { WATER_GLSL, createWaterUniforms, type WaterUniforms } from "../seabedMaterial";
@@ -28,6 +28,14 @@ void main() {
   #include <colorspace_fragment>
 }`;
 
+/**
+ * The tide's veil (scene/tide): dark 0…1 dims the water, the down-welling light
+ * and the murk to black and closes the fog to `darkVis` metres (浊潮, the
+ * particle-ized diver); clear 0…1 opens the fog toward `clearVis` (P1 吸气).
+ * All 0 = the look is exactly as without the tide.
+ */
+export type Veil = { dark: number; clear: number; darkVis: number; clearVis: number };
+
 /** What the lighting drives on the terrain material (seabedMaterial.ts). */
 export type SeabedLightTargets = { envLight: { value: number }; absorb: THREE.Vector3 };
 
@@ -45,6 +53,7 @@ export class WaterLook {
   private lastWater = -1;
   private baseAbsorb = new THREE.Vector3();
   private baseHaze = 0;
+  private veil: Veil | null = null;
 
   /** Sets the scene's fog (it only tints the marine snow near the camera) and adds the dome. */
   constructor(scene: THREE.Scene, viewDistance: number) {
@@ -83,6 +92,11 @@ export class WaterLook {
     this.baseHaze = this.water.uHaze.value;
   }
 
+  /** The tide's veil (null or all 0: off). */
+  setVeil(v: Veil | null): void {
+    this.veil = v && (v.dark > 0 || v.clear > 0) ? v : null;
+  }
+
   /** Per frame, after the lamp rig: camera height (world units), the world scale. */
   update(cameraY: number, worldScale: number, rig: LampRig, seabed: SeabedLightTargets, snow: MarineSnow): void {
     const W = worldScale;
@@ -110,6 +124,26 @@ export class WaterLook {
     fog.uGlowCone.value.copy(env.glowCone);
     fog.uGlowDir.value.copy(rig.glowDir);
     snow.setFog(env.fogK);
+    if (this.veil) this.applyVeil(this.veil, seabed, snow, env.fogK);
+  }
+
+  /** After the normal lighting (so the free dive never runs this). */
+  private applyVeil(v: Veil, seabed: SeabedLightTargets, snow: MarineSnow, k0: number): void {
+    const lit = 1 - v.dark;
+    const { water, fog } = this;
+    const open = k0 > 0 ? Math.min(k0, fogK(v.clearVis)) : 0;
+    const k = THREE.MathUtils.lerp(THREE.MathUtils.lerp(k0, open, v.clear), fogK(v.darkVis), v.dark);
+    this.lastDeep = -1; // colours are recomputed next frame
+    (this.scene.fog as THREE.Fog).color.multiplyScalar(lit);
+    water.uWaterHorizon.value.multiplyScalar(lit);
+    water.uWaterTop.value.multiplyScalar(lit);
+    water.uWaterBottom.value.multiplyScalar(lit);
+    fog.uFogColor.value.multiplyScalar(lit);
+    fog.uFogK.value = k;
+    seabed.envLight.value *= lit;
+    if (this.ambient) this.ambient.intensity *= lit;
+    if (this.sun) this.sun.intensity *= lit;
+    snow.setFog(k);
   }
 
   dispose(): void {

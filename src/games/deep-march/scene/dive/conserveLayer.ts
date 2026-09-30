@@ -34,7 +34,12 @@ export type ConserveLayerDeps = NodeMaterialOptions & {
   respawn: (home: HomeSpot | null) => void;
   /** The base panel opened: release the mouse. */
   releaseLock: () => void;
+  /** 唤潮 from the base panel (scene/tide/tideDirector.ts); absent: the button does nothing. */
+  tide?: TideCall;
 };
+
+/** The tide as the base sees it: call it (true = the warning began), and whether one runs. */
+export type TideCall = { call: () => boolean; active: () => boolean };
 
 export type ConserveFrame = {
   dt: number;
@@ -49,6 +54,8 @@ export class ConserveLayer {
   readonly expedition: ExpeditionScene;
   readonly base: BaseScene | null;
   private readonly viewDir = new THREE.Vector3();
+  /** Set by the tide each frame: lock = no build mode, placing or recall (the show); hold = no movement (particle-ized). */
+  readonly tide = { lock: false, hold: false };
 
   constructor(scene: THREE.Scene, d: ConserveLayerDeps) {
     const materials = { water: d.water, fog: d.fog, sonar: d.sonar, beam: d.beam, absorb: d.absorb };
@@ -71,6 +78,7 @@ export class ConserveLayer {
           ...materials,
           baseLight: d.baseLight,
           far: d.far,
+          tide: d.tide,
           onPanel: (open) => {
             if (open) d.releaseLock();
           },
@@ -94,9 +102,9 @@ export class ConserveLayer {
     return this.base?.home() ?? null;
   }
 
-  /** The recall's black screen: no movement. */
+  /** The recall's black screen, or the tide holding a particle-ized diver: no movement. */
   busy(): boolean {
-    return this.expedition.busy();
+    return this.expedition.busy() || this.tide.hold;
   }
 
   /** Per frame, after the camera sync: base presses first (E / click place while building), then absorbing. */
@@ -104,7 +112,7 @@ export class ConserveLayer {
     const { base, expedition } = this;
     const input = f.input;
     if (base) {
-      const act = f.ready && !expedition.busy();
+      const act = f.ready && !expedition.busy() && !this.tide.lock;
       const press = (code: string) => input.takePress(code) && act;
       const place = press("KeyE") || press("Mouse0");
       base.update({
@@ -126,11 +134,13 @@ export class ConserveLayer {
       dir: f.camera.getWorldDirection(this.viewDir),
       diver: f.diver,
       absorb: absorbHeld,
-      recall: input.held("KeyX") || input.panel.recall,
+      recall: !this.tide.lock && (input.held("KeyX") || input.panel.recall),
     });
   }
 
   dispose(): void {
+    this.expedition.mesh.removeFromParent();
+    this.base?.group.removeFromParent();
     this.expedition.dispose();
     this.base?.dispose();
   }

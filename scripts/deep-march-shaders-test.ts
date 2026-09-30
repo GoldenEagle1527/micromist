@@ -20,8 +20,9 @@
  *    variable 'float[5]'");
  *  - Mali-G57 cost budget on every captured seabed fragment program (Mali Offline
  *    Compiler, scripts/lib/malioc.ts; skipped with a warning when not installed):
- *    stack, longest-path load/store and texture cycles, and the LOD fade program
- *    discarding before any shading;
+ *    stack, longest-path load/store and texture cycles, and the LOD fade and tide
+ *    front programs discarding before any shading (the tide-front variant, M7, is
+ *    the third seabed program; base and fade programs don't carry it);
  *  - the ring wall's far proxy ring (wallRing.ts / wallRingShader.ts): the exact
  *    programs three builds (highp / mediump), glslang + glslangValidator ES 300,
  *    array precision, no samplers, and its own Mali-G57 budget (RING_MALI_BUDGET);
@@ -29,7 +30,9 @@
  *    instanced program, no samplers, WebGL2 minimums, its own Mali-G57 budget;
  *  - the base's programs (M5, lib/baseShaderChecks.ts): buildings (one instanced
  *    program for all kinds), lighthouse beams, placement hologram; same checks,
- *    their own Mali-G57 budgets. The seabed budget above includes the lighthouse light.
+ *    their own Mali-G57 budgets. The seabed budget above includes the lighthouse light;
+ *  - the tide's programs (M7, lib/tideShaderChecks.ts): the dome and the particle
+ *    currents; same checks, their own Mali-G57 budgets.
  * Run: npm run test:shaders
  */
 import glslangInit from "@webgpu/glslang/dist/node-devel/glslang.js";
@@ -70,6 +73,7 @@ import { TERRAIN } from "../src/games/deep-march/terrain/config";
 import { genesisLayout } from "./lib/worldFixture";
 import { nodePrograms } from "./lib/nodeShaderChecks";
 import { basePrograms } from "./lib/baseShaderChecks";
+import { tidePrograms } from "./lib/tideShaderChecks";
 
 /**
  * Far proxy ring on Mali-G57: no textures, a handful of pulses — a small fraction of
@@ -142,7 +146,7 @@ function snowSources(): [string, string] {
   return [vert, frag];
 }
 
-/** Seabed scene as world.ts builds it: hemisphere + sun + camera spot lamp, base + LOD fade meshes. */
+/** Seabed scene as world.ts builds it: hemisphere + sun + camera spot lamp, base + LOD fade + tide front meshes. */
 function seabedScene(lowSpec: boolean) {
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera();
@@ -162,10 +166,11 @@ function seabedScene(lowSpec: boolean) {
     materials: createMaterialUniforms(new THREE.DataArrayTexture(new Uint8Array(4), 1, 1, 1)),
   });
   const fade = sb.fadeMaterial().material;
+  const tide = sb.tideMaterial().material;
   const geo = new THREE.BufferGeometry();
   geo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(9), 3));
   geo.setAttribute("normal", new THREE.BufferAttribute(new Float32Array(9), 3));
-  scene.add(new THREE.Mesh(geo, sb.material), new THREE.Mesh(geo, fade));
+  scene.add(new THREE.Mesh(geo, sb.material), new THREE.Mesh(geo, fade), new THREE.Mesh(geo, tide));
   return { scene, camera };
 }
 
@@ -228,10 +233,11 @@ function exactPrograms(compile: Compile) {
     const { scene, camera } = seabedScene(c.lowSpec);
     const progs = capturePrograms(scene, camera, { highp });
     const tag = `${c.name}, ${highp ? "highp" : "mediump"}`;
-    check(progs.length === 2 && progs.every((p) => /#define DM_SONAR_N/.test(p.fragment)), `three builds base + fade seabed programs [${tag}]`, `${progs.length} programs`);
+    check(progs.length === 3 && progs.every((p) => /#define DM_SONAR_N/.test(p.fragment)), `three builds base + fade + tide-front seabed programs [${tag}]`, `${progs.length} programs`);
+    check(!/uTideFront/.test(progs[0].fragment) && !/uTideFront/.test(progs[1].fragment) && /#define DM_TIDE_FRONT/.test(progs[2].fragment), `only the tide program carries the front (base / fade unchanged) [${tag}]`, "");
     materialOf[tag] = material(progs[0].fragment);
     progs.forEach((p, i) => {
-      const kind = i === 0 ? "base" : "fade";
+      const kind = ["base", "fade", "tide"][i];
       const t = `[${tag}, ${kind}]`;
       fragments.push({ tag, kind, fragment: p.fragment });
       check(p.fragment.startsWith("#version 300 es") && /precision (highp|mediump) sampler2DArray;/.test(p.fragment), `three declares sampler2DArray precision ${t}`, (/precision \w+ sampler2DArray;/.exec(p.fragment) ?? ["missing"])[0]);
@@ -299,7 +305,9 @@ function maliBudget(fragments: { tag: string; kind: string; fragment: string }[]
     }
     const issues = budgetIssues(s, b);
     check(issues.length === 0, `Mali-G57 budget (stack <= ${b.stack} B, load/store <= ${b.longestLS}, texture <= ${b.longestTex}) ${t}`, issues.length ? `${issues.join("; ")} | ${fmtMalioc(s)}` : fmtMalioc(s));
-    if (f.kind === "fade") check(s.shortest.arith < 2 && s.shortest.ls === 0 && s.shortest.tex === 0, `LOD fade discards before shading ${t}`, `shortest path A/LS/T ${s.shortest.arith}/${s.shortest.ls}/${s.shortest.tex}`);
+    // the tide front reads a varying + a vec4 before its discard: highp may add one load/store cycle
+    const lsMax = f.kind === "tide" ? 1 : 0;
+    if (f.kind !== "base") check(s.shortest.arith < 2 && s.shortest.ls <= lsMax && s.shortest.tex === 0, `${f.kind === "fade" ? "LOD fade" : "tide front"} discards before shading ${t}`, `shortest path A/LS/T ${s.shortest.arith}/${s.shortest.ls}/${s.shortest.tex}`);
   }
 }
 
@@ -381,6 +389,7 @@ function wallRingPrograms(compile: Compile) {
   wallRingPrograms(compile);
   nodePrograms(check, compile);
   basePrograms(check, compile);
+  tidePrograms(check, compile);
   compile("background dome fragment", domeSource(), "fragment");
   const [sv, sf] = snowSources();
   compile("plankton vertex", sv, "vertex");

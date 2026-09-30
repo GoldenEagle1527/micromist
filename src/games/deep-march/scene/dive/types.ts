@@ -2,13 +2,14 @@
  * The dive's public surface (scene/world.ts): options, HUD labels, telemetry,
  * the loading snapshot and the handle the page drives. Types only.
  */
-import type { BasePort, ExpeditionPort } from "../../conserve";
+import type { BasePort, ExpeditionPort, TidePort } from "../../conserve";
 import type { LightMode, LightState } from "../../survival";
 import type { RegionField, RegionKey } from "../../terrain/regions";
 import type { SiteLayout, WorldRect } from "../../terrain/siteLayout";
 import type { EnvironmentKind, SurfaceType } from "../../terrain/terrainInfo";
 import type { AudioStatus } from "../audio";
 import type { BaseCommand, BaseTelemetry } from "../base/telemetry";
+import type { TideTelemetry } from "../tide/telemetry";
 import type { DiverState } from "../diver";
 import type { ExpeditionTelemetry } from "../expedition/telemetry";
 import type { GpuInfo } from "../gpuDiagnostics";
@@ -51,6 +52,8 @@ export type DeepMarchOptions = {
   expedition?: ExpeditionPort | null;
   /** Conserve mode (M5): the base — buildings, storage, energy (scene/base); needs `expedition`. */
   base?: BasePort | null;
+  /** Conserve mode (M7): the tide (唤潮, the show, gen + 1); needs `base`. */
+  tide?: TidePort | null;
 };
 
 export type Telemetry = {
@@ -137,4 +140,6 @@ export type DeepMarchHandle = {
   base: () => BaseTelemetry | null;
   /** HUD buttons (build, place, storage moves, demolish); ignored in the free dive. */
   baseCommand: (cmd: BaseCommand) => void;
+  /** The tide: countdown, phase, dome, summary (null in the free dive). */
+  tide: () => TideTelemetry | null;
 };

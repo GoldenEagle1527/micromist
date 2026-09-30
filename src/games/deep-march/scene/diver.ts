@@ -99,14 +99,20 @@ export class DiverController {
   private acc = 0;
   private blockSprint = false;
   private tickHeadOn = 0;
-  private readonly field: DensityField;
+  private field: DensityField;
   private readonly euler = new THREE.Euler(0, 0, 0, "YXZ");
   private readonly g = new Float64Array(3);
   /** Collision field: trilinear over the level-0 lattice, i.e. the surface as drawn. */
-  private readonly lattice: LatticeSampler;
+  private lattice: LatticeSampler;
 
   /** isRemovedPoint: level-0 lattice points removed as floating rock (chunks.isRemovedPoint). */
   constructor(field: DensityField, isRemovedPoint?: RemovedPoint) {
+    this.field = field;
+    this.lattice = createLatticeSampler(field, isRemovedPoint);
+  }
+
+  /** Collide with another field from now on (the tide's switch to the next generation, scene/tide). */
+  setField(field: DensityField, isRemovedPoint?: RemovedPoint): void {
     this.field = field;
     this.lattice = createLatticeSampler(field, isRemovedPoint);
   }

@@ -1,7 +1,7 @@
 /**
  * The per-frame loop, in a fixed order: look and move (or the loading gate),
  * camera, survival, conserve layer, lamp rig, terrain streaming and occlusion,
- * marine snow, lighting, sonar, sounds, render, pacing, the 4 Hz HUD. Paused
+ * the tide (conserve), marine snow, lighting, sonar, sounds, render, pacing, the 4 Hz HUD. Paused
  * while the tab is hidden (rAF mostly stops anyway; this also halts terrain
  * streaming and resets the pacing history on return).
  */
@@ -25,6 +25,7 @@ import { statsLine, type HudChips, type StatsLabels } from "./hudChips";
 import type { LoadingGate } from "./loadingGate";
 import type { SeabedMaterial } from "../seabedMaterial";
 import type { WaterLook } from "./waterLook";
+import type { TideDirector } from "../tide/tideDirector";
 
 /** No movement (the recall's black screen). */
 const STILL = { forward: 0, strafe: 0, up: false, down: false, sprint: false };
@@ -40,6 +41,8 @@ export type DiveParts = {
   gate: LoadingGate;
   survival: Survival;
   conserve: ConserveLayer | null;
+  /** Conserve with a tide port (M7): the tide's frame, after the terrain; null in the free dive. */
+  tide: TideDirector | null;
   rig: LampRig;
   chunks: ChunkManager;
   occlusion: TerrainOcclusion;
@@ -79,7 +82,7 @@ export function startDiveLoop(p: DiveParts): { stop: () => void } {
     } else if (gate.tick()) p.onDiveStart();
   };
 
-  const world = (now: number, dt: number) => {
+  const world = (now: number, dt: number, rawMs: number) => {
     const { camera, diver, rig } = p;
     const ready = p.gate.ready;
     p.cameraSync.sync(dt);
@@ -90,6 +93,8 @@ export function startDiveLoop(p: DiveParts): { stop: () => void } {
     rig.update(dt, p.survival.lights.state(), !ready);
     p.chunks.update(diver.position, camera, dt);
     p.occlusion.update(p.chunks.meshGroup, camera, (m) => p.chunks.isStable(m));
+    // after occlusion: the tide's front overrides which columns draw
+    if (ready) p.tide?.update(dt, rawMs, time);
     p.spawnDebug.update();
     p.snow.update(camera.position, dt);
     p.snow.fillLights(camera.position, camera.getWorldDirection(camForward), p.particleLights);
@@ -120,7 +125,7 @@ export function startDiveLoop(p: DiveParts): { stop: () => void } {
     const dt = Math.min(0.05, rawDt);
     last = now;
     step(dt);
-    world(now, dt);
+    world(now, dt, rawDt * 1000);
     sonarAndSound(now, dt);
     p.renderer.render(p.scene, p.camera);
     if (p.pacer.frameDone(performance.now())) {

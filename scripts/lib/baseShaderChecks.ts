@@ -27,7 +27,7 @@ import { arrayPrecisionIssues, esForGlslang, preprocess, samplerUniforms, unifor
 import { budgetIssues, findMalioc, fmtMalioc, maliocFragment, type MaliBudget } from "./malioc";
 import { capturePrograms, type CapturedProgram } from "./three-capture";
 
-type Budget = MaliBudget & { longestArith: number };
+export type Budget = MaliBudget & { longestArith: number };
 /**
  * Buildings: Phong + seams + sonar / beam / 2 lighthouse lights; no textures.
  * Measured Sep 2026 (longest A / LS / T): desktop highp 18 / 13 / 0, phone
@@ -37,8 +37,8 @@ export const STRUCTURE_MALI_BUDGET: Budget = { stack: 0, longestLS: 14, longestT
 /** Beam columns, hologram, rings: additive, a few ALU ops (measured ≤ 2.1 / 0 / 0). */
 export const OVERLAY_MALI_BUDGET: Budget = { stack: 0, longestLS: 2, longestTex: 0, longestArith: 4 };
 
-type Check = (ok: boolean, name: string, detail: string) => void;
-type Compile = (name: string, src: string, stage: "vertex" | "fragment") => void;
+export type Check = (ok: boolean, name: string, detail: string) => void;
+export type Compile = (name: string, src: string, stage: "vertex" | "fragment") => void;
 const KINDS: readonly StructureKind[] = ["core", "lighthouse", "energy", "storage"];
 
 function rig() {
@@ -73,7 +73,7 @@ function baseScenes(pulses: number) {
   return { structure: a, beam: b, holo: c, dispose: () => (inst.dispose(), beams.dispose(), holo.dispose(), mat.dispose()) };
 }
 
-function programChecks(check: Check, compile: Compile, bin: string | null, t: string, p: CapturedProgram, budget: Budget, label: string) {
+export function programChecks(check: Check, compile: Compile, bin: string | null, t: string, p: CapturedProgram, budget: Budget, label: string) {
   check(!/[^\x00-\x7f]/.test(p.vertex + p.fragment), `sources are pure ASCII ${t}`, "");
   const fs = samplerUniforms(p.fragment), vs = samplerUniforms(p.vertex);
   check(fs.count === 0 && vs.count === 0, `no texture fetches ${t}`, [...fs.names, ...vs.names].join(", ") || "none");
