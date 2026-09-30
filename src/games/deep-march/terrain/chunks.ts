@@ -52,6 +52,7 @@ import { TerrainInfoStore } from "./terrainInfo";
 import { REGION_STRIDE } from "./regionWeights";
 import { MACRO } from "./regions";
 import { insideRect, layoutRect, rectOverlaps, type WorldRect } from "./siteLayout";
+import { crackReachRects } from "./crackReach";
 
 type NodeState = "queued" | "pending" | "ready";
 
@@ -136,6 +137,10 @@ export class ChunkManager {
   private readonly field: DensityField;
   private base: DensityField | null = null;
   private readonly material: THREE.Material;
+  /** The columns' resting material (the tide's front swaps some to its variant and back). */
+  get baseMaterial(): THREE.Material {
+    return this.material;
+  }
   private readonly rows: ColumnRows;
   private readonly yMin: number;
   private readonly yMax: number;
@@ -165,6 +170,8 @@ export class ChunkManager {
   private disposed = false;
   /** Bounded world: footprints outside this rectangle are skipped (null = endless). */
   readonly worldRect: WorldRect | null;
+  /** Bounded world with open cracks: their notches' rectangles beyond the world one (crackReach.ts); empty otherwise. */
+  private readonly crackRects: WorldRect[];
   /**
    * Loading screen up: swaps are instant (no crossfade) so the start area refines
    * quickly; world.ts clears it once coverageComplete() and the dive starts.
@@ -184,6 +191,7 @@ export class ChunkManager {
     const s = field.settings;
     const layout = field.regions.layout;
     this.worldRect = layout ? layoutRect(layout, MACRO.cell * s.worldScale) : null;
+    this.crackRects = field.wall && layout?.wall?.cracks.length ? crackReachRects(field.wall.shape, layout.wall.cracks, s.worldScale, s.boundsSize) : [];
     this.levels = Math.max(1, s.lodLevels);
     this.lodTris = new Array(this.levels).fill(0);
     this.lodMsTotal = new Array(this.levels).fill(0);
@@ -307,7 +315,7 @@ export class ChunkManager {
       const size = s.boundsSize * (1 << lod);
       const d2 = this.sqrDstRect(viewer, x0, z0, size);
       if (d2 > (lod === top ? prefetch2 : view2)) return;
-      if (this.worldRect && !rectOverlaps(this.worldRect, x0, z0, size)) return;
+      if (this.worldRect && !this.inWorld(x0, z0, size)) return;
       const key = meshKey(lod, cx, cz);
       // hysteresis: an area already drawn finer merges back only SPLIT_HYST further out
       const finer = lod > 0 && this.coveredBelow(lod, cx, cz);
@@ -335,6 +343,11 @@ export class ChunkManager {
       if (this.sqrDstRect(viewer, x0, z0, bs) <= r * r) out.set(infoKey(cx, cz), { kind: "info", lod: 0, cx, cz });
     }
     return out;
+  }
+
+  /** A mesh footprint to stream in a bounded world: it touches the world rectangle or a crack's reach. */
+  private inWorld(x0: number, z0: number, size: number): boolean {
+    return rectOverlaps(this.worldRect!, x0, z0, size) || this.crackRects.some((r) => rectOverlaps(r, x0, z0, size));
   }
 
   /** Drawn on its own: built, not waiting to crossfade in, not mid-crossfade. */
@@ -643,6 +656,8 @@ export class ChunkManager {
       const reg = new THREE.InterleavedBuffer(r.region, REGION_STRIDE);
       geo.setAttribute("aRegA", new THREE.InterleavedBufferAttribute(reg, 4, 0, true));
       geo.setAttribute("aRegB", new THREE.InterleavedBufferAttribute(reg, 3, 4, true));
+      // ring wall (conserve): the chaos byte → aChaos (crack glow, read by the chaos program only)
+      if (this.field.wall) geo.setAttribute("aChaos", new THREE.InterleavedBufferAttribute(reg, 1, 7, true));
       geo.setIndex(new THREE.BufferAttribute(r.indices, 1));
       // Tight bounds from the actual vertices (worker-computed): full-height column boxes
       // (~240 m tall) let about half of the drawn triangles through the frustum test off-screen.

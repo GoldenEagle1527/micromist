@@ -60,6 +60,12 @@ export type WallShape = {
   face: (s: number, y: number) => number;
   facet: (s: number, y: number) => number;
   crack: (s: number, y: number) => number;
+  /** Open cracks in the spec (M8: the glow weight, terrain/crackWeight.ts). */
+  notches: number;
+  /** Crack i's opening profile at (s, y): 1 on its (jagged) centre line, 0 beyond its half-width. */
+  notch: (i: number, s: number, y: number) => number;
+  /** Crack i's depth into the wall (base units). */
+  notchDepth: (i: number) => number;
 };
 
 function hash01(seed: number, i: number, j: number): number {
@@ -159,13 +165,16 @@ export function createWallShape(rect: WorldRect, spec: WallSpec, seed: number, t
     return fu >= v ? B0 + (B1 - B0) * fu + (T1 - B1) * v : B0 + (T0 - B0) * v + (T1 - T0) * fu;
   };
 
+  const profile = (c: (typeof cracks)[number], s: number, y: number): number => {
+    let ds_ = s - c.s;
+    ds_ -= P * Math.round(ds_ / P);
+    const tri = 2 * Math.abs(2 * ((y / jagP + c.ph) - Math.floor(y / jagP + c.ph + 0.5))) - 1;
+    return smooth01(1 - Math.abs(ds_ + c.jag * tri) / c.half);
+  };
   const crack = (s: number, y: number): number => {
     let d = 0;
     for (const c of cracks) {
-      let ds_ = s - c.s;
-      ds_ -= P * Math.round(ds_ / P);
-      const tri = 2 * Math.abs(2 * ((y / jagP + c.ph) - Math.floor(y / jagP + c.ph + 0.5))) - 1;
-      const p = smooth01(1 - Math.abs(ds_ + c.jag * tri) / c.half);
+      const p = profile(c, s, y);
       if (p * c.depth > d) d = p * c.depth;
     }
     return d;
@@ -176,5 +185,8 @@ export function createWallShape(rect: WorldRect, spec: WallSpec, seed: number, t
     cx, cz, a, b, rc, perimeter: P, thickness: spec.thickness / U,
     faceMin: inset, faceMax: inset + relief + swell, crackMax: cracks.reduce((m, c) => Math.max(m, c.depth), 0),
     ns, nr, ds, dy, y0, locate, point, face, facet, crack,
+    notches: cracks.length,
+    notch: (i, s, y) => profile(cracks[i], s, y),
+    notchDepth: (i) => cracks[i].depth,
   };
 }

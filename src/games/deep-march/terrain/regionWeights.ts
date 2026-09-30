@@ -7,14 +7,18 @@
  * at every LOD level: no material pop when LOD levels swap. The weights are a pure
  * function of (seed, x, z), baked at generation time (mesher.ts) and packed as
  * 8 bytes per vertex (6 weights + the ring-wall weight, largest-remainder quantised
- * to sum exactly 255, + 1 padding byte) → shader attributes aRegA (sand, reef,
- * canyon, cave) and aRegB (terrace, trench, wall), normalised.
+ * to sum exactly 255, + the chaos byte) → shader attributes aRegA (sand, reef,
+ * canyon, cave) and aRegB (terrace, trench, wall), normalised; byte 7 → aChaos.
  *
  * Ring wall (bounded world): the wall material weight w (density.wallWeight, a pure
  * function of the vertex position, so equal at every LOD) takes its share and the
  * region weights are scaled by 1 − w. Without a wall byte 6 stays 0 and bytes 0–5
  * are exactly what they were before the wall existed (a zero weight never wins a
  * remainder).
+ *
+ * Chaos byte (M8, the former padding): the crack glow weight (density.crackWeight,
+ * crackWeight.ts, a pure function of the position) × 255, rounded; 0 without open
+ * cracks, so every other byte — and without cracks all eight — is exactly as before.
  */
 import { REGION_COUNT, createRegionSample, type RegionField } from "./regions";
 
@@ -24,6 +28,8 @@ export const REGION_GRID = 2;
 export const REGION_STRIDE = 8;
 /** Byte (weight slot) of the ring-wall material. */
 export const WALL_SLOT = REGION_COUNT;
+/** Byte of the crack glow weight (chaos seabed program: aChaos). */
+export const CHAOS_BYTE = 7;
 const SLOTS = REGION_COUNT + 1;
 
 export class RegionWeightSampler {
@@ -103,7 +109,8 @@ export function quantizeWeights(w: ArrayLike<number>, out: Uint8Array, o: number
 /**
  * Packed weights for `count` vertices (xyz positions); `copyFrom[i]` (optional)
  * makes vertex surfaceCount + i reuse another vertex's weights (skirts); `wallWeight`
- * (optional, world position → 0 … 1): the ring-wall material share.
+ * (optional, world position → 0 … 1): the ring-wall material share; `crackWeight`
+ * (optional, 0 … 1): the chaos byte.
  */
 export function packRegionWeights(
   positions: Float32Array,
@@ -112,6 +119,7 @@ export function packRegionWeights(
   sampler: RegionWeightSampler,
   copyFrom: ArrayLike<number> = [],
   wallWeight: ((x: number, y: number, z: number) => number) | null = null,
+  crackWeight: ((x: number, y: number, z: number) => number) | null = null,
 ): Uint8Array {
   const out = new Uint8Array(totalCount * REGION_STRIDE);
   const w = new Float64Array(wallWeight ? SLOTS : REGION_COUNT);
@@ -123,6 +131,7 @@ export function packRegionWeights(
       w[WALL_SLOT] = ww;
     }
     quantizeWeights(w, out, v * REGION_STRIDE);
+    if (crackWeight) out[v * REGION_STRIDE + CHAOS_BYTE] = Math.round(Math.min(1, Math.max(0, crackWeight(positions[v * 3], positions[v * 3 + 1], positions[v * 3 + 2]))) * 255);
   }
   for (let q = surfaceCount; q < totalCount; q++) out.copyWithin(q * REGION_STRIDE, copyFrom[q - surfaceCount] * REGION_STRIDE, copyFrom[q - surfaceCount] * REGION_STRIDE + REGION_STRIDE);
   return out;

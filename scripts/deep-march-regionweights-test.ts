@@ -6,7 +6,8 @@
  *  3. every mesher vertex at LOD 0…3 carries exactly that function's value (so a
  *     point has the same material weights at every LOD: no material pop on swaps),
  *     skirts copy their source vertex;
- *  4. interpolation error vs the exact region field, and packing cost per column.
+ *  4. interpolation error vs the exact region field, and packing cost per column;
+ *  5. the chaos byte (M8): the crack weight next to an open crack, nothing else changed.
  * Run: npm run test:regionweights
  */
 import { TERRAIN } from "../src/games/deep-march/terrain/config";
@@ -14,6 +15,7 @@ import { createDensityField } from "../src/games/deep-march/terrain/density";
 import { columnRows, generateColumnMesh, lodSpacing } from "../src/games/deep-march/terrain/mesher";
 import { createRegionSample } from "../src/games/deep-march/terrain/regions";
 import { REGION_STRIDE, RegionWeightSampler, packRegionWeights, quantizeWeights, regionGridSpacing } from "../src/games/deep-march/terrain/regionWeights";
+import { crackWeightChecks } from "./lib/crackWeightChecks";
 
 let failed = 0;
 const check = (ok: boolean, name: string, detail: string) => {
@@ -112,6 +114,7 @@ check(sumBad === 0, "mesher weights sum to 255 per vertex", `${sumBad} bad of ${
 check(skirtBad === 0, "every LOD's vertices carry the global function's weights (skirts: their source's)", `${mismatch} skirt vertices copy their source, ${skirtBad} unexplained, ${verts} vertices in ${cols} columns (LOD 0–3)`);
 check(maxErr < 0.1, "grid interpolation close to the exact region field", `max |Δw| ${maxErr.toFixed(3)} (grid ${regionGridSpacing(TERRAIN.worldScale)} u, blend band ${17 * TERRAIN.worldScale} u)`);
 check(packMs < meshMs * 0.15, "packing cost small vs meshing", `${packMs.toFixed(0)} ms packing vs ${meshMs.toFixed(0)} ms meshing (${cols} columns)`);
+crackWeightChecks(check);
 if (failed) {
   console.log(`${failed} check(s) FAILED`);
   process.exit(1);
