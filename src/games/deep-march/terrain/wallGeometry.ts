@@ -18,8 +18,13 @@ import { TERRAIN } from "./config";
 import type { WorldRect } from "./siteLayout";
 import { WALL_SHAPE, type WallShapeTuning } from "./wallConfig";
 
-/** A crack (M6): centre arc length, opening width and depth into the wall, metres. */
-export type WallCrack = { s: number; width: number; depth: number };
+/**
+ * A crack (M6): centre arc length, opening width and depth into the wall, metres.
+ * The conserve chaos also passes `through` (the notch runs past the outer face:
+ * passable) and `extent` (the opening's arc range, m) for streaming beyond the
+ * wall (M8); the geometry reads s / width / depth only.
+ */
+export type WallCrack = { s: number; width: number; depth: number; through?: boolean; extent?: readonly [number, number] };
 /** The wall of a bounded world (SiteLayout.wall): thickness in metres, cracks. */
 export type WallSpec = { thickness: number; cracks: readonly WallCrack[] };
 
