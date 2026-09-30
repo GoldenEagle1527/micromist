@@ -12,7 +12,7 @@
  * - Turbidity (fog.ts): lit surfaces fade into a dark blue-green murk within tens
  *   of metres, with lamp backscatter in the cone.
  * - Detail normal (detailNormal.ts): world-space ridged creases at 2 scales stand in
- *   for sub-metre relief, plus a little facet normal on rock (?detail=0 = off).
+ *   for sub-metre relief, plus a little facet normal on rock (off from the debug panel).
  * - Water for a vast scale (replaces three's fog): blue-green absorption over the
  *   first tens of units, then in-scattering haze toward a *darker* version of the
  *   water colour behind the surface (WATER_GLSL: bright above, black below), so
@@ -80,7 +80,7 @@ export type SeabedOptions = {
   particleLights: ParticleLightUniforms;
   /** Lighthouse light (conserve base, base/baseLight.ts); uBLCount 0 skips it. */
   baseLight: BaseLightUniforms;
-  /** Shader detail normal (detailNormal.ts); false = ?detail=0. Default true. */
+  /** Shader detail normal (detailNormal.ts); false = the debug panel's 细节法线 off. Default true. */
   detail?: boolean;
   /** Conserve (M8): the chaos program's uniforms (chaos/seabedChaos.ts); null / omitted = no chaos variant. */
   chaos?: ChaosUniforms | null;

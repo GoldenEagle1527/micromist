@@ -8,7 +8,7 @@
  *   - the forecast equals the tide bit for bit; a generation's chaos is fixed and
  *     forecasting moves no particle; save v5; SiteLayout.wall crack data; a
  *     through crack's notch passes the outer face;
- *   - M8 presentation: the scene's view and the ?chaos= preview, impassable
+ *   - M8 presentation: the scene's view and the debug panel's chaos preview, impassable
  *     stage-2 cracks, scars; the effects, ghosts, omen and director (stage 0 = no-op).
  * Run: npm run test:chaos
  */

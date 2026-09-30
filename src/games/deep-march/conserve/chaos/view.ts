@@ -38,7 +38,7 @@ export type ChaosView = {
   /** Open cracks (they glow) and healed ones (scars), ascending j. */
   cracks: ChaosCrackView[];
   scars: ChaosCrackView[];
-  /** A ?chaos= preview (never saved), not the generation's own state. */
+  /** A staging preview (debug panel, never saved), not the generation's own state. */
   preview: boolean;
 };
 

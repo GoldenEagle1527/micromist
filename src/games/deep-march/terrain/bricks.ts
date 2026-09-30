@@ -21,7 +21,7 @@
  *    at once and walks points only inside mixed bricks;
  *  - cellMask: marching-cubes cells in bricks whose corners all share a sign are
  *    skipped (same scan order → same vertex order).
- * The output is bit-identical to the dense mesher (?bricks=0) as long as the
+ * The output is bit-identical to the dense mesher (bricks off) as long as the
  * margins hold: every value the mesh reads (sign-change corners and their
  * gradient neighbours) is still an exact evaluation, every sign is unchanged.
  */

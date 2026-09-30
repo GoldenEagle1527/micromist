@@ -5,6 +5,8 @@
  *   - bundle separation (esbuild, code splitting, the game's entry): nothing under
  *     conserve/ is statically reachable from DeepMarchGame — the conserve modules
  *     sit in a chunk of their own behind the single dynamic import;
+ *   - debug panel: no debug/ module in a production-mode bundle (modes/debugLoader.ts
+ *     folds away), only a lazy chunk in staging mode (deploy:staging's --mode staging);
  *   - module boundaries (source scan): shared code refers to conserve/ only through
  *     type-only imports and modes/conserveLoader.ts; outside conserve/, the conserve
  *     code imports only the game-store (platform/gameStoreBackend.ts); the pure logic
@@ -27,6 +29,8 @@ const GAME_DIR = "src/games/deep-march";
 const CONSERVE_DIR = `${GAME_DIR}/conserve`;
 const ENTRY = `${GAME_DIR}/DeepMarchGame.tsx`;
 const LOADER = `${GAME_DIR}/modes/conserveLoader.ts`;
+const DEBUG_DIR = `${GAME_DIR}/debug`;
+const DEBUG_LOADER = `${GAME_DIR}/modes/debugLoader.ts`;
 const MAX_LINES = 200;
 
 function sourceFiles(dir: string): string[] {
@@ -120,6 +124,47 @@ c.section("bundle separation");
   }
 }
 
+c.section("debug panel: staging builds only");
+{
+  const bundle = async (mode: string) => {
+    const r = await build({
+      entryPoints: [ENTRY],
+      bundle: true,
+      splitting: true,
+      format: "esm",
+      platform: "browser",
+      outdir: `node_modules/.cache/dm-modes-${mode}`,
+      write: false,
+      metafile: true,
+      packages: "external",
+      jsx: "automatic",
+      loader: { ".css": "empty" },
+      define: { "import.meta.env.MODE": JSON.stringify(mode) },
+      minifySyntax: true,
+      logLevel: "silent",
+    });
+    return r.metafile.outputs;
+  };
+  const inDebug = (p: string) => p.startsWith(`${DEBUG_DIR}/`);
+  const prod = await bundle("production");
+  const prodDebug = Object.values(prod).flatMap((o) => Object.keys(o.inputs)).filter(inDebug);
+  c.check(prodDebug.length === 0, "production mode: no debug/ module in any output (panel, port, strings)", prodDebug.join(", ") || `${Object.keys(prod).length} outputs`);
+  const stg = await bundle("staging");
+  const entry = Object.keys(stg).find((o) => stg[o].entryPoint === ENTRY)!;
+  const closure = new Set<string>();
+  const visit = (o: string) => {
+    if (closure.has(o)) return;
+    closure.add(o);
+    for (const i of stg[o].imports) if (i.kind === "import-statement" && stg[i.path]) visit(i.path);
+  };
+  visit(entry);
+  const staticDebug = [...closure].flatMap((o) => Object.keys(stg[o].inputs)).filter(inDebug);
+  const lazy = [...closure].flatMap((o) => stg[o].imports.filter((i) => i.kind === "dynamic-import").map((i) => i.path)).find((o) => stg[o] && Object.keys(stg[o].inputs).includes(`${DEBUG_DIR}/index.ts`));
+  c.check(staticDebug.length === 0 && !!lazy, "staging mode: debug/ only as a dynamically imported chunk", lazy ? `${Object.keys(stg[lazy].inputs).filter(inDebug).length} modules` : "missing");
+  const scripts = JSON.parse(readFileSync("package.json", "utf8")).scripts as Record<string, string>;
+  c.check(/--mode staging/.test(scripts["deploy:staging"]) && !/--mode/.test(scripts.build) && !/--mode/.test(scripts.deploy), "deploy:staging builds in staging mode; build / deploy (production) in production mode");
+}
+
 c.section("module boundaries");
 {
   const gameFiles = sourceFiles(GAME_DIR);
@@ -130,6 +175,10 @@ c.section("module boundaries");
   c.check(intoConserve.length > 0 && badShared.length === 0, "shared code → conserve/: type-only imports, plus the one dynamic import in modes/conserveLoader.ts", badShared.map(({ f, r }) => `${relative(GAME_DIR, f)} → ${r.spec}`).join(", ") || `${intoConserve.length} refs`);
   const dynamicLoads = intoConserve.filter(({ r }) => r.dynamic);
   c.check(dynamicLoads.length === 1 && dynamicLoads[0].f === LOADER, "exactly one dynamic import of conserve/");
+
+  const intoDebug = shared.filter((f) => !f.startsWith(`${DEBUG_DIR}/`)).flatMap((f) => importsOf(f).filter((r) => resolvesInto(f, r.spec, DEBUG_DIR)).map((r) => ({ f, r })));
+  const badDebug = intoDebug.filter(({ f, r }) => !r.typeOnly && !(r.dynamic && f === DEBUG_LOADER));
+  c.check(badDebug.length === 0 && intoDebug.filter(({ r }) => r.dynamic).length === 1, "shared code → debug/: type-only imports, plus the one dynamic import in modes/debugLoader.ts", badDebug.map(({ f, r }) => `${relative(GAME_DIR, f)} → ${r.spec}`).join(", ") || `${intoDebug.length} refs`);
 
   const runtimeOutside = conserve.flatMap((f) => importsOf(f).filter((r) => !r.typeOnly && !resolvesInto(f, r.spec, CONSERVE_DIR)).map((r) => `${relative(CONSERVE_DIR, f)} → ${r.spec}`));
   const allowedOutside = ["platform/gameStoreBackend.ts → ../../../../lib/game-store", "platform/gameStoreBackend.ts → ../../settings"];

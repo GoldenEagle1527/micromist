@@ -66,5 +66,5 @@ export async function chaosAudioChecks(check: Check): Promise<void> {
   } catch {
     threw = true;
   }
-  check("?audio=0: chaos / rumble are harmless no-ops", !threw);
+  check("no audio context: chaos / rumble are harmless no-ops", !threw);
 }

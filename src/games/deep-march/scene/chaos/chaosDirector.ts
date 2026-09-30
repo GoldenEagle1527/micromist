@@ -50,7 +50,7 @@ export function needsChaosProgram(view: ChaosView | null): boolean {
 
 /** Scar slots are re-picked (nearest) this often (s). */
 const SCAR_REFRESH_S = 1;
-/** A preview (?chaos=) runs its first omen this soon (s) instead of omen.firstS. */
+/** A preview (debug panel) runs its first omen this soon (s) instead of omen.firstS. */
 const PREVIEW_OMEN_S = 12;
 
 export class ChaosDirector {
@@ -71,6 +71,11 @@ export class ChaosDirector {
   constructor(d: ChaosDirectorDeps, view: ChaosView | null) {
     this.d = d;
     this.setView(view);
+  }
+
+  /** The chaos drawn now (the debug panel's crack teleports). */
+  current(): ChaosView | null {
+    return this.view;
   }
 
   /** The generation's chaos (at the start, and at the tide's switch to gen + 1). */

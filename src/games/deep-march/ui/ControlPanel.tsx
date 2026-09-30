@@ -58,7 +58,7 @@ export function ControlPanel({
   onExit?: () => void;
   /** Flip the rotated portrait fallback by 180°. */
   onFlip?: () => void;
-  /** Sound state; undefined hides the mute button (?audio=0 / no Web Audio). */
+  /** Sound state; undefined hides the mute button (sound off in the debug panel / no Web Audio). */
   muted?: boolean;
   onToggleMute?: () => void;
   labels: PanelLabels;

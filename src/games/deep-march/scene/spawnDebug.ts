@@ -1,7 +1,7 @@
 /**
  * Debug view of generation-time spawn candidates: small coloured markers by
  * surface type (instanced, one draw call) plus a DOM legend. Off by default;
- * toggled with B on desktop or enabled by ?debugSpawns=1. Never used in normal play.
+ * toggled with B on desktop or from the staging debug panel. Never used in normal play.
  * Legend strings come from the game i18n (setLabels on language change).
  * Also shows the macro region under the diver (name, blend weight, distance to
  * the border) and a small top-down region map (±128 units, north up).

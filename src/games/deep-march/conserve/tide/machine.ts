@@ -8,7 +8,7 @@
  * show frame, so gen + 1 is on disk before P1 (a page closed during the show
  * cold-starts in the new generation; closed during P0 it is still the old one).
  *
- * Murk triggers: ?tide=simple, a low-memory device, the precompute not done at
+ * Murk triggers: the debug panel's simple tide, a low-memory device, the precompute not done at
  * +30 s, the frame-time governor (TIDE.governor), a lost WebGL context. A context
  * lost during the show switches at once and ends the tide.
  */

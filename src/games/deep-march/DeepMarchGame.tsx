@@ -6,7 +6,9 @@ import { seedFromString } from "./terrain/noise";
 import { createDeepMarch, type DeepMarchHandle } from "./scene/world";
 import { isTouchDevice, loadSettings, panelEnabled, saveSettings, type SoundSettings } from "./settings";
 import { ControlPanel } from "./ui/ControlPanel";
-import { acquireAudioContext, audioDisabledByUrl, closeAudioContext, releaseAudioContext } from "./scene/audioContext";
+import { acquireAudioContext, closeAudioContext, releaseAudioContext } from "./scene/audioContext";
+import { diveParams } from "./scene/dive/params";
+import { useDebugModule } from "./modes/debugLoader";
 import { LoadingScreen } from "./ui/loading/LoadingScreen";
 import type { OpenIntent } from "./conserve";
 import type { GameMode } from "./modes/gameMode";
@@ -29,7 +31,7 @@ export function DeepMarchGame() {
   const [calmLights, setCalmLights] = useState(() => loadSettings().calmLights);
   const [panelOn, setPanelOn] = useState(() => panelEnabled(loadSettings()));
   const [sound, setSound] = useState<SoundSettings>(() => loadSettings().sound);
-  /** This dive has an audio context (false: ?audio=0 or no Web Audio) → no mute button. */
+  /** This dive has an audio context (false: sound off in the debug panel, or no Web Audio) → no mute button. */
   const [audioOn, setAudioOn] = useState(false);
   const [game, setGame] = useState<DeepMarchHandle | null>(null);
   const [loadingOn, setLoadingOn] = useState(true);
@@ -43,6 +45,14 @@ export function DeepMarchGame() {
     };
   }, []);
   const [touch] = useState(isTouchDevice);
+  // staging builds only (modes/debugLoader.ts): the debug panel and its port factory
+  const debugMod = useDebugModule();
+  const debugRef = useRef(debugMod);
+  debugRef.current = debugMod;
+  /** Bumped by the debug panel's restart of a free dive (conserve restarts re-open the save). */
+  const [diveEpoch, setDiveEpoch] = useState(0);
+  /** A debug restart re-acquired the audio context in its click: the old dive's teardown must not suspend it. */
+  const keepAudioRef = useRef(false);
 
   const persist = useCallback(
     (patch: Partial<{ mode: GameMode; seed: string; panel: boolean; sensitivity: number; invertY: boolean; calmLights: boolean; sound: SoundSettings }>) => {
@@ -67,7 +77,7 @@ export function DeepMarchGame() {
   const diveBase = conservePlay && conserveDive.status === "open" ? conserveDive.base : null;
   // conserve (M7): the tide
   const diveTide = conservePlay && conserveDive.status === "open" ? conserveDive.tide : null;
-  // conserve (M8): the generation's chaos (or a ?chaos= preview)
+  // conserve (M8): the generation's chaos (or the debug panel's preview)
   const diveChaos = conservePlay && conserveDive.status === "open" ? conserveDive.chaos : null;
 
   useEffect(() => {
@@ -95,6 +105,7 @@ export function DeepMarchGame() {
           tide: diveTide,
           chaos: diveChaos,
           calmLights,
+          debug: debugRef.current?.createDebugPort ?? null,
         });
         setGame(g);
       }, 0);
@@ -105,11 +116,12 @@ export function DeepMarchGame() {
       setGame(null);
       g?.destroy();
       // after the world's audio lifecycle is gone (it would resume it): suspended, reused next dive
-      releaseAudioContext();
+      if (!keepAudioRef.current) releaseAudioContext();
+      keepAudioRef.current = false;
     };
     // Settings/labels are read once per dive; the panel toggle is pushed via setPanelMode.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [screen, diveSeed, diveWorld, diveExpedition, diveBase, diveTide, diveChaos]);
+  }, [screen, diveSeed, diveWorld, diveExpedition, diveBase, diveTide, diveChaos, diveEpoch]);
 
   // Volume / mute: live into the running dive, persisted
   const soundRef = useRef(sound);
@@ -151,10 +163,19 @@ export function DeepMarchGame() {
     if (touch) void enterLandscape();
     setLoadingOn(true);
     // inside the click: acquire (or reuse) the shared context and resume it; never throws
-    audioCtxRef.current = audioDisabledByUrl(window.location.search) ? null : acquireAudioContext();
+    audioCtxRef.current = diveParams().noAudio ? null : acquireAudioContext();
     setAudioOn(audioCtxRef.current !== null);
     setScreen("playing");
   }, [mode, seed, sensitivity, invertY, calmLights, panelOn, sound, persist, touch]);
+  // debug panel: rebuild the dive with its new overrides (inside the click: the audio context may resume)
+  const restartDive = useCallback(() => {
+    if (diveParams().noAudio) releaseAudioContext();
+    audioCtxRef.current = diveParams().noAudio ? null : acquireAudioContext();
+    keepAudioRef.current = audioCtxRef.current !== null;
+    setAudioOn(audioCtxRef.current !== null);
+    if (intent) setIntent({ kind: "continue" });
+    else setDiveEpoch((n) => n + 1);
+  }, [intent]);
   const back = useCallback(() => {
     leaveLandscape();
     audioCtxRef.current = null;
@@ -191,6 +212,7 @@ export function DeepMarchGame() {
     loadingOn && diveSteps !== null ? (
       <LoadingScreen game={game} seedText={diveSeed ?? ""} seed={seedFromString(diveSeed ?? "")} labels={loadingLabels(dm)} steps={diveSteps} onDone={loadingDone} />
     ) : null;
+  const debugPanel = debugMod ? <debugMod.DebugPanel game={game} touch={touch} conserve={conservePlay} onRestart={restartDive} /> : null;
   const conserveFailed = conservePlay && conserveDive.status === "failed" ? <div className="dm-mode-failed">{dm.setup.moduleFailed}</div> : null;
 
   const togglePanel = useCallback(() => {
@@ -224,6 +246,7 @@ export function DeepMarchGame() {
           <div ref={hostRef} className="game-stage dm-stage" aria-label={dm.stageAria}>
             {loadingScreen}
             {conserveFailed}
+            {debugPanel}
             <ControlPanel
               game={game}
               panelOn={panelOn}
@@ -257,6 +280,7 @@ export function DeepMarchGame() {
       <div ref={hostRef} className="game-stage dm-stage" aria-label={dm.stageAria}>
         {loadingScreen}
         {conserveFailed}
+        {debugPanel}
         <ControlPanel
           game={game}
           panelOn={panelOn}

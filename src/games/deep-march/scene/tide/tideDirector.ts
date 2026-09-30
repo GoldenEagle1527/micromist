@@ -35,7 +35,7 @@ export type TideDirectorDeps = Omit<VisualsDeps, "timeline"> & {
   router: PoolRouter;
   settings: TerrainSettings;
   diver: DiverController;
-  /** ?tide=simple, and a low-memory device (navigator.deviceMemory): the murk from the start. */
+  /** The debug panel's simple tide, and a low-memory device (navigator.deviceMemory): the murk from the start. */
   start: { simple: boolean; lowMemory: boolean };
   gpuLost: () => boolean;
   pxPerM: () => number;

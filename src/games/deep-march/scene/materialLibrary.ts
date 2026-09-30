@@ -12,7 +12,7 @@
  *   failing, or transcoding yields an uncompressed format) every layer is fetched
  *   again from the WebP copies into RGBA8 DataArrayTextures (512 desktop / 256
  *   phone, mips generated) — the same multi-material system, lower resolution.
- *   `?ktx2=0` forces it (debug). If WebP fails too, the loading screen offers retry().
+ *   The debug panel's KTX2 switch (dive/params.ts `webp`) forces it. If WebP fails too, the loading screen offers retry().
  * - When all layers are in, both arrays are uploaded (renderer.initTexture) and
  *   `ready` turns true.
  */
@@ -23,6 +23,7 @@ import { createMaterialUniforms, type MaterialUniforms } from "./materialUniform
 
 export type { MaterialUniforms };
 import { MaterialDownload, type MaterialProgress } from "./materialDownload";
+import { diveParams } from "./dive/params";
 
 const FILES = import.meta.glob("../assets/materials/*", { query: "?url", import: "default", eager: true }) as Record<string, string>;
 const fileUrl = (name: string): string => {
@@ -89,7 +90,7 @@ export class MaterialLibrary {
     this.onReady = onReady;
     this.placeholder = new THREE.DataArrayTexture(new Uint8Array(4), 1, 1, 1);
     this.placeholder.needsUpdate = true;
-    const forceWebp = typeof window !== "undefined" && new URLSearchParams(window.location.search).get("ktx2") === "0";
+    const forceWebp = diveParams().webp;
     this.download = new MaterialDownload(lowSpec, forceWebp ? "webp" : "ktx2");
     this.uniforms = createMaterialUniforms(this.placeholder);
     if (this.download.path === "ktx2") {

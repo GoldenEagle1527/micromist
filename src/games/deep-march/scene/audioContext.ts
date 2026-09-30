@@ -20,11 +20,6 @@ export function audioContextCtor(host: AudioHost = globalThis as AudioHost): Aud
   return host.AudioContext ?? host.webkitAudioContext ?? null;
 }
 
-/** ?audio=0: hard off (no context at all). */
-export function audioDisabledByUrl(search: string): boolean {
-  return new URLSearchParams(search).get("audio") === "0";
-}
-
 /**
  * The shared context, created on first use. Call inside a user gesture: the resume()
  * issued here is what unlocks playback on iOS / Chrome autoplay rules.

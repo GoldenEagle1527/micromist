@@ -18,6 +18,7 @@ export type { WallState } from "./chaos/wallModel";
 export type { ChaosView, ChaosCrackView } from "./chaos/view";
 export type { ChaosStage } from "./chaos/model";
 export { diveChaosOf, type DiveChaos } from "./platform/diveChaos";
+export type { ChaosPreviewSpec } from "./chaos/preview";
 export type { BasePort, BaseView, BaseBuilding, BaseAction, StructureInfo, StructureKind, PlacementReason, WorldRect, TideReadiness, TideForecast } from "./base/port";
 export type { ExpeditionPort, ExpeditionNode, ExpeditionCache, FlowResult, NodeSurface } from "./expedition/port";
 export { withWorldSaveStep } from "./loading/worldSaveStep";

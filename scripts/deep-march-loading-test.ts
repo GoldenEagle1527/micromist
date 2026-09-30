@@ -211,7 +211,7 @@ console.log("loading steps + dive gate");
   {
     const snap = snapOf({ audio: { state: "off", settled: true, done: 0, total: 0, totalBytes: 0, bytes: 0 } });
     const { model, evals } = run(snap);
-    check(model.status.audio === "done" && evals.get("audio")!.lines[0] === loadingEn.audioOff && canBeginDive(model, LOADING_STEPS, snap, false), "audio off (?audio=0) → done, dive starts");
+    check(model.status.audio === "done" && evals.get("audio")!.lines[0] === loadingEn.audioOff && canBeginDive(model, LOADING_STEPS, snap, false), "audio off (sound off) → done, dive starts");
   }
   {
     const snap = snapOf({ audio: { missing: [] } });

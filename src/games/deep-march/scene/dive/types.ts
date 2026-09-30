@@ -15,6 +15,7 @@ import type { ExpeditionTelemetry } from "../expedition/telemetry";
 import type { GpuInfo } from "../gpuDiagnostics";
 import type { PanelInput } from "../input";
 import type { MaterialStatus } from "../materialLibrary";
+import type { DebugParts, DebugPort } from "../../debug/types";
 
 export type HudLabels = {
   chunks: string;
@@ -58,6 +59,8 @@ export type DeepMarchOptions = {
   chaos?: ChaosView | null;
   /** 「减弱灯光起伏」 (settings.ts): shallower, slower light changes near cracks. */
   calmLights?: boolean;
+  /** Staging debug panel (debug/port.ts): builds the handle's `debug` port from what the dive lends. Production builds never pass it. */
+  debug?: ((parts: DebugParts) => DebugPort) | null;
 };
 
 export type Telemetry = {
@@ -146,4 +149,6 @@ export type DeepMarchHandle = {
   baseCommand: (cmd: BaseCommand) => void;
   /** The tide: countdown, phase, dome, summary (null in the free dive). */
   tide: () => TideTelemetry | null;
+  /** Staging debug panel's runtime port (teleport, light, overlay, battery); null without `opts.debug`. */
+  debug: DebugPort | null;
 };

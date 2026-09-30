@@ -102,18 +102,18 @@ export type TerrainSettings = {
   floaterMargin: number;
   /**
    * Mesh jobs evaluate the full noise only near the surface, found by a coarse
-   * pre-pass (terrain/refine.ts). Default on; false (?refine=0) = full evaluation.
+   * pre-pass (terrain/refine.ts). Default on; false (debug panel) = full evaluation.
    */
   refine?: boolean;
   /**
    * Noise hot path in WebAssembly (terrain/noiseWasm.ts, bit-exact with JS). Default
    * off: on V8 the scalar port measured ~4% slower end-to-end than the JIT-compiled
-   * JS (node, separate processes); ?wasm=1 turns it on (e.g. to compare on iOS), ?wasm=0 forces JS.
+   * JS (node, separate processes); the debug panel's 噪声计算 turns it on (e.g. to compare on iOS) or forces JS.
    */
   wasm?: boolean;
   /**
    * Sparse 8³ bricks in mesh jobs (terrain/bricks.ts, bit-identical output).
-   * Default on; false (?bricks=0) = the dense passes.
+   * Default on; false (debug panel) = the dense passes.
    */
   bricks?: boolean;
 };

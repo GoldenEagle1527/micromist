@@ -4,15 +4,20 @@
  *   - every string is filled; every function takes the same number of arguments;
  *   - every function, called with the fixtures below, gives text with no
  *     "undefined" / "NaN" / "[object" (a function without a fixture fails);
+ *   - the staging debug panel's dictionaries (debug/i18n.ts) under "debug.";
  *   - Chinese strings are Chinese (a short allow-list of symbols / key names),
  *     English strings carry no Chinese.
  * Run: npm run test:i18n
  */
-import { deepMarchEn, deepMarchZh } from "../src/games/deep-march/i18n";
+import { deepMarchEn as gameEn, deepMarchZh as gameZh } from "../src/games/deep-march/i18n";
+import { debugEn, debugZh } from "../src/games/deep-march/debug/i18n";
 import type { GenerationSummary } from "../src/games/deep-march/conserve/tide/plan";
 import { createChecker } from "./lib/checks";
 
 type Tree = { [k: string]: unknown };
+/** The game's dictionaries plus the staging debug panel's (debug/i18n.ts, its own chunk), checked as one tree. */
+const deepMarchEn = { ...gameEn, debug: debugEn };
+const deepMarchZh = { ...gameZh, debug: debugZh };
 const c = createChecker();
 const CJK = /[\u3400-\u9fff\uff00-\uffef\u3000-\u303f]/;
 /** Chinese entries / functions that are legitimately without CJK (key names, units, counters). */
@@ -64,6 +69,9 @@ const fixtures: Record<string, (d: typeof deepMarchEn) => unknown[][]> = {
   "tide.comeBack": () => [[12.2]],
   "tide.summary": (d) => [[summary, d.regionNames], [{ ...summary, newCracks: 0, healed: 0, open: 0 }, d.regionNames]],
   "seedNow": () => [["abc"]],
+  "debug.position": () => [[12.4, -30.2, 1999.6]],
+  "debug.pending": () => [[1], [3]],
+  "debug.target.crack": () => [["1"], ["2"]],
 };
 
 function shape(en: unknown, zh: unknown, path: string, out: { strings: [string, string, string][]; fns: string[] }) {
