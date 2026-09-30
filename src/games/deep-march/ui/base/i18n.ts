@@ -1,6 +1,7 @@
-/** Base HUD strings (conserve mode, plan M5): build mode, the base panel, storage, energy, the tide stub. */
+/** Base HUD strings (conserve mode, plans M5–M6): build mode, the base panel, storage, energy, the tide stub and its forecast. */
 import type { StructureKind } from "../../conserve";
 import type { BuildReason } from "../../scene/base/buildMode";
+import { forecastEn, forecastZh, type ForecastDict } from "./forecastI18n";
 
 export type BaseDict = {
   structures: Record<StructureKind, string>;
@@ -39,7 +40,8 @@ export type BaseDict = {
   no: string;
   tideTitle: string;
   tideNeeds: (energy: number, energyNeed: number, dives: number, divesNeed: number) => string;
-  tideForecast: (m: number, thickness: number) => string;
+  /** The tide forecast card (M6). */
+  forecast: ForecastDict;
   tideSoon: string;
   tideBtn: string;
   homeMark: (m: number) => string;
@@ -109,7 +111,7 @@ export const baseEn: BaseDict = {
   no: "Keep",
   tideTitle: "Call the tide",
   tideNeeds: (e, en, d, dn) => `Energy ${Math.floor(e)}/${en} · departures ${d}/${dn}`,
-  tideForecast: (m, t) => `Forecast: m = ${m.toFixed(2)} · ring wall ${Math.round(t)} m`,
+  forecast: forecastEn,
   tideSoon: "The tide sequence opens in a later version",
   tideBtn: "Call the tide",
   homeMark: (m) => `Base · ${m} m`,
@@ -178,7 +180,7 @@ export const baseZh: BaseDict = {
   no: "保留",
   tideTitle: "唤潮",
   tideNeeds: (e, en, d, dn) => `能量 ${Math.floor(e)}/${en} · 本代出航 ${d}/${dn}`,
-  tideForecast: (m, t) => `预测：m = ${m.toFixed(2)} · 环壁厚 ${Math.round(t)} 米`,
+  forecast: forecastZh,
   tideSoon: "潮汐演出将在后续版本开放",
   tideBtn: "唤潮",
   homeMark: (m) => `基地 · ${m} 米`,

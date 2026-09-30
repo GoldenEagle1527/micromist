@@ -94,3 +94,16 @@
   align-items: center;
   gap: 4px;
 }
+
+/* ---- tide forecast card (plan M6) ---- */
+.dm-tide-forecast {
+  margin: 6px 0 4px;
+  padding: 4px 6px;
+  border: 1px solid var(--hud-faint);
+}
+.dm-tide-forecast .dm-base-table td.dim {
+  opacity: 0.6;
+}
+.dm-tide-forecast tr.changed td:first-child {
+  color: var(--hud-warn);
+}
