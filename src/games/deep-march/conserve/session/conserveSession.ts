@@ -1,6 +1,6 @@
 /**
  * A world opened for a dive: the save header, the live ledger, the generation's
- * site table and the throttled writer. Every ledger transfer marks the save dirty;
+ * site table and ring wall, and the throttled writer. Every ledger transfer marks the save dirty;
  * close() writes what is left.
  * No rendering, no DOM (the page lifecycle binding lives in platform/pageLifecycle.ts).
  */
@@ -12,6 +12,7 @@ import { writeSlot } from "../save/saveRepository";
 import { createSaveWriter, systemClock, type SaveWriter, type WriterClock } from "../save/saveWriter";
 import type { WorldSave } from "../save/schema";
 import { buildSiteTable, type SiteTable } from "../world/siteTable";
+import { wallStateOf, type WallState } from "../chaos/wallModel";
 import type { OpenedReport } from "./openReport";
 
 export type SessionDeps = { backend: SaveBackend; clock?: WriterClock; throttleMs?: number };
@@ -55,6 +56,11 @@ export class ConserveSession {
     const h = this.header;
     this.table ??= buildSiteTable({ seed: h.seed, gen: h.gen, allocInput: h.generation.allocInput, totals: h.totals, size: h.size });
     return this.table;
+  }
+
+  /** This generation's ring wall (thickness from m = Σ R / Σ N; cracks from M6). */
+  get wall(): WallState {
+    return wallStateOf(this.header.generation.allocInput, this.header.totals);
   }
 
   /** The save as it would be written now. */

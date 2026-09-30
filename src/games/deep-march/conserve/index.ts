@@ -10,5 +10,6 @@ export { peekWorldSlot, type SlotSummary } from "./session/peekSlot";
 export { flushOnPageHide } from "./platform/pageLifecycle";
 export { terrainLayoutOf } from "./platform/terrainLayout";
 export type { SiteTable, Site } from "./world/siteTable";
+export type { WallState } from "./chaos/wallModel";
 export { withWorldSaveStep } from "./loading/worldSaveStep";
 export type { OpenReport } from "./session/openReport";

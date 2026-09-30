@@ -19,7 +19,9 @@ function openedLines(r: OpenedReport, L: LoadingLabels): string[] {
   const moved = repairedParticles(r.repairs);
   const biomes = BIOMES.filter((b) => r.sites.byBiome[b] > 0).length;
   const sites = W.sites(r.sites.sitesX, r.sites.sitesZ, biomes);
-  return moved > 0 ? [head, ledger, W.repaired(groupDigits(moved)), sites] : [head, ledger, sites];
+  const s = r.wall.sigma;
+  const wall = W.wall(Math.round(r.wall.thickness), s >= 1 ? "stable" : s > 0 ? "thinning" : "thinnest");
+  return moved > 0 ? [head, ledger, W.repaired(groupDigits(moved)), sites, wall] : [head, ledger, sites, wall];
 }
 
 function openedDiag(r: OpenedReport, L: LoadingLabels): DiagEntry[] {
@@ -30,6 +32,7 @@ function openedDiag(r: OpenedReport, L: LoadingLabels): DiagEntry[] {
     { label: D.pools, value: POOL_IDS.map((id) => groupDigits(r.poolTotals[id])).join(" · ") },
     { label: D.biomes, value: BIOMES.map((b) => `${L.regionNames[b]} ${r.sites.byBiome[b]}`).join(" · ") },
     { label: D.bias, value: `${r.sites.deltaMin.toFixed(2)} … ${r.sites.deltaMax.toFixed(2)}` },
+    { label: D.wall, value: `m ${r.wall.m.toFixed(4)} · σ ${r.wall.sigma.toFixed(2)} · ${r.wall.thickness.toFixed(1)} m` },
   ];
   if (r.repairs.length > 0) diag.push({ label: D.repairs, value: r.repairs.map((x) => `${x.pool}.${x.type} ${x.delta > 0 ? "+" : ""}${x.delta} (${x.cause})`).join(", ") });
   return diag;
