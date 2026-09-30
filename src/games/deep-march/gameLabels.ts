@@ -59,5 +59,6 @@ export function panelLabels(dm: DeepMarchDict): PanelLabels {
     expedition: dm.expedition,
     base: dm.base,
     tide: dm.tide,
+    hints: dm.hints,
   };
 }

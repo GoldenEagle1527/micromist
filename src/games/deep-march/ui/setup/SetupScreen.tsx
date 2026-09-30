@@ -1,6 +1,6 @@
 /**
  * Setup screen: mode (conserved world / free dive), the conserve save slot, seed,
- * controls and sound. Starting hands the parent an OpenIntent in conserve mode
+ * controls, the conserve mode's new-player hints (M9) and sound. Starting hands the parent an OpenIntent in conserve mode
  * (continue / new world) or null for the free dive.
  */
 import { useState } from "react";
@@ -9,6 +9,7 @@ import type { DeepMarchDict } from "../../i18n";
 import type { GameMode } from "../../modes/gameMode";
 import { useConserveSlot } from "../../modes/useConserveSlot";
 import { randomSeed, type SoundSettings } from "../../settings";
+import { useHintSetting } from "../hints/useHintSetting";
 import { ConserveSlotCard } from "./ConserveSlotCard";
 import { conserveStart } from "./conserveStart";
 import { ModePicker } from "./ModePicker";
@@ -29,6 +30,7 @@ export function SetupScreen({ dm, values, onChange, slotRefresh, onStart }: Prop
   const conserve = mode === "conserve";
   const slot = useConserveSlot(conserve, slotRefresh);
   const [newWorld, setNewWorld] = useState(false);
+  const [hintsOn, setHintsOn] = useHintSetting();
   const plan = conserveStart(slot, newWorld);
   const showSeed = !conserve || plan.showSeed;
   const canStart = !conserve || plan.canStart;
@@ -83,6 +85,15 @@ export function SetupScreen({ dm, values, onChange, slotRefresh, onStart }: Prop
             <small className="dm-check-hint">{dm.calmLightsHint}</small>
           </span>
         </label>
+        {conserve && (
+          <label className="dm-check">
+            <input type="checkbox" checked={hintsOn} onChange={(e) => setHintsOn(e.target.checked)} />
+            <span>
+              {dm.hints.setting}
+              <small className="dm-check-hint">{dm.hints.settingHint}</small>
+            </span>
+          </label>
+        )}
         <label className="dm-check">
           <input type="checkbox" checked={panelOn} onChange={(e) => onChange({ panelOn: e.target.checked })} />
           <span>
@@ -108,7 +119,7 @@ export function SetupScreen({ dm, values, onChange, slotRefresh, onStart }: Prop
         <div className="dm-controls">
           <h3>{dm.controlsTitle}</h3>
           <ul>
-            {dm.controls.map((c) => (
+            {(conserve ? [...dm.controls, ...dm.setup.conserveControls] : dm.controls).map((c) => (
               <li key={c}>{c}</li>
             ))}
           </ul>

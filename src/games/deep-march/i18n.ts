@@ -6,6 +6,7 @@ import { setupEn, setupZh, type SetupDict } from "./ui/setup/i18n";
 import { expeditionEn, expeditionZh, type ExpeditionDict } from "./ui/expedition/i18n";
 import { tideEn, tideZh, type TideDict } from "./ui/tide/i18n";
 import { baseEn, baseZh, type BaseDict } from "./ui/base/i18n";
+import { hintsEn, hintsZh, type HintDict } from "./ui/hints/i18n";
 
 export type DeepMarchDict = {
   setupTitle: string;
@@ -53,6 +54,8 @@ export type DeepMarchDict = {
   /** Conserve base HUD (ui/base, M5). */
   base: BaseDict;
   tide: TideDict;
+  /** Conserve new-player hints (ui/hints, M9). */
+  hints: HintDict;
   hudGrounded: string;
   hudCeiling: string;
   hudScrape: string;
@@ -108,7 +111,6 @@ export const deepMarchEn: DeepMarchDict = {
     "Release W to stop swimming · F — lights on / off · L — next light mode · 1 / 2 / 3 — beam / high beam / sonar · M — mute / unmute",
     "Lights run on the battery (beam drains least, sonar most); it slowly recharges while the lights are off",
     "Touch panel: left dial moves (push to the outer SWIM arc to swim), right fan = up / down / swim / lamp / light mode, drag elsewhere to look",
-    "Conserve world: aim at a glowing node (it lights up) and hold E / left mouse / the ABSORB fan button to draw its particles into the 200-particle tank · hold X or the ⟲ button 2 s for an emergency recall (the tank is left behind as a lost cache; the compass shows it)",
   ],
   hint: "Click to look · WASD move · double-tap W swim · Space/Shift up/down · F lights · L mode",
   hintPanel: "Left dial moves · right fan acts · drag the view to look",
@@ -148,6 +150,7 @@ export const deepMarchEn: DeepMarchDict = {
   expedition: expeditionEn,
   base: baseEn,
   tide: tideEn,
+  hints: hintsEn,
   hudGrounded: "Touching bottom",
   hudCeiling: "Touching ceiling",
   hudScrape: "Brushing rock",
@@ -209,7 +212,6 @@ export const deepMarchZh: DeepMarchDict = {
     "松开 W 停止游泳 · F — 开关灯光 · L — 切换灯光模式 · 1 / 2 / 3 — 光束 / 远光 / 声呐 · M — 静音 / 取消静音",
     "灯光消耗电池（光束最省电，声呐最耗电）；关灯时电池会缓慢回充",
     "触屏面板：左侧摇盘移动（推到外圈「游泳」弧区即游泳），右侧扇形按钮为上浮 / 下沉 / 游泳 / 头灯 / 灯光模式，拖动其余画面转动视角",
-    "守恒世界：对准发光的资源节点（被瞄准时会变亮），按住 E / 鼠标左键 / 扇形「吸取」按钮把粒子吸进 200 容量的粒子罐 · 按住 X 或 ⟲ 按钮 2 秒紧急召回（罐中粒子留在原地成为遗失粒子包，罗盘上会标出）",
   ],
   hint: "点击画面转视角 · WASD 移动 · 双击 W 游泳 · 空格/Shift 上浮/下沉 · F 灯光 · L 模式",
   hintPanel: "左摇盘移动 · 右扇形按钮操作 · 拖动画面转视角",
@@ -249,6 +251,7 @@ export const deepMarchZh: DeepMarchDict = {
   expedition: expeditionZh,
   base: baseZh,
   tide: tideZh,
+  hints: hintsZh,
   hudGrounded: "触底",
   hudCeiling: "触顶",
   hudScrape: "擦碰岩壁",
