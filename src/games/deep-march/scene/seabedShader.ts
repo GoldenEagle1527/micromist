@@ -7,7 +7,7 @@ import { BEAM_LIGHT, BEAM_OPAQUE } from "./highBeam";
 import { PL_LIGHT } from "./particleLight";
 import { FOG_OPAQUE } from "./fog";
 import { SONAR_OPAQUE } from "./sonar";
-import { MAT_DECLS, MAT_FRAGMENT } from "./materialShader";
+import { MAT_DECLS, MAT_FRAGMENT, WALL_TINT_GLSL } from "./materialShader";
 
 /** Open-water colour seen along a view direction (bright toward the surface, black below). */
 export const WATER_GLSL = /* glsl */ `
@@ -162,6 +162,7 @@ ${MAT_FRAGMENT}
   albedo *= mix(0.85, 1.08, dmFbm(wp * 0.05 + 13.0));           // and at the diver's scale
   albedo *= mix(vec3(1.0), vec3(0.86, 0.95, 0.9), smoothstep(0.4, 0.8, nA) * floorW); // silt tint
   albedo *= mix(0.62, 1.0, smoothstep(-24.0 * uWS, 6.0 * uWS, wp.y)); // deeper = darker sediment
+  albedo *= mix(vec3(1.0), ${WALL_TINT_GLSL}, vRegB.z);          // ring wall (0 off the wall)
   diffuseColor.rgb *= albedo;
 
   // ---- normal (whiteout triplanar, blended per axis in MAT_FRAGMENT) ------------

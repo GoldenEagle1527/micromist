@@ -4,7 +4,8 @@
  * → region palettes (main + alt sub-patches) → the 5 surface slots of the current
  * surface weights (floor A/B, wall A/B, ceiling). One shader for every device.
  *
- *  - region choice: the 6 baked region weights reduced to the top two; their mix is
+ *  - region choice: the 6 baked region weights + the ring wall's (「界壁」, slot 6,
+ *    bounded world only; 0 elsewhere) reduced to the top two; their mix is
  *    sharpened by world noise into meandering interfingering (no hard seam, both
  *    regions fetched only in thin ribbons). Each region blends its main / alt
  *    palette by a world patch noise (narrow soft band);
@@ -30,15 +31,15 @@
  * wallW, nA, slotW0..4, albedo, dmNrm (whiteout triplanar normal, unnormalised) and
  * dmRough for the rest of MAP_FRAGMENT.
  */
-import { LAYER_COUNT, PALETTE_COUNT, paletteOf } from "./materialCatalog";
+import { LAYER_COUNT, PALETTE_COUNT, WALL_MATERIAL, WALL_TINT, paletteOf } from "./materialCatalog";
 import { TOP3_GLSL, topTwoDecl, topTwoGlsl, topTwoJS, type LayerCandidate } from "./materialSelect";
 
 /** Vertex side: region weight attributes (terrain/regionWeights.ts) → varyings. */
 export const MAT_VERT_DECLS = /* glsl */ `
 attribute vec4 aRegA;
-attribute vec2 aRegB;
+attribute vec3 aRegB;
 varying vec4 vRegA;
-varying vec2 vRegB;
+varying vec3 vRegB;
 `;
 export const MAT_VERT_MAIN = /* glsl */ `
   vRegA = aRegA;
@@ -49,7 +50,7 @@ export const MAT_DECLS = /* glsl */ `
 #define DM_LAYERS ${LAYER_COUNT}
 #define DM_PALETTES ${PALETTE_COUNT}
 varying vec4 vRegA;               // region weights: sand, reef, canyon, cave
-varying vec2 vRegB;               //                 terrace, trench
+varying vec3 vRegB;               //                 terrace, trench, ring wall
 uniform DM_M sampler2DArray tMatA;   // 8-bit data: mediump results
 uniform DM_M sampler2DArray tMatN;
 uniform DM_P vec4 uLayer[DM_LAYERS];   // x = 1 / repeat, y = gain, z = rot (1 desktop, 2 always)
@@ -155,6 +156,9 @@ ${topTwoGlsl("dmP", [
 ${topTwoGlsl("dmF", cands(TWO, FLOOR_SLOTS), floorDistinct(2))}${topTwoGlsl("dmK", cands(TWO, WALL_SLOTS))}  }
 `;
 
+/** Wall albedo tint (MAP_FRAGMENT, by the wall weight vRegB.z). */
+export const WALL_TINT_GLSL = `vec3(${WALL_TINT.map((v) => v.toFixed(3)).join(", ")})`;
+
 export const MAT_FRAGMENT = /* glsl */ `
   // ---- surface weights ---------------------------------------------------
   DM_M float up = wn.y;
@@ -184,6 +188,7 @@ export const MAT_FRAGMENT = /* glsl */ `
   dmTop2(vRegA.w, 3, regA, wA, regB, wB);
   dmTop2(vRegB.x, 4, regA, wA, regB, wB);
   dmTop2(vRegB.y, 5, regA, wA, regB, wB);
+  dmTop2(vRegB.z, ${WALL_MATERIAL}, regA, wA, regB, wB);
   if (wA < 1e-3) { regA = 0; wA = 1.0; }
   // order the pair by region index, not by weight: the blend below is then the
   // same function on both sides of a rank swap (no seam where wA = wB)

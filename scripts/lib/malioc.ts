@@ -81,7 +81,9 @@ export type MaliBudget = { stack: number; longestLS: number; longestTex: number 
 /**
  * Seabed terrain fragment programs on Mali-G57 (the reference low-end phone GPU),
  * every variant (desktop / phone defines, highp / mediump, base / LOD fade).
- * Achieved at this commit: stack <= 48 B, longest load/store <= 97, texture 24.25.
+ * Achieved at M2: stack <= 48 B, longest load/store <= 97, texture 24.25.
+ * M3 (ring-wall material slot 6): stack <= 64 B, load/store <= 102, texture 24.25,
+ * arithmetic unchanged (180 / 161 highp desktop / phone).
  * 78b0952 (14-entry merge arrays): stack 416-432 B, load/store 1650-1750, texture 84.
  */
 export const SEABED_MALI_BUDGET: MaliBudget = { stack: 96, longestLS: 150, longestTex: 40 };

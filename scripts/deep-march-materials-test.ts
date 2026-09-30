@@ -1,7 +1,8 @@
 /**
  * Seabed multi-material tests (node, no GPU):
  * - catalogue: 22 layers, every one used by some region, big-feature sets (rot
- *   "always") only in B slots, main ≠ alt, every region's look distinct;
+ *   "always") only in B slots, main ≠ alt, every region's look distinct; the ring
+ *   wall's 「界壁」 palettes as material slot 6;
  * - catalogue keys match the asset pipeline (scripts/deep-march-materials.py) and
  *   every shipped file exists with the expected KTX2 encoding / size / mip chain;
  * - layer selection (materialSelect.ts, SELECT in materialShader.ts): top-2 per
@@ -12,7 +13,7 @@
  *   retries per file, switch to the WebP path, final failure + user retry.
  */
 import { readFileSync, existsSync, readdirSync, statSync } from "node:fs";
-import { B_SLOTS, LAYERS, LAYER_COUNT, PALETTE_COUNT, REGION_PALETTES, layersOfRegion, paletteOf, regionsOfLayer } from "../src/games/deep-march/scene/materialCatalog";
+import { B_SLOTS, LAYERS, LAYER_COUNT, PALETTE_COUNT, REGION_PALETTES, WALL_MATERIAL, WALL_PALETTES, layersOfRegion, paletteOf, regionsOfLayer } from "../src/games/deep-march/scene/materialCatalog";
 import { MATERIAL_RETRIES, MaterialDownload, layerFiles, pathBytes } from "../src/games/deep-march/scene/materialDownload";
 import { MATERIAL_FILE_BYTES } from "../src/games/deep-march/scene/materialFiles";
 import { selectLayersJS } from "../src/games/deep-march/scene/materialShader";
@@ -29,7 +30,9 @@ const check = (ok: boolean, msg: string) => {
 
 // ---- catalogue
 check(LAYER_COUNT === 22, `22 layers (got ${LAYER_COUNT})`);
-check(REGION_PALETTES.length === REGION_COUNT && PALETTE_COUNT === 2 * REGION_COUNT, "one main+alt palette per region");
+check(REGION_PALETTES.length === REGION_COUNT && PALETTE_COUNT === 2 * (REGION_COUNT + 1), "one main+alt palette per region, + the ring wall's");
+check(WALL_MATERIAL === REGION_COUNT && paletteOf(2 * WALL_MATERIAL) === WALL_PALETTES.main && paletteOf(2 * WALL_MATERIAL + 1) === WALL_PALETTES.alt, "ring wall 「界壁」 = material slot 6 (palettes 12 / 13)");
+check(WALL_PALETTES.main.join() !== WALL_PALETTES.alt.join() && [WALL_PALETTES.main[3], WALL_PALETTES.alt[3]].every((l) => LAYERS[l].rot === "always"), "wall: alt differs, its patch layers use the rotated second scale (no tiling on flat facets)");
 check(new Set(LAYERS.map((l) => l.key)).size === LAYER_COUNT, "unique keys");
 for (let i = 0; i < LAYER_COUNT; i++) check(regionsOfLayer(i).length > 0, `layer ${LAYERS[i].key} used by a region`);
 for (let p = 0; p < PALETTE_COUNT; p++) {
@@ -103,9 +106,10 @@ for (let r = 0; r < REGION_COUNT; r++) {
   let jump = 0, where = "";
   const eps = 1e-7;
   for (let t = 0; t < 4000; t++) {
-    const regA = Math.floor(rnd() * REGION_COUNT);
-    let regB = Math.floor(rnd() * REGION_COUNT);
-    if (regB === regA) regB = (regA + 1) % REGION_COUNT;
+    // material slots 0 … 6 (6 = the ring wall)
+    const regA = Math.floor(rnd() * (REGION_COUNT + 1));
+    let regB = Math.floor(rnd() * (REGION_COUNT + 1));
+    if (regB === regA) regB = (regA + 1) % (REGION_COUNT + 1);
     const [a, b] = regA < regB ? [regA, regB] : [regB, regA];
     const sw = slot();
     const edge = [0, 1, rnd()];
@@ -128,8 +132,9 @@ for (let r = 0; r < REGION_COUNT; r++) {
   let pops = 0, popAt = "", steps = 0, singular = 0;
   const N = 400;
   for (let t = 0; t < 300; t++) {
-    const a = Math.floor(rnd() * (REGION_COUNT - 1));
-    const b = a + 1 + Math.floor(rnd() * (REGION_COUNT - 1 - a));
+    // material slots 0 … 6 (6 = the ring wall)
+    const a = Math.floor(rnd() * REGION_COUNT);
+    const b = a + 1 + Math.floor(rnd() * (REGION_COUNT - a));
     const sw = slot();
     const edge = [0, 1, rnd()];
     const fixed = [edge[Math.floor(rnd() * 3)], edge[Math.floor(rnd() * 3)], edge[Math.floor(rnd() * 3)]];
