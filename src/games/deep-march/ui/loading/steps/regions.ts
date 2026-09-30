@@ -7,7 +7,8 @@ export const regionsStep: LoadingStepDef = {
   weight: 12,
   required: true,
   evaluate(snap, { L, mapRows, mapSize }) {
-    const km = (REGION_MAP.span / 1000).toFixed(1);
+    // map span: the bounded world's width, or the fixed window around the spawn
+    const km = ((snap?.world ? snap.world.x1 - snap.world.x0 : REGION_MAP.span) / 1000).toFixed(1);
     const pct = Math.floor((mapRows / mapSize) * 100);
     if (!snap) return { state: "pending", lines: [] };
     if (mapRows >= mapSize) return { state: "done", lines: [L.mapProgress(100, km)] };
