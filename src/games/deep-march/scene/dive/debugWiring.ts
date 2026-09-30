@@ -31,6 +31,8 @@ export function debugPortOf(factory: DeepMarchOptions["debug"], w: Lent): DebugP
     },
     lights: h.survival.lights,
     ping: () => h.survival.sonar.queue(),
+    observe: { get: () => loop.scanner.observing, set: (on) => (on !== loop.scanner.observing ? h.controls.toggleObserve() : on) },
+    forgetScans: () => loop.scanner.forget(),
     markers: loop.spawnDebug,
     fillBattery: () => h.survival.resources.add("battery", SURVIVAL_TUNING.battery.capacity),
     conserve: w.conserve,

@@ -55,6 +55,11 @@ export class ConserveSession {
     return this.header.seedText;
   }
 
+  /** Slot id and creation time: with the seed, what names this world (e.g. its sonar scan record). */
+  get identity(): { id: string; createdAt: number; seed: number } {
+    return { id: this.header.id, createdAt: this.header.createdAt, seed: this.header.seed };
+  }
+
   get seed(): number {
     return this.header.seed;
   }

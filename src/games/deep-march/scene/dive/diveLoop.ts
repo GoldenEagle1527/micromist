@@ -1,7 +1,8 @@
 /**
  * The per-frame loop, in a fixed order: look and move (or the loading gate),
  * camera, survival, conserve layer, lamp rig, terrain streaming and occlusion,
- * the tide (conserve), marine snow, lighting, chaos (conserve), sonar, sounds, render, pacing, the 4 Hz HUD. Paused
+ * the tide (conserve), marine snow, lighting, chaos (conserve), sonar (pings, the scan
+ * record), sounds, render (the live world, or the record in observation mode), pacing, the 4 Hz HUD. Paused
  * while the tab is hidden (rAF mostly stops anyway; this also halts terrain
  * streaming and resets the pacing history on return).
  */
@@ -17,6 +18,7 @@ import type { MarineSnow } from "../particles";
 import type { ParticleLightUniforms } from "../particleLight";
 import type { SonarPulses, SonarUniforms } from "../sonar";
 import { longPingDue } from "../sonarLong";
+import type { SonarScanner } from "../sonarScan/sonarScanner";
 import type { SpawnDebugView } from "../spawnDebug";
 import type { WallRing } from "../wallRing";
 import type { CameraSync } from "./cameraSync";
@@ -60,6 +62,8 @@ export type DiveParts = {
   sonar: SonarUniforms;
   longPulses: SonarPulses;
   wallRing: WallRing | null;
+  /** The pings' record and the observation view (N). */
+  scanner: SonarScanner;
   cues: DiveCues;
   hud: HudChips;
   stats: HTMLElement;
@@ -114,6 +118,7 @@ export function startDiveLoop(p: DiveParts): { stop: () => void } {
     const pings = p.survival.sonar.take();
     for (let i = 0; i < pings; i++) {
       p.sonarPulses.ping(t, camera.position);
+      p.scanner.ping(t, camera.position, p.chunks.meshGroup);
       if (p.wallRing && longPingDue(p.longPulses, t)) p.longPulses.ping(t, camera.position);
     }
     p.sonarPulses.update(t);
@@ -136,7 +141,9 @@ export function startDiveLoop(p: DiveParts): { stop: () => void } {
     step(dt);
     world(now, dt, rawDt * 1000);
     sonarAndSound(now, dt);
-    p.renderer.render(p.scene, p.camera);
+    // observation mode draws the scan record instead of the live world
+    const observed = p.scanner.frame({ time: now / 1000, nowMs: now, camera: p.camera, renderer: p.renderer, allowed: p.gate.ready && !(p.tide?.active() ?? false) });
+    p.renderer.render(observed ?? p.scene, p.camera);
     if (p.pacer.frameDone(performance.now())) {
       p.renderer.setPixelRatio(p.pacer.ratio);
       p.resize();

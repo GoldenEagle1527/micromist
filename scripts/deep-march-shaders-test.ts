@@ -35,6 +35,8 @@
  *    currents; same checks, their own Mali-G57 budgets;
  *  - the chaos programs (M8, lib/chaosShaderChecks.ts): stage 0 = the M7 seabed
  *    programs bit for bit; the DM_CHAOS variant in the seabed budget; the omen.
+ *  - the sonar observation view (lib/scanShaderChecks.ts): one additive Points
+ *    program over the scan record; same checks, its own Mali-G57 budget, phone draws.
  * Run: npm run test:shaders
  */
 import glslangInit from "@webgpu/glslang/dist/node-devel/glslang.js";
@@ -76,6 +78,7 @@ import { genesisLayout } from "./lib/worldFixture";
 import { nodePrograms } from "./lib/nodeShaderChecks";
 import { basePrograms } from "./lib/baseShaderChecks";
 import { tidePrograms } from "./lib/tideShaderChecks";
+import { scanPrograms } from "./lib/scanShaderChecks";
 import { chaosPrograms } from "./lib/chaosShaderChecks";
 
 /**
@@ -393,6 +396,7 @@ function wallRingPrograms(compile: Compile) {
   nodePrograms(check, compile);
   basePrograms(check, compile);
   tidePrograms(check, compile);
+  scanPrograms(check, compile);
   chaosPrograms(check, compile);
   compile("background dome fragment", domeSource(), "fragment");
   const [sv, sf] = snowSources();

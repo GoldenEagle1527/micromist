@@ -17,19 +17,19 @@ import { tideAdvice } from "../src/games/deep-march/ui/base/tideAdvice";
 import { createChecker } from "./lib/checks";
 
 const c = createChecker();
-const idle: HintObservation = { tank: 0, founded: false, deposited: false, released: false, gen: 1, tideCalled: false, busy: false };
+const idle: HintObservation = { tank: 0, founded: false, deposited: false, released: false, gen: 1, tideCalled: false, observing: false, busy: false };
 const at = (o: Partial<HintObservation>): HintObservation => ({ ...idle, ...o });
 
 c.section("the sequence");
 {
   let p: HintProgress = NO_PROGRESS;
   const seen: (string | null)[] = [];
-  const steps: Partial<HintObservation>[] = [{}, { tank: 40 }, { tank: 40, founded: true }, { founded: true, deposited: true }, { founded: true, tideCalled: true }, { founded: true, gen: 2 }, { founded: true, gen: 2, released: true }];
+  const steps: Partial<HintObservation>[] = [{}, { tank: 40 }, { tank: 40, founded: true }, { founded: true, deposited: true }, { founded: true, tideCalled: true }, { founded: true, gen: 2 }, { founded: true, gen: 2, observing: true }, { founded: true, gen: 2, released: true }];
   for (const o of steps) {
     p = observe(p, at(o));
     seen.push(currentHint(p, at(o)) ?? "null");
   }
-  c.check(seen.join(",") === "absorb,core,deposit,tide,null,release,null", "absorb → core → deposit → 唤潮 → (nothing until the tide) → 放流 → done", seen.join(","));
+  c.check(seen.join(",") === "absorb,core,deposit,tide,null,rescan,release,null", "absorb → core → deposit → 唤潮 → (nothing until the tide) → 重扫 → 放流 → done", seen.join(","));
   c.check(p.done.join(",") === HINT_STEPS.join(","), "every step done, in order");
 }
 {
@@ -37,7 +37,7 @@ c.section("the sequence");
   c.check(currentHint(p, at({ founded: true })) === "absorb", "core founded from the lander cargo first: the absorb hint still comes first");
   c.check(currentHint(NO_PROGRESS, at({ tank: 0 })) === "absorb" && currentHint(observe(NO_PROGRESS, at({ tank: 5 })), at({ tank: 5 })) === "core", "deposit and 唤潮 wait for the core");
   const back = observe(NO_PROGRESS, at({ founded: true, gen: 3 }));
-  c.check(currentHint(back, at({ founded: true, gen: 3 })) === "release" && back.done.length === 4, "a returning player (generation 3): straight to the 放流 hint");
+  c.check(currentHint(back, at({ founded: true, gen: 3 })) === "rescan" && back.done.length === 4, "a returning player (generation 3): straight to the 重扫 hint");
 }
 c.section("showing and dismissing");
 {
@@ -80,6 +80,7 @@ c.section("telemetry → observation");
   c.check(busy.every((o) => o.busy), "busy: recall, base panel, the tide's warning / show, the loading screen");
   const called = observationOf(exp(), base(), tide("done", 2), true);
   c.check(called.tideCalled && !called.busy && called.gen === 2, "after the tide: called, not busy, generation 2");
+  c.check(observationOf(exp(), base(), tide("done", 2), true, true).observing && !called.observing, "sonar observation mode → observing (default off)");
 }
 
 c.section("tide advice (base panel)");

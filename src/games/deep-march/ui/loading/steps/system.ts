@@ -1,5 +1,5 @@
 /**
- * 05 System check: battery, lamps, the active sonar, seabed programs compiled / linked. The GPU
+ * 05 System check: battery, lamps, the active sonar and its scan record, seabed programs compiled / linked. The GPU
  * facts and full shader logs go to the diagnostics drawer (a long ANGLE renderer
  * string used to overflow the row on phones). A shader failure can be overridden with
  * "Dive anyway"; a lost GPU context cannot.
@@ -17,7 +17,7 @@ export const systemStep: LoadingStepDef = {
     const mark = (ok: boolean) => (ok ? "✓" : "·");
     const broken = !!s.shaderError || s.gpuLost;
     const lines = [
-      `${mark(s.battery > 0)} ${L.battery(Math.round(s.battery * 100))} · ${mark(s.sonar)} ${L.sonar}`,
+      `${mark(s.battery > 0)} ${L.battery(Math.round(s.battery * 100))} · ${mark(s.sonar)} ${L.sonar}${s.scanPoints !== undefined ? ` · ${L.scanRecord(s.scanPoints)}` : ""}`,
       `${mark(s.lamps.length > 0)} ${L.lamps(s.lamps.map((m) => L.lightModes[m]).join(" · "))}`,
       s.gpuLost ? `✗ ${L.gpuLost}` : s.shaderError ? `✗ ${L.shaderErrorShort}` : `${mark(s.shaders)} ${L.shaders}`,
     ];

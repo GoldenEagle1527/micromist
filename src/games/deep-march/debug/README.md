@@ -10,14 +10,14 @@ Replaces every URL debug switch (`?chaos= &cracks= &scar= ?at= ?light= ?tide=sim
 |---|---|---|
 | 传送 | spawn, base, crack N, the 4 edges and 4 corners of a bounded world, a custom x / y / z (steppers ±10 / ±100, "use current position") | at once; every destination is made safe (`teleport.ts`: eye height above the seabed, lifted out of rock, walked in from a rounded wall corner) |
 | 混沌预览 | stage (this generation / 0 / 1 / 2), cracks 1–2 at stage 2, a healed scar | restart; conserve only; never saved, the forecast and the tide keep the real chaos |
-| 灯光/声呐 | off / beam / high (the gear's modes); a free sonar ping (no battery, no cooldown) | at once |
+| 灯光/声呐 | off / beam / high (the gear's modes); a free sonar ping (no battery, no cooldown); sonar observation mode (same as N); forget the scan record | at once; forgetting also clears the conserve world's saved record |
 | 潮汐 | simple tide (the 浊潮 murk instead of the show) | restart; conserve only |
 | 资源 | fill the battery | at once; the battery is the dive's own, not in the save |
 | 渲染 | KTX2 (off = WebP), pixel ratio, full-detail radius, turbidity, noise engine JS / WASM, coarse pre-pass, sparse bricks, detail normals, occlusion culling | restart |
 | 声音 | sound off (no audio context at all) | restart |
 | 调试叠加层 | spawn-candidate and region markers (same as B) | at once |
 
-Restart commands edit a draft; the bar at the bottom shows how many wait and 「重新开始下潜」 applies them (`scene/dive/params.ts`, session-only, in memory — no URL, no storage). A free dive is rebuilt with the same seed; a conserve dive re-opens the save with "continue" (like leaving and continuing: progress is saved as usual). Nothing in the panel writes the save. Filling the tank or the base energy is deliberately missing: particles are conserved by the ledger (a fill would create them from nothing), and the energy lives in the saved base state.
+Restart commands edit a draft; the bar at the bottom shows how many wait and 「重新开始下潜」 applies them (`scene/dive/params.ts`, session-only, in memory — no URL, no storage). A free dive is rebuilt with the same seed; a conserve dive re-opens the save with "continue" (like leaving and continuing: progress is saved as usual). Nothing in the panel writes the save, except 「清空声呐记录」 (the scan record is its own game-store entry, `scan/<save id>`, not the save). Filling the tank or the base energy is deliberately missing: particles are conserved by the ledger (a fill would create them from nothing), and the energy lives in the saved base state.
 
 | File | What |
 |---|---|

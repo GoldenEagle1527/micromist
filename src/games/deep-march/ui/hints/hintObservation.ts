@@ -4,8 +4,8 @@ import type { ExpeditionTelemetry } from "../../scene/expedition/telemetry";
 import type { TideTelemetry } from "../../scene/tide/telemetry";
 import type { HintObservation } from "./hintModel";
 
-/** diving: the loading screen is gone (the hints wait for the dive). */
-export function observationOf(exp: ExpeditionTelemetry, base: BaseTelemetry | null, tide: TideTelemetry | null, diving: boolean): HintObservation {
+/** diving: the loading screen is gone (the hints wait for the dive); observing: sonar observation mode is on. */
+export function observationOf(exp: ExpeditionTelemetry, base: BaseTelemetry | null, tide: TideTelemetry | null, diving: boolean, observing = false): HintObservation {
   const bn = base?.notice ?? null;
   const en = exp.notice;
   const deposited = (bn?.kind === "moved" && bn.action === "deposit" && bn.total > 0) || (bn?.kind === "deposited" && bn.total > 0) || (en?.kind === "deposited" && en.total > 0);
@@ -19,6 +19,7 @@ export function observationOf(exp: ExpeditionTelemetry, base: BaseTelemetry | nu
     released,
     gen: tide?.gen ?? 1,
     tideCalled,
+    observing,
     busy: !diving || tideRunning || exp.recall.phase !== "idle" || (base?.panel ?? false),
   };
 }

@@ -16,6 +16,7 @@ import type { GpuInfo } from "../gpuDiagnostics";
 import type { PanelInput } from "../input";
 import type { MaterialStatus } from "../materialLibrary";
 import type { DebugParts, DebugPort } from "../../debug/types";
+import type { ScanStore } from "../sonarScan/scanStore";
 
 export type HudLabels = {
   chunks: string;
@@ -59,6 +60,8 @@ export type DeepMarchOptions = {
   chaos?: ChaosView | null;
   /** 「减弱灯光起伏」 (settings.ts): shallower, slower light changes near cracks. */
   calmLights?: boolean;
+  /** Where the sonar scan record lives: conserve passes the save's store; omitted = this session (free dive). */
+  scans?: ScanStore | null;
   /** Staging debug panel (debug/port.ts): builds the handle's `debug` port from what the dive lends. Production builds never pass it. */
   debug?: ((parts: DebugParts) => DebugPort) | null;
 };
@@ -78,6 +81,8 @@ export type Telemetry = {
   light: LightState;
   /** Active sonar: unit equipped, ready, cooldown (survival/sonarPing.ts). */
   sonar: SonarState;
+  /** Sonar observation mode (N) and the points recorded so far. */
+  scan: { observe: boolean; points: number };
   battery: { value: number; capacity: number; ratio: number; rate: number; low: boolean };
   swimLatch: boolean;
   ready: boolean;
@@ -105,6 +110,8 @@ export type LoadingSnapshot = {
     battery: number;
     lamps: LightMode[];
     sonar: boolean;
+    /** Points in the sonar scan record the dive starts with (conserve: from the save). */
+    scanPoints?: number;
     /** Program compile / link check finished. */
     shaders: boolean;
     /** A program failed to build: program / fragment / vertex info logs. */
@@ -141,6 +148,8 @@ export type DeepMarchHandle = {
   cycleLight: () => LightMode;
   /** Sonar ping (key 3); false if refused (cooldown, battery, no unit). */
   ping: () => boolean;
+  /** Sonar observation mode on / off (key N); returns the new state (refused while loading or during a tide). */
+  toggleObserve: () => boolean;
   toggleSwimLatch: () => boolean;
   /** Master volume 0..1 / mute. */
   setSound: (s: { muted: boolean; volume: number }) => void;

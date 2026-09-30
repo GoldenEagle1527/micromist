@@ -28,6 +28,8 @@ export type MesherResponse = {
   /** Macro-region weights, 8 bytes per vertex (regionWeights.ts). */
   region: Uint8Array;
   indices: Uint16Array | Uint32Array;
+  /** Vertices before the skirts (mesher.ts). */
+  surfaceVerts: number;
   /** Tight mesh AABB (min xyz, max xyz) — frustum culling. */
   bounds: Float32Array;
   /** Removed floating lattice points owned by the column: (i, j, k) triplets. */

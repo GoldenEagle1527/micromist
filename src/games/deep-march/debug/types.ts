@@ -37,6 +37,10 @@ export type DebugParts = {
   };
   /** A sonar ping from the diver, bypassing its battery cost and cooldown. */
   ping: () => void;
+  /** Sonar observation mode (N): the recorded scan instead of the live view; `set` returns the new state (refused while loading / in a tide). */
+  observe: { get(): boolean; set(on: boolean): boolean };
+  /** Forget the sonar scan record (conserve: the saved one too). */
+  forgetScans: () => void;
   /** The spawn-candidate / region overlay (the B key). */
   markers: { readonly visible: boolean; setVisible(on: boolean): void };
   /** Battery to full (the dive's own resource: not in any save). */
@@ -62,6 +66,9 @@ export type DebugPort = {
   setLight(c: LightChoice): void;
   /** A free sonar ping (no battery, no cooldown). */
   ping(): void;
+  observe(): boolean;
+  setObserve(on: boolean): void;
+  forgetScans(): void;
   markers(): boolean;
   setMarkers(on: boolean): void;
   fillBattery(): void;

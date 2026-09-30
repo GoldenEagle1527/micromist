@@ -29,6 +29,8 @@ export type LoadingDict = {
   battery: (pct: number) => string;
   lamps: (modes: string) => string;
   sonar: string;
+  /** Sonar scan record the dive starts with (points; 0 = none yet). */
+  scanRecord: (points: number) => string;
   shaders: string;
   /** One-line shader failure for the focus card (the full log is in the diagnostics). */
   shaderErrorShort: string;
@@ -95,7 +97,8 @@ export const loadingEn: LoadingDict = {
   terrain: (pct) => `Coverage ${pct}%`,
   battery: (pct) => `Battery ${pct}%`,
   lamps: (modes) => `Lamps: ${modes}`,
-  sonar: "Active sonar ready (3 = ping)",
+  sonar: "Active sonar ready",
+  scanRecord: (n) => (n > 0 ? `scan record ${n >= 1000 ? `${(n / 1000).toFixed(1)}k` : n} pts` : "no scan record yet"),
   shaders: "Seabed shaders compiled",
   shaderErrorShort: "Shader error — see Diagnostics",
   gpuLost: "Graphics context lost (GPU reset) — reload the page",
@@ -180,7 +183,8 @@ export const loadingZh: LoadingDict = {
   terrain: (pct) => `覆盖 ${pct}%`,
   battery: (pct) => `电池 ${pct}%`,
   lamps: (modes) => `灯光：${modes}`,
-  sonar: "主动声呐就绪（3 = 发射脉冲）",
+  sonar: "主动声呐就绪",
+  scanRecord: (n) => (n > 0 ? `扫描记录 ${n >= 10000 ? `${(n / 10000).toFixed(1)} 万` : n} 点` : "尚无扫描记录"),
   shaders: "海床着色器已编译",
   shaderErrorShort: "着色器错误（详见诊断详情）",
   gpuLost: "图形上下文丢失（GPU 重置）— 请刷新页面",

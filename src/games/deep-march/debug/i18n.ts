@@ -34,6 +34,8 @@ export type DebugDict = {
     customGo: string;
     lightMode: string;
     ping: string;
+    observe: string;
+    forgetScans: string;
     fillBattery: string;
     markers: string;
     chaosStage: string;
@@ -81,6 +83,8 @@ export const debugZh: DebugDict = {
     customGo: "传送到自定位置（在岩石里会自动抬到水中）",
     lightMode: "灯光模式",
     ping: "发射声呐脉冲（不耗电、无冷却）",
+    observe: "声呐观察模式（N 键）",
+    forgetScans: "清空声呐记录（存档里的也清空）",
     fillBattery: "电池充满（不存档）",
     markers: "出生点与区域标记（B 键）",
     chaosStage: "混沌阶段（仅本次预览）",
@@ -132,6 +136,8 @@ export const debugEn: DebugDict = {
     customGo: "Teleport to custom point (lifted out of rock)",
     lightMode: "Light mode",
     ping: "Sonar ping (free, no cooldown)",
+    observe: "Sonar observation mode (N)",
+    forgetScans: "Forget the sonar scan record (the saved one too)",
     fillBattery: "Fill battery (not saved)",
     markers: "Spawn and region markers (B)",
     chaosStage: "Chaos stage (preview only)",

@@ -7,6 +7,7 @@ import type { DiverController } from "../diver";
 import type { InputController } from "../input";
 import type { MaterialLibrary } from "../materialLibrary";
 import type { SonarUniforms } from "../sonar";
+import type { SonarScanner } from "../sonarScan/sonarScanner";
 import type { ConserveLayer } from "./conserveLayer";
 import type { TideDirector } from "../tide/tideDirector";
 import type { GpuHealth } from "./gpuHealth";
@@ -27,11 +28,12 @@ export type HandleParts = {
   health: GpuHealth;
   survival: Survival;
   sonar: SonarUniforms;
+  scanner: SonarScanner;
   audio: DiveAudio;
   input: InputController;
   diver: DiverController;
   hud: HudChips;
-  controls: { toggleLamp: () => boolean; cycleLight: () => LightMode; ping: () => boolean };
+  controls: { toggleLamp: () => boolean; cycleLight: () => LightMode; ping: () => boolean; toggleObserve: () => boolean };
   updatePrompt: () => void;
   setLabels: (labels: HudLabels) => void;
   destroy: () => void;
@@ -44,6 +46,7 @@ function systemState(p: HandleParts): LoadingSnapshot["system"] {
     battery: p.survival.resources.view("battery").ratio,
     lamps: p.survival.lights.available(),
     sonar: p.survival.sonar.state(performance.now() / 1000).available && p.sonar.uSonarPulse.value.length > 0,
+    scanPoints: p.scanner.record.points,
     shaders: p.health.shadersReady,
     shaderError: p.health.shaderError,
     gpu: p.health.gpu,
@@ -89,6 +92,7 @@ function telemetry(p: HandleParts): Telemetry {
     lamp: light.on,
     light,
     sonar: survival.sonar.state(performance.now() / 1000),
+    scan: { observe: p.scanner.observing, points: p.scanner.record.points },
     battery: { value: b.value, capacity: b.capacity, ratio: b.ratio, rate: b.rate, low: b.ratio <= SURVIVAL_TUNING.battery.lowFraction },
     swimLatch: p.input.panel.swimLatch,
     ready: p.gate.ready,
@@ -118,6 +122,7 @@ export function createHandle(p: HandleParts): DeepMarchHandle {
     toggleLamp: p.controls.toggleLamp,
     cycleLight: p.controls.cycleLight,
     ping: p.controls.ping,
+    toggleObserve: p.controls.toggleObserve,
     toggleSwimLatch: () => {
       input.panel.swimLatch = !input.panel.swimLatch;
       return input.panel.swimLatch;

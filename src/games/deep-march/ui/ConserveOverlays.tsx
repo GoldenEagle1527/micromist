@@ -29,7 +29,7 @@ type Props = {
 };
 
 export function ConserveOverlays({ game, tel, exp, base, tide, panelOn, labels }: Props) {
-  const hints = useHints(exp, base, tide, tel?.ready ?? false);
+  const hints = useHints(exp, base, tide, tel?.ready ?? false, tel?.scan.observe ?? false);
   if (!exp) return null;
   const building = base?.build.active ?? false;
   return (

@@ -37,6 +37,7 @@ const fixtures: Record<string, (d: typeof deepMarchEn) => unknown[][]> = {
   "loading.terrain": () => [[70]],
   "loading.battery": () => [[88]],
   "loading.lamps": () => [["flood · spot"]],
+  "loading.scanRecord": () => [[0], [12345]],
   "loading.audioCount": () => [[2, 9, 120, 900]],
   "loading.audioPartial": () => [["ambience"]],
   "loading.diag.limitsValue": () => [[16, 1024, true], [8, 256, false]],

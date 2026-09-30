@@ -23,7 +23,7 @@ terrainTeleportChecks(c);
 
 /** A port that records what the panel asked of the dive. */
 function fakePort(log: string[]): DebugPort {
-  let light: "off" | "beam" | "high" = "beam", markers = false;
+  let light: "off" | "beam" | "high" = "beam", markers = false, observe = false;
   return {
     conserve: true,
     targets: () => [{ kind: "crack", key: "1", pose: () => ({ x: 1, y: 2, z: 3, yaw: 0, pitch: 0 }) }],
@@ -33,6 +33,9 @@ function fakePort(log: string[]): DebugPort {
     lightChoices: () => ["off", "beam", "high"],
     setLight: (m) => void (light = m),
     ping: () => void log.push("ping"),
+    observe: () => observe,
+    setObserve: (on) => void (observe = on),
+    forgetScans: () => void log.push("forget"),
     markers: () => markers,
     setMarkers: (on) => void (markers = on),
     fillBattery: () => void log.push("battery"),
@@ -107,12 +110,16 @@ c.section("runtime commands go through the port");
   if (light.kind === "choice") light.set(ctx, "off");
   const ping = byId("light.ping");
   if (ping.kind === "action") ping.apply(ctx);
+  const obs = byId("light.observe");
+  if (obs.kind === "toggle") obs.set(ctx, true);
+  const forget = byId("light.forgetScans");
+  if (forget.kind === "action") forget.apply(ctx);
   const bat = byId("resources.battery");
   if (bat.kind === "action") bat.apply(ctx);
   const mk = byId("overlay.markers");
   if (mk.kind === "toggle") mk.set(ctx, true);
-  c.check(log.join(" | ") === "tp 1,2,3 | tp 110,-4,7 | ping | battery", "crack teleport, current position + 100 m east, a free ping, battery", log.join(" | "));
-  c.check(ctx.custom.y === 1 && ctx.port!.light() === "off" && ctx.port!.markers() && JSON.stringify(ctx.draft) === JSON.stringify(DEFAULT_DIVE_PARAMS), "custom y follows the safe placement; light off; markers on; the draft untouched");
+  c.check(log.join(" | ") === "tp 1,2,3 | tp 110,-4,7 | ping | forget | battery", "crack teleport, current position + 100 m east, a free ping, forget the scans, battery", log.join(" | "));
+  c.check(ctx.custom.y === 1 && ctx.port!.light() === "off" && ctx.port!.observe() && ctx.port!.markers() && JSON.stringify(ctx.draft) === JSON.stringify(DEFAULT_DIVE_PARAMS), "custom y follows the safe placement; light off; observation on; markers on; the draft untouched");
   c.check(light.kind === "choice" && light.options(ctx).map((o) => o.value).join() === "off,beam,high", "light choices: off + the gear's modes");
   c.check(x.kind === "stepper" && stepValue(x, 5990, 100) === x.max && stepValue(x, -5990, -100) === x.min, "steppers clamp to their range");
 }

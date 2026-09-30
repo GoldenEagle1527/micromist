@@ -1,7 +1,7 @@
 # ui/hints — new-player hints (conserve mode, plan M9)
 
 One small card at a time, top right under the HUD buttons, for the first loop of the conserve mode:
-采集 (absorb a node) → 建核心 (G, place the base core) → 存入 (deposit at the base) → 唤潮 (call the tide) → 放流 (release, after the first tide).
+采集 (absorb a node) → 建核心 (G, place the base core) → 存入 (deposit at the base) → 唤潮 (call the tide) → 重扫 (after the first tide: open the sonar view with N, the record is stale — done by opening it) → 放流 (release).
 
 | File | Role |
 |---|---|
@@ -13,4 +13,4 @@ One small card at a time, top right under the HUD buttons, for the first loop of
 | `HintCard.tsx`, `hints.css` | The card (key and touch wording): small, top right, off the crosshair and the controls |
 | `i18n.ts` | zh / en texts |
 
-Rules: nothing is shown in the free dive; a hint never pauses or blocks the game; a returning world (generation ≥ 2) skips straight to 放流. Tests: `test:hints` (model, observation, the base panel's tide advice), `test:i18n` (texts).
+Rules: nothing is shown in the free dive; a hint never pauses or blocks the game; a returning world (generation ≥ 2) skips straight to 重扫, then 放流. Tests: `test:hints` (model, observation, the base panel's tide advice), `test:i18n` (texts).
