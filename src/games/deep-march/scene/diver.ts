@@ -15,11 +15,17 @@
  * hard head-on hit that kills most speed also ends the swim.
  *
  * Collision is a single small sphere at the camera, pushed out of rock along
- * the density gradient (sub-stepped so fast swims can't tunnel).
+ * the density gradient (sub-stepped so fast swims can't tunnel). In a bounded
+ * world (`edge` set) the diver is also held EDGE_MARGIN inside the world
+ * rectangle — a temporary hard edge until the boundary wall exists.
  */
 import * as THREE from "three";
 import type { DensityField } from "../terrain/density";
 import { createLatticeSampler, type LatticeSampler, type RemovedPoint } from "../terrain/latticeSampler";
+import { clampInsideRect, type WorldRect } from "../terrain/siteLayout";
+
+/** Bounded world: how far inside the world rectangle the diver is held (world units). */
+export const EDGE_MARGIN = 2;
 
 export const DIVER = {
   /** World units per Minecraft block. */
@@ -81,6 +87,8 @@ export class DiverController {
   lastTicks = 0;
   /** Total ticks simulated (20 per simulated second). */
   totalTicks = 0;
+  /** Bounded world rectangle (null = endless). */
+  edge: WorldRect | null = null;
   /**
    * Strongest speed along a contact normal removed by collisions during the last
    * update(), in world units per second (0 = no real impact; grazing is ~0).
@@ -204,6 +212,7 @@ export class DiverController {
     for (let i = 0; i < n; i++) {
       this.position.addScaledVector(v, (D.blockSize * D.speedScale) / n);
       this.resolveCollisions();
+      if (this.edge) this.keepInsideEdge(this.edge);
     }
     // Extension: a hard head-on hit that stops the swimmer ends the swim.
     if (swimming && this.tickHeadOn > 0.75 && alongBefore > 0.08) {
@@ -328,6 +337,16 @@ export class DiverController {
       this.contactTimer = 0.3;
       this.contactNormalY = ny;
     }
+  }
+
+  /** Hard world edge: clamp inside the rectangle; an outward hit counts as a wall contact. */
+  private keepInsideEdge(edge: WorldRect) {
+    const vn = clampInsideRect(edge, EDGE_MARGIN, this.position, this.velocity);
+    if (vn <= 0) return;
+    const hit = vn * DIVER.blockSize * DIVER.speedScale * DIVER.tickRate;
+    if (hit > this.impact) this.impact = hit;
+    this.contactTimer = 0.3;
+    this.contactNormalY = 0;
   }
 
   /** Find open water near (x, z): the middle of the tallest water gap in the column. */

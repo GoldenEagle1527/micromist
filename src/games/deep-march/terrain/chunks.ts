@@ -33,6 +33,10 @@
  * `isRemovedPoint()` lets collision ignore exactly what the renderer dropped (the diver
  * is always inside the level-0 area).
  *
+ * Bounded world (the field has an explicit site layout, siteLayout.ts): nodes whose
+ * footprint lies wholly outside the layout's cell rectangle are never requested
+ * (columns straddling the edge are built whole); the endless field is unaffected.
+ *
  * Terrain classification (TerrainInfoStore `terrain`: getEnvAt / getSpawnCandidates)
  * is generated separately for the base-scale columns (world / worldScale, see
  * config.baseTerrain) within infoRadius of the viewer.
@@ -46,6 +50,8 @@ import { WorkerPool, type JobPool, type JobRequest } from "./jobPool";
 import type { LodFadeMaterial } from "../scene/seabedMaterial";
 import { TerrainInfoStore } from "./terrainInfo";
 import { REGION_STRIDE } from "./regionWeights";
+import { MACRO } from "./regions";
+import { insideRect, layoutRect, rectOverlaps, type WorldRect } from "./siteLayout";
 
 type NodeState = "queued" | "pending" | "ready";
 
@@ -157,6 +163,8 @@ export class ChunkManager {
   readonly terrain: TerrainInfoStore;
   private floaters = 0;
   private disposed = false;
+  /** Bounded world: footprints outside this rectangle are skipped (null = endless). */
+  readonly worldRect: WorldRect | null;
   /**
    * Loading screen up: swaps are instant (no crossfade) so the start area refines
    * quickly; world.ts clears it once coverageComplete() and the dive starts.
@@ -174,11 +182,13 @@ export class ChunkManager {
     this.material = material;
     this.rows = columnRows(field);
     const s = field.settings;
+    const layout = field.regions.layout;
+    this.worldRect = layout ? layoutRect(layout, MACRO.cell * s.worldScale) : null;
     this.levels = Math.max(1, s.lodLevels);
     this.lodTris = new Array(this.levels).fill(0);
     this.lodMsTotal = new Array(this.levels).fill(0);
     this.lodMsCount = new Array(this.levels).fill(0);
-    this.terrain = new TerrainInfoStore({ seed, boundsSize: INFO_GRID.boundsSize, numPointsPerAxis: INFO_GRID.numPointsPerAxis, scale: s.worldScale });
+    this.terrain = new TerrainInfoStore({ seed, boundsSize: INFO_GRID.boundsSize, numPointsPerAxis: INFO_GRID.numPointsPerAxis, scale: s.worldScale, layout });
     this.yMin = lodCoord(this.rows.gjMin, field, 0);
     this.yMax = lodCoord(this.rows.gjMax, field, 0);
     scene.add(this.group);
@@ -188,7 +198,7 @@ export class ChunkManager {
       // Desktop: min(4, cores − 2) keeps two cores for the main thread + GPU driver
       // (6 workers made the main thread stutter while streaming); low-spec: 2.
       const count = lowSpec ? Math.max(1, Math.min(2, cores - 1)) : Math.max(1, Math.min(4, cores - 2));
-      this.pool = new WorkerPool(seed, s, typeof Worker === "undefined" ? 0 : count);
+      this.pool = new WorkerPool(seed, s, typeof Worker === "undefined" ? 0 : count, layout);
     }
     this.pool.onLost = (ids) => {
       for (const id of ids) {
@@ -303,6 +313,7 @@ export class ChunkManager {
       const size = s.boundsSize * (1 << lod);
       const d2 = this.sqrDstRect(viewer, x0, z0, size);
       if (d2 > (lod === top ? prefetch2 : view2)) return;
+      if (this.worldRect && !rectOverlaps(this.worldRect, x0, z0, size)) return;
       const key = meshKey(lod, cx, cz);
       // hysteresis: an area already drawn finer merges back only SPLIT_HYST further out
       const finer = lod > 0 && this.coveredBelow(lod, cx, cz);
@@ -326,6 +337,7 @@ export class ChunkManager {
     const iz0 = Math.floor((viewer.z + bs / 2 - r) / bs), iz1 = Math.floor((viewer.z + bs / 2 + r) / bs);
     for (let cz = iz0; cz <= iz1; cz++) for (let cx = ix0; cx <= ix1; cx++) {
       const [x0, z0] = this.origin("info", 0, cx, cz);
+      if (this.worldRect && !rectOverlaps(this.worldRect, x0, z0, bs)) continue;
       if (this.sqrDstRect(viewer, x0, z0, bs) <= r * r) out.set(infoKey(cx, cz), { kind: "info", lod: 0, cx, cz });
     }
     return out;
@@ -563,7 +575,7 @@ export class ChunkManager {
     let m: ReturnType<typeof generateColumnMesh>;
     if (e.kind === "info") {
       const s = this.field.settings;
-      if (!this.base) this.base = createDensityField(this.field.seed, baseTerrain(s));
+      if (!this.base) this.base = createDensityField(this.field.seed, baseTerrain(s), undefined, this.field.regions.layout);
       const full = generateColumnMesh(this.base, e.cx, e.cz, columnRows(this.base), this.base.settings.floaterMargin, undefined, true);
       m = { ...full, positions: new Float32Array(0), normals: new Float32Array(0), ao: new Float32Array(0), region: new Uint8Array(0), indices: new Uint16Array(0), removed: new Int32Array(0) };
     } else {
@@ -725,7 +737,8 @@ export class ChunkManager {
 
   /**
    * Points on a `step` grid within viewDistance (XZ) of the viewer whose footprint
-   * no drawn column covers (0 = full coverage).
+   * no drawn column covers (0 = full coverage). Points outside a bounded world
+   * never count.
    */
   coverageHoles(viewer: THREE.Vector3, step = 8): number {
     const s = this.field.settings;
@@ -737,6 +750,7 @@ export class ChunkManager {
       for (let x = Math.ceil((viewer.x - r) / step) * step; x <= viewer.x + r; x += step) {
         const dx = x - viewer.x, dz = z - viewer.z;
         if (dx * dx + dz * dz > r * r) continue;
+        if (this.worldRect && !insideRect(this.worldRect, x, z)) continue;
         const gx = Math.floor((x + b / 2) / b), gz = Math.floor((z + b / 2) / b);
         let ok = false;
         for (let l = top; l >= 0 && !ok; l--) ok = this.drawn(this.nodes.get(meshKey(l, gx >> l, gz >> l)));
@@ -772,7 +786,7 @@ export class ChunkManager {
     for (let z = Math.ceil((viewer.z - r) / step) * step; z <= viewer.z + r; z += step) {
       for (let x = Math.ceil((viewer.x - r) / step) * step; x <= viewer.x + r; x += step) {
         const dx = x - viewer.x, dz = z - viewer.z;
-        if (dx * dx + dz * dz <= r * r) points++;
+        if (dx * dx + dz * dz <= r * r && (!this.worldRect || insideRect(this.worldRect, x, z))) points++;
       }
     }
     const holes = this.coverageHoles(viewer, step);

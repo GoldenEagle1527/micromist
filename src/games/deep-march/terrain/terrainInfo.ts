@@ -77,6 +77,7 @@
  */
 
 import { REGION_COUNT, REGION_KEYS, createRegionField, createRegionSample, type RegionField, type RegionKey } from "./regions";
+import type { SiteLayout } from "./siteLayout";
 
 export { REGION_COUNT, REGION_KEYS };
 
@@ -259,6 +260,8 @@ export type TerrainGeometry = {
    * queries take and return world coordinates / distances. Default 1.
    */
   scale?: number;
+  /** Explicit site layout of a bounded world (siteLayout.ts); default none. */
+  layout?: SiteLayout | null;
 };
 
 export type RegionInfo = {
@@ -290,7 +293,7 @@ export class TerrainInfoStore {
     this.g = g;
     this.scale = g.scale ?? 1;
     this.sp = g.boundsSize / (g.numPointsPerAxis - 1);
-    this.regions = createRegionField(g.seed);
+    this.regions = createRegionField(g.seed, g.layout ?? null);
   }
 
   /** Macro region at (x, z) with blend weights (pure function of seed + position). */

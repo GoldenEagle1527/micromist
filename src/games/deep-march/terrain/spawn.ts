@@ -21,9 +21,13 @@
  *      ties broken toward the farthest seabed 15° below the horizon).
  * Falls back to the next region if a region has no acceptable spot (never seen
  * in tests), and finally to the most open probed point.
+ *
+ * Bounded world (explicit site layout): only cores at least one site cell inside
+ * the world edge are considered (never a wall-adjacent site).
  */
 import type { DensityField } from "./density";
-import { REGION, REGION_COUNT, createRegionSample } from "./regions";
+import { MACRO, REGION, REGION_COUNT, createRegionSample } from "./regions";
+import { insideRect, layoutRect } from "./siteLayout";
 
 export type SpawnSpot = { x: number; y: number; z: number; yaw: number; region: number; clearance: number; exits: number };
 
@@ -61,9 +65,13 @@ export function findSpawn(field: DensityField): SpawnSpot {
   };
   let fallback: SpawnSpot | null = null, fallbackScore = -Infinity;
   const start = field.regions.spawnRegion();
+  const layout = field.regions.layout;
+  const cell = MACRO.cell * W;
+  const world = layout ? layoutRect(layout, cell) : null;
   for (let k = 0; k < REGION_COUNT; k++) {
     const region = (start + k) % REGION_COUNT;
     for (const core of field.regions.coresOf(region, 4)) {
+      if (world && !insideRect(world, core.x, core.z, cell)) continue;
       let best: SpawnSpot | null = null, bestScore = -Infinity;
       for (let ring = 0; ring <= 3; ring++) {
         const nDir = ring === 0 ? 1 : 8;

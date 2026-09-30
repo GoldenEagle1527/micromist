@@ -7,6 +7,7 @@ import type { EnvironmentKind, SurfaceType } from "../terrain/terrainInfo";
 import { REGION_KEYS, createRegionSample, type RegionField, type RegionKey } from "../terrain/regions";
 import { SpawnDebugView } from "./spawnDebug";
 import { findSpawn } from "../terrain/spawn";
+import type { SiteLayout, WorldRect } from "../terrain/siteLayout";
 import { InputController, type PanelInput } from "./input";
 import { MarineSnow } from "./particles";
 import { MaterialLibrary, type MaterialStatus } from "./materialLibrary";
@@ -53,6 +54,8 @@ export type DeepMarchOptions = {
   sound?: { muted: boolean; volume: number };
   /** M key: the page owns (and persists) the mute state. */
   onMuteToggle?: () => void;
+  /** Bounded world: explicit site layout (terrain/siteLayout.ts); omitted = the endless free dive. */
+  world?: SiteLayout | null;
 };
 
 export type Telemetry = {
@@ -87,6 +90,8 @@ export type LoadingSnapshot = {
   spawn: { x: number; y: number; z: number };
   /** Macro region field of this world (world units) for the region map. */
   regions: RegionField;
+  /** Bounded world rectangle (world units), null for the endless free dive. */
+  world: WorldRect | null;
   materials: MaterialStatus;
   /** Terrain around the spawn: gate items done / total, and the gate itself. */
   terrain: { done: number; total: number; ready: boolean };
@@ -284,7 +289,8 @@ void main() {
   const baseAbsorb = seabed.absorb.clone();
   const baseHaze = water.uHaze.value;
 
-  const field = createDensityField(opts.seed, terrain);
+  const layout = opts.world ?? null;
+  const field = createDensityField(opts.seed, terrain, undefined, layout);
   const chunks = new ChunkManager(scene, field, opts.seed, terrainMat, lowSpec, seabed.fadeMaterial);
   // GPU occlusion culling of terrain columns (?occ=0 disables)
   const occlusion = new TerrainOcclusion(renderer, scene, new URLSearchParams(window.location.search).get("occ") !== "0");
@@ -345,6 +351,7 @@ void main() {
   }
 
   const diver = new DiverController(field, (gi, gj, gk) => chunks.isRemovedPoint(gi, gj, gk));
+  diver.edge = chunks.worldRect;
   // HUD terrain chip: lookup in the generation-time class grid (no probing), with
   // a short hold so the label doesn't flicker on class-cell borders.
   let terrainKind: EnvironmentKind | null = null;
@@ -390,7 +397,7 @@ void main() {
   // Spawn in a seeded region (uniform over the 6), at an open-water spot with clearance
   // near that region's core, facing the longest sightline (terrain/spawn.ts).
   // Always searched on the desktop-preset field so a seed spawns at the same spot on every device.
-  const spawnAt = findSpawn(lowSpec ? createDensityField(opts.seed, TERRAIN) : field);
+  const spawnAt = findSpawn(lowSpec ? createDensityField(opts.seed, TERRAIN, undefined, layout) : field);
   diver.spawnAt(spawnAt.x, spawnAt.y, spawnAt.z, spawnAt.yaw);
   // Optional viewpoint for sharing / screenshots: ?at=x,y,z,yawDeg,pitchDeg.
   const at = new URLSearchParams(window.location.search).get("at");
@@ -651,6 +658,7 @@ void main() {
         seed: opts.seed,
         spawn: { x: spawnAt.x, y: spawnAt.y, z: spawnAt.z },
         regions: field.regions,
+        world: chunks.worldRect,
         materials: mat,
         terrain: { done: tp.done, total: tp.total, ready: terrainReady },
         system,
