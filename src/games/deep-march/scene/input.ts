@@ -1,7 +1,9 @@
 /**
  * Diver input: keyboard (WASD / arrows, Space, Shift, sprint = double-tap W /
  * Ctrl / R; lights: F on/off, L cycle, 1-3 mode; M mute), mouse-look via pointer lock (desktop, panel off), drag-look on
- * touch, plus analog state pushed in by the sci-fi control panel.
+ * touch, plus analog state pushed in by the sci-fi control panel. Modes add
+ * hold keys (`holdKeys`, e.g. conserve's E absorb / X recall; the free dive
+ * passes none and keeps its key set) read with `held()`.
  */
 import type { DiverInput } from "./diver";
 import { screenDelta } from "../viewRotation";
@@ -29,6 +31,8 @@ export type InputOptions = {
   onLightSelect?: (index: number) => void;
   /** M: mute / unmute. */
   onMuteToggle?: () => void;
+  /** Extra key codes held for actions (read with held()); "Mouse0" = left button while the mouse is captured. */
+  holdKeys?: readonly string[];
 };
 
 export type PanelInput = {
@@ -38,6 +42,9 @@ export type PanelInput = {
   up: boolean;
   down: boolean;
   swimLatch: boolean;
+  /** Mode hold buttons (conserve: absorb, recall); unused in the free dive. */
+  absorb: boolean;
+  recall: boolean;
 };
 
 export class InputController {
@@ -52,11 +59,13 @@ export class InputController {
   private touchX = 0;
   private touchY = 0;
   panelMode = false;
-  readonly panel: PanelInput = { moveX: 0, moveY: 0, swimZone: false, up: false, down: false, swimLatch: false };
+  readonly panel: PanelInput = { moveX: 0, moveY: 0, swimZone: false, up: false, down: false, swimLatch: false, absorb: false, recall: false };
+  private readonly holdKeys: ReadonlySet<string>;
 
   constructor(el: HTMLElement, opts: InputOptions) {
     this.el = el;
     this.opts = opts;
+    this.holdKeys = new Set(opts.holdKeys ?? []);
     window.addEventListener("keydown", this.onKeyDown);
     window.addEventListener("keyup", this.onKeyUp);
     window.addEventListener("blur", this.onBlur);
@@ -66,6 +75,15 @@ export class InputController {
     el.addEventListener("pointermove", this.onPointerMove);
     el.addEventListener("pointerup", this.onPointerUp);
     el.addEventListener("pointercancel", this.onPointerUp);
+    if (this.holdKeys.has("Mouse0")) {
+      document.addEventListener("mousedown", this.onMouseButton);
+      document.addEventListener("mouseup", this.onMouseButton);
+    }
+  }
+
+  /** A hold key / button is down. */
+  held(code: string): boolean {
+    return this.keys.has(code);
   }
 
   get locked(): boolean {
@@ -78,7 +96,7 @@ export class InputController {
   }
 
   private onKeyDown = (e: KeyboardEvent) => {
-    if (this.isTyping() || !HANDLED.has(e.code)) return;
+    if (this.isTyping() || !(HANDLED.has(e.code) || this.holdKeys.has(e.code))) return;
     e.preventDefault();
     if (e.code === "KeyF") {
       if (!e.repeat) this.opts.onLampToggle?.();
@@ -116,6 +134,12 @@ export class InputController {
 
   private onLockChange = () => {
     this.opts.onLockChange?.(this.locked);
+  };
+
+  private onMouseButton = (e: MouseEvent) => {
+    if (e.button !== 0) return;
+    if (e.type === "mousedown" && this.locked) this.keys.add("Mouse0");
+    else if (e.type === "mouseup") this.keys.delete("Mouse0");
   };
 
   private onMouseMove = (e: MouseEvent) => {
@@ -203,6 +227,8 @@ export class InputController {
     window.removeEventListener("blur", this.onBlur);
     document.removeEventListener("pointerlockchange", this.onLockChange);
     document.removeEventListener("mousemove", this.onMouseMove);
+    document.removeEventListener("mousedown", this.onMouseButton);
+    document.removeEventListener("mouseup", this.onMouseButton);
     this.el.removeEventListener("pointerdown", this.onPointerDown);
     this.el.removeEventListener("pointermove", this.onPointerMove);
     this.el.removeEventListener("pointerup", this.onPointerUp);

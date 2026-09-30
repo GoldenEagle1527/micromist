@@ -146,6 +146,8 @@ export function DeepMarchGame() {
   const diveSteps = !conservePlay ? undefined : "steps" in conserveDive ? conserveDive.steps : null;
   // conserve: the bounded 10 × 10 world of the save's current generation; free: endless (null)
   const diveWorld = conservePlay && conserveDive.status === "open" ? conserveDive.world : null;
+  // conserve: the generation's expedition (nodes, tank, lost caches); the free dive has none
+  const diveExpedition = conservePlay && conserveDive.status === "open" ? conserveDive.expedition : null;
 
   useEffect(() => {
     if (screen !== "playing" || diveSeed === null) return;
@@ -167,6 +169,7 @@ export function DeepMarchGame() {
           sound: soundRef.current,
           onMuteToggle: () => toggleMuteRef.current(),
           world: diveWorld,
+          expedition: diveExpedition,
         });
         setGame(g);
       }, 0);
@@ -181,7 +184,7 @@ export function DeepMarchGame() {
     };
     // Settings/labels are read once per dive; the panel toggle is pushed via setPanelMode.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [screen, diveSeed, diveWorld]);
+  }, [screen, diveSeed, diveWorld, diveExpedition]);
 
   // Volume / mute: live into the running dive, persisted
   const soundRef = useRef(sound);
@@ -305,6 +308,8 @@ export function DeepMarchGame() {
         p.up = false;
         p.down = false;
         p.swimLatch = false;
+        p.absorb = false;
+        p.recall = false;
         game.setPanelMode(next);
       }
       return next;

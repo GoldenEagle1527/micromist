@@ -5,7 +5,7 @@
  * hide and when the dive ends.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { ConserveSession, OpenIntent } from "../conserve";
+import type { ConserveSession, ExpeditionPort, OpenIntent } from "../conserve";
 import { seedFromString } from "../terrain/noise";
 import type { SiteLayout } from "../terrain/siteLayout";
 import { LOADING_STEPS, type LoadingStepDef } from "../ui/loading/steps";
@@ -13,8 +13,8 @@ import { loadConserve } from "./conserveLoader";
 
 export type ConserveDive =
   | { status: "idle" | "opening" | "failed" }
-  /** Save opened: dive with `seedText` in the bounded world `world` (this generation's site table). */
-  | { status: "open"; seedText: string; world: SiteLayout; steps: readonly LoadingStepDef[] }
+  /** Save opened: dive with `seedText` in the bounded world `world` (this generation's site table) and its expedition (nodes, tank, caches). */
+  | { status: "open"; seedText: string; world: SiteLayout; expedition: ExpeditionPort; steps: readonly LoadingStepDef[] }
   /** The save can't be entered: the loading screen shows why (no world is built). */
   | { status: "blocked"; steps: readonly LoadingStepDef[] };
 
@@ -36,7 +36,7 @@ export function useConserveDive(intent: OpenIntent | null): { dive: ConserveDive
         if (!outcome.ok) return setDive({ status: "blocked", steps });
         sessionRef.current = outcome.session;
         unbind = mod.flushOnPageHide(() => outcome.session.flush());
-        setDive({ status: "open", seedText: outcome.session.seedText, world: mod.terrainLayoutOf(outcome.session.siteTable, outcome.session.wall), steps });
+        setDive({ status: "open", seedText: outcome.session.seedText, world: mod.terrainLayoutOf(outcome.session.siteTable, outcome.session.wall), expedition: outcome.session.expedition, steps });
       },
       () => !cancelled && setDive({ status: "failed" }),
     );

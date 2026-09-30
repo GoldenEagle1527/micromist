@@ -25,6 +25,9 @@ import { createParticleLightUniforms } from "./particleLight";
 import { SURVIVAL_TUNING, createSurvival, type LightMode, type LightState } from "../survival";
 import { createDiveAudio, type AudioStatus } from "./audio";
 import { BumpCue, CueLimiter } from "./audioCues";
+import type { ExpeditionPort } from "../conserve";
+import { ExpeditionScene } from "./expedition/expeditionScene";
+import type { ExpeditionTelemetry } from "./expedition/telemetry";
 
 export type HudLabels = {
   chunks: string;
@@ -58,6 +61,8 @@ export type DeepMarchOptions = {
   onMuteToggle?: () => void;
   /** Bounded world: explicit site layout (terrain/siteLayout.ts); omitted = the endless free dive. */
   world?: SiteLayout | null;
+  /** Conserve mode: this generation's nodes, tank and lost caches (scene/expedition); null / omitted in the free dive. */
+  expedition?: ExpeditionPort | null;
 };
 
 export type Telemetry = {
@@ -94,6 +99,8 @@ export type LoadingSnapshot = {
   regions: RegionField;
   /** Bounded world rectangle (world units), null for the endless free dive. */
   world: WorldRect | null;
+  /** Lost caches (world x / z) for the map; empty without an expedition. */
+  caches: { x: number; z: number }[];
   materials: MaterialStatus;
   /** Terrain around the spawn: gate items done / total, and the gate itself. */
   terrain: { done: number; total: number; ready: boolean };
@@ -139,7 +146,12 @@ export type DeepMarchHandle = {
   /** Master volume 0..1 / mute. */
   setSound: (s: { muted: boolean; volume: number }) => void;
   telemetry: () => Telemetry;
+  /** Tank, aim target, caches, recall (null in the free dive). */
+  expedition: () => ExpeditionTelemetry | null;
 };
+
+/** No movement (the recall's black screen). */
+const STILL = { forward: 0, strafe: 0, up: false, down: false, sprint: false };
 
 export function createDeepMarch(host: HTMLElement, opts: DeepMarchOptions): DeepMarchHandle {
   // Desktop keeps MSAA and a pixel ratio floating 1.25–1.75; low-spec (touch / ≤ 4 cores)
@@ -299,6 +311,32 @@ void main() {
   const longPulses = createLongPulses();
   const wallRing = createWallRing(field, { water, fog, sonar, long: longPulses, far: terrain.viewDistance });
   if (wallRing) scene.add(wallRing.mesh);
+  // conserve: nodes, absorbing, lost caches, recall (scene/expedition); the free dive has none
+  const expedition =
+    opts.expedition && layout
+      ? new ExpeditionScene({
+          port: opts.expedition,
+          field,
+          layout,
+          rect: chunks.worldRect,
+          resources: survival.resources,
+          audio,
+          overlay,
+          lowSpec,
+          water,
+          fog,
+          sonar,
+          beam: rig.beam,
+          absorb: seabed.absorb,
+          respawn: () => {
+            diver.spawnAt(spawnAt.x, spawnAt.y, spawnAt.z, spawnAt.yaw);
+            survival.resources.add("battery", SURVIVAL_TUNING.battery.capacity);
+          },
+        })
+      : null;
+  if (expedition) scene.add(expedition.mesh);
+  const bornAt = performance.now();
+  const viewDir = new THREE.Vector3();
   // GPU occlusion culling of terrain columns (?occ=0 disables)
   const occlusion = new TerrainOcclusion(renderer, scene, new URLSearchParams(window.location.search).get("occ") !== "0");
   // System check: compile the terrain programs (base + LOD crossfade, wall ring) before the dive,
@@ -315,7 +353,8 @@ void main() {
   const gpu = gpuInfo(renderer.getContext());
   console.info(`[deep-march] GPU: ${gpu.renderer} · texture units ${gpu.textureUnits} · fragment uniform vectors ${gpu.fragmentVectors} · fragment highp ${gpu.highp ? "yes" : "no"}`);
   renderer.debug.onShaderError = (gl, program, vs, fs) => {
-    const seabedProgram = /#define DM_SONAR_N/.test(gl.getShaderSource(fs) ?? "");
+    const fsSource = gl.getShaderSource(fs) ?? "";
+    const seabedProgram = /#define DM_SONAR_N/.test(fsSource) && !/#define DM_NODE/.test(fsSource);
     const report = failureReport(gl.getProgramInfoLog(program), gl.getShaderInfoLog(vs), gl.getShaderInfoLog(fs));
     console.error(`[deep-march] shader program failed to link${seabedProgram ? " (seabed)" : ""}:\n${report}\nGPU: ${gpu.renderer}`);
     shaderError ??= `${seabedProgram ? "seabed: " : ""}${report}`;
@@ -327,6 +366,7 @@ void main() {
     warm.add(new THREE.Mesh(geo, terrainMat), new THREE.Mesh(geo, seabed.fadeMaterial().material));
     // the wall ring's program too (drawn only in sonar mode: no hitch on the first ping)
     if (wallRing) warm.add(new THREE.Mesh(geo, wallRing.mesh.material as THREE.Material));
+    if (expedition) warm.add(expedition.warmObject);
     renderer
       .compileAsync(warm, camera, scene)
       .catch((e: unknown) => console.error("[deep-march] shader compile failed:", e))
@@ -484,6 +524,8 @@ void main() {
     },
     onMuteToggle: () => opts.onMuteToggle?.(),
     onLockChange: () => updatePrompt(),
+    // conserve: E / left mouse (captured) absorb, X recall
+    holdKeys: expedition ? ["KeyE", "Mouse0", "KeyX"] : undefined,
   });
   input.panelMode = opts.panel;
   const coarse = typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches;
@@ -523,7 +565,7 @@ void main() {
     const [dYaw, dPitch] = input.takeLook();
     diver.look(-dYaw, -dPitch);
     if (ready) {
-      diver.update(dt, input.move());
+      diver.update(dt, expedition?.busy() ? STILL : input.move());
       if (diver.lastTicks > 0) input.consumePulse();
       const bump = bumpCue.update(dt, diver.impact, diver.contact !== null);
       if (bump) audio.play("bump", { gain: bump.gain, rate: bump.rate, lowpass: 480 });
@@ -541,6 +583,16 @@ void main() {
     syncCamera(dt);
     if (ready) survival.tick(dt);
     camera.updateMatrixWorld();
+    expedition?.update({
+      dt,
+      time: (now - bornAt) / 1000,
+      ready,
+      eye: camera.position,
+      dir: camera.getWorldDirection(viewDir),
+      diver: diver.position,
+      absorb: input.held("KeyE") || input.held("Mouse0") || input.panel.absorb,
+      recall: input.held("KeyX") || input.panel.recall,
+    });
     rig.update(dt, lights.state(), !ready);
     chunks.update(diver.position, camera, dt);
     occlusion.update(chunks.meshGroup, camera, (m) => chunks.isStable(m));
@@ -672,6 +724,7 @@ void main() {
         spawn: { x: spawnAt.x, y: spawnAt.y, z: spawnAt.z },
         regions: field.regions,
         world: chunks.worldRect,
+        caches: expedition ? expedition.telemetry().caches.map((c) => ({ x: c.x, z: c.z })) : [],
         materials: mat,
         terrain: { done: tp.done, total: tp.total, ready: terrainReady },
         system,
@@ -727,6 +780,7 @@ void main() {
       y: diver.position.y,
       z: diver.position.z,
     }),
+    expedition: () => expedition?.telemetry() ?? null,
     destroy: () => {
       cancelAnimationFrame(raf);
       document.removeEventListener("visibilitychange", onVisibility);
@@ -738,6 +792,7 @@ void main() {
       chunks.dispose();
       snow.dispose();
       rig.dispose();
+      expedition?.dispose();
       survival.dispose();
       occlusion.dispose();
       destroyed = true;

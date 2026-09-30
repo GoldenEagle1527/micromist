@@ -20,4 +20,9 @@ export const SURVIVAL_TUNING = {
     high: 0.6, // ~2.8 min
     sonar: 1.2, // ~1.4 min
   },
+  /** Drain per held action (charge / s), stacking with the lights. */
+  actions: {
+    /** Conserve: absorbing a node / retrieving a cache (the suit's pump). */
+    absorb: 0.5,
+  },
 } as const;

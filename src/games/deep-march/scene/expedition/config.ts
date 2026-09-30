@@ -67,4 +67,8 @@ export const BEACON = {
   period: 5,
   audible: 260,
   gain: 0.16,
+  /** The sonar clip, pitched up and muffled with distance (lowpass Hz far → near). */
+  rate: 1.6,
+  lowpassFar: 600,
+  lowpassNear: 4000,
 } as const;
