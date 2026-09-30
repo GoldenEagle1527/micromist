@@ -19,6 +19,9 @@ import { BuildBar } from "./base/BuildBar";
 import { HomeMark } from "./base/HomeMark";
 import type { BaseDict } from "./base/i18n";
 import { useBase } from "./base/useBase";
+import { TideHud } from "./tide/TideHud";
+import type { TideDict } from "./tide/i18n";
+import { useTide } from "./tide/useTide";
 import "./panel.css";
 import "./expedition/expedition.css";
 import "./base/base.css";
@@ -38,6 +41,7 @@ export type PanelLabels = ReadoutLabels & {
   unmute: string;
   expedition: ExpeditionDict;
   base: BaseDict;
+  tide: TideDict;
 };
 
 export function ControlPanel({
@@ -67,6 +71,8 @@ export function ControlPanel({
   const exp = useExpedition(game);
   // conserve with a base (M5): build mode, storage, energy (null in the free dive)
   const base = useBase(game);
+  // conserve with a tide (M7): countdown, phase, dome warning, summary
+  const tide = useTide(game);
   const building = base?.build.active ?? false;
   const [, force] = useState(0);
   const swimming = tel?.state === "swim";
@@ -105,6 +111,7 @@ export function ControlPanel({
         }
       />
       {exp ? <CacheMarks exp={exp} title={labels.expedition.cacheMark} /> : null}
+      {tide ? <TideHud tide={tide} labels={labels.tide} biomes={labels.regions} /> : null}
       {base ? <HomeMark base={base} title={labels.base.homeMark} /> : null}
       {exp && !building ? <AbsorbPrompt exp={exp} touch={panelOn} labels={labels.expedition} /> : null}
       {base && game ? (

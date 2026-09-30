@@ -1,0 +1,71 @@
+/* Tide HUD (plan M7): countdown / phase line, dome warning, particle-ized line, generation summary. */
+.dm-tide-head {
+  position: absolute;
+  left: 50%;
+  top: 12%;
+  transform: translateX(-50%);
+  padding: 4px 14px;
+  border-bottom: 1px solid rgb(120 220 255 / 0.6);
+  background: rgb(0 22 48 / 0.45);
+  font-size: 13px;
+  letter-spacing: 0.18em;
+  color: #cff4ff;
+  text-shadow: 0 0 8px rgb(80 200 255 / 0.8);
+  pointer-events: none;
+  white-space: nowrap;
+}
+.dm-tide-head.warn {
+  color: #ffd9a8;
+  border-bottom-color: var(--hud-warn, #ffb060);
+}
+.dm-tide-edge {
+  position: absolute;
+  left: 50%;
+  top: 30%;
+  transform: translateX(-50%);
+  padding: 4px 12px;
+  border-left: 2px solid var(--hud-warn, #ffb060);
+  background: rgb(40 10 0 / 0.55);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  color: #ffd9a8;
+  pointer-events: none;
+  animation: dm-tide-blink 0.9s ease-in-out infinite alternate;
+}
+.dm-tide-taken {
+  position: absolute;
+  left: 50%;
+  top: 48%;
+  transform: translate(-50%, -50%);
+  max-width: min(86%, 560px);
+  font-size: 13px;
+  letter-spacing: 0.12em;
+  color: #9fdcf0;
+  text-align: center;
+  pointer-events: none;
+}
+.dm-tide-summary {
+  position: absolute;
+  left: 50%;
+  bottom: 22%;
+  transform: translateX(-50%);
+  max-width: min(90%, 640px);
+  padding: 6px 14px;
+  border-top: 1px solid rgb(120 220 255 / 0.5);
+  border-bottom: 1px solid rgb(120 220 255 / 0.5);
+  background: rgb(0 22 48 / 0.55);
+  font-size: 12px;
+  line-height: 1.5;
+  letter-spacing: 0.06em;
+  color: #d8f6ff;
+  text-align: center;
+  pointer-events: none;
+}
+@keyframes dm-tide-blink {
+  from {
+    opacity: 0.55;
+  }
+  to {
+    opacity: 1;
+  }
+}

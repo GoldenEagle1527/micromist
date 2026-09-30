@@ -1,4 +1,4 @@
-/** Base HUD strings (conserve mode, plans M5–M6): build mode, the base panel, storage, energy, the tide stub and its forecast. */
+/** Base HUD strings (conserve mode, plans M5–M6): build mode, the base panel, storage, energy, 唤潮 and its forecast. */
 import type { StructureKind } from "../../conserve";
 import type { BuildReason } from "../../scene/base/buildMode";
 import { forecastEn, forecastZh, type ForecastDict } from "./forecastI18n";
@@ -42,8 +42,12 @@ export type BaseDict = {
   tideNeeds: (energy: number, energyNeed: number, dives: number, divesNeed: number) => string;
   /** The tide forecast card (M6). */
   forecast: ForecastDict;
-  tideSoon: string;
   tideBtn: string;
+  /** 唤潮 notices, and the note while the diver is away from the base / a tide runs. */
+  tideCalled: string;
+  tideAway: string;
+  tideNotReady: string;
+  tideRunning: string;
   homeMark: (m: number) => string;
   built: (name: string) => string;
   refused: (name: string, reason: string) => string;
@@ -112,8 +116,11 @@ export const baseEn: BaseDict = {
   tideTitle: "Call the tide",
   tideNeeds: (e, en, d, dn) => `Energy ${Math.floor(e)}/${en} · departures ${d}/${dn}`,
   forecast: forecastEn,
-  tideSoon: "The tide sequence opens in a later version",
   tideBtn: "Call the tide",
+  tideCalled: "The tide is coming — 60 s. Stay inside the dome.",
+  tideAway: "Call the tide from inside the base",
+  tideNotReady: "The tide can't be called yet",
+  tideRunning: "A tide is running",
   homeMark: (m) => `Base · ${m} m`,
   built: (n) => `${n} built`,
   refused: (n, r) => `Can't build the ${n}: ${r}`,
@@ -181,8 +188,11 @@ export const baseZh: BaseDict = {
   tideTitle: "唤潮",
   tideNeeds: (e, en, d, dn) => `能量 ${Math.floor(e)}/${en} · 本代出航 ${d}/${dn}`,
   forecast: forecastZh,
-  tideSoon: "潮汐演出将在后续版本开放",
   tideBtn: "唤潮",
+  tideCalled: "潮汐将在 60 秒后到来 · 请留在穹顶内",
+  tideAway: "请在基地保护范围内唤潮",
+  tideNotReady: "现在还不能唤潮",
+  tideRunning: "潮汐进行中",
   homeMark: (m) => `基地 · ${m} 米`,
   built: (n) => `${n}已建成`,
   refused: (n, r) => `无法建造${n}：${r}`,

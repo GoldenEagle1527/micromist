@@ -58,5 +58,6 @@ export function panelLabels(dm: DeepMarchDict): PanelLabels {
     unmute: dm.unmute,
     expedition: dm.expedition,
     base: dm.base,
+    tide: dm.tide,
   };
 }
