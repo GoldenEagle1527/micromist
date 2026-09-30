@@ -96,3 +96,8 @@ Invariants:
 - New pure rules get their own folder, like `world/`, `chaos/`, `tide/`, `base/` from the plan, each with a node test.
 - A new save field means `SAVE_VERSION + 1`, plus a migration in `save/migrations.ts` and a validation rule.
 - Shared code that needs conserve behaviour gets it through `index.ts` via the loader. It never imports from here directly.
+
+## Follow-ups (recorded at acceptance)
+
+- **Streaming must widen by the wall thickness T once cracks go through** (M3 deviation #5, recorded when M3 was accepted; owner M6 / M8). `terrain/chunks.ts` clips every column to the world rectangle (`rectOverlaps(this.worldRect, …)`), so the chaos void beyond the wall is never meshed. That is invisible while the wall is never breached (M3), but before a crack can show the void (a through crack, or M8's membrane notch), the streaming rectangle has to grow by T (+ one column of margin), only on the cracked side and only near the crack. Without cracks the request sequence must stay bit-identical (`test:streaming`), and the extra columns must keep the conservative bounds (`test:bricks`). M6's `chaos/cracks.ts` has to put "goes through" and the crack's arc-length span into `SiteLayout.wall.cracks` for the chunk manager to use. Also recorded in the plan doc, section 5 「跟进事项」.
+
