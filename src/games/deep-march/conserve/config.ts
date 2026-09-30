@@ -135,3 +135,51 @@ export const SAVE = {
  * the suspended pool, an excess is taken back from the pools in this order.
  */
 export const REPAIR_TAKE_ORDER: readonly PoolId[] = ["suspended", "world", "lost", "player", "base"];
+
+/** Base buildings (M5 plan table, §6.2). Durability is reserved for later (nothing is damaged in the MVP). */
+export const STRUCTURE_KINDS = ["core", "lighthouse", "energy", "storage"] as const;
+export type StructureKind = (typeof STRUCTURE_KINDS)[number];
+export type StructureDef = {
+  readonly cost: ParticleCounts;
+  /** Footprint (bounding circle) radius and height above its ground point, metres. */
+  readonly radius: number;
+  readonly height: number;
+  /** Energy per second while working (+ produces, − consumes). */
+  readonly energy: number;
+  /** Adds to the base's storage and energy capacity, and to its protection radius (m). */
+  readonly storage: number;
+  readonly energyCap: number;
+  readonly radiusBonus: number;
+  /** Fuel: one particle of `type` every `every` s of working, base storage → suspended (lighthouse). */
+  readonly fuel?: { readonly type: ParticleType; readonly every: number };
+  readonly durability: number;
+};
+export const STRUCTURES: Readonly<Record<StructureKind, StructureDef>> = {
+  core: { cost: { lithic: 400, ferro: 60 }, radius: 10, height: 28, energy: 0.25, storage: 500, energyCap: 100, radiusBonus: 0, durability: 1000 },
+  lighthouse: { cost: { lithic: 300, lumen: 60, ferro: 40 }, radius: 5, height: 46, energy: -0.3, storage: 0, energyCap: 0, radiusBonus: 8, fuel: { type: "lumen", every: 60 }, durability: 400 },
+  energy: { cost: { lithic: 150, ferro: 60, lumen: 20 }, radius: 5, height: 24, energy: 0, storage: 0, energyCap: 200, radiusBonus: 0, durability: 300 },
+  storage: { cost: { lithic: 200, ferro: 40 }, radius: 8, height: 13, energy: 0, storage: 1000, energyCap: 0, radiusBonus: 8, durability: 500 },
+};
+
+/** The base (§6.1, §6.3, §8.1): placement rules, grid, energy, frozen area, the tide's requirements. */
+export const BASE = {
+  /** Protection radius: start, + each building's radiusBonus, capped (m). */
+  radius: 48,
+  radiusMax: 120,
+  /** A building must be within this of the core or an energy tower (the power grid, m). */
+  gridRange: 60,
+  /** Gap kept between two buildings' footprints, m. */
+  gap: 2,
+  /** The core must be this far from the ring wall's inner face (room for cracks, §4.2), m. */
+  wallClearance: 600,
+  /** Dominant region weight at the core: not on a biome blend (§6.1). */
+  regionMin: 0.6,
+  maxStructures: 40,
+  /** Frozen square around the core's site: (2 · frozenReach + 1)² sites (D15: 3 × 3). */
+  frozenReach: 1,
+  /** A brown-out switches consumers off in this order; they come back above restartEnergy. */
+  shutdownOrder: ["lighthouse"] as readonly StructureKind[],
+  restartEnergy: 10,
+  /** The tide (G3, M7): base energy ≥ energy and ≥ dives departures this generation. */
+  tide: { energy: 150, dives: 1 },
+} as const;

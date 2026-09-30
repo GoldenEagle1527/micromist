@@ -25,9 +25,12 @@ function allocInputOfRaw(raw: RawSave): unknown {
   return totals.map((n: unknown, k) => (typeof n === "number" ? Math.min(n, Math.max(0, Math.floor(n - player[k] - base[k]))) : n));
 }
 
+const divesOfRaw = (raw: RawSave): unknown => (isRecord(raw.stats) ? raw.stats.divesStarted : 0);
+
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
 
 export const SAVE_MIGRATIONS: Readonly<Record<number, Migration>> = {
   1: (raw) => ({ ...raw, generation: { allocInput: allocInputOfRaw(raw) } }),
   2: (raw) => ({ ...raw, generation: isRecord(raw.generation) ? { ...raw.generation, harvested: "", partial: [] } : raw.generation, caches: [] }),
+  3: (raw) => ({ ...raw, generation: isRecord(raw.generation) ? { ...raw.generation, dives: divesOfRaw(raw) } : raw.generation, base: null }),
 };

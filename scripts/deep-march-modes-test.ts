@@ -136,9 +136,9 @@ c.section("module boundaries");
   const unexpected = runtimeOutside.filter((x) => !allowedOutside.includes(x));
   c.check(unexpected.length === 0, "conserve runtime imports outside conserve/: only platform/gameStoreBackend.ts", unexpected.join(", ") || runtimeOutside.join(", "));
 
-  const pureDirs = ["particles", "ledger", "world", "chaos", "nodes", "expedition", "save", "session"].map((d) => `${CONSERVE_DIR}/${d}/`);
+  const pureDirs = ["particles", "ledger", "world", "chaos", "nodes", "expedition", "base", "save", "session"].map((d) => `${CONSERVE_DIR}/${d}/`);
   const impure = conserve.filter((f) => pureDirs.some((d) => f.startsWith(d))).flatMap((f) => importsOf(f).filter((r) => !resolvesInto(f, r.spec, CONSERVE_DIR)).map((r) => `${relative(CONSERVE_DIR, f)} → ${r.spec}`));
-  c.check(impure.length === 0, "pure logic folders (particles, ledger, world, chaos, nodes, expedition, save, session) import only conserve/", impure.join(", ") || "ok");
+  c.check(impure.length === 0, "pure logic folders (particles, ledger, world, chaos, nodes, expedition, base, save, session) import only conserve/", impure.join(", ") || "ok");
   const domUse = conserve.filter((f) => pureDirs.some((d) => f.startsWith(d)) && /\b(window|document|localStorage|indexedDB)\./.test(readFileSync(f, "utf8"))).map((f) => relative(CONSERVE_DIR, f));
   c.check(domUse.length === 0, "pure logic folders touch no DOM / storage globals (browser glue lives in platform/)", domUse.join(", ") || "ok");
 

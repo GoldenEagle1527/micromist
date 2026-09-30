@@ -29,9 +29,10 @@ export function createWorldSave(spec: NewSaveSpec): WorldSave {
     ledger: { world: [], player: [], base: [], suspended: [], lost: [] },
     stats: { divesStarted: 0 },
     flags: {},
-    generation: { allocInput: [], harvested: "", partial: [] },
+    generation: { allocInput: [], harvested: "", partial: [], dives: 0 },
     caches: [],
+    base: null,
   };
   const ledger = spec.ledger ?? createGenesisLedger();
-  return { ...withLedger(header, ledger), generation: { allocInput: allocationInput(ledger.toState()), harvested: "", partial: [] } };
+  return { ...withLedger(header, ledger), generation: { ...header.generation, allocInput: allocationInput(ledger.toState()) } };
 }

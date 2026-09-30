@@ -1,7 +1,7 @@
 /**
  * A world opened for a dive: the save header, the live ledger, the generation's
- * site table, ring wall, resource nodes and expedition (absorbing, lost caches),
- * and the throttled writer. Every ledger transfer marks the save dirty; a death
+ * site table, ring wall, resource nodes, expedition (absorbing, lost caches) and
+ * base (buildings, storage, energy), and the throttled writer. Every ledger transfer marks the save dirty; a death
  * writes at once; close() writes what is left.
  * No rendering, no DOM (the page lifecycle binding lives in platform/pageLifecycle.ts).
  */
@@ -17,6 +17,7 @@ import { wallStateOf, type WallState } from "../chaos/wallModel";
 import { buildNodeTable, type NodeTable } from "../nodes/nodeTable";
 import { NodeState } from "../nodes/nodeState";
 import { Expedition } from "../expedition/expedition";
+import { Base } from "../base/base";
 import type { OpenedReport } from "./openReport";
 
 export type SessionDeps = { backend: SaveBackend; clock?: WriterClock; throttleMs?: number };
@@ -33,6 +34,7 @@ export class ConserveSession {
   private table: SiteTable | null = null;
   private nodes: NodeTable | null = null;
   private exp: Expedition | null = null;
+  private home: Base | null = null;
 
   /** report: built from the site table (so the table is computed once, at open). */
   constructor(save: WorldSave, ledger: ParticleLedger, report: (table: SiteTable) => OpenedReport, deps: SessionDeps) {
@@ -57,10 +59,15 @@ export class ConserveSession {
     return this.header.gen;
   }
 
-  /** This generation's site table: (seed, gen, R) → sites; fixed until the next tide. */
+  /**
+   * This generation's site table: (seed, gen, R, frozen) → sites; fixed until the
+   * next tide. The base's frozen sites count from the generation after its
+   * founding (the founding one keeps the table it was played with, D2).
+   */
   get siteTable(): SiteTable {
     const h = this.header;
-    this.table ??= buildSiteTable({ seed: h.seed, gen: h.gen, allocInput: h.generation.allocInput, totals: h.totals, size: h.size });
+    const frozen = h.base && h.base.foundedGen < h.gen ? h.base.frozen : undefined;
+    this.table ??= buildSiteTable({ seed: h.seed, gen: h.gen, allocInput: h.generation.allocInput, totals: h.totals, size: h.size, frozen });
     return this.table;
   }
 
@@ -85,16 +92,39 @@ export class ConserveSession {
     return this.exp;
   }
 
+  /** The base (built or not yet), created once from the save. */
+  get base(): Base {
+    if (!this.home) {
+      const h = this.header;
+      this.home = new Base({
+        ledger: this.ledger, save: h.base, table: this.siteTable, gen: h.gen, dives: h.generation.dives, totals: h.totals,
+        onCommit: () => this.writer.flush(),
+        onDirty: () => this.writer.markDirty(),
+        onDive: () => this.countDive(),
+      });
+    }
+    return this.home;
+  }
+
   /** The save as it would be written now. */
   snapshot(): WorldSave {
     const save = withLedger(this.header, this.ledger);
-    if (!this.exp) return save;
+    const generation = { ...save.generation, dives: this.base.departures };
+    if (!this.exp) return { ...save, generation, base: this.base.toSave() };
     const { harvested, partial, caches } = this.exp.toSave();
-    return { ...save, generation: { ...save.generation, harvested, partial }, caches };
+    return { ...save, generation: { ...generation, harvested, partial }, caches, base: this.base.toSave() };
   }
 
-  /** The loading screen finished and the dive began. */
+  /**
+   * The loading screen finished and the dive began: a dive from the lander
+   * while there is no base; with one, a dive starts when the diver leaves the
+   * protection radius (BasePort.recordDeparture).
+   */
   recordDiveStart(): void {
+    this.base.recordLanderDive();
+  }
+
+  private countDive(): void {
     this.header = { ...this.header, stats: { ...this.header.stats, divesStarted: this.header.stats.divesStarted + 1 } };
     this.writer.markDirty();
   }

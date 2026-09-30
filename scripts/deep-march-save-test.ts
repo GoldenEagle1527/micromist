@@ -4,7 +4,10 @@
  *   - write → read round trip through a backend; the game-store adapter's key;
  *   - migrations: current version, chained upgrades, future / unknown versions refused;
  *     v1 → v2 (M2): generation.allocInput = N − P − B from the stored ledger;
- *     v2 → v3 (M4): nodes all full (harvested "", partial []), no caches; v1 → v3 chained;
+ *     v2 → v3 (M4): nodes all full (harvested "", partial []), no caches; v1 → v4 chained;
+ *     v3 → v4 (M5): no base, generation.dives = dives started (lib/baseSaveChecks.ts);
+ *   - base (M5): shape validation, fitted to pool B on load, saved with the session,
+ *     dives counted per departure once the base stands (lib/baseSaveChecks.ts);
  *   - validation: every corrupted field makes the slot unreadable (never guessed);
  *   - reconcile: sanitizing, deficit → suspended, excess taken in the configured
  *     order, result conserves, input untouched;
@@ -38,6 +41,7 @@ import { peekWorldSlot } from "../src/games/deep-march/conserve/session/peekSlot
 import { DEEP_MARCH_GAME } from "../src/games/deep-march/settings";
 import { seedFromString } from "../src/games/deep-march/terrain/noise";
 import { createChecker } from "./lib/checks";
+import { baseSaveChecks } from "./lib/baseSaveChecks";
 
 const c = createChecker();
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
@@ -114,14 +118,15 @@ c.section("migrations");
   (v1.ledger as Record<string, number[]>).world[2] -= 30;
   const backend = createMemoryBackend({ "save/main": v1 });
   const read = readSlot(backend, "main");
-  c.check(SAVE_VERSION === 3 && read.status === "ok" && read.migratedFrom === 1 && read.save.v === 3, "v1 save (M1) migrates (1 → 2 → 3) and reads ok");
+  c.check(SAVE_VERSION === 4 && read.status === "ok" && read.migratedFrom === 1 && read.save.v === 4, "v1 save (M1) migrates (1 → 2 → 3 → 4) and reads ok");
   c.check(read.status === "ok" && same(read.save.generation.allocInput, [65400, 0, 16970, 16920, 0, 0, 0]), "v1 → v2: allocInput = N − P − B (lander cargo in B, 30 lumen carried)");
   const opened = openConserveSession({ backend, intent: { kind: "continue" }, hashSeed: seedFromString });
-  c.check(opened.ok && (backend.read("save/main") as WorldSave).v === 3, "a migrated save is written back as v3 at once");
+  c.check(opened.ok && (backend.read("save/main") as WorldSave).v === 4, "a migrated save is written back as v4 at once");
   if (opened.ok) opened.session.close();
   // v2 → v3: a stored M2/M3 save gains the node state and an empty cache list
   const v2 = clone(newSave()) as unknown as Record<string, unknown>;
   delete v2.caches;
+  delete v2.base;
   v2.generation = { allocInput: (v2.generation as Record<string, unknown>).allocInput };
   v2.v = 2;
   const read2 = readSlot(createMemoryBackend({ "save/main": v2 }), "main");
@@ -349,5 +354,7 @@ c.section("setup peek");
   c.check(peekWorldSlot(createMemoryBackend({ "save/main": { ...s, flags: { endingA: "annihilated" } } })).state === "ended", "ended");
   c.check(peekWorldSlot(createMemoryBackend({ "save/main": { v: 1 } })).state === "unreadable", "unreadable");
 }
+
+baseSaveChecks(c);
 
 c.finish();

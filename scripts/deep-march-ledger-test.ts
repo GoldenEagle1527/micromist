@@ -1,16 +1,13 @@
 /**
  * Conserve mode — particle ledger (conserve/particles, conserve/ledger, conserve/world):
- *   - particle kinds and vector helpers;
- *   - genesis: configured totals, lander cargo already in the base, conserved;
- *   - every refused transfer (pool, kind, count, balance) throws a LedgerError and
- *     changes nothing; vector transfers are all-or-nothing;
- *   - 100,000 random operations (valid and invalid): Σ pools = N_k after every step;
- *   - saved state round trip, refusal of non-conserving / malformed state, copies
- *     are isolated, transfer events and unsubscribe;
- *   - expedition moves (M4, conserve/expedition): absorb W → P (tank limit 200),
- *     death P → L as a lost cache, retrieve L → P (tank limit), a 6th cache sends
- *     the oldest L → S; Σ caches = L throughout; 20,000 random expedition steps
- *     conserve.
+ *   - kinds, vector helpers; genesis: configured totals, lander cargo in the base;
+ *   - every refused transfer throws a LedgerError and changes nothing; vector
+ *     transfers are all-or-nothing; 100,000 random operations: Σ pools = N_k;
+ *   - saved state round trip, refusal of bad state, isolated copies, events;
+ *   - expedition moves (M4): absorb W → P (tank 200), death P → L as a lost cache,
+ *     retrieve L → P, a 6th cache sends the oldest L → S; 20,000 random steps;
+ *   - base moves (M5, lib/baseLedgerChecks.ts): founding, build, demolish, deposit,
+ *     withdraw, 放流, death in the base, fuel; B = storage + buildings + frozen rock.
  * Run: npm run test:ledger
  */
 import { GENESIS } from "../src/games/deep-march/conserve/config";
@@ -22,6 +19,7 @@ import { isCountVector, vectorFromCounts, vectorTotal, zeroVector } from "../src
 import { createGenesisLedger } from "../src/games/deep-march/conserve/world/genesis";
 import { mulberry32 } from "../src/games/deep-march/terrain/noise";
 import { createChecker } from "./lib/checks";
+import { baseLedgerChecks } from "./lib/baseLedgerChecks";
 import { Expedition } from "../src/games/deep-march/conserve/expedition/expedition";
 import { NodeState } from "../src/games/deep-march/conserve/nodes/nodeState";
 import { buildNodeTable } from "../src/games/deep-march/conserve/nodes/nodeTable";
@@ -197,4 +195,5 @@ c.section("expedition moves (world → carried → lost)");
   c.check(broke === 0, "20,000 random absorb / retrieve / death steps: conserved, Σ caches = L, tank ≤ 200, ≤ 5 caches", `S ${ledger.poolTotal("suspended")}, L ${ledger.poolTotal("lost")}`);
 }
 
+baseLedgerChecks(c);
 c.finish();
