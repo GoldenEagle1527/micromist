@@ -40,6 +40,88 @@
   font: inherit;
 }
 
+/* setup: mode choice (ui/setup/ModePicker) and conserve save slot (ui/setup/ConserveSlotCard) */
+.dm-modes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0.75rem 0 0;
+  padding: 0;
+  border: 0;
+}
+
+.dm-modes legend {
+  margin-bottom: 0.35rem;
+  font-size: 0.9rem;
+}
+
+.dm-mode {
+  flex: 1 1 10rem;
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.55rem 0.7rem;
+  border-radius: var(--md-sys-shape-corner-sm);
+  border: 1px solid var(--line);
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.dm-mode[data-on] {
+  border-color: var(--md-sys-color-primary);
+  background: color-mix(in srgb, var(--md-sys-color-primary) 12%, transparent);
+}
+
+.dm-mode input {
+  accent-color: var(--md-sys-color-primary);
+}
+
+.dm-mode-name {
+  font-weight: 600;
+}
+
+.dm-mode-hint {
+  flex-basis: 100%;
+  margin: 0.2rem 0 0;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  opacity: 0.85;
+}
+
+.dm-slot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+  padding: 0.6rem 0.7rem;
+  border-radius: var(--md-sys-shape-corner-sm);
+  border: 1px dashed var(--line);
+  font-size: 0.86rem;
+}
+
+.dm-slot-line,
+.dm-slot-warn {
+  flex-basis: 100%;
+  margin: 0;
+}
+
+.dm-slot-warn {
+  color: var(--md-sys-color-error, #e57373);
+  font-size: 0.8rem;
+}
+
+.dm-mode-failed {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  text-align: center;
+  background: #02060c;
+  color: #cfe3f2;
+}
+
 .dm-check {
   display: flex;
   align-items: center;

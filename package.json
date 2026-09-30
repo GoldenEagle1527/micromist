@@ -33,6 +33,7 @@
     "test:free-baseline": "esbuild scripts/deep-march-free-baseline-test.ts --bundle --platform=node --outfile=node_modules/.cache/dm-free-baseline-test.cjs --log-level=warning && node node_modules/.cache/dm-free-baseline-test.cjs",
     "test:ledger": "esbuild scripts/deep-march-ledger-test.ts --bundle --platform=node --outfile=node_modules/.cache/dm-ledger-test.cjs --log-level=warning && node node_modules/.cache/dm-ledger-test.cjs",
     "test:save": "esbuild scripts/deep-march-save-test.ts --bundle --platform=node --outfile=node_modules/.cache/dm-save-test.cjs --log-level=warning && node node_modules/.cache/dm-save-test.cjs",
+    "test:modes": "esbuild scripts/deep-march-modes-test.ts --bundle --platform=node --format=esm --external:esbuild --outfile=node_modules/.cache/dm-modes-test.mjs --log-level=warning && node node_modules/.cache/dm-modes-test.mjs",
     "test:regions": "esbuild scripts/deep-march-regions-test.ts --bundle --platform=node --outfile=node_modules/.cache/dm-regions-test.cjs --log-level=warning && node node_modules/.cache/dm-regions-test.cjs",
     "cf-typegen": "wrangler types --include-runtime false",
     "deploy:staging": "npm run build && node scripts/patch-staging-wrangler.mjs && wrangler deploy"

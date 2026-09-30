@@ -5,11 +5,15 @@ import { useLocale } from "../../i18n";
 import { seedFromString } from "./terrain/noise";
 import { createDeepMarch, type DeepMarchHandle, type HudLabels } from "./scene/world";
 import type { DeepMarchDict } from "./i18n";
-import { isTouchDevice, loadSettings, panelEnabled, randomSeed, saveSettings, type SoundSettings } from "./settings";
+import { isTouchDevice, loadSettings, panelEnabled, saveSettings, type SoundSettings } from "./settings";
 import { ControlPanel, type PanelLabels } from "./ui/ControlPanel";
 import { viewRotation, type Rotation } from "./viewRotation";
 import { acquireAudioContext, audioDisabledByUrl, closeAudioContext, releaseAudioContext } from "./scene/audioContext";
 import { LoadingScreen, type LoadingLabels } from "./ui/loading/LoadingScreen";
+import type { OpenIntent } from "./conserve";
+import type { GameMode } from "./modes/gameMode";
+import { useConserveDive } from "./modes/useConserveDive";
+import { SetupScreen, type SetupValues } from "./ui/setup/SetupScreen";
 
 /** Best effort: fullscreen + landscape lock (Android Chrome). Rejections are expected elsewhere (iOS). */
 async function enterLandscape(): Promise<void> {
@@ -104,6 +108,7 @@ export function DeepMarchGame() {
   const dm = t.deepMarch;
 
   const [screen, setScreen] = useState<Screen>("setup");
+  const [mode, setMode] = useState<GameMode>(() => loadSettings().mode);
   const [seed, setSeed] = useState(() => loadSettings().seed);
   const [sensitivity, setSensitivity] = useState(() => loadSettings().sensitivity);
   const [invertY, setInvertY] = useState(() => loadSettings().invertY);
@@ -125,15 +130,23 @@ export function DeepMarchGame() {
   const [touch] = useState(isTouchDevice);
 
   const persist = useCallback(
-    (patch: Partial<{ seed: string; panel: boolean; sensitivity: number; invertY: boolean; sound: SoundSettings }>) => {
+    (patch: Partial<{ mode: GameMode; seed: string; panel: boolean; sensitivity: number; invertY: boolean; sound: SoundSettings }>) => {
       const cur = loadSettings();
       saveSettings({ ...cur, ...patch });
     },
     [],
   );
 
+  // Conserve mode: the world save is opened first (the dive's seed comes from it)
+  const [intent, setIntent] = useState<OpenIntent | null>(null);
+  const [slotRefresh, setSlotRefresh] = useState(0);
+  const { dive: conserveDive, onDiveBegun } = useConserveDive(screen === "playing" ? intent : null);
+  const conservePlay = intent !== null;
+  const diveSeed = !conservePlay ? seed || "1" : conserveDive.status === "open" ? conserveDive.seedText : null;
+  const diveSteps = !conservePlay ? undefined : "steps" in conserveDive ? conserveDive.steps : null;
+
   useEffect(() => {
-    if (screen !== "playing") return;
+    if (screen !== "playing" || diveSeed === null) return;
     const host = hostRef.current;
     if (!host) return;
     setLoadingOn(true);
@@ -143,7 +156,7 @@ export function DeepMarchGame() {
     const raf = requestAnimationFrame(() => {
       timer = window.setTimeout(() => {
         g = createDeepMarch(host, {
-          seed: seedFromString(seed || "1"),
+          seed: seedFromString(diveSeed),
           sensitivity,
           invertY,
           panel: panelOn,
@@ -165,7 +178,7 @@ export function DeepMarchGame() {
     };
     // Settings/labels are read once per dive; the panel toggle is pushed via setPanelMode.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [screen]);
+  }, [screen, diveSeed]);
 
   // Volume / mute: live into the running dive, persisted
   const soundRef = useRef(sound);
@@ -231,22 +244,51 @@ export function DeepMarchGame() {
         ? { width: vp.h, height: vp.w, transform: `translateY(${vp.h}px) rotate(-90deg)` }
         : undefined;
 
-  const start = useCallback(() => {
+  const start = useCallback((conserveIntent: OpenIntent | null) => {
     const s = seed.trim() || "1";
     setSeed(s);
-    persist({ seed: s, sensitivity, invertY, panel: panelOn, sound });
+    setIntent(conserveIntent);
+    persist({ mode, seed: s, sensitivity, invertY, panel: panelOn, sound });
     if (touch) void enterLandscape();
     setLoadingOn(true);
     // inside the click: acquire (or reuse) the shared context and resume it; never throws
     audioCtxRef.current = audioDisabledByUrl(window.location.search) ? null : acquireAudioContext();
     setAudioOn(audioCtxRef.current !== null);
     setScreen("playing");
-  }, [seed, sensitivity, invertY, panelOn, sound, persist, touch]);
+  }, [mode, seed, sensitivity, invertY, panelOn, sound, persist, touch]);
   const back = useCallback(() => {
     leaveLandscape();
     audioCtxRef.current = null;
     setScreen("setup");
+    setIntent(null);
+    setSlotRefresh((n) => n + 1);
   }, []);
+
+  const setupValues: SetupValues = { mode, seed, sensitivity, invertY, panelOn, sound };
+  const changeSetup = useCallback(
+    (patch: Partial<SetupValues>) => {
+      if (patch.mode !== undefined) {
+        setMode(patch.mode);
+        persist({ mode: patch.mode });
+      }
+      if (patch.seed !== undefined) setSeed(patch.seed);
+      if (patch.sensitivity !== undefined) setSensitivity(patch.sensitivity);
+      if (patch.invertY !== undefined) setInvertY(patch.invertY);
+      if (patch.panelOn !== undefined) setPanelOn(patch.panelOn);
+      if (patch.sound !== undefined) changeSound(patch.sound);
+    },
+    [persist, changeSound],
+  );
+
+  const loadingDone = useCallback(() => {
+    setLoadingOn(false);
+    onDiveBegun();
+  }, [onDiveBegun]);
+  const loadingScreen =
+    loadingOn && diveSteps !== null ? (
+      <LoadingScreen game={game} seedText={diveSeed ?? ""} seed={seedFromString(diveSeed ?? "")} labels={loadingLabels(dm)} steps={diveSteps} onDone={loadingDone} />
+    ) : null;
+  const conserveFailed = conservePlay && conserveDive.status === "failed" ? <div className="dm-mode-failed">{dm.setup.moduleFailed}</div> : null;
 
   const togglePanel = useCallback(() => {
     setPanelOn((on) => {
@@ -267,89 +309,7 @@ export function DeepMarchGame() {
   }, [game, persist]);
 
   if (screen === "setup") {
-    return (
-      <div className="deep-march dm-setup">
-        <div className="panel">
-          <h2>{dm.setupTitle}</h2>
-          <p className="hint" style={{ marginTop: 0 }}>
-            {dm.setupHint}
-          </p>
-          <label className="dm-field">
-            <span>{dm.seedLabel}</span>
-            <div className="dm-seed-row">
-              <input
-                type="text"
-                inputMode="numeric"
-                maxLength={32}
-                value={seed}
-                onChange={(e) => setSeed(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") start();
-                }}
-              />
-              <button type="button" className="ghost" onClick={() => setSeed(randomSeed())}>
-                {dm.randomSeed}
-              </button>
-            </div>
-          </label>
-          <label className="dm-field">
-            <span>
-              {dm.sensitivity} <b className="dm-sens-val">{sensitivity.toFixed(1)}×</b>
-            </span>
-            <input
-              type="range"
-              min={0.2}
-              max={3}
-              step={0.1}
-              value={sensitivity}
-              onChange={(e) => setSensitivity(Number(e.target.value))}
-            />
-          </label>
-          <label className="dm-check">
-            <input type="checkbox" checked={invertY} onChange={(e) => setInvertY(e.target.checked)} />
-            <span>{dm.invertY}</span>
-          </label>
-          <label className="dm-check">
-            <input type="checkbox" checked={panelOn} onChange={(e) => setPanelOn(e.target.checked)} />
-            <span>
-              {dm.panelToggle}
-              <small className="dm-check-hint">{dm.panelToggleHint}</small>
-            </span>
-          </label>
-          <label className="dm-check">
-            <input type="checkbox" checked={!sound.muted} onChange={(e) => changeSound({ ...sound, muted: !e.target.checked })} />
-            <span>{dm.soundToggle}</span>
-          </label>
-          <label className="dm-field">
-            <span>
-              {dm.volume} <b className="dm-sens-val">{Math.round(sound.volume * 100)}%</b>
-            </span>
-            <input
-              type="range"
-              min={0}
-              max={1}
-              step={0.05}
-              value={sound.volume}
-              disabled={sound.muted}
-              onChange={(e) => changeSound({ ...sound, volume: Number(e.target.value) })}
-            />
-          </label>
-          <div className="row">
-            <button type="button" className="primary" onClick={start}>
-              {dm.start}
-            </button>
-          </div>
-          <div className="dm-controls">
-            <h3>{dm.controlsTitle}</h3>
-            <ul>
-              {dm.controls.map((c) => (
-                <li key={c}>{c}</li>
-              ))}
-            </ul>
-          </div>
-        </div>
-      </div>
-    );
+    return <SetupScreen dm={dm} values={setupValues} onChange={changeSetup} slotRefresh={slotRefresh} onStart={start} />;
   }
 
   if (immersive) {
@@ -357,7 +317,8 @@ export function DeepMarchGame() {
       <div className="deep-march dm-immersive">
         <div className="dm-rotor" data-rot={rot} style={rotorStyle}>
           <div ref={hostRef} className="game-stage dm-stage" aria-label={dm.stageAria}>
-            {loadingOn && <LoadingScreen game={game} seedText={seed || "1"} seed={seedFromString(seed || "1")} labels={loadingLabels(dm)} onDone={() => setLoadingOn(false)} />}
+            {loadingScreen}
+            {conserveFailed}
             <ControlPanel
               game={game}
               panelOn={panelOn}
@@ -381,11 +342,12 @@ export function DeepMarchGame() {
         <button type="button" className="ghost" onClick={back}>
           {dm.backSetup}
         </button>
-        <span className="dm-seed-tag">{dm.seedNow(seed)}</span>
+        <span className="dm-seed-tag">{dm.seedNow(diveSeed ?? seed)}</span>
         <p className="hint dm-play-hint">{panelOn ? dm.hintPanel : dm.hint}</p>
       </div>
       <div ref={hostRef} className="game-stage dm-stage" aria-label={dm.stageAria}>
-        {loadingOn && <LoadingScreen game={game} seedText={seed || "1"} seed={seedFromString(seed || "1")} labels={loadingLabels(dm)} onDone={() => setLoadingOn(false)} />}
+        {loadingScreen}
+        {conserveFailed}
         <ControlPanel
           game={game}
           panelOn={panelOn}
