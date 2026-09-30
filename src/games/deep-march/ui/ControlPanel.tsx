@@ -7,7 +7,14 @@ import { LookPad } from "./LookPad";
 import { MoveDial } from "./MoveDial";
 import { Readout, type ReadoutLabels } from "./Readout";
 import { useTelemetry } from "./useTelemetry";
+import { AbsorbPrompt } from "./expedition/AbsorbPrompt";
+import { CacheMarks } from "./expedition/CacheMarks";
+import type { ExpeditionDict } from "./expedition/i18n";
+import { RecallButton } from "./expedition/RecallButton";
+import { TankGauge } from "./expedition/TankGauge";
+import { useExpedition } from "./expedition/useExpedition";
 import "./panel.css";
+import "./expedition/expedition.css";
 
 export type PanelLabels = ReadoutLabels & {
   btnUp: string;
@@ -21,6 +28,7 @@ export type PanelLabels = ReadoutLabels & {
   flip: string;
   mute: string;
   unmute: string;
+  expedition: ExpeditionDict;
 };
 
 export function ControlPanel({
@@ -46,11 +54,13 @@ export function ControlPanel({
   labels: PanelLabels;
 }) {
   const tel = useTelemetry(game);
+  // conserve mode only: tank, aim prompt, cache markers, recall (null in the free dive)
+  const exp = useExpedition(game);
   const [, force] = useState(0);
   const swimming = tel?.state === "swim";
 
   const onHold = useCallback(
-    (id: "up" | "down", on: boolean) => {
+    (id: "up" | "down" | "absorb", on: boolean) => {
       if (game) game.panelInput[id] = on;
     },
     [game],
@@ -68,8 +78,11 @@ export function ControlPanel({
 
   return (
     <div className={`dm-hud-layer${panelOn ? " panel-on" : ""}`}>
-      <Readout tel={tel} labels={labels} />
+      <Readout tel={tel} labels={labels} extra={exp ? <TankGauge exp={exp} labels={labels.expedition} /> : null} />
+      {exp ? <CacheMarks exp={exp} title={labels.expedition.cacheMark} /> : null}
+      {exp ? <AbsorbPrompt exp={exp} touch={panelOn} labels={labels.expedition} /> : null}
       <div className="dm-hud-buttons">
+        {exp && game ? <RecallButton game={game} exp={exp} labels={labels.expedition} /> : null}
         {onFlip ? (
           <button type="button" className="dm-hud-btn dm-flip-btn" onClick={onFlip} aria-label={labels.flip} title={labels.flip}>
             <IconFlip />
@@ -118,6 +131,7 @@ export function ControlPanel({
             speed={tel?.speed ?? 0}
             onHold={onHold}
             onToggle={onToggle}
+            absorb={exp ? { label: labels.expedition.btnAbsorb, active: exp.absorbing } : undefined}
           />
         </>
       ) : null}

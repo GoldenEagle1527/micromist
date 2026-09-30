@@ -134,6 +134,8 @@ export function LoadingScreen({ game, seedText, seed, labels: L, steps: stepsPro
   // spawn marker: the centre of the endless map, its own pixel on a bounded world map
   const spawnPx = snap ? worldToPixel(mapSpecFor(snap.spawn, snap.world), snap.spawn.x, snap.spawn.z) : null;
   const spawnStyle = spawnPx ? { left: `${(spawnPx[0] / REGION_MAP.size) * 100}%`, top: `${(spawnPx[1] / REGION_MAP.size) * 100}%` } : undefined;
+  // conserve: lost caches (plan M4 map marker) on the bounded world map
+  const cachePx = snap && snap.world ? (snap.caches ?? []).map((c) => worldToPixel(mapSpecFor(snap.spawn, snap.world), c.x, c.z)) : [];
 
   // keep the focused row in view when the list scrolls (many steps / very short screens);
   // scrollTop only: scrollIntoView would also scroll the rotated immersive stage
@@ -226,6 +228,10 @@ export function LoadingScreen({ game, seedText, seed, labels: L, steps: stepsPro
               <canvas ref={canvasRef} width={REGION_MAP.size} height={REGION_MAP.size} />
               <div className="dm-load-scanline" style={{ top: `${(view.mapRows / REGION_MAP.size) * 100}%` }} hidden={view.mapRows >= REGION_MAP.size || view.mapRows === 0} />
               {mapHalf && <span className="dm-load-spawn" title={L.spawn} style={spawnStyle} />}
+              {mapHalf &&
+                cachePx.map(([x, y], i) => (
+                  <span key={i} className="dm-load-cache" title={L.mapCache} style={{ left: `${(x / REGION_MAP.size) * 100}%`, top: `${(y / REGION_MAP.size) * 100}%` }} />
+                ))}
             </div>
             <figcaption className="dm-load-legend">
               <span className="dm-load-legend-title">{L.legend}</span>
@@ -239,6 +245,12 @@ export function LoadingScreen({ game, seedText, seed, labels: L, steps: stepsPro
                 <i className="dm-load-key-spawn" />
                 <span className="dm-load-key-name">{L.spawn}</span>
               </span>
+              {cachePx.length > 0 && L.mapCache ? (
+                <span className="dm-load-key" title={L.mapCache}>
+                  <i className="dm-load-key-cache" />
+                  <span className="dm-load-key-name">{L.mapCache}</span>
+                </span>
+              ) : null}
             </figcaption>
           </figure>
         </div>

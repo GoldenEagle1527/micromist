@@ -1,12 +1,13 @@
 /**
  * Bottom-right fan-shaped button cluster: annular sectors along a quarter arc
  * around the corner — Down / Up (hold), Swim (toggle latch), Lamp (on/off),
- * Mode (cycle beam / high beam / sonar; icon + label show the current mode).
+ * Mode (cycle beam / high beam / sonar; icon + label show the current mode),
+ * and in conserve mode Absorb (hold, plan M4).
  */
 import { useRef, useState, type PointerEvent as RPointerEvent, type ReactNode } from "react";
 import { arcPath, polar, sectorPath, ticksPath } from "./geom";
 import type { LightMode } from "../survival";
-import { IconBeam, IconDown, IconHighBeam, IconLamp, IconSonar, IconSwim, IconUp } from "./icons";
+import { IconAbsorb, IconBeam, IconDown, IconHighBeam, IconLamp, IconSonar, IconSwim, IconUp } from "./icons";
 
 const MODE_ICON: Record<LightMode, ReactNode> = { beam: <IconBeam />, high: <IconHighBeam />, sonar: <IconSonar /> };
 
@@ -20,8 +21,10 @@ const A0 = 270;
 const A1 = 360;
 const GAP = 1.6;
 
+type HoldId = "up" | "down" | "absorb";
+
 type Btn = {
-  id: "down" | "up" | "swim" | "lamp" | "mode";
+  id: HoldId | "swim" | "lamp" | "mode";
   label: string;
   icon: ReactNode;
   kind: "hold" | "toggle";
@@ -39,6 +42,7 @@ export function ActionFan({
   speed,
   onHold,
   onToggle,
+  absorb,
 }: {
   labels: { up: string; down: string; swim: string; lamp: string; mode: string };
   lampOn: boolean;
@@ -49,11 +53,13 @@ export function ActionFan({
   swimming: boolean;
   stateLabel: string;
   speed: number;
-  onHold: (id: "up" | "down", on: boolean) => void;
+  onHold: (id: HoldId, on: boolean) => void;
   onToggle: (id: "swim" | "lamp" | "mode") => void;
+  /** Conserve: the absorb hold button (label; lit while particles flow). Omitted in the free dive. */
+  absorb?: { label: string; active: boolean };
 }) {
-  const [held, setHeld] = useState<{ up: boolean; down: boolean }>({ up: false, down: false });
-  const owners = useRef(new Map<number, "up" | "down">());
+  const [held, setHeld] = useState<Record<HoldId, boolean>>({ up: false, down: false, absorb: false });
+  const owners = useRef(new Map<number, HoldId>());
 
   const buttons: Btn[] = [
     { id: "down", label: labels.down, icon: <IconDown />, kind: "hold", on: held.down },
@@ -61,6 +67,7 @@ export function ActionFan({
     { id: "swim", label: labels.swim, icon: <IconSwim />, kind: "toggle", on: swimLatch || swimming },
     { id: "lamp", label: labels.lamp, icon: <IconLamp />, kind: "toggle", on: lampOn },
     { id: "mode", label: labels.mode, icon: MODE_ICON[lightMode], kind: "toggle", on: lampOn },
+    ...(absorb ? [{ id: "absorb", label: absorb.label, icon: <IconAbsorb />, kind: "hold", on: held.absorb || absorb.active } as Btn] : []),
   ];
   const seg = (A1 - A0) / buttons.length;
 
@@ -71,7 +78,7 @@ export function ActionFan({
       onToggle(b.id as "swim" | "lamp" | "mode");
       return;
     }
-    const id = b.id as "up" | "down";
+    const id = b.id as HoldId;
     (e.currentTarget as SVGGElement).setPointerCapture(e.pointerId);
     owners.current.set(e.pointerId, id);
     setHeld((h) => ({ ...h, [id]: true }));

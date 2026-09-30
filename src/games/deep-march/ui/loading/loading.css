@@ -358,6 +358,34 @@
   transform: translate(-50%, -50%);
   animation: dm-load-ping 1.6s ease-out infinite;
 }
+/* lost caches (conserve, plan M4): pale-cyan diamonds, blinking like their beacon */
+.dm-load-cache,
+.dm-load-key > i.dm-load-key-cache {
+  background: #bff6ff;
+  box-shadow: 0 0 6px #7ff0ff;
+  transform: rotate(45deg);
+}
+.dm-load-cache {
+  position: absolute;
+  width: 7px;
+  height: 7px;
+  margin: -3.5px 0 0 -3.5px;
+  animation: dm-load-beacon 5s ease-out infinite;
+}
+.dm-load-key > i.dm-load-key-cache {
+  width: 0.5em;
+  height: 0.5em;
+  opacity: 1;
+}
+@keyframes dm-load-beacon {
+  0% {
+    opacity: 1;
+  }
+  30%,
+  100% {
+    opacity: 0.45;
+  }
+}
 @keyframes dm-load-ping {
   0% {
     box-shadow: 0 0 0 0 rgb(255 255 255 / 0.7);

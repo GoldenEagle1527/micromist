@@ -10,6 +10,10 @@ export function IconSwim() {
     <path d="M -10 -3 Q -5 -8 0 -3 T 10 -3 M -10 4 Q -5 -1 0 4 T 10 4 M 3 -10 L 9 -10 L 9 -4" />
   );
 }
+/** Absorb: particles drawn into a funnel. */
+export function IconAbsorb() {
+  return <path d="M -9 -8 L 0 2 L 9 -8 M 0 2 L 0 9 M -6 9 L 6 9 M -9 -2 L -7 -2 M 7 -2 L 9 -2 M -4 -10 L -3 -9 M 4 -10 L 3 -9" />;
+}
 export function IconLamp() {
   return (
     <>
