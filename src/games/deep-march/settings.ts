@@ -1,10 +1,13 @@
-/** Seed, control and sound preferences, persisted via the platform game-store (IndexedDB). */
+/** Mode, seed, control and sound preferences, persisted via the platform game-store (IndexedDB). */
 import { gameStoreGet, gameStoreSet } from "../../lib/game-store";
+import { parseMode, type GameMode } from "./modes/gameMode";
 
 export const DEEP_MARCH_GAME = "deep-march";
 const KEY = "settings";
 
 export type DeepMarchSettings = {
+  /** Last chosen way to play (conserved world / free dive). */
+  mode: GameMode;
   seed: string;
   /** On-screen control panel; null = automatic (on for touch devices). */
   panel: boolean | null;
@@ -48,6 +51,7 @@ export function loadSettings(): DeepMarchSettings {
   const raw = gameStoreGet<Partial<DeepMarchSettings>>(DEEP_MARCH_GAME, KEY);
   const sens = typeof raw?.sensitivity === "number" && Number.isFinite(raw.sensitivity) ? raw.sensitivity : 1;
   return {
+    mode: parseMode(raw?.mode),
     seed: typeof raw?.seed === "string" && raw.seed.trim() ? raw.seed.slice(0, 32) : "1",
     panel: typeof raw?.panel === "boolean" ? raw.panel : null,
     sensitivity: Math.min(3, Math.max(0.2, sens)),
@@ -58,6 +62,7 @@ export function loadSettings(): DeepMarchSettings {
 
 export function saveSettings(s: DeepMarchSettings): void {
   gameStoreSet(DEEP_MARCH_GAME, KEY, {
+    mode: parseMode(s.mode),
     seed: s.seed.slice(0, 32),
     panel: s.panel,
     sensitivity: s.sensitivity,
