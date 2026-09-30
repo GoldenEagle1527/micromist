@@ -58,6 +58,7 @@ function openedReport(kind: OpenedReport["kind"], save: WorldSave, ledger: Parti
     bytes: saveBytes(save),
     sites,
     wall,
+    chaos: { stage: save.chaos.stage, open: save.chaos.cracks.filter((c) => c.open).length, scars: save.chaos.cracks.filter((c) => c.healed).length },
   };
 }
 

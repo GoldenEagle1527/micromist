@@ -33,6 +33,7 @@ function openedDiag(r: OpenedReport, L: LoadingLabels): DiagEntry[] {
     { label: D.biomes, value: BIOMES.map((b) => `${L.regionNames[b]} ${r.sites.byBiome[b]}`).join(" · ") },
     { label: D.bias, value: `${r.sites.deltaMin.toFixed(2)} … ${r.sites.deltaMax.toFixed(2)}` },
     { label: D.wall, value: `m ${r.wall.m.toFixed(4)} · σ ${r.wall.sigma.toFixed(2)} · ${r.wall.thickness.toFixed(1)} m` },
+    { label: D.chaos, value: `${r.chaos.stage} · ${r.chaos.open} · ${r.chaos.scars}` },
   ];
   if (r.repairs.length > 0) diag.push({ label: D.repairs, value: r.repairs.map((x) => `${x.pool}.${x.type} ${x.delta > 0 ? "+" : ""}${x.delta} (${x.cause})`).join(", ") });
   return diag;

@@ -8,7 +8,7 @@
  * Pure data and functions; base.ts owns the live state.
  */
 import { BASE, STRUCTURES, STRUCTURE_KINDS, type StructureKind } from "../config";
-import { addInto, vectorFromCounts, zeroVector, type ParticleVector, type ReadonlyParticleVector } from "../particles/particleVector";
+import { addInto, vectorFromCounts, zeroVector, type ParticleVector } from "../particles/particleVector";
 import type { FrozenSite } from "../world/siteTable";
 import type { StructureInfo } from "./port";
 
@@ -20,7 +20,7 @@ export type BaseStructure = {
   /** Ground point (world, m) and heading (rad). */
   pos: Vec3;
   yaw: number;
-  /** The player's switch (MVP: always on; a brown-out does not clear it). */
+  /** The player's switch (consumers only, M9; a brown-out does not clear it). */
   on: boolean;
   /** Seconds of work since the last fuel particle (lighthouse). */
   fuel: number;
@@ -84,10 +84,6 @@ export function energyCapacity(structures: readonly BaseStructure[]): number {
 
 export function coreOf(structures: readonly BaseStructure[]): BaseStructure | undefined {
   return structures.find((s) => s.kind === "core");
-}
-
-export function vectorsEqual(a: ReadonlyParticleVector, b: ReadonlyParticleVector): boolean {
-  return a.length === b.length && a.every((n, k) => n === b[k]);
 }
 
 export function cloneBase(b: BaseSave): BaseSave {

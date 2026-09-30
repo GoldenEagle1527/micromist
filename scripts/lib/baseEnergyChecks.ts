@@ -2,7 +2,7 @@
  * test:placement — base energy (conserve/base/energy.ts via Base.tick): core
  * output and capacity, lighthouse drain, brown-out (lighthouses off first,
  * core keeps producing) and the restart hysteresis, fuel stop when storage has
- * no lumen, energy towers' capacity, and the tide stub's requirements.
+ * no lumen, energy towers' capacity, and the tide's requirements.
  */
 import { BASE, STRUCTURES } from "../../src/games/deep-march/conserve/config";
 import { particleIndex } from "../../src/games/deep-march/conserve/particles/particleTypes";
@@ -56,11 +56,11 @@ export function energyChecks(c: Checker): void {
     base.build("energy", [0, -100, 20], 0, RECT);
     c.check(base.view().energyCap === 300, "an energy tower adds 200 capacity", `${base.view().energyCap}`);
     const tide0 = base.tide();
-    c.check(!tide0.ready && tide0.energyNeeded === 150 && tide0.divesNeeded === 1, "tide stub: needs 150 energy and one dive this generation");
+    c.check(!tide0.ready && tide0.energyNeeded === 150 && tide0.divesNeeded === 1, "the tide: needs 150 energy and one dive this generation");
     base.tick(400);
     base.recordDeparture();
     const tide1 = base.tide();
-    c.check(tide1.ready && tide1.energy >= 150 && tide1.dives === 1 && rig.counts.dives === 1, "150+ energy and one departure → ready (the tide itself comes with M7)");
+    c.check(tide1.ready && tide1.energy >= 150 && tide1.dives === 1 && rig.counts.dives === 1, "150+ energy and one departure → ready");
     const f = base.forecast();
     c.check(f.m > 0.9 && f.m < 1 && f.thickness > 100, "forecast: m = Σ (N − P − B) / Σ N and its wall thickness", `m ${f.m.toFixed(4)}, ${f.thickness.toFixed(1)} m`);
     const d = base.demolish(base.view().buildings.find((b) => b.kind === "energy")!.id);

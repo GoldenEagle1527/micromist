@@ -11,7 +11,7 @@ export type WorldSaveDict = {
   unreadable: string;
   ended: string;
   missing: string;
-  diag: { slot: string; format: string; formatValue: (version: number, from: number, kb: string) => string; pools: string; repairs: string; reason: string; biomes: string; bias: string; wall: string };
+  diag: { slot: string; format: string; formatValue: (version: number, from: number, kb: string) => string; pools: string; repairs: string; reason: string; biomes: string; bias: string; wall: string; chaos: string };
 };
 
 export const worldSaveEn: WorldSaveDict = {
@@ -35,6 +35,7 @@ export const worldSaveEn: WorldSaveDict = {
     biomes: "Sites per biome",
     bias: "Terrain bias δ",
     wall: "Ring wall (external share m · stability σ · thickness)",
+    chaos: "Chaos (stage · open cracks · healed scars)",
   },
 };
 
@@ -59,5 +60,6 @@ export const worldSaveZh: WorldSaveDict = {
     biomes: "各群系站点数",
     bias: "地形偏置 δ",
     wall: "界壁（外源占比 m · 稳定度 σ · 厚度）",
+    chaos: "混沌（阶段 · 开启裂缝 · 愈合疤痕）",
   },
 };

@@ -12,7 +12,7 @@ export function viewOf(s: BaseSave | null, storage: ParticleVector, tank: Partic
     founded: s !== null,
     center: s ? s.center : null,
     radius: protectionRadius(structures),
-    buildings: structures.map((b) => ({ id: b.id, kind: b.kind, pos: b.pos, yaw: b.yaw, working: isWorking(b, brownout, storage) })),
+    buildings: structures.map((b) => ({ id: b.id, kind: b.kind, pos: b.pos, yaw: b.yaw, working: isWorking(b, brownout, storage), on: b.on })),
     storage: storage.slice(),
     stored: vectorTotal(storage),
     tank: tank.slice(),

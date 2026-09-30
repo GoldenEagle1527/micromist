@@ -1,7 +1,7 @@
 /**
- * The tide's stub (G3; the tide itself is M7): what the core needs before the
- * player may call it, and the forecast — the chaos it would bring if it came
- * now (chaos/forecast.ts: exactly what the tide will compute).
+ * The base's side of the tide (G3; the tide itself: ../tide/): what the core
+ * needs before the player may call it, and the forecast — the chaos it would
+ * bring if it came now (chaos/forecast.ts: exactly what the tide will compute).
  */
 import { BASE } from "../config";
 import { forecastTide } from "../chaos/forecast";

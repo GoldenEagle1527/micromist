@@ -4,6 +4,10 @@
  * out, and it has fuel: every `fuel.every` s of work burns one particle of
  * `fuel.type` from base storage (→ suspended, by the caller).
  *
+ * The player's switch (`on`, M9): a switchable consumer that is off neither
+ * consumes nor burns fuel — with only the core producing (+0.25 / s), one lit
+ * lighthouse (−0.3 / s) would keep the energy from ever reaching the tide's 150.
+ *
  * Brown-out: energy runs dry while the net rate is negative → the consumer
  * kinds of BASE.shutdownOrder switch off (MVP: lighthouses only; sonar and
  * harvesters join the list ahead of them later); they come back when the
@@ -24,6 +28,19 @@ export type EnergyTick = {
   /** Fuel particles burnt this tick, per kind index. */
   burnt: Map<number, number>;
 };
+
+/** A consumer the player may switch off (MVP: the lighthouse) — to save energy for the tide. */
+export function switchable(kind: BaseStructure["kind"]): boolean {
+  return STRUCTURES[kind].energy < 0;
+}
+
+/** Set a switchable structure's `on` in place; false if `id` is unknown or not switchable. */
+export function switchStructure(structures: readonly BaseStructure[], id: number, on: boolean): boolean {
+  const s = structures.find((x) => x.id === id);
+  if (!s || !switchable(s.kind)) return false;
+  s.on = on;
+  return true;
+}
 
 /** Is `s` working (producing / consuming) with this storage? */
 export function isWorking(s: BaseStructure, brownout: boolean, storage: ReadonlyParticleVector): boolean {
