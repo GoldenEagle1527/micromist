@@ -30,7 +30,7 @@
  * shared per-edge vertices (indexed), rows provably above/below iso (from
  * field.bounds) skip noise, and the field's vertical smoothing is assembled from
  * raw lattice rows (no extra noise evaluations). Mesh-only jobs run the passes
- * over sparse 8³ bricks (bricks.ts, same output; ?bricks=0 = dense).
+ * over sparse 8³ bricks (bricks.ts, same output; bricks off = dense).
  */
 import { ALL_REGIONS_MASK, type DensityField } from "./density";
 import { columnRegionMask, columnRowPlan, latticeSpacing, lodCoord, lodPoints, lodSpacing, type ColumnRows } from "./columnLattice";

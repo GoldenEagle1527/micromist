@@ -30,16 +30,16 @@ import type { HomeSpot } from "./base/home";
 import { CameraSync } from "./dive/cameraSync";
 import { ConserveLayer, type ConserveLayerDeps } from "./dive/conserveLayer";
 import { listenSpawnDebugKey } from "./dive/debugKey";
+import { debugPortOf } from "./dive/debugWiring";
 import { DiveCues, lightControls } from "./dive/diveCues";
 import { startDiveLoop, type DiveParts } from "./dive/diveLoop";
 import { GpuHealth } from "./dive/gpuHealth";
 import { createHandle, type HandleParts } from "./dive/handle";
 import { HudChips } from "./dive/hudChips";
 import { LoadingGate } from "./dive/loadingGate";
-import { diveTerrain, parseViewpoint, readDiveParams } from "./dive/params";
+import { diveParams, diveTerrain } from "./dive/params";
 import { createOverlay, createRenderer, watchResize } from "./dive/rendererRig";
 import { createTideDirector } from "./dive/tideWiring";
-import { crackViewpoint } from "./dive/chaosWiring";
 import { ChaosDirector, needsChaosProgram } from "./chaos/chaosDirector";
 import { createChaosUniforms } from "./chaos/seabedChaos";
 import type { TideDirector } from "./tide/tideDirector";
@@ -50,7 +50,8 @@ export type { DeepMarchHandle, DeepMarchOptions, HudLabels, LoadingSnapshot, Tel
 export { AUDIO_GRACE_MS } from "./dive/loadingGate";
 
 export function createDeepMarch(host: HTMLElement, opts: DeepMarchOptions): DeepMarchHandle {
-  const params = readDiveParams(window.location.search);
+  // the debug panel's overrides (staging; production: the defaults), read once per dive
+  const params = diveParams();
   const lowSpec = isLowSpecDevice();
   const { renderer, pacer } = createRenderer(host, lowSpec, params.dpr);
   const overlay = createOverlay(host, opts.labels.lockPrompt);
@@ -60,12 +61,11 @@ export function createDeepMarch(host: HTMLElement, opts: DeepMarchOptions): Deep
   const scene = new THREE.Scene();
   const look = new WaterLook(scene, terrain.viewDistance);
   const { water, fog } = look;
-  // Turbidity (fog.ts): ?fog=0|off disables, ?fog=60 sets the beam visibility (m), ?fog=50,80 beam + high beam
+  // Turbidity (fog.ts): the panel's 浑浊度 (off / beam visibility m), else the defaults
   const fogVis = parseFogParam(params.fog);
   const camera = new THREE.PerspectiveCamera(70, 1, 0.05, terrain.viewDistance + 40);
   // Survival layer (battery, gear, light modes) and the scene side of the lights.
   const survival = createSurvival();
-  const lights = survival.lights;
   const audio = createDiveAudio(opts.audioContext ?? null, { sound: opts.sound });
   const cues = new DiveCues(survival, audio);
   const rig = new LampRig(camera, fogVis);
@@ -88,7 +88,7 @@ export function createDeepMarch(host: HTMLElement, opts: DeepMarchOptions): Deep
   // conserve (M8): the chaos program's uniforms (its columns use it only while their generation shows chaos)
   const chaosUniforms = conserveWorld ? createChaosUniforms() : null;
   const seabed = createSeabedMaterial({
-    // ?detail=0: no shader detail normal (creases + facet blend, detailNormal.ts)
+    // off: no shader detail normal (creases + facet blend, detailNormal.ts)
     detail: params.detail,
     lowSpec,
     water,
@@ -152,7 +152,7 @@ export function createDeepMarch(host: HTMLElement, opts: DeepMarchOptions): Deep
     });
   const conserve = conserveWorld ? layerFor({ expedition: opts.expedition!, base: opts.base }, field) : null;
   const bornAt = performance.now();
-  // GPU occlusion culling of terrain columns (?occ=0 disables)
+  // GPU occlusion culling of terrain columns (the panel can switch it off)
   const occlusion = new TerrainOcclusion(renderer, scene, params.occlusion);
   const health = new GpuHealth(renderer, audio, overlay.alert, () => labels);
   const diver = new DiverController(field, (gi, gj, gk) => chunks.isRemovedPoint(gi, gj, gk));
@@ -173,9 +173,8 @@ export function createDeepMarch(host: HTMLElement, opts: DeepMarchOptions): Deep
   health.warm(warmMaterials, [...(conserve?.warmObjects() ?? []), ...(tide?.warmObjects ?? [])], camera, scene);
   health.listen();
   const hud = new HudChips(chunks.terrain, field.regions);
-  // Debug: spawn-candidate markers (B, or ?debugSpawns=1); off in normal play.
+  // Debug: spawn-candidate markers (B, or the debug panel); off in normal play.
   const spawnDebug = new SpawnDebugView(scene, chunks.terrain, field.regions, overlay.root, labels);
-  if (params.debugSpawns) spawnDebug.setVisible(true);
   const unbindDebugKey = listenSpawnDebugKey(spawnDebug);
   // Spawn in a seeded region (uniform over the 6), at an open-water spot with clearance
   // near that region's core, facing the longest sightline (terrain/spawn.ts).
@@ -184,22 +183,12 @@ export function createDeepMarch(host: HTMLElement, opts: DeepMarchOptions): Deep
   // conserve (M5): a dive starts at the base core once it stands
   const startAt = conserve?.home() ?? spawnAt;
   diver.spawnAt(startAt.x, startAt.y, startAt.z, startAt.yaw);
-  // Optional viewpoint for sharing / screenshots: ?at=x,y,z,yawDeg,pitchDeg.
-  const view = parseViewpoint(params.at) ?? crackViewpoint(params.at, opts.chaos ?? null, field);
-  if (view) {
-    diver.position.set(view.x, view.y, view.z);
-    diver.prev.copy(diver.position);
-    diver.setView(view.yaw, view.pitch);
-  }
   scene.add(camera);
   const cameraSync = new CameraSync(camera, diver);
   cameraSync.sync(0);
   const snow = new MarineSnow(900, opts.seed);
   scene.add(snow.points);
 
-  // Optional start mode for screenshots: ?light=beam|high|sonar|off.
-  if (params.light === "off") lights.setOn(false);
-  else if (params.light === "beam" || params.light === "high" || params.light === "sonar") lights.select(params.light);
   const controls = lightControls(survival, audio, cues);
   const input = new InputController(renderer.domElement, {
     sensitivity: opts.sensitivity,
@@ -283,6 +272,7 @@ export function createDeepMarch(host: HTMLElement, opts: DeepMarchOptions): Deep
       health.updateAlert();
       handleParts.hud.refreshSoon();
     },
+    debug: null,
     destroy: () => {
       loop.stop();
       audio.dispose();
@@ -310,5 +300,7 @@ export function createDeepMarch(host: HTMLElement, opts: DeepMarchOptions): Deep
     },
   };
   parts = { loop: loopParts, handle: handleParts };
+  // staging debug panel: its runtime port, only when the page passes the factory (dive/debugWiring.ts)
+  handleParts.debug = debugPortOf(opts.debug, { handle: handleParts, loop: loopParts, chaos, spawnAt, worldScale: terrain.worldScale, conserve: conserveWorld });
   return createHandle(handleParts);
 }

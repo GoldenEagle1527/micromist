@@ -12,12 +12,13 @@
  */
 import { createDiveAudio, fetchBytes, type AudioStatus } from "../src/games/deep-march/scene/audio";
 import { CLIP_IDS, FORMAT_MIME, formatOrder, loopPoints, parseManifest, type SfxManifest } from "../src/games/deep-march/scene/audioManifest";
-import { acquireAudioContext, audioContextCtor, audioDisabledByUrl, closeAudioContext, releaseAudioContext, sharedAudioContext } from "../src/games/deep-march/scene/audioContext";
+import { acquireAudioContext, audioContextCtor, closeAudioContext, releaseAudioContext, sharedAudioContext } from "../src/games/deep-march/scene/audioContext";
 import { AudioLifecycle, UNLOCK_EVENTS, type LifecycleEnv } from "../src/games/deep-march/scene/audioLifecycle";
 import { BUMP_TUNING, BumpCue, CUE_INTERVAL, CueLimiter } from "../src/games/deep-march/scene/audioCues";
 import { DEFAULT_SOUND, parseSound } from "../src/games/deep-march/settings";
 import { FakeAudioContext, flush } from "./lib/fakeAudio";
 import { chaosAudioChecks } from "./lib/chaosAudioChecks";
+import { DEFAULT_DIVE_PARAMS } from "../src/games/deep-march/scene/dive/params";
 
 let failed = 0;
 const check = (name: string, ok: boolean, info = "") => {
@@ -250,7 +251,7 @@ async function main() {
     check("byte progress monotonic", mono, `${statuses.length} samples`);
     a.dispose();
   }
-  // null context (?audio=0 / no Web Audio): off, settled
+  // null context (debug panel sound off / no Web Audio): off, settled
   {
     const a = createDiveAudio(null);
     check("no context → off, settled", a.status().state === "off" && a.status().settled);
@@ -423,7 +424,7 @@ async function lifecycleChecks() {
 }
 
 async function contextChecks() {
-  check("?audio=0 is hard off", audioDisabledByUrl("?audio=0") && !audioDisabledByUrl("?audio=1") && !audioDisabledByUrl(""));
+  check("sound is on unless the staging debug panel turns it off", DEFAULT_DIVE_PARAMS.noAudio === false);
   // no Web Audio: null, no throw
   let threw = false;
   let none: AudioContext | null = null;
@@ -620,6 +621,6 @@ async function soundChecks() {
     } catch {
       threw = true;
     }
-    check("?audio=0 / no Web Audio: setSound is a harmless no-op", !threw && a.status().state === "off");
+    check("sound off / no Web Audio: setSound is a harmless no-op", !threw && a.status().state === "off");
   }
 }

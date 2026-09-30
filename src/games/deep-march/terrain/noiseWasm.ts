@@ -6,7 +6,7 @@
  * ridged-octave code (scripts/deep-march-wasm-test.ts compares them). The module
  * is ~1.7 KB, so it compiles synchronously everywhere (main thread, workers, node);
  * any failure → null and density.ts keeps its JS path. Used when
- * TerrainSettings.wasm is true (`?wasm=1`); `?wasm=0` / default = JS.
+ * TerrainSettings.wasm is true (debug panel: WASM); default = JS.
  *
  * Memory: one fixed block (no growth, so typed-array views stay valid); GRAD3 at 0,
  * then per-field blocks handed out by `alloc` (a field that doesn't fit uses JS).

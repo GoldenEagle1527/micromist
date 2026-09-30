@@ -1,5 +1,5 @@
 /**
- * Turbidity (scene/fog.ts) math + ?fog= parsing + the lamp rig's per-mode fog.
+ * Turbidity (scene/fog.ts) math + the fog override parsing + the lamp rig's per-mode fog.
  * Run: npm run test:fog
  */
 import * as THREE from "three";
@@ -23,7 +23,7 @@ check(fogK(0) === 0 && glowIntegral(0, 1e5) === 0 && near(glowIntegral(fogK(50),
 const p1 = parseFogParam("60"), p2 = parseFogParam("50,80");
 check(parseFogParam(null)?.beam === V.beam && parseFogParam("off") === null && parseFogParam("0") === null && parseFogParam("abc")?.beam === V.beam &&
   p1?.beam === 60 && near(p1.high, 60 * (V.high / V.beam)) && p2?.beam === 50 && p2.high === 80,
-  "?fog= parsing", `null → defaults, off/0 → none, 60 → ${p1?.beam}/${p1?.high.toFixed(1)}, 50,80 → ${p2?.beam}/${p2?.high}`);
+  "fog override parsing", `null → defaults, off/0 → none, 60 → ${p1?.beam}/${p1?.high.toFixed(1)}, 50,80 → ${p2?.beam}/${p2?.high}`);
 
 // lamp rig: per-mode extinction, murk / glow only with a lamp
 const cam = new THREE.PerspectiveCamera();
@@ -40,7 +40,7 @@ check(gh > gb && gb > 0 && go === 0 && mo === 0 && mb === 1, "lights off: black 
 check(rig.beam.uBeamRange.value <= 120, "high beam fog-limited range", `${rig.beam.uBeamRange.value} m`);
 const noFog = new LampRig(cam, null);
 noFog.update(0, st("beam", true), true);
-check(noFog.env.fogK === 0 && noFog.beam.uBeamRange.value === 280, "?fog=off: no extinction, original high-beam range", `k ${noFog.env.fogK}, range ${noFog.beam.uBeamRange.value}`);
+check(noFog.env.fogK === 0 && noFog.beam.uBeamRange.value === 280, "fog off: no extinction, original high-beam range", `k ${noFog.env.fogK}, range ${noFog.beam.uBeamRange.value}`);
 if (failed) {
   console.log(`${failed} check(s) FAILED`);
   process.exit(1);

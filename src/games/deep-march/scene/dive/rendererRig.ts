@@ -7,7 +7,7 @@ import { FramePacer } from "../framePacer";
 
 export function createRenderer(host: HTMLElement, lowSpec: boolean, dpr: number): { renderer: THREE.WebGLRenderer; pacer: FramePacer } {
   // Desktop keeps MSAA and a pixel ratio floating 1.25–1.75; low-spec (touch / ≤ 4 cores)
-  // drops MSAA and stays ≤ 1.25. ?dpr=<n> pins the ratio (screenshots / debugging).
+  // drops MSAA and stays ≤ 1.25. The debug panel's 像素比 pins the ratio (screenshots / debugging).
   const renderer = new THREE.WebGLRenderer({ antialias: !lowSpec, powerPreference: "high-performance" });
   const deviceRatio = window.devicePixelRatio || 1;
   const maxRatio = Math.min(deviceRatio, lowSpec ? 1.25 : 1.75);

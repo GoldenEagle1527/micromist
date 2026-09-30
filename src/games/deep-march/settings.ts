@@ -16,7 +16,7 @@ export type DeepMarchSettings = {
   invertY: boolean;
   /** 「减弱灯光起伏」 (accessibility, M8): shallower, slower light changes near cracks. */
   calmLights: boolean;
-  /** Dive sound (?audio=0 still turns audio off entirely, whatever this says). */
+  /** Dive sound (the staging debug panel's sound switch still turns audio off entirely, whatever this says). */
   sound: SoundSettings;
 };
 

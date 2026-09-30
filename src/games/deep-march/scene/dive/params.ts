@@ -1,68 +1,73 @@
 /**
- * URL switches of the dive (debugging, screenshots, comparisons), read once:
- * ?dpr ?lodNear ?refine=0 ?bricks=0 ?wasm=0|1 ?fog ?detail=0 ?occ=0
- * ?debugSpawns=1 ?at=x,y,z,yawDeg,pitchDeg ?light=off|beam|high|sonar
- * ?tide=simple (conserve: always the 浊潮 murk instead of the tide's show).
- * Conserve (M8): ?at=crack (in front of the first open crack, chaosWiring.ts) and
- * ?chaos=0|1|2 [&cracks=2] [&scar=1] (read by conserve/platform/diveChaos.ts).
+ * The dive's debug overrides, set by the staging debug panel (debug/, 渲染 / 混沌预览
+ * / 潮汐 / 声音) and read once when a dive is built — a change takes the panel's
+ * 「重新开始下潜」. Session-only, in memory: no URL, no storage, never saved.
+ * Production builds have no panel, so every dive there uses DEFAULT_DIVE_PARAMS.
  */
+import type { ChaosPreviewSpec } from "../../conserve";
 import { terrainForDevice, type TerrainSettings } from "../../terrain/config";
 
 export type DiveParams = {
-  /** Pinned pixel ratio (> 0), else NaN / 0. */
+  /** Pinned pixel ratio (> 0), else 0 (adaptive). */
   dpr: number;
-  /** Full-resolution ring radius override (> 0). */
+  /** Full-resolution ring radius override (> 0), else 0 (the preset's). */
   lodNear: number;
+  /** Full noise evaluation in mesh jobs (no coarse pre-pass, terrain/refine.ts). */
   noRefine: boolean;
+  /** Dense mesher passes instead of sparse 8³ bricks (terrain/bricks.ts; same output). */
   noBricks: boolean;
+  /** WebAssembly noise (bit-exact) on / off; undefined = the preset's (JS). */
   wasm: boolean | undefined;
+  /** Turbidity (fog.ts parseFogParam): null = defaults, "off", "60" (beam m), "50,80". */
   fog: string | null;
+  /** Shader detail normal (detailNormal.ts). */
   detail: boolean;
+  /** GPU occlusion culling of terrain columns (occlusion.ts). */
   occlusion: boolean;
-  debugSpawns: boolean;
-  at: string | null;
-  light: string | null;
+  /** Conserve: always the tide's 浊潮 murk instead of its show. */
   tideSimple: boolean;
+  /** Conserve: a chaos preview for this dive (conserve/chaos/preview.ts; never saved), null = the generation's own. */
+  chaos: ChaosPreviewSpec | null;
+  /** Material textures as WebP instead of KTX2 (materialLibrary.ts). */
+  webp: boolean;
+  /** No audio context at all (the dive runs silent, no mute button). */
+  noAudio: boolean;
 };
 
-export function readDiveParams(search: string): DiveParams {
-  const qs = new URLSearchParams(search);
-  const wasm = qs.get("wasm");
-  return {
-    dpr: Number(qs.get("dpr")),
-    lodNear: Number(qs.get("lodNear")),
-    noRefine: qs.get("refine") === "0",
-    noBricks: qs.get("bricks") === "0",
-    wasm: wasm === "1" ? true : wasm === "0" ? false : undefined,
-    fog: qs.get("fog"),
-    detail: qs.get("detail") !== "0",
-    occlusion: qs.get("occ") !== "0",
-    debugSpawns: qs.get("debugSpawns") === "1",
-    at: qs.get("at"),
-    light: qs.get("light"),
-    tideSimple: qs.get("tide") === "simple",
-  };
+export const DEFAULT_DIVE_PARAMS: Readonly<DiveParams> = Object.freeze({
+  dpr: 0,
+  lodNear: 0,
+  noRefine: false,
+  noBricks: false,
+  wasm: undefined,
+  fog: null,
+  detail: true,
+  occlusion: true,
+  tideSimple: false,
+  chaos: null,
+  webp: false,
+  noAudio: false,
+});
+
+let current: Readonly<DiveParams> = DEFAULT_DIVE_PARAMS;
+
+/** The overrides the next dive is built with. */
+export function diveParams(): Readonly<DiveParams> {
+  return current;
 }
 
-/** The device's terrain preset with the URL overrides. */
-export function diveTerrain(lowSpec: boolean, p: DiveParams): TerrainSettings {
-  // ?lodNear=<units> overrides the full-resolution ring radius (LOD comparisons / debugging)
+/** Debug panel only: the overrides for the next dive (the panel restarts it). */
+export function setDiveParams(next: DiveParams): void {
+  current = Object.freeze({ ...next });
+}
+
+/** The device's terrain preset with the overrides. */
+export function diveTerrain(lowSpec: boolean, p: Readonly<DiveParams>): TerrainSettings {
   const base = p.lodNear > 0 ? { ...terrainForDevice(lowSpec), lodNear: p.lodNear } : terrainForDevice(lowSpec);
   return {
     ...base,
-    // ?refine=0 forces full noise evaluation in mesh jobs (no coarse pre-pass, terrain/refine.ts)
     ...(p.noRefine ? { refine: false } : {}),
-    // ?bricks=0: dense mesher passes instead of sparse 8³ bricks (terrain/bricks.ts; same output)
     ...(p.noBricks ? { bricks: false } : {}),
-    // ?wasm=1: WebAssembly noise (bit-exact; default JS, see TerrainSettings.wasm); ?wasm=0: JS
     ...(p.wasm !== undefined ? { wasm: p.wasm } : {}),
   };
-}
-
-/** ?at=x,y,z,yawDeg,pitchDeg → position and view (radians), or null. */
-export function parseViewpoint(at: string | null): { x: number; y: number; z: number; yaw: number; pitch: number } | null {
-  if (!at) return null;
-  const v = at.split(",").map(Number);
-  if (v.length < 3 || !v.every(Number.isFinite)) return null;
-  return { x: v[0], y: v[1], z: v[2], yaw: ((v[3] ?? 0) * Math.PI) / 180, pitch: ((v[4] ?? 0) * Math.PI) / 180 };
 }

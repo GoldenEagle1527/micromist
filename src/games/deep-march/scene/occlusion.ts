@@ -18,7 +18,7 @@
  *   rest of the scene), visible ones every VISIBLE_REQUERY frames, staggered;
  * - culling = moving the mesh to a layer the camera doesn't render, so the chunk
  *   manager's own `visible` bookkeeping (crossfade) is untouched;
- * - no WebGL2 query support, `?occ=0`, or any GL error → everything drawn.
+ * - no WebGL2 query support, switched off in the debug panel, or any GL error → everything drawn.
  */
 import * as THREE from "three";
 

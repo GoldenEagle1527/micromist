@@ -13,6 +13,7 @@ import type { GpuHealth } from "./gpuHealth";
 import type { HudChips } from "./hudChips";
 import type { LoadingGate } from "./loadingGate";
 import type { DeepMarchHandle, DeepMarchOptions, HudLabels, LoadingSnapshot, Telemetry } from "./types";
+import type { DebugPort } from "../../debug/types";
 
 export type HandleParts = {
   opts: DeepMarchOptions;
@@ -34,6 +35,8 @@ export type HandleParts = {
   updatePrompt: () => void;
   setLabels: (labels: HudLabels) => void;
   destroy: () => void;
+  /** Staging debug panel's port (opts.debug), else null. */
+  debug: DebugPort | null;
 };
 
 function systemState(p: HandleParts): LoadingSnapshot["system"] {
@@ -124,6 +127,7 @@ export function createHandle(p: HandleParts): DeepMarchHandle {
     base: () => p.conserve?.base?.telemetry() ?? null,
     baseCommand: (cmd) => p.conserve?.base?.command(cmd),
     tide: () => p.tide?.telemetry() ?? null,
+    debug: p.debug,
     destroy: p.destroy,
   };
 }

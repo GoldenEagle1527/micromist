@@ -3,7 +3,7 @@
  *  - caps rendering at `maxFps` (drift-corrected: 60 on desktop, 30 on low-spec / mobile);
  *  - adaptive resolution: lowers the pixel ratio in steps when rendered frames can't
  *    hold the cap, raises it again once they hold it steadily (with a growing
- *    cooldown so it doesn't oscillate). A fixed ratio (?dpr=) disables adaptation.
+ *    cooldown so it doesn't oscillate). A fixed ratio (debug panel 像素比) disables adaptation.
  */
 export type FramePacerOptions = {
   maxFps: number;

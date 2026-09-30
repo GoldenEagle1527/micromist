@@ -17,7 +17,7 @@
  *   sliver triangles never shade differently from their neighbours.
  *
  * `detailNormalJS` mirrors the GLSL for the unit test (scripts/deep-march-detail-test.ts).
- * ?detail=0 turns the whole block off (the DM_DETAIL define).
+ * The debug panel's 细节法线 off turns the whole block off (the DM_DETAIL define).
  */
 
 /** [frequency (1/u), crease depth (u)] per scale: coarse, fine. */

@@ -11,7 +11,7 @@
  * (backscatter): with the source at the eye the cone factor is constant along a
  * view ray, so the in-scatter integral is analytic — (1 − exp(−2kd)) — one exp per
  * pixel. Terrain generation distance is unchanged (sonar needs the far terrain);
- * sonar output ignores the fog (sonar.ts). ?fog= overrides (parseFogParam).
+ * sonar output ignores the fog (sonar.ts). The debug panel's 浑浊度 overrides it (parseFogParam).
  */
 import * as THREE from "three";
 
@@ -52,7 +52,7 @@ export function glowIntegral(k: number, d: number): number {
 }
 
 /**
- * ?fog= : "0" / "off" → no fog; "60" → beam 60 m (high ×1.44, off = beam);
+ * Override (dive/params.ts fog): "0" / "off" → no fog; "60" → beam 60 m (high ×1.44, off = beam);
  * "50,80" → beam 50, high 80. Anything else → the defaults.
  */
 export function parseFogParam(v: string | null, base: FogVisibility = FOG_TUNING.visibility): FogVisibility | null {

@@ -70,7 +70,7 @@ export function tideMachineChecks(c: Checker): void {
     c.check(near(ns * 0.1, 100, 0.2) && never.frames[ns - 1].dark === 1, "the murk holds in the dark until the new terrain is ready, then switches", `swap at ${(ns * 0.1).toFixed(1)} s`);
     const simple = run({ simple: true, lowMemory: false });
     const sc = simple.at("commit"), sd = simple.at("done");
-    c.check(simple.frames[sc].fallback === "simple" && near(sc * 0.1, 60), "?tide=simple: the murk right after the warning");
+    c.check(simple.frames[sc].fallback === "simple" && near(sc * 0.1, 60), "simple tide: the murk right after the warning");
     c.check(near((sd - sc) * 0.1, 12, 0.3), "the murk takes ≈ 12 s (3 s to black, 3 s held, 6 s clearing)", `${((sd - sc) * 0.1).toFixed(1)} s`);
     const darks = simple.frames.slice(sc, sd).map((f) => f.dark);
     c.check(darks[0] < 0.1 && near(darks[30], 1, 0.05) && darks[darks.length - 1] < 0.05 && darks.every((d) => d >= 0 && d <= 1), "darkness 0 → 1 → 0");

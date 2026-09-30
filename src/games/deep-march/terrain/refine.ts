@@ -16,7 +16,7 @@
  *
  * The margin is empirical (scripts/deep-march-refine-test.ts measures the
  * smallest margin with zero sign misses per LOD; the table is 2× that).
- * ?refine=0 (TerrainSettings.refine = false) disables the pass.
+ * The debug panel's 粗筛预处理 off (TerrainSettings.refine = false) disables the pass.
  */
 
 /** Coarse node spacing in lattice points. */

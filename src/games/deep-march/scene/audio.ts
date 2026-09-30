@@ -22,7 +22,7 @@
  * (audioContext.ts) so playback is allowed; AudioLifecycle (audioLifecycle.ts)
  * keeps it running across gestures, background / iOS interruptions and GPU loss.
  * Volume / mute come from settings.ts via setSound (mute also suspends the
- * context); ?audio=0 skips the mixer entirely.
+ * context); no context (debug panel sound off) skips the mixer entirely.
  */
 import { AudioLifecycle, type HoldReason, type LifecycleEnv } from "./audioLifecycle";
 import { createChaosAudio, type ChaosAudio, type ChaosAudioParams } from "./chaos/chaosAudio";
@@ -34,7 +34,7 @@ export type ShotId = "sonar" | "switch" | "mode" | "bump" | "warn";
 export type ShotOpts = { gain?: number; rate?: number; lowpass?: number };
 
 export type AudioStatus = {
-  /** off: no mixer (?audio=0 / no Web Audio) · loading · ready: all clips · partial · silent: none */
+  /** off: no mixer (sound off in the debug panel / no Web Audio) · loading · ready: all clips · partial · silent: none */
   state: "off" | "loading" | "ready" | "partial" | "silent";
   /** Every clip resolved (loaded or given up), or the world stopped waiting (late). */
   settled: boolean;
