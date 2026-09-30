@@ -1,7 +1,7 @@
 /**
  * Base energy chip under the tank gauge (once the core stands: energy / cap,
  * net rate, brown-out, docked), and the base's notices (built, refused,
- * storage moves, demolished, the tide stub).
+ * storage moves, demolished, the lighthouse switch, 唤潮).
  */
 import type { BaseNotice, BaseTelemetry } from "../../scene/base/telemetry";
 import type { BaseDict } from "./i18n";
@@ -37,6 +37,8 @@ export function noticeText(n: BaseNotice, labels: BaseDict): string {
       return labels.moved(n.action, n.total);
     case "demolished":
       return labels.demolished(labels.structures[n.structure]);
+    case "switched":
+      return labels.switched(labels.structures[n.structure], n.on);
     case "deposited":
       return labels.moved("deposit", n.total);
     case "tide":

@@ -1,14 +1,16 @@
 /**
  * The base panel (plan M5; Q or the HUD 「基地」 button): energy, storage vs
  * tank per particle kind with deposit / withdraw / 放流 (release, unlimited),
- * the buildings with demolish (full refund, confirmed), and the tide (唤潮)
- * stub — its requirements and the forecast (TideForecastCard); the sequence is M7's.
+ * the buildings with the lighthouse switch (M9) and demolish (full refund,
+ * confirmed), and 唤潮 — its requirements, what to do before it (tideAdvice.ts)
+ * and the forecast (TideForecastCard).
  */
 import { useState } from "react";
 import type { BaseCommand, BaseTelemetry } from "../../scene/base/telemetry";
 import type { ExpeditionDict } from "../expedition/i18n";
 import type { BaseDict } from "./i18n";
 import { TideForecastCard } from "./TideForecastCard";
+import { adviceText, tideAdvice } from "./tideAdvice";
 
 type Props = { base: BaseTelemetry; labels: BaseDict; kinds: ExpeditionDict["kinds"]; send: (cmd: BaseCommand) => void };
 
@@ -46,6 +48,11 @@ export function BasePanel({ base, labels, kinds, send }: Props) {
                   <span>
                     {labels.structures[b.kind]} <small className={b.working ? "on" : "off"}>{b.working ? labels.working : labels.idle}</small>
                   </span>
+                  {(base.structures.find((x) => x.kind === b.kind)?.energy ?? 0) < 0 && confirm !== b.id ? (
+                    <button type="button" className="dm-base-btn" aria-pressed={!b.on} onClick={() => send({ type: "switch", id: b.id, on: !b.on })}>
+                      {b.on ? labels.switchOff : labels.switchOn}
+                    </button>
+                  ) : null}
                   {b.kind === "core" ? null : confirm === b.id ? (
                     <span className="dm-base-confirm">
                       <small>{labels.confirmDemolish(labels.structures[b.kind])}</small>
@@ -124,6 +131,7 @@ function Storage({ base, labels, kinds, send }: Props) {
 
 function Tide({ base, labels, send }: { base: BaseTelemetry; labels: BaseDict; send: (cmd: BaseCommand) => void }) {
   const t = base.tide, f = base.forecast;
+  const advice = tideAdvice(base.view, t, base.tideActive);
   return (
     <div className="dm-base-section dm-base-tide">
       <div className="dm-base-row-head">
@@ -133,6 +141,7 @@ function Tide({ base, labels, send }: { base: BaseTelemetry; labels: BaseDict; s
         </button>
       </div>
       <p className="dm-base-note">{labels.tideNeeds(t.energy, t.energyNeeded, t.dives, t.divesNeeded)}</p>
+      {advice ? <p className="dm-base-note warn">{adviceText(advice, labels.advice)}</p> : null}
       {f ? <TideForecastCard forecast={f} labels={labels.forecast} /> : null}
       {base.tideActive ? <p className="dm-base-note">{labels.tideRunning}</p> : !base.atBase ? <p className="dm-base-note dim">{labels.tideAway}</p> : null}
     </div>
