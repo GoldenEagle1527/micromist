@@ -40,6 +40,8 @@
     "test:frozen": "esbuild scripts/deep-march-frozen-test.ts --bundle --platform=node --outfile=node_modules/.cache/dm-frozen-test.cjs --log-level=warning && node node_modules/.cache/dm-frozen-test.cjs",
     "test:placement": "esbuild scripts/deep-march-placement-test.ts --bundle --platform=node --outfile=node_modules/.cache/dm-placement-test.cjs --log-level=warning && node node_modules/.cache/dm-placement-test.cjs",
     "test:regions": "esbuild scripts/deep-march-regions-test.ts --bundle --platform=node --outfile=node_modules/.cache/dm-regions-test.cjs --log-level=warning && node node_modules/.cache/dm-regions-test.cjs",
+    "test:chaos": "esbuild scripts/deep-march-chaos-test.ts --bundle --platform=node --outfile=node_modules/.cache/dm-chaos-test.cjs --log-level=warning && node node_modules/.cache/dm-chaos-test.cjs",
+    "test:economy": "esbuild scripts/deep-march-economy-test.ts --bundle --platform=node --outfile=node_modules/.cache/dm-economy-test.cjs --log-level=warning && node node_modules/.cache/dm-economy-test.cjs",
     "cf-typegen": "wrangler types --include-runtime false",
     "deploy:staging": "npm run build && node scripts/patch-staging-wrangler.mjs && wrangler deploy"
   },
