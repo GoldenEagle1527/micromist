@@ -23,9 +23,10 @@ type Check = (ok: boolean, name: string, detail: string) => void;
  * Phone preset, seed 7, 180 u inside the east edge swimming east. Recorded at
  * deep-march-boundary-lod-fix: the terrain extent includes the wall's shell and the
  * edge columns no longer re-merge and split again (M7's 0e551d26 / 66 requests
- * carried that churn).
+ * carried that churn); a79fa85e / 62 with the view-reach split rule (chunks.ts
+ * childrenInView; 8b9eec13 / 66 before it).
  */
-const NO_CRACKS = { hash: "8b9eec13", requests: 66 };
+const NO_CRACKS = { hash: "a79fa85e", requests: 62 };
 
 export function crackStreamingChecks(check: Check): void {
   console.log("streaming at the cracks (M8)");

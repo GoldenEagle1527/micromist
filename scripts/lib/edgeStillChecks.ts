@@ -7,14 +7,13 @@
  * top-level column straddling the edge and split it again, forever), and the
  * column under the diver is drawn at level 0.
  *
- * Desktop preset (viewDistance 420 m): every quadrant of a column that splits is
- * within the view. The phone preset (230 m) is not checked here: a top-level column
- * split within lodNear·4 = 128 m can have a quadrant beyond 230 m, which the
- * quadtree never builds, and that churns the same way anywhere in the world, not
- * only at the edge (a separate fix).
+ * Both presets. The phone's 230 m view also exercises chunks.ts childrenInView: a
+ * top-level column split within 128 m could have a quadrant beyond the view that
+ * is never built, and re-merged / split the same way anywhere — so the free dive
+ * (phone) is held still at a few spots too.
  */
 import * as THREE from "three";
-import { TERRAIN, type TerrainSettings } from "../../src/games/deep-march/terrain/config";
+import { TERRAIN, terrainForDevice, type TerrainSettings } from "../../src/games/deep-march/terrain/config";
 import { createDensityField, type DensityField } from "../../src/games/deep-march/terrain/density";
 import type { ChunkManager } from "../../src/games/deep-march/terrain/chunks";
 import type { SiteLayout } from "../../src/games/deep-march/terrain/siteLayout";
@@ -123,9 +122,21 @@ function checkSpots(check: Check, preset: string, field: DensityField, spots: Sp
   }
 }
 
+/** The free dive holding still, phone preset (no edge: only the view reach can loop). */
+function freeStillChecks(check: Check): void {
+  console.log("free dive, holding still (seed 7, phone)");
+  const field = createDensityField(7, terrainForDevice(true));
+  const spots: Spot[] = [[0, 0], [100, 37], [-230, 410], [700, -90], [1234, 555]].map(([x, z]) => ({ name: `at ${x}, ${z}`, x, z, nx: 1, nz: 0 }));
+  checkSpots(check, "phone free", field, spots, 2, 4, 30);
+}
+
 export function edgeStillChecks(check: Check): void {
+  freeStillChecks(check);
   console.log("bounded world, holding still at the edge (seed 7)");
-  const presets: [string, TerrainSettings, number, number, number][] = [["desktop", TERRAIN, 4, 1, 60]];
+  const presets: [string, TerrainSettings, number, number, number][] = [
+    ["phone", terrainForDevice(true), 2, 4, 30],
+    ["desktop", TERRAIN, 4, 1, 60],
+  ];
   const base = genesisLayout(7);
   for (const [preset, st, w, f, fps] of presets) {
     const field = createDensityField(7, st, undefined, base);

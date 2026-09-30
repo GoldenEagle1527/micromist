@@ -1,5 +1,5 @@
 {
-  "note": "Free-dive ChunkManager request sequence (scripts/lib/streamingSim.ts requestSequence, seed 7, 40 s swim), recorded on tag deep-march-pre-mvp-m2 (before the bounded world). test:streaming checks it is unchanged.",
-  "phone": { "hash": "43386362", "requests": 143 },
+  "note": "Free-dive ChunkManager request sequence (scripts/lib/streamingSim.ts requestSequence, seed 7, 40 s swim), recorded on tag deep-march-pre-mvp-m2 (before the bounded world); phone re-recorded with the view-reach split rule (chunks.ts childrenInView; was 43386362 / 143, which carried a top-column merge / split loop). test:streaming checks it is unchanged.",
+  "phone": { "hash": "d30cab2b", "requests": 137 },
   "desktop": { "hash": "6a75e0ce", "requests": 221 }
 }
