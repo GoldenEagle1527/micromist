@@ -28,7 +28,12 @@ export function esForGlslang(src: string, stage: "vertex" | "fragment"): string 
     // precision: a keyword or a macro (DM_M, seabedShader.ts)
     .replace(/\buniform\s+((?:highp|mediump|lowp|DM_\w+)\s+)?((?:[iu]?sampler\w+))\s+(\w+)\s*;/g, (_, p, t, n) => `layout(binding = ${binding++}) uniform ${p ?? ""}${t} ${n};`)
     .replace(/\buniform\s+(?!((?:highp|mediump|lowp|DM_\w+)\s+)?[iu]?sampler)/g, "")
-    .replace(/^(\s*)attribute\s+/gm, () => `layout(location = ${inLoc++}) in `)
+    // a matN attribute (instanceMatrix) takes N locations
+    .replace(/^(\s*)attribute\s+((?:(?:highp|mediump|lowp)\s+)?)(\w+)/gm, (_, sp, prec, type) => {
+      const loc = inLoc;
+      inLoc += /^mat4/.test(type) ? 4 : /^mat3/.test(type) ? 3 : /^mat2/.test(type) ? 2 : 1;
+      return `${sp}layout(location = ${loc}) in ${prec}${type}`;
+    })
     .replace(/^(\s*)(flat\s+)?varying\s+/gm, (_, sp, fl) => (stage === "vertex" ? `layout(location = ${outLoc++}) ${fl ?? ""}out ` : `layout(location = ${inLoc++}) ${fl ?? ""}in `));
 }
 
