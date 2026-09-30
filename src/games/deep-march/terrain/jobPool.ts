@@ -13,6 +13,7 @@
  */
 import type { TerrainSettings } from "./config";
 import type { MesherRequest, MesherResponse } from "./protocol";
+import type { SiteLayout } from "./siteLayout";
 
 export type JobRequest = Extract<MesherRequest, { type: "column" } | { type: "info" }>;
 
@@ -38,7 +39,7 @@ export class WorkerPool implements JobPool {
   private readonly done: MesherResponse[] = [];
   onLost: ((ids: number[]) => void) | null = null;
 
-  constructor(seed: number, settings: TerrainSettings, count: number) {
+  constructor(seed: number, settings: TerrainSettings, count: number, layout: SiteLayout | null = null) {
     for (let i = 0; i < count; i++) {
       try {
         const worker = new Worker(new URL("./mesher.worker.ts", import.meta.url), { type: "module" });
@@ -51,7 +52,7 @@ export class WorkerPool implements JobPool {
           ev.preventDefault();
           this.kill(slot);
         };
-        const init: MesherRequest = { type: "init", seed, settings };
+        const init: MesherRequest = { type: "init", seed, settings, layout };
         worker.postMessage(init);
         this.slots.push(slot);
       } catch {

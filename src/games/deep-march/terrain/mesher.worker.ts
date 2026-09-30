@@ -20,8 +20,8 @@ const rowsByLod: ColumnRows[] = [];
 ctx.onmessage = (ev) => {
   const msg = ev.data;
   if (msg.type === "init") {
-    field = createDensityField(msg.seed, msg.settings);
-    base = createDensityField(msg.seed, baseTerrain(msg.settings));
+    field = createDensityField(msg.seed, msg.settings, undefined, msg.layout);
+    base = createDensityField(msg.seed, baseTerrain(msg.settings), undefined, msg.layout);
     baseRows = columnRows(base);
     rowsByLod.length = 0;
     return;
