@@ -1,8 +1,8 @@
 /** Sci-fi diving HUD: readout (always), plus dial / action fan / look pad when the panel is on. */
 import { useCallback, useState } from "react";
 import type { DeepMarchHandle } from "../scene/world";
-import { ActionFan } from "./ActionFan";
-import { IconExit, IconFlip, IconMute, IconPanel, IconSound } from "./icons";
+import { ActionFan, type FanToggleId } from "./ActionFan";
+import { IconBase, IconExit, IconFlip, IconMute, IconPanel, IconSound } from "./icons";
 import { LookPad } from "./LookPad";
 import { MoveDial } from "./MoveDial";
 import { Readout, type ReadoutLabels } from "./Readout";
@@ -13,8 +13,16 @@ import type { ExpeditionDict } from "./expedition/i18n";
 import { RecallButton } from "./expedition/RecallButton";
 import { TankGauge } from "./expedition/TankGauge";
 import { useExpedition } from "./expedition/useExpedition";
+import { BasePanel } from "./base/BasePanel";
+import { BaseEnergy, BaseNoticeLine } from "./base/BaseStatus";
+import { BuildBar } from "./base/BuildBar";
+import { HomeMark } from "./base/HomeMark";
+import type { BaseDict } from "./base/i18n";
+import { useBase } from "./base/useBase";
 import "./panel.css";
 import "./expedition/expedition.css";
+import "./base/base.css";
+import "./base/basePanel.css";
 
 export type PanelLabels = ReadoutLabels & {
   btnUp: string;
@@ -29,6 +37,7 @@ export type PanelLabels = ReadoutLabels & {
   mute: string;
   unmute: string;
   expedition: ExpeditionDict;
+  base: BaseDict;
 };
 
 export function ControlPanel({
@@ -56,6 +65,9 @@ export function ControlPanel({
   const tel = useTelemetry(game);
   // conserve mode only: tank, aim prompt, cache markers, recall (null in the free dive)
   const exp = useExpedition(game);
+  // conserve with a base (M5): build mode, storage, energy (null in the free dive)
+  const base = useBase(game);
+  const building = base?.build.active ?? false;
   const [, force] = useState(0);
   const swimming = tel?.state === "swim";
 
@@ -66,9 +78,11 @@ export function ControlPanel({
     [game],
   );
   const onToggle = useCallback(
-    (id: "swim" | "lamp" | "mode") => {
+    (id: FanToggleId) => {
       if (!game) return;
-      if (id === "swim") game.toggleSwimLatch();
+      if (id === "build") game.baseCommand({ type: "build" });
+      else if (id === "place") game.baseCommand({ type: "place" });
+      else if (id === "swim") game.toggleSwimLatch();
       else if (id === "mode") game.cycleLight();
       else game.toggleLamp();
       force((n) => n + 1);
@@ -78,10 +92,41 @@ export function ControlPanel({
 
   return (
     <div className={`dm-hud-layer${panelOn ? " panel-on" : ""}`}>
-      <Readout tel={tel} labels={labels} extra={exp ? <TankGauge exp={exp} labels={labels.expedition} /> : null} />
+      <Readout
+        tel={tel}
+        labels={labels}
+        extra={
+          exp ? (
+            <>
+              <TankGauge exp={exp} labels={labels.expedition} />
+              {base ? <BaseEnergy base={base} labels={labels.base} /> : null}
+            </>
+          ) : null
+        }
+      />
       {exp ? <CacheMarks exp={exp} title={labels.expedition.cacheMark} /> : null}
-      {exp ? <AbsorbPrompt exp={exp} touch={panelOn} labels={labels.expedition} /> : null}
+      {base ? <HomeMark base={base} title={labels.base.homeMark} /> : null}
+      {exp && !building ? <AbsorbPrompt exp={exp} touch={panelOn} labels={labels.expedition} /> : null}
+      {base && game ? (
+        <>
+          <BaseNoticeLine base={base} labels={labels.base} />
+          <BuildBar base={base} touch={panelOn} labels={labels.base} kinds={labels.expedition.kinds} send={game.baseCommand} />
+          <BasePanel base={base} labels={labels.base} kinds={labels.expedition.kinds} send={game.baseCommand} />
+        </>
+      ) : null}
       <div className="dm-hud-buttons">
+        {base && game ? (
+          <button
+            type="button"
+            className={`dm-hud-btn dm-base-toggle${base.panel ? " on" : ""}`}
+            onClick={() => game.baseCommand({ type: "panel" })}
+            aria-label={labels.base.btnBase}
+            aria-pressed={base.panel}
+            title={labels.base.btnBase}
+          >
+            <IconBase />
+          </button>
+        ) : null}
         {exp && game ? <RecallButton game={game} exp={exp} labels={labels.expedition} /> : null}
         {onFlip ? (
           <button type="button" className="dm-hud-btn dm-flip-btn" onClick={onFlip} aria-label={labels.flip} title={labels.flip}>
@@ -131,7 +176,9 @@ export function ControlPanel({
             speed={tel?.speed ?? 0}
             onHold={onHold}
             onToggle={onToggle}
-            absorb={exp ? { label: labels.expedition.btnAbsorb, active: exp.absorbing } : undefined}
+            absorb={exp && !building ? { label: labels.expedition.btnAbsorb, active: exp.absorbing } : undefined}
+            place={building ? { label: labels.base.btnPlace, ok: base?.build.ok ?? false } : undefined}
+            build={base ? { label: labels.base.btnBuild, active: building } : undefined}
           />
         </>
       ) : null}

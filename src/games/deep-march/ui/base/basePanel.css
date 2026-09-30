@@ -1,0 +1,96 @@
+/* Base panel (plan M5): storage table, buildings, the tide stub. */
+
+/* ---- base panel (centre, scrolls on small screens) ---- */
+.dm-base-panel {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: min(94%, 620px);
+  max-height: 86%;
+  overflow: auto;
+  padding: 8px 12px 10px;
+  border: 1px solid var(--hud-dim);
+  background: rgb(0 16 34 / 0.9);
+  pointer-events: auto;
+  font-size: 11px;
+  color: var(--hud);
+  z-index: 5;
+}
+.dm-base-head,
+.dm-base-row-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+.dm-base-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin: 6px 0;
+  font-variant-numeric: tabular-nums;
+}
+.dm-base-section {
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 1px solid var(--hud-faint);
+}
+.dm-base-note {
+  margin: 4px 0;
+  font-size: 10px;
+  opacity: 0.85;
+}
+.dm-base-note.warn {
+  color: var(--hud-warn);
+}
+.dm-base-note.dim {
+  opacity: 0.55;
+}
+.dm-base-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+.dm-base-table th,
+.dm-base-table td {
+  padding: 2px 4px;
+  text-align: left;
+  font-weight: normal;
+}
+.dm-base-table th {
+  opacity: 0.6;
+  font-size: 9.5px;
+}
+.dm-base-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+}
+.dm-base-actions .dm-base-btn {
+  padding: 2px 6px;
+  font-size: 9.5px;
+}
+.dm-base-list {
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.dm-base-list li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 0;
+}
+.dm-base-list small.on {
+  color: var(--hud-2);
+}
+.dm-base-list small.off {
+  color: var(--hud-warn);
+}
+.dm-base-confirm {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}

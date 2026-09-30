@@ -101,6 +101,7 @@ function panelLabels(dm: DeepMarchDict): PanelLabels {
     mute: dm.mute,
     unmute: dm.unmute,
     expedition: dm.expedition,
+    base: dm.base,
   };
 }
 
@@ -149,6 +150,8 @@ export function DeepMarchGame() {
   const diveWorld = conservePlay && conserveDive.status === "open" ? conserveDive.world : null;
   // conserve: the generation's expedition (nodes, tank, lost caches); the free dive has none
   const diveExpedition = conservePlay && conserveDive.status === "open" ? conserveDive.expedition : null;
+  // conserve (M5): the base (buildings, storage, energy)
+  const diveBase = conservePlay && conserveDive.status === "open" ? conserveDive.base : null;
 
   useEffect(() => {
     if (screen !== "playing" || diveSeed === null) return;
@@ -171,6 +174,7 @@ export function DeepMarchGame() {
           onMuteToggle: () => toggleMuteRef.current(),
           world: diveWorld,
           expedition: diveExpedition,
+          base: diveBase,
         });
         setGame(g);
       }, 0);
@@ -185,7 +189,7 @@ export function DeepMarchGame() {
     };
     // Settings/labels are read once per dive; the panel toggle is pushed via setPanelMode.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [screen, diveSeed, diveWorld, diveExpedition]);
+  }, [screen, diveSeed, diveWorld, diveExpedition, diveBase]);
 
   // Volume / mute: live into the running dive, persisted
   const soundRef = useRef(sound);
@@ -355,6 +359,7 @@ export function DeepMarchGame() {
         <p className="hint dm-play-hint">
           {panelOn ? dm.hintPanel : dm.hint}
           {diveExpedition ? (panelOn ? dm.expedition.hintPanel : dm.expedition.hint) : null}
+          {diveBase ? (panelOn ? dm.base.hintPanel : dm.base.hint) : null}
         </p>
       </div>
       <div ref={hostRef} className="game-stage dm-stage" aria-label={dm.stageAria}>

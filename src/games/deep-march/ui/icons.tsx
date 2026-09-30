@@ -14,6 +14,22 @@ export function IconSwim() {
 export function IconAbsorb() {
   return <path d="M -9 -8 L 0 2 L 9 -8 M 0 2 L 0 9 M -6 9 L 6 9 M -9 -2 L -7 -2 M 7 -2 L 9 -2 M -4 -10 L -3 -9 M 4 -10 L 3 -9" />;
 }
+/** Build: a tower on the seabed. */
+export function IconBuild() {
+  return <path d="M -9 9 L 9 9 M -5 9 L -3 -6 L 3 -6 L 5 9 M -4 -6 L 0 -10 L 4 -6 M -3 1 L 3 1" />;
+}
+/** Place: a drop pin onto the ground. */
+export function IconPlace() {
+  return <path d="M 0 5 L -6 -3 A 7 7 0 1 1 6 -3 Z M -9 9 L 9 9 M 0 -6 L 0 -4" />;
+}
+/** HUD button: the base panel (a house). */
+export function IconBase() {
+  return (
+    <svg viewBox="-12 -12 24 24" aria-hidden="true">
+      <path d="M -8 8 L -8 -1 L 0 -8 L 8 -1 L 8 8 Z M -3 8 L -3 2 L 3 2 L 3 8" fill="none" />
+    </svg>
+  );
+}
 export function IconLamp() {
   return (
     <>

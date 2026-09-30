@@ -4,6 +4,7 @@ import type { LightMode } from "./survival";
 import { loadingEn, loadingZh, type LoadingDict } from "./ui/loading/i18n";
 import { setupEn, setupZh, type SetupDict } from "./ui/setup/i18n";
 import { expeditionEn, expeditionZh, type ExpeditionDict } from "./ui/expedition/i18n";
+import { baseEn, baseZh, type BaseDict } from "./ui/base/i18n";
 
 export type DeepMarchDict = {
   setupTitle: string;
@@ -45,6 +46,8 @@ export type DeepMarchDict = {
   loading: LoadingDict;
   /** Conserve expedition HUD (ui/expedition). */
   expedition: ExpeditionDict;
+  /** Conserve base HUD (ui/base, M5). */
+  base: BaseDict;
   hudGrounded: string;
   hudCeiling: string;
   hudScrape: string;
@@ -136,6 +139,7 @@ export const deepMarchEn: DeepMarchDict = {
   setup: setupEn,
   loading: loadingEn,
   expedition: expeditionEn,
+  base: baseEn,
   hudGrounded: "Touching bottom",
   hudCeiling: "Touching ceiling",
   hudScrape: "Brushing rock",
@@ -233,6 +237,7 @@ export const deepMarchZh: DeepMarchDict = {
   setup: setupZh,
   loading: loadingZh,
   expedition: expeditionZh,
+  base: baseZh,
   hudGrounded: "触底",
   hudCeiling: "触顶",
   hudScrape: "擦碰岩壁",

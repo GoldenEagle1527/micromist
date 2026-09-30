@@ -2,12 +2,13 @@
  * Bottom-right fan-shaped button cluster: annular sectors along a quarter arc
  * around the corner — Down / Up (hold), Swim (toggle latch), Lamp (on/off),
  * Mode (cycle beam / high beam / sonar; icon + label show the current mode),
- * and in conserve mode Absorb (hold, plan M4).
+ * and in conserve mode Absorb (hold, plan M4) and Build (toggle, M5; while
+ * building, Absorb's sector becomes Place).
  */
 import { useRef, useState, type PointerEvent as RPointerEvent, type ReactNode } from "react";
 import { arcPath, polar, sectorPath, ticksPath } from "./geom";
 import type { LightMode } from "../survival";
-import { IconAbsorb, IconBeam, IconDown, IconHighBeam, IconLamp, IconSonar, IconSwim, IconUp } from "./icons";
+import { IconAbsorb, IconBeam, IconBuild, IconDown, IconHighBeam, IconLamp, IconPlace, IconSonar, IconSwim, IconUp } from "./icons";
 
 const MODE_ICON: Record<LightMode, ReactNode> = { beam: <IconBeam />, high: <IconHighBeam />, sonar: <IconSonar /> };
 
@@ -22,9 +23,10 @@ const A1 = 360;
 const GAP = 1.6;
 
 type HoldId = "up" | "down" | "absorb";
+export type FanToggleId = "swim" | "lamp" | "mode" | "build" | "place";
 
 type Btn = {
-  id: HoldId | "swim" | "lamp" | "mode";
+  id: HoldId | FanToggleId;
   label: string;
   icon: ReactNode;
   kind: "hold" | "toggle";
@@ -43,6 +45,8 @@ export function ActionFan({
   onHold,
   onToggle,
   absorb,
+  build,
+  place,
 }: {
   labels: { up: string; down: string; swim: string; lamp: string; mode: string };
   lampOn: boolean;
@@ -54,9 +58,13 @@ export function ActionFan({
   stateLabel: string;
   speed: number;
   onHold: (id: HoldId, on: boolean) => void;
-  onToggle: (id: "swim" | "lamp" | "mode") => void;
+  onToggle: (id: FanToggleId) => void;
   /** Conserve: the absorb hold button (label; lit while particles flow). Omitted in the free dive. */
   absorb?: { label: string; active: boolean };
+  /** Conserve with a base (M5): build mode toggle; omitted in the free dive. */
+  build?: { label: string; active: boolean };
+  /** Build mode on: place the building (lit when the spot is valid); replaces absorb. */
+  place?: { label: string; ok: boolean };
 }) {
   const [held, setHeld] = useState<Record<HoldId, boolean>>({ up: false, down: false, absorb: false });
   const owners = useRef(new Map<number, HoldId>());
@@ -68,6 +76,8 @@ export function ActionFan({
     { id: "lamp", label: labels.lamp, icon: <IconLamp />, kind: "toggle", on: lampOn },
     { id: "mode", label: labels.mode, icon: MODE_ICON[lightMode], kind: "toggle", on: lampOn },
     ...(absorb ? [{ id: "absorb", label: absorb.label, icon: <IconAbsorb />, kind: "hold", on: held.absorb || absorb.active } as Btn] : []),
+    ...(place ? [{ id: "place", label: place.label, icon: <IconPlace />, kind: "toggle", on: place.ok } as Btn] : []),
+    ...(build ? [{ id: "build", label: build.label, icon: <IconBuild />, kind: "toggle", on: build.active } as Btn] : []),
   ];
   const seg = (A1 - A0) / buttons.length;
 
@@ -75,7 +85,7 @@ export function ActionFan({
     e.preventDefault();
     e.stopPropagation();
     if (b.kind === "toggle") {
-      onToggle(b.id as "swim" | "lamp" | "mode");
+      onToggle(b.id as FanToggleId);
       return;
     }
     const id = b.id as HoldId;
