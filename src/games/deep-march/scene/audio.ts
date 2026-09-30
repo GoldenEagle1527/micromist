@@ -25,6 +25,7 @@
  * context); ?audio=0 skips the mixer entirely.
  */
 import { AudioLifecycle, type HoldReason, type LifecycleEnv } from "./audioLifecycle";
+import { createChaosAudio, type ChaosAudio, type ChaosAudioParams } from "./chaos/chaosAudio";
 import { CLIP_IDS, formatOrder, loopPoints, parseManifest, type ClipId, type SfxClip, type SfxFile, type SfxFormat, type SfxManifest } from "./audioManifest";
 
 export type LoopId = "ambience" | "swim";
@@ -59,6 +60,13 @@ export type DiveAudio = {
   /** Master volume 0..1 and mute (muted also suspends the context: no stream, no battery). */
   setSound: (s: { muted: boolean; volume: number }) => void;
   status: () => AudioStatus;
+  /**
+   * M8 chaos insert (chaos/chaosAudio.ts): detune + wet wobble near cracks. The
+   * identity (rate 1, wet 0) builds nothing; free dives never call it.
+   */
+  chaos: (p: ChaosAudioParams) => void;
+  /** The omen's low rumble, 0 … 1 (built on first use). */
+  rumble: (level: number) => void;
   dispose: () => void;
 };
 
@@ -89,6 +97,8 @@ const noop: DiveAudio = {
   play: () => {},
   setSound: () => {},
   status: () => OFF,
+  chaos: () => {},
+  rumble: () => {},
   dispose: () => {},
 };
 
@@ -128,6 +138,9 @@ export function createDiveAudio(ctx: AudioContext | null, opts: DiveAudioOptions
   const buffers = new Map<ClipId, Loaded>();
   const targets: Record<LoopId, number> = { ambience: 0, swim: 0 };
   const loops = new Map<LoopId, GainNode>();
+  const loopSources: AudioBufferSourceNode[] = [];
+  let chaosAudio: ChaosAudio | null = null;
+  let chaosRate = 1;
   const sources: AudioBufferSourceNode[] = [];
   let alive = true;
 
@@ -211,7 +224,9 @@ export function createDiveAudio(ctx: AudioContext | null, opts: DiveAudioOptions
     src.loopEnd = clip.end;
     src.connect(gain);
     src.start(0, clip.start);
+    src.playbackRate.value = chaosRate;
     sources.push(src);
+    loopSources.push(src);
     loops.set(id, gain);
   };
 
@@ -235,7 +250,7 @@ export function createDiveAudio(ctx: AudioContext | null, opts: DiveAudioOptions
       if (!clip || ctx.state !== "running") return;
       const src = ctx.createBufferSource();
       src.buffer = clip.buf;
-      src.playbackRate.value = o?.rate ?? 1;
+      src.playbackRate.value = (o?.rate ?? 1) * chaosRate;
       let node: AudioNode = src;
       if (o?.lowpass) {
         const filter = ctx.createBiquadFilter();
@@ -268,8 +283,22 @@ export function createDiveAudio(ctx: AudioContext | null, opts: DiveAudioOptions
       lifecycle?.hold("muted", sound.muted);
     },
     status,
+    chaos: (p) => {
+      if (!chaosAudio && p.wet <= 0 && p.rate === 1) return;
+      chaosAudio ??= createChaosAudio(ctx, master, ctx.destination);
+      chaosAudio.apply(p);
+      if (p.rate === chaosRate) return;
+      chaosRate = p.rate;
+      for (const src of loopSources) src.playbackRate.setTargetAtTime(p.rate, ctx.currentTime, 0.12);
+    },
+    rumble: (level) => {
+      if (!chaosAudio && level <= 0) return;
+      chaosAudio ??= createChaosAudio(ctx, master, ctx.destination);
+      chaosAudio.rumble(level);
+    },
     dispose: () => {
       alive = false;
+      chaosAudio?.dispose();
       lifecycle?.dispose();
       if (ctx.state === "closed") return;
       for (const src of sources) {

@@ -9,7 +9,7 @@
  *     forecasting moves no particle; save v5; SiteLayout.wall crack data; a
  *     through crack's notch passes the outer face;
  *   - M8 presentation: the scene's view and the ?chaos= preview, impassable
- *     stage-2 cracks, scars.
+ *     stage-2 cracks, scars; the effects, ghosts, omen and director (stage 0 = no-op).
  * Run: npm run test:chaos
  */
 import { createChecker } from "./lib/checks";
@@ -17,10 +17,12 @@ import { chaosModelChecks } from "./lib/chaosModelChecks";
 import { chaosCrackChecks } from "./lib/chaosCrackChecks";
 import { chaosTideChecks } from "./lib/chaosTideChecks";
 import { chaosViewChecks } from "./lib/chaosViewChecks";
+import { chaosSceneChecks } from "./lib/chaosSceneChecks";
 
 const c = createChecker();
 chaosModelChecks(c);
 chaosCrackChecks(c);
 chaosTideChecks(c);
 chaosViewChecks(c);
+chaosSceneChecks(c);
 c.finish();

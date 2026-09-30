@@ -33,6 +33,8 @@ import { BL_DECLS } from "./base/baseLightShader";
 import type { BaseLightUniforms } from "./base/baseLight";
 import { DECLS, EMISSIVE_FRAGMENT, LIGHTS_END_FRAGMENT, MAP_FRAGMENT, OPAQUE_FRAGMENT, WATER_GLSL } from "./seabedShader";
 import { TIDE_FRONT_DECLS, TIDE_FRONT_EMISSIVE, TIDE_FRONT_FRAGMENT } from "./tide/tideFrontShader";
+import { CHAOS_DECLS, CHAOS_EMISSIVE, CHAOS_MAP, CHAOS_OPAQUE, CHAOS_VERT_DECLS, CHAOS_VERT_MAIN, type ChaosUniforms } from "./chaos/seabedChaos";
+import { SONAR_OPAQUE } from "./sonar";
 
 export { WATER_GLSL };
 
@@ -80,7 +82,12 @@ export type SeabedOptions = {
   baseLight: BaseLightUniforms;
   /** Shader detail normal (detailNormal.ts); false = ?detail=0. Default true. */
   detail?: boolean;
+  /** Conserve (M8): the chaos program's uniforms (chaos/seabedChaos.ts); null / omitted = no chaos variant. */
+  chaos?: ChaosUniforms | null;
 };
+
+/** One program family for a generation's columns: resting material + its LOD-crossfade variants. */
+export type SeabedVariant = { material: THREE.MeshStandardMaterial; fadeMaterial: () => LodFadeMaterial };
 
 export type LodFadeMaterial = { material: THREE.Material; fade: THREE.Vector2 };
 
@@ -101,6 +108,12 @@ export type SeabedMaterial = {
   fadeMaterial: () => LodFadeMaterial;
   /** The tide's front variant (conserve mode only; built on first use, one program). */
   tideMaterial: () => TideFrontMaterial;
+  /**
+   * The columns' programs for a generation: chaos = its terrain shows chaos (M8:
+   * DM_CHAOS, built on first use); false (and without `opts.chaos`) = `material` /
+   * `fadeMaterial` exactly.
+   */
+  variant: (chaos: boolean) => SeabedVariant;
   update: (time: number) => void;
   dispose: () => void;
 };
@@ -123,20 +136,20 @@ export function createSeabedMaterial(opts: SeabedOptions): SeabedMaterial {
     uEnvLight: { value: 1 },
   };
 
-  const patch = (shader: THREE.WebGLProgramParametersWithUniforms, extra: Record<string, THREE.IUniform>) => {
-    Object.assign(shader.uniforms, uniforms, extra);
+  const patch = (shader: THREE.WebGLProgramParametersWithUniforms, extra: Record<string, THREE.IUniform>, chaos: boolean) => {
+    Object.assign(shader.uniforms, uniforms, extra, chaos ? opts.chaos : {});
     shader.vertexShader = shader.vertexShader
       .replace(
         "#include <common>",
-        "#include <common>\nattribute float ao;\nvarying vec3 vWPos;\nvarying vec3 vWNrm;\nvarying float vAO;" + MAT_VERT_DECLS,
+        "#include <common>\nattribute float ao;\nvarying vec3 vWPos;\nvarying vec3 vWNrm;\nvarying float vAO;" + MAT_VERT_DECLS + (chaos ? CHAOS_VERT_DECLS : ""),
       )
       .replace(
         "#include <project_vertex>",
-        "#include <project_vertex>\n  vWPos = (modelMatrix * vec4(transformed, 1.0)).xyz;\n  vWNrm = normalize(mat3(modelMatrix) * objectNormal);\n  vAO = ao;" + MAT_VERT_MAIN,
+        "#include <project_vertex>\n  vWPos = (modelMatrix * vec4(transformed, 1.0)).xyz;\n  vWNrm = normalize(mat3(modelMatrix) * objectNormal);\n  vAO = ao;" + MAT_VERT_MAIN + (chaos ? CHAOS_VERT_MAIN : ""),
       );
     shader.fragmentShader = shader.fragmentShader
-      .replace("#include <common>", "#include <common>\n" + DECLS + DETAIL_GLSL + WATER_GLSL + FOG_GLSL + SONAR_DECLS + BEAM_DECLS + PL_DECLS + BL_DECLS)
-      .replace("#include <map_fragment>", (extra.uTideFront ? TIDE_FRONT_FRAGMENT : "") + MAP_FRAGMENT)
+      .replace("#include <common>", "#include <common>\n" + DECLS + DETAIL_GLSL + WATER_GLSL + FOG_GLSL + SONAR_DECLS + BEAM_DECLS + PL_DECLS + BL_DECLS + (chaos ? CHAOS_DECLS : ""))
+      .replace("#include <map_fragment>", (extra.uTideFront ? TIDE_FRONT_FRAGMENT : "") + MAP_FRAGMENT + (chaos ? CHAOS_MAP : ""))
       .replace("#include <roughnessmap_fragment>", "float roughnessFactor = clamp(mix(0.55, 1.0, dmRough), 0.3, 1.0);")
       .replace(
         "#include <normal_fragment_maps>",
@@ -144,7 +157,7 @@ export function createSeabedMaterial(opts: SeabedOptions): SeabedMaterial {
       )
       .replace(
         "#include <emissivemap_fragment>",
-        EMISSIVE_FRAGMENT + (extra.uTideFront ? TIDE_FRONT_EMISSIVE : ""),
+        EMISSIVE_FRAGMENT + (extra.uTideFront ? TIDE_FRONT_EMISSIVE : "") + (chaos ? CHAOS_EMISSIVE : ""),
       )
       .replace(
         "#include <lights_fragment_end>",
@@ -152,44 +165,56 @@ export function createSeabedMaterial(opts: SeabedOptions): SeabedMaterial {
       )
       .replace(
         "#include <opaque_fragment>",
-        OPAQUE_FRAGMENT,
+        chaos ? OPAQUE_FRAGMENT.replace(SONAR_OPAQUE, CHAOS_OPAQUE + SONAR_OPAQUE) : OPAQUE_FRAGMENT,
       );
     if (extra.uTideFront) shader.fragmentShader = shader.fragmentShader.replace("#include <common>", "#include <common>" + TIDE_FRONT_DECLS);
     if (extra.uLodFade) shader.fragmentShader = shader.fragmentShader.replace("#include <common>", "#include <common>\nuniform vec2 uLodFade;");
   };
   const detail = opts.detail !== false;
-  const make = (fade: { value: THREE.Vector2 } | null, tide: Record<string, THREE.IUniform> | null = null) => {
+  const make = (fade: { value: THREE.Vector2 } | null, tide: Record<string, THREE.IUniform> | null = null, chaos = false) => {
     const m = new THREE.MeshStandardMaterial({ roughness: 1, metalness: 0 });
     m.fog = false; // own water model (see header)
-    m.defines = { ...(opts.lowSpec ? { DM_LOW_SPEC: "" } : {}), ...(detail ? { DM_DETAIL: "" } : {}), ...(fade ? { DM_LOD_FADE: "" } : {}), ...(tide ? { DM_TIDE_FRONT: "" } : {}), DM_SONAR_N: String(opts.sonar.uSonarPulse.value.length) };
-    m.onBeforeCompile = (shader) => patch(shader, fade ? { uLodFade: fade } : tide ?? {});
+    m.defines = { ...(opts.lowSpec ? { DM_LOW_SPEC: "" } : {}), ...(detail ? { DM_DETAIL: "" } : {}), ...(fade ? { DM_LOD_FADE: "" } : {}), ...(tide ? { DM_TIDE_FRONT: "" } : {}), ...(chaos ? { DM_CHAOS: "" } : {}), DM_SONAR_N: String(opts.sonar.uSonarPulse.value.length) };
+    m.onBeforeCompile = (shader) => patch(shader, fade ? { uLodFade: fade } : tide ?? {}, chaos);
     // Fade variants share one program (their own uLodFade is uploaded when the
     // renderer switches material); the base material has no discard at all, so
     // the resting terrain keeps early depth testing.
-    const key = `deep-march-seabed-${opts.lowSpec ? "lo" : "hi"}${detail ? "-d" : ""}${fade ? "-fade" : ""}${tide ? "-tide" : ""}`;
+    const key = `deep-march-seabed-${opts.lowSpec ? "lo" : "hi"}${detail ? "-d" : ""}${fade ? "-fade" : ""}${tide ? "-tide" : ""}${chaos ? "-chaos" : ""}`;
     m.customProgramCacheKey = () => key;
     return m;
   };
   const material = make(null);
   const fades: THREE.MeshStandardMaterial[] = [];
   let tide: TideFrontMaterial | null = null;
+  const fadeOf = (chaos: boolean) => (): LodFadeMaterial => {
+    const fade = { value: new THREE.Vector2(0, 1) };
+    const m = make(fade, null, chaos);
+    fades.push(m);
+    return { material: m, fade: fade.value };
+  };
+  const plain: SeabedVariant = { material, fadeMaterial: fadeOf(false) };
+  let chaotic: SeabedVariant | null = null;
 
   return {
     material,
     absorb: uniforms.uAbsorb.value,
     envLight: uniforms.uEnvLight,
-    fadeMaterial: () => {
-      const fade = { value: new THREE.Vector2(0, 1) };
-      const m = make(fade);
-      fades.push(m);
-      return { material: m, fade: fade.value };
-    },
+    fadeMaterial: plain.fadeMaterial,
     tideMaterial: () => {
       if (tide) return tide;
       const u = { uTideFront: { value: new THREE.Vector4(0, 0, 1e6, 1) }, uTideGlow: { value: new THREE.Color(0, 0, 0) } };
       const m = make(null, u);
       fades.push(m);
       return (tide = { material: m, front: u.uTideFront.value, glow: u.uTideGlow.value });
+    },
+    variant: (chaos) => {
+      if (!chaos || !opts.chaos) return plain;
+      if (!chaotic) {
+        const m = make(null, null, true);
+        fades.push(m);
+        chaotic = { material: m, fadeMaterial: fadeOf(true) };
+      }
+      return chaotic;
     },
     update: (time) => {
       uniforms.uTime.value = time;

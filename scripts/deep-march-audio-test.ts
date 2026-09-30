@@ -6,7 +6,8 @@
  * - gapless loop points from the source frame count and codec priming / padding;
  * - volume / mute (settings validation, master gain, mute suspends the context);
  * - AudioLifecycle (gestures, visibility, iOS interruption, GPU hold) and the shared
- *   AudioContext (never throws, webkit fallback, no duplicates).
+ *   AudioContext (never throws, webkit fallback, no duplicates);
+ * - the chaos insert (M8): identity bypass, wet path and rumble on demand.
  * Run: npm run test:audio
  */
 import { createDiveAudio, fetchBytes, type AudioStatus } from "../src/games/deep-march/scene/audio";
@@ -16,6 +17,7 @@ import { AudioLifecycle, UNLOCK_EVENTS, type LifecycleEnv } from "../src/games/d
 import { BUMP_TUNING, BumpCue, CUE_INTERVAL, CueLimiter } from "../src/games/deep-march/scene/audioCues";
 import { DEFAULT_SOUND, parseSound } from "../src/games/deep-march/settings";
 import { FakeAudioContext, flush } from "./lib/fakeAudio";
+import { chaosAudioChecks } from "./lib/chaosAudioChecks";
 
 let failed = 0;
 const check = (name: string, ok: boolean, info = "") => {
@@ -276,6 +278,9 @@ async function main() {
   console.log("lifecycle + context");
   await lifecycleChecks();
   await contextChecks();
+
+  console.log("chaos insert (M8)");
+  await chaosAudioChecks(check);
 
   if (failed) {
     console.log(`${failed} audio check(s) failed`);

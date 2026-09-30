@@ -32,7 +32,9 @@
  *    program for all kinds), lighthouse beams, placement hologram; same checks,
  *    their own Mali-G57 budgets. The seabed budget above includes the lighthouse light;
  *  - the tide's programs (M7, lib/tideShaderChecks.ts): the dome and the particle
- *    currents; same checks, their own Mali-G57 budgets.
+ *    currents; same checks, their own Mali-G57 budgets;
+ *  - the chaos programs (M8, lib/chaosShaderChecks.ts): stage 0 = the M7 seabed
+ *    programs bit for bit; the DM_CHAOS variant in the seabed budget; the omen.
  * Run: npm run test:shaders
  */
 import glslangInit from "@webgpu/glslang/dist/node-devel/glslang.js";
@@ -74,6 +76,7 @@ import { genesisLayout } from "./lib/worldFixture";
 import { nodePrograms } from "./lib/nodeShaderChecks";
 import { basePrograms } from "./lib/baseShaderChecks";
 import { tidePrograms } from "./lib/tideShaderChecks";
+import { chaosPrograms } from "./lib/chaosShaderChecks";
 
 /**
  * Far proxy ring on Mali-G57: no textures, a handful of pulses — a small fraction of
@@ -390,6 +393,7 @@ function wallRingPrograms(compile: Compile) {
   nodePrograms(check, compile);
   basePrograms(check, compile);
   tidePrograms(check, compile);
+  chaosPrograms(check, compile);
   compile("background dome fragment", domeSource(), "fragment");
   const [sv, sf] = snowSources();
   compile("plankton vertex", sv, "vertex");

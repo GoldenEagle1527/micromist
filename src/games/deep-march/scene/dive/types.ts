@@ -2,7 +2,7 @@
  * The dive's public surface (scene/world.ts): options, HUD labels, telemetry,
  * the loading snapshot and the handle the page drives. Types only.
  */
-import type { BasePort, ExpeditionPort, TidePort } from "../../conserve";
+import type { BasePort, ChaosView, ExpeditionPort, TidePort } from "../../conserve";
 import type { LightMode, LightState } from "../../survival";
 import type { RegionField, RegionKey } from "../../terrain/regions";
 import type { SiteLayout, WorldRect } from "../../terrain/siteLayout";
@@ -54,6 +54,10 @@ export type DeepMarchOptions = {
   base?: BasePort | null;
   /** Conserve mode (M7): the tide (唤潮, the show, gen + 1); needs `base`. */
   tide?: TidePort | null;
+  /** Conserve mode (M8): this generation's chaos as the scene presents it (conserve/chaos/view.ts). */
+  chaos?: ChaosView | null;
+  /** 「减弱灯光起伏」 (settings.ts): shallower, slower light changes near cracks. */
+  calmLights?: boolean;
 };
 
 export type Telemetry = {

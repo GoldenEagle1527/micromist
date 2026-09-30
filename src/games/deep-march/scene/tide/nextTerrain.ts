@@ -6,7 +6,8 @@
  * no LOD crossfades; `ready` = the loading gate's rule (every footprint in view
  * drawn, level 0 around the diver) and the set settled (nothing queued or
  * building), so P4 shows it at full detail. At the switch it becomes the current
- * terrain (the director hands `chunks` / `field` to the loop).
+ * terrain (the director hands `chunks` / `field` to the loop). Its programs are
+ * gen + 1's seabed variant (M8: the chaos program when gen + 1 shows chaos).
  */
 import type * as THREE from "three";
 import { ChunkManager } from "../../terrain/chunks";
@@ -14,7 +15,7 @@ import type { TerrainSettings } from "../../terrain/config";
 import { createDensityField, type DensityField } from "../../terrain/density";
 import type { PoolRouter } from "../../terrain/poolRouter";
 import type { SiteLayout } from "../../terrain/siteLayout";
-import type { SeabedMaterial } from "../seabedMaterial";
+import type { SeabedVariant } from "../seabedMaterial";
 
 /** The loading gate's level-0 radius (dive/loadingGate.ts). */
 const NEAR_RADIUS = 14;
@@ -23,7 +24,7 @@ export class NextTerrain {
   readonly field: DensityField;
   readonly chunks: ChunkManager;
 
-  constructor(scene: THREE.Scene, router: PoolRouter, seed: number, settings: TerrainSettings, layout: SiteLayout, gen: number, seabed: SeabedMaterial, lowSpec: boolean) {
+  constructor(scene: THREE.Scene, router: PoolRouter, seed: number, settings: TerrainSettings, layout: SiteLayout, gen: number, seabed: SeabedVariant, lowSpec: boolean) {
     this.field = createDensityField(seed, settings, undefined, layout);
     this.chunks = new ChunkManager(scene, this.field, seed, seabed.material, lowSpec, seabed.fadeMaterial, router.view(gen, layout));
     this.chunks.meshGroup.visible = false;
