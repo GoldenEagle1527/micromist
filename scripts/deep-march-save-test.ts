@@ -3,6 +3,7 @@
  *   - new save at genesis: shape, 10 × 10, generation 1, conserved, size budget;
  *   - write → read round trip through a backend; the game-store adapter's key;
  *   - migrations: current version, chained upgrades, future / unknown versions refused;
+ *     v1 → v2 (M2): generation.allocInput = N − P − B from the stored ledger;
  *   - validation: every corrupted field makes the slot unreadable (never guessed);
  *   - reconcile: sanitizing, deficit → suspended, excess taken in the configured
  *     order, result conserves, input untouched;
@@ -10,6 +11,8 @@
  *   - sessions: new / continue / repaired / annihilated (read-only) / unreadable /
  *     missing; dive count and ledger changes are written throttled and on close;
  *     blocked opens never touch the stored save;
+ *   - generation: the session's site table is built from generation.allocInput, so
+ *     it stays fixed while the ledger changes within a generation;
  *   - setup peek of each slot state.
  * Run: npm run test:save
  */
@@ -70,6 +73,7 @@ c.section("new save");
   c.check(s.seedText === "abyss" && s.seed === seedFromString("abyss") >>> 0, "seed text and terrain seed");
   c.check(s.size.sitesX === 10 && s.size.sitesZ === 10, "10 × 10 sites (D17)");
   c.check(poolsConserve(s.totals, s.ledger) && s.ledger.base[0] === 600 && s.ledger.base[3] === 80, "ledger conserved, lander cargo in the base");
+  c.check(same(s.generation.allocInput, [65400, 0, 17000, 16920, 0, 0, 0]), "generation 1 allocation input R = N − P − B");
   c.check(s.stats.divesStarted === 0 && same(s.flags, {}), "no dives, no flags");
   c.check(saveBytes(s) < 20 * 1024, "JSON < 20 KB", `${saveBytes(s)} B`);
 }
@@ -97,6 +101,19 @@ c.section("migrations");
   const up = migrateSave({ v: 1 }, chain, 3);
   c.check(up.ok && same(up.raw, { v: 3, a: 1, b: 2 }) && up.from === 1, "chained migrations 1 → 2 → 3 run in order");
   c.check(same(migrateSave({ v: 0 }, chain, 3), { ok: false, reason: "missing-migration" }), "gap in the chain refused (missing-migration)");
+  // v1 → v2: a stored M1 save gains generation.allocInput = N − P − B
+  const v1 = clone(newSave()) as unknown as Record<string, unknown>;
+  delete v1.generation;
+  v1.v = 1;
+  (v1.ledger as Record<string, number[]>).player[2] = 30;
+  (v1.ledger as Record<string, number[]>).world[2] -= 30;
+  const backend = createMemoryBackend({ "save/main": v1 });
+  const read = readSlot(backend, "main");
+  c.check(SAVE_VERSION === 2 && read.status === "ok" && read.migratedFrom === 1 && read.save.v === 2, "v1 save (M1) migrates to v2 and reads ok");
+  c.check(read.status === "ok" && same(read.save.generation.allocInput, [65400, 0, 16970, 16920, 0, 0, 0]), "v1 → v2: allocInput = N − P − B (lander cargo in B, 30 lumen carried)");
+  const opened = openConserveSession({ backend, intent: { kind: "continue" }, hashSeed: seedFromString });
+  c.check(opened.ok && (backend.read("save/main") as WorldSave).v === 2, "a migrated save is written back as v2 at once");
+  if (opened.ok) opened.session.close();
 }
 
 c.section("validation");
@@ -113,6 +130,9 @@ c.section("validation");
     ["ledger pool value", (s) => ((s.ledger as Record<string, number[]>).world[1] = Number.NaN)],
     ["stats", (s) => (s.stats = { divesStarted: 1.5 })],
     ["flags", (s) => (s.flags = { endingA: "opened" })],
+    ["generation", (s) => (s.generation = null)],
+    ["generation.allocInput shape", (s) => ((s.generation as Record<string, unknown>).allocInput = [1, 2])],
+    ["generation.allocInput above the totals", (s) => ((s.generation as Record<string, number[]>).allocInput[0] = 70_000)],
   ];
   for (const [name, corrupt] of corruptions) {
     const raw = clone(newSave()) as unknown as Record<string, unknown>;
@@ -187,7 +207,11 @@ c.section("sessions");
   c.check((backend.read("save/main") as WorldSave).stats.divesStarted === 0, "dive count written throttled, not at once");
   clock.advance(30_000);
   c.check((backend.read("save/main") as WorldSave).stats.divesStarted === 1 && (backend.read("save/main") as WorldSave).savedAt === clock.now(), "…written after the interval, savedAt updated");
+  const tableBefore = JSON.stringify(session.siteTable);
+  c.check(session.siteTable === session.siteTable && session.siteTable.sites.length === 100 && same(session.siteTable.allocInput, session.snapshot().generation.allocInput), "site table: built once, from generation.allocInput");
   session.ledger.transfer("world", "player", "lumen", 25);
+  c.check(JSON.stringify(session.siteTable) === tableBefore && same(session.snapshot().generation.allocInput, [65400, 0, 17000, 16920, 0, 0, 0]), "ledger changes within a generation leave R and the site table unchanged");
+  c.check(session.report.sites.sitesX === 10 && Object.values(session.report.sites.byBiome).reduce((a, b) => a + b, 0) === 100, "report: site summary (10 × 10, 100 sites by biome)");
   session.close();
   const afterClose = backend.read("save/main") as WorldSave;
   c.check(afterClose.ledger.player[2] === 25 && poolsConserve(afterClose.totals, afterClose.ledger), "ledger change marks dirty; close() writes it");

@@ -8,5 +8,7 @@ export { openConserveSession, type OpenIntent, type OpenOutcome } from "./sessio
 export type { ConserveSession } from "./session/conserveSession";
 export { peekWorldSlot, type SlotSummary } from "./session/peekSlot";
 export { flushOnPageHide } from "./platform/pageLifecycle";
+export { terrainLayoutOf } from "./platform/terrainLayout";
+export type { SiteTable, Site } from "./world/siteTable";
 export { withWorldSaveStep } from "./loading/worldSaveStep";
 export type { OpenReport } from "./session/openReport";

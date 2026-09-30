@@ -34,6 +34,14 @@ function ledgerProblem(raw: RawSave): string | null {
   return bad ? `ledger.${bad}` : null;
 }
 
+function generationProblem(raw: RawSave): string | null {
+  if (!isRecord(raw.generation)) return "generation";
+  const r = raw.generation.allocInput;
+  const totals = raw.totals as number[];
+  if (!isCountVector(r) || r.some((n, k) => n > totals[k])) return "generation.allocInput";
+  return null;
+}
+
 function extrasProblem(raw: RawSave): string | null {
   if (!isRecord(raw.stats) || typeof raw.stats.divesStarted !== "number" || !Number.isSafeInteger(raw.stats.divesStarted) || raw.stats.divesStarted < 0) return "stats";
   if (!isRecord(raw.flags)) return "flags";
@@ -43,7 +51,7 @@ function extrasProblem(raw: RawSave): string | null {
 }
 
 export function validateSave(raw: RawSave): ValidateResult {
-  const problem = fieldProblem(raw) ?? ledgerProblem(raw) ?? extrasProblem(raw);
+  const problem = fieldProblem(raw) ?? ledgerProblem(raw) ?? generationProblem(raw) ?? extrasProblem(raw);
   if (problem) return { ok: false, reason: `invalid ${problem}` };
   return { ok: true, save: raw as unknown as WorldSave };
 }

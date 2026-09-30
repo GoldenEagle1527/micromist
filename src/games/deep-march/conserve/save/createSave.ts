@@ -1,6 +1,7 @@
 /** A new world save at genesis. */
 import { WORLD_SIZE } from "../config";
 import type { ParticleLedger } from "../ledger/particleLedger";
+import { allocationInput } from "../world/allocInput";
 import { createGenesisLedger } from "../world/genesis";
 import { withLedger } from "./saveLedger";
 import { SAVE_VERSION, type WorldSave } from "./schema";
@@ -28,6 +29,8 @@ export function createWorldSave(spec: NewSaveSpec): WorldSave {
     ledger: { world: [], player: [], base: [], suspended: [], lost: [] },
     stats: { divesStarted: 0 },
     flags: {},
+    generation: { allocInput: [] },
   };
-  return withLedger(header, spec.ledger ?? createGenesisLedger());
+  const ledger = spec.ledger ?? createGenesisLedger();
+  return { ...withLedger(header, ledger), generation: { allocInput: allocationInput(ledger.toState()) } };
 }

@@ -17,6 +17,7 @@ import { systemClock, type WriterClock } from "../save/saveWriter";
 import { SAVE_VERSION, isReadOnlySave, type WorldSave } from "../save/schema";
 import { ConserveSession } from "./conserveSession";
 import type { BlockedReport, OpenedReport } from "./openReport";
+import { summarizeSites, type SiteSummary } from "../world/siteSummary";
 
 export type OpenIntent = { kind: "continue" } | { kind: "new"; seedText: string };
 
@@ -38,7 +39,9 @@ function poolTotalsOf(ledger: ParticleLedger): Record<PoolId, number> {
   return out;
 }
 
-function openedReport(kind: OpenedReport["kind"], save: WorldSave, ledger: ParticleLedger, repairs: Repair[], migratedFrom: number): OpenedReport {
+type ReportBuilder = (ledger: ParticleLedger, sites: SiteSummary) => OpenedReport;
+
+function openedReport(kind: OpenedReport["kind"], save: WorldSave, ledger: ParticleLedger, sites: SiteSummary, repairs: Repair[], migratedFrom: number): OpenedReport {
   return {
     kind,
     slotKey: slotKey(save.id),
@@ -52,6 +55,7 @@ function openedReport(kind: OpenedReport["kind"], save: WorldSave, ledger: Parti
     conserved: ledger.isConserved(),
     repairs,
     bytes: saveBytes(save),
+    sites,
   };
 }
 
@@ -59,9 +63,9 @@ function blocked(kind: BlockedReport["kind"], slotId: string, reason: string): O
   return { ok: false, report: { kind, slotKey: slotKey(slotId), reason } };
 }
 
-function startSession(save: WorldSave, report: (ledger: ParticleLedger) => OpenedReport, opts: OpenOptions): OpenOutcome {
+function startSession(save: WorldSave, report: ReportBuilder, opts: OpenOptions): OpenOutcome {
   const ledger = ledgerOf(save);
-  const session = new ConserveSession(save, ledger, report(ledger), opts);
+  const session = new ConserveSession(save, ledger, (table) => report(ledger, summarizeSites(table)), opts);
   return { ok: true, session };
 }
 
@@ -69,7 +73,7 @@ function createNew(seedText: string, slotId: string, opts: OpenOptions): OpenOut
   const now = (opts.clock ?? systemClock).now();
   const save = createWorldSave({ id: slotId, seedText, seed: opts.hashSeed(seedText), now });
   writeSlot(opts.backend, save);
-  return startSession(save, (ledger) => openedReport("created", save, ledger, [], SAVE_VERSION), opts);
+  return startSession(save, (ledger, sites) => openedReport("created", save, ledger, sites, [], SAVE_VERSION), opts);
 }
 
 function continueStored(slotId: string, opts: OpenOptions): OpenOutcome {
@@ -78,7 +82,7 @@ function continueStored(slotId: string, opts: OpenOptions): OpenOutcome {
   if (read.status === "unreadable") return blocked("unreadable", slotId, read.reason);
   if (isReadOnlySave(read.save)) return blocked("ended", slotId, "annihilated");
   if (read.repairs.length > 0 || read.migratedFrom !== SAVE_VERSION) writeSlot(opts.backend, read.save);
-  return startSession(read.save, (ledger) => openedReport("continued", read.save, ledger, read.repairs, read.migratedFrom), opts);
+  return startSession(read.save, (ledger, sites) => openedReport("continued", read.save, ledger, sites, read.repairs, read.migratedFrom), opts);
 }
 
 export function openConserveSession(opts: OpenOptions): OpenOutcome {
