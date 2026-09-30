@@ -9,7 +9,7 @@ Buildings, the lighthouse light, build mode and the base's HUD data. `world.ts` 
 | `innerRect.ts` | The ring wall's inner face as the base rules' rectangle (rounded corners) | no |
 | `dock.ts` | Departure detection (radius + 6 m hysteresis), docking at an energy tower | no |
 | `home.ts` | Where recall / death wakes the diver once the core stands | no |
-| `commands.ts` | Keys / HUD buttons → port and build mode, cues, notices | no |
+| `commands.ts` | Keys / HUD buttons → port and build mode, cues, notices; M9: `switch` (a lighthouse on / off, from anywhere) | no |
 | `telemetry.ts` | HUD data and command types | no |
 | `shapes.ts`, `structureShapes.ts`, `structureGeometry.ts` | Low-poly flat-shaded forms (184–232 triangles each, 6 m skirt into the ground), glow strips as a vertex attribute | geometry only |
 | `structureShader.ts`, `structureMaterial.ts` | One patched MeshPhong program for all kinds: panel-seam normals without textures, glow, grow-in, the terrain's water / fog / sonar / high beam and the lighthouse light | yes |
@@ -19,6 +19,6 @@ Buildings, the lighthouse light, build mode and the base's HUD data. `world.ts` 
 | `hologramShader.ts`, `hologram.ts` | Placement preview (green / red) + footprint and base-radius rings | yes |
 | `baseScene.ts` | Composition: energy tick, departures, docking, light and beams, hologram, telemetry, warm compile | yes |
 
-Controls: G build mode, T next building, E / left click place (absorbing is off while building), Q base panel (唤潮 at the base, M7: `commands.ts` → the tide director; off while a tide runs, and build mode / recall are off during its show); touch: 「建造」 / 「放置」 in the action fan, the 「基地」 HUD button, the build bar's cards and buttons.
+Controls: G build mode, T next building, E / left click place (absorbing is off while building), Q base panel (lighthouse 「开启 / 关闭」 from anywhere, M9; 唤潮 at the base, M7: `commands.ts` → the tide director; off while a tide runs, and build mode / recall are off during its show); touch: 「建造」 / 「放置」 in the action fan, the 「基地」 HUD button, the build bar's cards and buttons.
 
 Tests: `test:placement` (rules, ground, energy, draw calls ≤ 8 and ≤ 60k triangles for a full base), `test:frozen`, `test:shaders` (glslang ES, Mali-G57 budgets for the building / beam / hologram programs and the seabed with the light). Pure files stay free of three.js so these run in node.

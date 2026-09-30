@@ -11,6 +11,7 @@ export type BaseNotice =
   | { kind: "deposited"; total: number }
   | { kind: "moved"; action: "deposit" | "withdraw" | "release"; total: number }
   | { kind: "demolished"; structure: StructureKind }
+  | { kind: "switched"; structure: StructureKind; on: boolean }
   /** 唤潮 pressed: the warning began (ok), or it could not (away: not at the base). */
   | { kind: "tide"; ok: boolean; away?: boolean };
 
@@ -48,4 +49,6 @@ export type BaseCommand =
   | { type: "withdraw"; kind: number; count: number }
   | { type: "release"; kind: number; count: number }
   | { type: "demolish"; id: number }
+  /** The lighthouse switch (M9): off saves energy for the tide. */
+  | { type: "switch"; id: number; on: boolean }
   | { type: "tide" };

@@ -1,7 +1,8 @@
 /**
  * The base's commands (keys and HUD buttons → the port and build mode): what
  * each does, the cue it plays and the notice it leaves. Storage moves only at
- * the base (inside the protection radius); 唤潮 too.
+ * the base (inside the protection radius); 唤潮 too. The lighthouse switch
+ * (M9) works from anywhere the panel opens.
  */
 import type { BasePort, BaseView } from "../../conserve";
 import type { DiveAudio } from "../audio";
@@ -49,6 +50,12 @@ export function runCommand(cmd: BaseCommand, c: CommandContext): CommandResult {
     case "demolish": {
       const b = c.view.buildings.find((x) => x.id === cmd.id);
       return done(b && port.demolish(cmd.id).ok ? { kind: "demolished", structure: b.kind } : null);
+    }
+    case "switch": {
+      const b = c.view.buildings.find((x) => x.id === cmd.id);
+      if (!b || !port.setOn(cmd.id, cmd.on).ok) return done();
+      audio.play("switch", { gain: 0.3, rate: cmd.on ? 1.2 : 0.9 });
+      return done({ kind: "switched", structure: b.kind, on: cmd.on });
     }
     case "tide": {
       // only at the base (the dome is its protection radius); the panel closes on success

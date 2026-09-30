@@ -1,7 +1,8 @@
-/** Base HUD strings (conserve mode, plans M5–M6): build mode, the base panel, storage, energy, 唤潮 and its forecast. */
+/** Base HUD strings (conserve mode, plans M5–M9): build mode, the base panel, storage, energy, the lighthouse switch, 唤潮, its forecast and advice. */
 import type { StructureKind } from "../../conserve";
 import type { BuildReason } from "../../scene/base/buildMode";
 import { forecastEn, forecastZh, type ForecastDict } from "./forecastI18n";
+import { reasonsEn, reasonsZh } from "./reasonsI18n";
 
 export type BaseDict = {
   structures: Record<StructureKind, string>;
@@ -35,6 +36,10 @@ export type BaseDict = {
   working: string;
   idle: string;
   demolish: string;
+  /** The lighthouse switch (M9). */
+  switchOn: string;
+  switchOff: string;
+  switched: (name: string, on: boolean) => string;
   confirmDemolish: (name: string) => string;
   yes: string;
   no: string;
@@ -48,6 +53,8 @@ export type BaseDict = {
   tideAway: string;
   tideNotReady: string;
   tideRunning: string;
+  /** Why the tide can't be called yet, and what to do (ui/base/tideAdvice.ts, M9). */
+  advice: { cap: string; drain: string; charging: (minutes: number) => string; dive: string };
   homeMark: (m: number) => string;
   built: (name: string) => string;
   refused: (name: string, reason: string) => string;
@@ -66,23 +73,7 @@ export const baseEn: BaseDict = {
     energy: "Stores energy; dock here to charge the battery",
     storage: "+1000 storage; widens the base",
   },
-  reasons: {
-    ok: "Can be placed here",
-    "no-core": "Build the base core first",
-    "has-core": "The base core already stands",
-    wall: "Too close to the ring wall",
-    radius: "Outside the base's protection radius",
-    grid: "Too far from the core / an energy tower",
-    overlap: "Overlaps another building",
-    limit: "Building limit reached",
-    cost: "Not enough particles",
-    "no-ground": "No seabed in reach",
-    slope: "Ground too steep",
-    rough: "Ground too rough",
-    clearance: "Not enough open water above",
-    blend: "Too close to a region border",
-    frozen: "The frozen zone here would disturb the terrain",
-  },
+  reasons: reasonsEn,
   btnBuild: "BUILD",
   btnPlace: "PLACE",
   btnBase: "Base (Q)",
@@ -110,6 +101,9 @@ export const baseEn: BaseDict = {
   working: "on",
   idle: "off",
   demolish: "Demolish",
+  switchOn: "Switch on",
+  switchOff: "Switch off",
+  switched: (n, on) => `${n} switched ${on ? "on" : "off"}`,
   confirmDemolish: (name) => `Demolish the ${name}? Its full cost goes back into storage.`,
   yes: "Demolish",
   no: "Keep",
@@ -121,6 +115,12 @@ export const baseEn: BaseDict = {
   tideAway: "Call the tide from inside the base",
   tideNotReady: "The tide can't be called yet",
   tideRunning: "A tide is running",
+  advice: {
+    cap: "Energy capacity is below 150 — build an energy tower",
+    drain: "Energy is falling — switch the lighthouses off to save up for the tide",
+    charging: (min) => `Enough energy in about ${min} min`,
+    dive: "Make one dive first: leave the base and come back",
+  },
   homeMark: (m) => `Base · ${m} m`,
   built: (n) => `${n} built`,
   refused: (n, r) => `Can't build the ${n}: ${r}`,
@@ -138,23 +138,7 @@ export const baseZh: BaseDict = {
     energy: "储存能量；停靠可为电池充电",
     storage: "仓储 +1000；扩大基地",
   },
-  reasons: {
-    ok: "可以放置",
-    "no-core": "请先建造基地核心",
-    "has-core": "基地核心已建成",
-    wall: "离环壁太近",
-    radius: "超出基地保护半径",
-    grid: "离核心 / 储能塔太远",
-    overlap: "与其他建筑重叠",
-    limit: "建筑数量已达上限",
-    cost: "粒子不足",
-    "no-ground": "瞄准范围内没有海床",
-    slope: "地面太陡",
-    rough: "地面太崎岖",
-    clearance: "上方水域不够开阔",
-    blend: "离区域边界太近",
-    frozen: "此处的冻结区会破坏地形",
-  },
+  reasons: reasonsZh,
   btnBuild: "建造",
   btnPlace: "放置",
   btnBase: "基地（Q）",
@@ -182,6 +166,9 @@ export const baseZh: BaseDict = {
   working: "运行",
   idle: "停机",
   demolish: "拆除",
+  switchOn: "开启",
+  switchOff: "关闭",
+  switched: (n, on) => `${n}已${on ? "开启" : "关闭"}`,
   confirmDemolish: (n) => `确定拆除${n}？建造材料将全额退回仓储。`,
   yes: "拆除",
   no: "保留",
@@ -193,6 +180,12 @@ export const baseZh: BaseDict = {
   tideAway: "请在基地保护范围内唤潮",
   tideNotReady: "现在还不能唤潮",
   tideRunning: "潮汐进行中",
+  advice: {
+    cap: "能量上限不足 150 · 先建一座储能塔",
+    drain: "能量在下降 · 关闭灯塔来为唤潮攒能量",
+    charging: (min) => `约 ${min} 分钟后能量足够`,
+    dive: "先出航一次：离开基地再回来",
+  },
   homeMark: (m) => `基地 · ${m} 米`,
   built: (n) => `${n}已建成`,
   refused: (n, r) => `无法建造${n}：${r}`,
