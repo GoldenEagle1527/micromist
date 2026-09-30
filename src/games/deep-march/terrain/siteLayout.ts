@@ -9,9 +9,13 @@
  * seeded default sites ("pseudo-sites" beyond the world edge: they shape the
  * blend along the border but carry no bias), so the field stays continuous.
  *
+ * `wall` (optional): the ring wall along the rectangle (wallGeometry.ts) — its
+ * thickness from the world's wall model, and cracks (M6).
+ *
  * Plain data (typed arrays): crosses postMessage to the mesher workers unchanged.
  * Without a layout every term is an identity — the free dive is unaffected.
  */
+import type { WallSpec } from "./wallGeometry";
 
 export type SiteLayout = {
   /** First cell of the rectangle (base-unit site grid). */
@@ -29,6 +33,8 @@ export type SiteLayout = {
   hash: Float64Array;
   /** Density bias δ (raw base units; > 0 more rock). */
   bias: Float64Array;
+  /** Ring wall along the rectangle; absent / null = none (open edge). */
+  wall?: WallSpec | null;
 };
 
 /** World-space rectangle (x0 ≤ x ≤ x1, z0 ≤ z ≤ z1). */
@@ -77,6 +83,10 @@ export function assertSiteLayout(l: SiteLayout, regionCount: number): void {
     if (!(l.region[i] >= 0 && l.region[i] < regionCount)) throw new Error("SiteLayout: region id");
     for (const v of [l.jx[i], l.jz[i], l.hash[i]]) if (!(v >= 0 && v < 1)) throw new Error("SiteLayout: hash out of [0, 1)");
     if (!Number.isFinite(l.bias[i])) throw new Error("SiteLayout: bias");
+  }
+  if (l.wall) {
+    if (!(l.wall.thickness > 0 && Number.isFinite(l.wall.thickness))) throw new Error("SiteLayout: wall thickness");
+    for (const c of l.wall.cracks) if (![c.s, c.width, c.depth].every(Number.isFinite) || c.width <= 0 || c.depth < 0) throw new Error("SiteLayout: wall crack");
   }
 }
 

@@ -36,7 +36,7 @@ export function useConserveDive(intent: OpenIntent | null): { dive: ConserveDive
         if (!outcome.ok) return setDive({ status: "blocked", steps });
         sessionRef.current = outcome.session;
         unbind = mod.flushOnPageHide(() => outcome.session.flush());
-        setDive({ status: "open", seedText: outcome.session.seedText, world: mod.terrainLayoutOf(outcome.session.siteTable), steps });
+        setDive({ status: "open", seedText: outcome.session.seedText, world: mod.terrainLayoutOf(outcome.session.siteTable, outcome.session.wall), steps });
       },
       () => !cancelled && setDive({ status: "failed" }),
     );

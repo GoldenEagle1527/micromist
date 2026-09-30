@@ -85,7 +85,7 @@ const planCache = new WeakMap<DensityField, Map<number, RowPlan>>();
 const maskCache = new WeakMap<DensityField, Map<string, number>>();
 
 /**
- * Regions (bitmask) that can have non-zero weight anywhere a column's job reads
+ * Regions (bitmask, + WALL_BIT) that can have non-zero weight anywhere a column's job reads
  * the field: its padded footprint plus the floater-search window. The column's
  * row plan uses only these regions' bounds, so rows that are always rock / water
  * *here* are skipped even though another region (e.g. the deep trench) needs them.
@@ -102,7 +102,8 @@ export function columnRegionMask(field: DensityField, cx: number, cz: number, lo
   const Mi = Math.max(1, Math.ceil(s.floaterMargin / latticeSpacing(field))) + 2;
   const x0 = lodCoord(cx * (n - 1) - 1 - Mi, field, lod), x1 = lodCoord(cx * (n - 1) + n + Mi, field, lod);
   const z0 = lodCoord(cz * (n - 1) - 1 - Mi, field, lod), z1 = lodCoord(cz * (n - 1) + n + Mi, field, lod);
-  const mask = field.regions.maskInRect(x0, z0, x1, z1);
+  // + WALL_BIT near the ring wall (bounded world): wider row bounds there
+  const mask = field.regions.maskInRect(x0, z0, x1, z1) | field.wallMask(x0, z0, x1, z1);
   if (m.size > 20000) m.clear();
   m.set(key, mask);
   return mask;
@@ -923,7 +924,7 @@ export function generateColumnMesh(
   for (let q = surfaceVerts; q < vcount; q++) ao[q] = ao[skirtSrc[q - surfaceVerts]];
   // macro-region weights for the material system: global grid → identical at every LOD
   // (classification-only info jobs don't render the mesh)
-  const region = withInfo ? new Uint8Array(0) : packRegionWeights(positions, surfaceVerts, vcount, new RegionWeightSampler(field.regions, regionGridSpacing(field.settings.worldScale)), skirtSrc);
+  const region = withInfo ? new Uint8Array(0) : packRegionWeights(positions, surfaceVerts, vcount, new RegionWeightSampler(field.regions, regionGridSpacing(field.settings.worldScale)), skirtSrc, field.wallWeight);
   let info: ChunkTerrainInfo | null = null;
   let infoMs = 0;
   if (withInfo) {

@@ -1,13 +1,15 @@
 /**
- * Site table → the terrain's explicit site layout (terrain/siteLayout.ts): plain
- * typed arrays the density field, the mesher workers and the region map read.
+ * Site table (+ ring wall) → the terrain's explicit site layout (terrain/siteLayout.ts):
+ * plain typed arrays the density field, the mesher workers and the region map read.
+ * The wall state becomes the layout's wall spec (thickness and cracks, metres).
  * The world is centred on the origin: cells −⌊nx/2⌋ … nx − 1 − ⌊nx/2⌋ (base-unit
  * site grid). Type-only import: no terrain code enters the conserve chunk.
  */
 import type { SiteLayout } from "../../terrain/siteLayout";
+import type { WallState } from "../chaos/wallModel";
 import type { SiteTable } from "../world/siteTable";
 
-export function terrainLayoutOf(table: SiteTable): SiteLayout {
+export function terrainLayoutOf(table: SiteTable, wall: WallState | null = null): SiteLayout {
   const n = table.sites.length;
   const layout: SiteLayout = {
     cx0: -Math.floor(table.sitesX / 2),
@@ -19,6 +21,7 @@ export function terrainLayoutOf(table: SiteTable): SiteLayout {
     region: new Int8Array(n),
     hash: new Float64Array(n),
     bias: new Float64Array(n),
+    wall: wall ? { thickness: wall.thickness, cracks: wall.cracks.map((c) => ({ ...c })) } : null,
   };
   for (const s of table.sites) {
     layout.jx[s.i] = s.jx;

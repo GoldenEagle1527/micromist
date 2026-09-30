@@ -645,10 +645,10 @@ export class ChunkManager {
       geo.setAttribute("position", new THREE.BufferAttribute(r.positions, 3));
       geo.setAttribute("normal", new THREE.BufferAttribute(r.normals, 3));
       geo.setAttribute("ao", new THREE.BufferAttribute(r.ao, 1));
-      // macro-region weights (regionWeights.ts): 8 normalised bytes → aRegA (4) + aRegB (2)
+      // macro-region weights (regionWeights.ts): 8 normalised bytes → aRegA (4) + aRegB (2 + ring wall)
       const reg = new THREE.InterleavedBuffer(r.region, REGION_STRIDE);
       geo.setAttribute("aRegA", new THREE.InterleavedBufferAttribute(reg, 4, 0, true));
-      geo.setAttribute("aRegB", new THREE.InterleavedBufferAttribute(reg, 2, 4, true));
+      geo.setAttribute("aRegB", new THREE.InterleavedBufferAttribute(reg, 3, 4, true));
       geo.setIndex(new THREE.BufferAttribute(r.indices, 1));
       // Tight bounds from the actual vertices (worker-computed): full-height column boxes
       // (~240 m tall) let about half of the drawn triangles through the frustum test off-screen.
