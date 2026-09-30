@@ -8,15 +8,16 @@
  * diver moved a few metres).
  */
 import * as THREE from "three";
-import type { ExpeditionPort } from "../../conserve";
+import type { ExpeditionNode, ExpeditionPort } from "../../conserve";
 import type { DensityField } from "../../terrain/density";
 import type { SiteLayout } from "../../terrain/siteLayout";
-import { BEACON, NODE_VIEW } from "./config";
+import { cachePhase } from "./beacon";
+import { NODE_VIEW } from "./config";
 import { NodeInstances, type NodeInstance } from "./nodeInstances";
 import { NodePlacement, type PlacedNode } from "./placement";
 import { cacheKey, nodeKey, selectVisible, type Candidate } from "./selection";
 
-export type ViewItem = Candidate & { inst: NodeInstance };
+export type ViewItem = Candidate & { inst: NodeInstance; node?: ExpeditionNode };
 export type Highlight = { key: number; absorbing: boolean } | null;
 
 const REBUILD_MOVE = 6;
@@ -93,7 +94,7 @@ export class NodeView {
       phase: (((node.hash >>> 16) & 0xff) / 255) * 4,
       birth: this.birth(key, time),
     };
-    return { key, kind: "node", id: node.id, x: a.x + ax * 0.5 * scale, y: a.y + ay * 0.5 * scale, z: a.z + az * 0.5 * scale, inst };
+    return { key, kind: "node", id: node.id, node, x: a.x + ax * 0.5 * scale, y: a.y + ay * 0.5 * scale, z: a.z + az * 0.5 * scale, inst };
   }
 
   private cacheItem(id: number, pos: readonly [number, number, number], time: number, h: Highlight): ViewItem {
@@ -114,11 +115,6 @@ export class NodeView {
   dispose(): void {
     this.instances.dispose();
   }
-}
-
-/** Beacon phase of a cache (s): the glow flash and the audio tick share it. */
-export function cachePhase(id: number): number {
-  return (id * 1.37) % BEACON.period;
 }
 
 /**

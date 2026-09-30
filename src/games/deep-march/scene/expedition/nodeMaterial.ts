@@ -40,7 +40,7 @@ export function createNodeMaterial(opts: NodeMaterialOptions): NodeMaterial {
   };
   const material = new THREE.MeshPhongMaterial({ color: NODE_VIEW.body, specular: NODE_VIEW.specular, shininess: NODE_VIEW.shininess });
   material.fog = false;
-  material.defines = { DM_SONAR_N: String(opts.sonar.uSonarPulse.value.length) };
+  material.defines = { DM_SONAR_N: String(opts.sonar.uSonarPulse.value.length), DM_NODE: "1" };
   material.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, uniforms);
     shader.vertexShader = shader.vertexShader
