@@ -5,7 +5,7 @@
  * hide and when the dive ends.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { BasePort, ConserveSession, ExpeditionPort, OpenIntent, TidePort } from "../conserve";
+import type { BasePort, ChaosView, ConserveSession, ExpeditionPort, OpenIntent, TidePort } from "../conserve";
 import { seedFromString } from "../terrain/noise";
 import type { SiteLayout } from "../terrain/siteLayout";
 import { LOADING_STEPS, type LoadingStepDef } from "../ui/loading/steps";
@@ -17,8 +17,9 @@ export type ConserveDive =
    * Save opened: dive with `seedText` in the bounded world `world` (this generation's site table), its
    * expedition (nodes, tank, caches), base and tide. The tide switches the dive to gen + 1 in place
    * (these stay the objects the world was built with; the world takes the new ones from the tide port).
+   * `chaos`: the generation's chaos as the scene presents it (M8), or a `?chaos=` preview (never saved).
    */
-  | { status: "open"; seedText: string; world: SiteLayout; expedition: ExpeditionPort; base: BasePort; tide: TidePort; steps: readonly LoadingStepDef[] }
+  | { status: "open"; seedText: string; world: SiteLayout; expedition: ExpeditionPort; base: BasePort; tide: TidePort; chaos: ChaosView; steps: readonly LoadingStepDef[] }
   /** The save can't be entered: the loading screen shows why (no world is built). */
   | { status: "blocked"; steps: readonly LoadingStepDef[] };
 
@@ -40,7 +41,10 @@ export function useConserveDive(intent: OpenIntent | null): { dive: ConserveDive
         if (!outcome.ok) return setDive({ status: "blocked", steps });
         sessionRef.current = outcome.session;
         unbind = mod.flushOnPageHide(() => outcome.session.flush());
-        setDive({ status: "open", seedText: outcome.session.seedText, world: mod.terrainLayoutOf(outcome.session.siteTable, outcome.session.wall), expedition: outcome.session.expedition, base: outcome.session.base, tide: mod.tidePortOf(outcome.session), steps });
+        const s = outcome.session;
+        // the generation's chaos, or a ?chaos= preview: the terrain's wall (cracks) and the scene's view agree
+        const dc = mod.diveChaosOf(s, window.location.search);
+        setDive({ status: "open", seedText: s.seedText, world: mod.terrainLayoutOf(s.siteTable, dc.wall), expedition: s.expedition, base: s.base, tide: mod.tidePortOf(s), chaos: dc.view, steps });
       },
       () => !cancelled && setDive({ status: "failed" }),
     );

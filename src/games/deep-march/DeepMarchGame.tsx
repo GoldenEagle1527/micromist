@@ -26,6 +26,7 @@ export function DeepMarchGame() {
   const [seed, setSeed] = useState(() => loadSettings().seed);
   const [sensitivity, setSensitivity] = useState(() => loadSettings().sensitivity);
   const [invertY, setInvertY] = useState(() => loadSettings().invertY);
+  const [calmLights, setCalmLights] = useState(() => loadSettings().calmLights);
   const [panelOn, setPanelOn] = useState(() => panelEnabled(loadSettings()));
   const [sound, setSound] = useState<SoundSettings>(() => loadSettings().sound);
   /** This dive has an audio context (false: ?audio=0 or no Web Audio) → no mute button. */
@@ -44,7 +45,7 @@ export function DeepMarchGame() {
   const [touch] = useState(isTouchDevice);
 
   const persist = useCallback(
-    (patch: Partial<{ mode: GameMode; seed: string; panel: boolean; sensitivity: number; invertY: boolean; sound: SoundSettings }>) => {
+    (patch: Partial<{ mode: GameMode; seed: string; panel: boolean; sensitivity: number; invertY: boolean; calmLights: boolean; sound: SoundSettings }>) => {
       const cur = loadSettings();
       saveSettings({ ...cur, ...patch });
     },
@@ -66,6 +67,8 @@ export function DeepMarchGame() {
   const diveBase = conservePlay && conserveDive.status === "open" ? conserveDive.base : null;
   // conserve (M7): the tide
   const diveTide = conservePlay && conserveDive.status === "open" ? conserveDive.tide : null;
+  // conserve (M8): the generation's chaos (or a ?chaos= preview)
+  const diveChaos = conservePlay && conserveDive.status === "open" ? conserveDive.chaos : null;
 
   useEffect(() => {
     if (screen !== "playing" || diveSeed === null) return;
@@ -90,6 +93,8 @@ export function DeepMarchGame() {
           expedition: diveExpedition,
           base: diveBase,
           tide: diveTide,
+          chaos: diveChaos,
+          calmLights,
         });
         setGame(g);
       }, 0);
@@ -104,7 +109,7 @@ export function DeepMarchGame() {
     };
     // Settings/labels are read once per dive; the panel toggle is pushed via setPanelMode.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [screen, diveSeed, diveWorld, diveExpedition, diveBase, diveTide]);
+  }, [screen, diveSeed, diveWorld, diveExpedition, diveBase, diveTide, diveChaos]);
 
   // Volume / mute: live into the running dive, persisted
   const soundRef = useRef(sound);
@@ -142,14 +147,14 @@ export function DeepMarchGame() {
     const s = seed.trim() || "1";
     setSeed(s);
     setIntent(conserveIntent);
-    persist({ mode, seed: s, sensitivity, invertY, panel: panelOn, sound });
+    persist({ mode, seed: s, sensitivity, invertY, calmLights, panel: panelOn, sound });
     if (touch) void enterLandscape();
     setLoadingOn(true);
     // inside the click: acquire (or reuse) the shared context and resume it; never throws
     audioCtxRef.current = audioDisabledByUrl(window.location.search) ? null : acquireAudioContext();
     setAudioOn(audioCtxRef.current !== null);
     setScreen("playing");
-  }, [mode, seed, sensitivity, invertY, panelOn, sound, persist, touch]);
+  }, [mode, seed, sensitivity, invertY, calmLights, panelOn, sound, persist, touch]);
   const back = useCallback(() => {
     leaveLandscape();
     audioCtxRef.current = null;
@@ -158,7 +163,7 @@ export function DeepMarchGame() {
     setSlotRefresh((n) => n + 1);
   }, []);
 
-  const setupValues: SetupValues = { mode, seed, sensitivity, invertY, panelOn, sound };
+  const setupValues: SetupValues = { mode, seed, sensitivity, invertY, calmLights, panelOn, sound };
   const changeSetup = useCallback(
     (patch: Partial<SetupValues>) => {
       if (patch.mode !== undefined) {
@@ -168,6 +173,10 @@ export function DeepMarchGame() {
       if (patch.seed !== undefined) setSeed(patch.seed);
       if (patch.sensitivity !== undefined) setSensitivity(patch.sensitivity);
       if (patch.invertY !== undefined) setInvertY(patch.invertY);
+      if (patch.calmLights !== undefined) {
+        setCalmLights(patch.calmLights);
+        persist({ calmLights: patch.calmLights });
+      }
       if (patch.panelOn !== undefined) setPanelOn(patch.panelOn);
       if (patch.sound !== undefined) changeSound(patch.sound);
     },

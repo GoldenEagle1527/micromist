@@ -14,6 +14,8 @@ export type DeepMarchSettings = {
   /** Look sensitivity multiplier (1 = Minecraft default). */
   sensitivity: number;
   invertY: boolean;
+  /** 「减弱灯光起伏」 (accessibility, M8): shallower, slower light changes near cracks. */
+  calmLights: boolean;
   /** Dive sound (?audio=0 still turns audio off entirely, whatever this says). */
   sound: SoundSettings;
 };
@@ -56,6 +58,7 @@ export function loadSettings(): DeepMarchSettings {
     panel: typeof raw?.panel === "boolean" ? raw.panel : null,
     sensitivity: Math.min(3, Math.max(0.2, sens)),
     invertY: raw?.invertY === true,
+    calmLights: raw?.calmLights === true,
     sound: parseSound(raw?.sound),
   };
 }
@@ -67,6 +70,7 @@ export function saveSettings(s: DeepMarchSettings): void {
     panel: s.panel,
     sensitivity: s.sensitivity,
     invertY: s.invertY,
+    calmLights: s.calmLights === true,
     sound: parseSound(s.sound),
   });
 }

@@ -13,7 +13,7 @@ import { ConserveSlotCard } from "./ConserveSlotCard";
 import { conserveStart } from "./conserveStart";
 import { ModePicker } from "./ModePicker";
 
-export type SetupValues = { mode: GameMode; seed: string; sensitivity: number; invertY: boolean; panelOn: boolean; sound: SoundSettings };
+export type SetupValues = { mode: GameMode; seed: string; sensitivity: number; invertY: boolean; calmLights: boolean; panelOn: boolean; sound: SoundSettings };
 
 type Props = {
   dm: DeepMarchDict;
@@ -25,7 +25,7 @@ type Props = {
 };
 
 export function SetupScreen({ dm, values, onChange, slotRefresh, onStart }: Props) {
-  const { mode, seed, sensitivity, invertY, panelOn, sound } = values;
+  const { mode, seed, sensitivity, invertY, calmLights, panelOn, sound } = values;
   const conserve = mode === "conserve";
   const slot = useConserveSlot(conserve, slotRefresh);
   const [newWorld, setNewWorld] = useState(false);
@@ -75,6 +75,13 @@ export function SetupScreen({ dm, values, onChange, slotRefresh, onStart }: Prop
         <label className="dm-check">
           <input type="checkbox" checked={invertY} onChange={(e) => onChange({ invertY: e.target.checked })} />
           <span>{dm.invertY}</span>
+        </label>
+        <label className="dm-check">
+          <input type="checkbox" checked={calmLights} onChange={(e) => onChange({ calmLights: e.target.checked })} />
+          <span>
+            {dm.calmLights}
+            <small className="dm-check-hint">{dm.calmLightsHint}</small>
+          </span>
         </label>
         <label className="dm-check">
           <input type="checkbox" checked={panelOn} onChange={(e) => onChange({ panelOn: e.target.checked })} />
