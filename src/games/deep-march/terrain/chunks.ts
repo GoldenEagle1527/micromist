@@ -17,9 +17,10 @@
  *   else and stay resident (hidden, not freed) while their children are drawn, so
  *   coarsening back is instant; a node splits only once it is drawn and settled
  *   (or its footprint is already drawn finer), so refinement only happens where
- *   terrain is on screen and every swap is one column ↔ its 4 children. Top-level
- *   columns are prefetched PREFETCH_U beyond viewDistance so nothing inside the view
- *   is ever uncovered while swimming;
+ *   terrain is on screen and every swap is one column ↔ its 4 children, and only
+ *   when all 4 (those with terrain) lie within viewDistance, so a split never leaves
+ *   a quadrant unbuilt (childrenInView). Top-level columns are prefetched PREFETCH_U
+ *   beyond viewDistance so nothing inside the view is ever uncovered while swimming;
  * - build order: uncovered footprints first, then refinements, near first,
  *   weighted towards the camera / swim direction; stale queued jobs are dropped
  *   and stale results discarded (jobPool.ts on in-flight jobs);
@@ -324,7 +325,8 @@ export class ChunkManager {
       // hysteresis: an area already drawn finer merges back only SPLIT_HYST further out
       const finer = lod > 0 && this.coveredBelow(lod, cx, cz);
       const near = lod > 0 && d2 <= view2 && this.sqrDstAhead(viewer, x0, z0, size) < (s.lodNear * (1 << (lod - 1)) * (finer ? SPLIT_HYST : 1)) ** 2;
-      if (!near || !(finer || this.settled(this.nodes.get(key)))) {
+      const split = near && this.childrenInView(viewer, lod, cx, cz) && (finer || this.settled(this.nodes.get(key)));
+      if (!split) {
         out.set(key, { kind: "mesh", lod, cx, cz });
         return;
       }
@@ -353,6 +355,25 @@ export class ChunkManager {
   private hasTerrainAt(lod: number, cx: number, cz: number): boolean {
     const [x0, z0] = this.origin("mesh", lod, cx, cz);
     return hasTerrain(this.extent, x0, z0, this.field.settings.boundsSize * (1 << lod));
+  }
+
+  /**
+   * Every child of mesh node (lod, cx, cz) that holds terrain lies within
+   * viewDistance (a node splits only then). A child beyond it is never built, so
+   * after a split its quadrant would stay undrawn, the node would never count as
+   * drawn finer, and it would be wanted back as soon as its children are drawn — a
+   * merge / split loop. Only a top-level column on the phone preset can hit it: it
+   * splits within lodNear·4 = 128 m, its far children start up to 128 m further
+   * out, beyond the 230 m view (desktop: 420 m, never). Such a column stays whole.
+   */
+  private childrenInView(viewer: THREE.Vector3, lod: number, cx: number, cz: number): boolean {
+    const s = this.field.settings;
+    const size = s.boundsSize * (1 << (lod - 1));
+    for (let dz = 0; dz <= 1; dz++) for (let dx = 0; dx <= 1; dx++) {
+      const [x0, z0] = this.origin("mesh", lod - 1, cx * 2 + dx, cz * 2 + dz);
+      if (hasTerrain(this.extent, x0, z0, size) && this.sqrDstRect(viewer, x0, z0, size) > s.viewDistance * s.viewDistance) return false;
+    }
+    return true;
   }
 
   /** Drawn on its own: built, not waiting to crossfade in, not mid-crossfade. */
