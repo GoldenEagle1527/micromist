@@ -1,12 +1,12 @@
 /**
  * New-player hints of the conserve mode (MVP plan M9: 采集 → 建核心 → 存入 →
- * 唤潮, then 放流 after the first tide). Pure: the progress is a list of steps
+ * 唤潮, then 重扫 — the sonar record is stale — and 放流 after the first tide). Pure: the progress is a list of steps
  * done plus an "all off" flag; each poll of the HUD telemetry becomes an
  * observation that completes steps on its own (doing the thing is the best
  * dismissal), and the card shows the first step not done whose moment has
  * come. A returning player (generation ≥ 2) starts with the first four done.
  */
-export const HINT_STEPS = ["absorb", "core", "deposit", "tide", "release"] as const;
+export const HINT_STEPS = ["absorb", "core", "deposit", "tide", "rescan", "release"] as const;
 export type HintStep = (typeof HINT_STEPS)[number];
 
 export type HintProgress = { readonly done: readonly HintStep[]; readonly off: boolean };
@@ -24,6 +24,8 @@ export type HintObservation = {
   gen: number;
   /** A tide was called (warning, show, murk or done). */
   tideCalled: boolean;
+  /** Sonar observation mode (N) is on. */
+  observing: boolean;
   /** Something else owns the screen: a tide, the recall, the base panel, the loading screen. */
   busy: boolean;
 };
@@ -36,14 +38,15 @@ function reached(o: HintObservation): HintStep[] {
   if (o.founded) out.push("core");
   if (o.deposited || later) out.push("deposit");
   if (o.tideCalled || later) out.push("tide");
+  if (o.observing && later) out.push("rescan");
   if (o.released) out.push("release");
   return out;
 }
 
-/** Whether a step's moment has come (deposit and 唤潮 need the core; 放流 follows the first tide). */
+/** Whether a step's moment has come (deposit and 唤潮 need the core; 重扫 and 放流 follow the first tide). */
 function available(step: HintStep, o: HintObservation): boolean {
   if (step === "deposit" || step === "tide") return o.founded;
-  if (step === "release") return o.gen >= 2;
+  if (step === "release" || step === "rescan") return o.gen >= 2;
   return true;
 }
 

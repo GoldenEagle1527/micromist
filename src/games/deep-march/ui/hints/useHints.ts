@@ -13,9 +13,9 @@ import { loadHints, saveHints } from "./hintStore";
 
 export type HintState = { step: HintStep | null; dismiss: () => void; hideAll: () => void };
 
-export function useHints(exp: ExpeditionTelemetry | null, base: BaseTelemetry | null, tide: TideTelemetry | null, diving: boolean): HintState {
+export function useHints(exp: ExpeditionTelemetry | null, base: BaseTelemetry | null, tide: TideTelemetry | null, diving: boolean, observing = false): HintState {
   const [progress, setProgress] = useState<HintProgress>(loadHints);
-  const obs = exp ? observationOf(exp, base, tide, diving) : null;
+  const obs = exp ? observationOf(exp, base, tide, diving, observing) : null;
   const step = obs ? currentHint(progress, obs) : null;
   const update = useCallback((next: HintProgress) => {
     setProgress(next);

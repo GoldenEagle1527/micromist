@@ -1,8 +1,8 @@
 /**
  * The debug panel's runtime port: what the panel does to the running dive at
- * once (teleport, light mode, a free sonar ping, the B overlay, battery). Built by the dive from
+ * once (teleport, light mode, a free sonar ping, observation mode, forgetting the scan record, the B overlay, battery). Built by the dive from
  * the parts it lends (scene/world.ts → DeepMarchOptions.debug); only staging
- * builds pass this factory. Nothing here writes a save.
+ * builds pass this factory. Nothing here writes a save except forgetting the scan record.
  */
 import { heightRange, placeSafely, teleportTargets } from "./teleport";
 import type { DebugParts, DebugPort, LightChoice, Pose } from "./types";
@@ -28,6 +28,9 @@ export function createDebugPort(p: DebugParts): DebugPort {
       else p.lights.select(c);
     },
     ping: p.ping,
+    observe: p.observe.get,
+    setObserve: (on) => void p.observe.set(on),
+    forgetScans: p.forgetScans,
     markers: () => p.markers.visible,
     setMarkers: (on) => p.markers.setVisible(on),
     fillBattery: p.fillBattery,

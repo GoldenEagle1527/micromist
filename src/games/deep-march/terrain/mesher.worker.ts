@@ -50,7 +50,7 @@ ctx.onmessage = (ev) => {
   if (!g) {
     // generation dropped while the job was queued: answer (the pool counts in-flight jobs), nothing built
     const stats = { floaters: 0, floaterPoints: 0, ambiguous: 0, searched: 0, noiseSamples: 0, rawPoints: 0, coarseSamples: 0 };
-    m = { ...EMPTY(), bounds: new Float32Array(6), stats, info: null, infoMs: 0 } as ReturnType<typeof generateColumnMesh>;
+    m = { ...EMPTY(), surfaceVerts: 0, bounds: new Float32Array(6), stats, info: null, infoMs: 0 } as ReturnType<typeof generateColumnMesh>;
   } else if (msg.type === "column") {
     const rows = (g.rowsByLod[msg.lod] ??= columnRows(g.field, msg.lod));
     m = generateColumnMesh(g.field, msg.cx, msg.cz, rows, g.field.settings.floaterMargin * (1 << msg.lod), undefined, false, undefined, msg.lod);

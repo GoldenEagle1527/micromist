@@ -693,6 +693,9 @@ export class ChunkManager {
       // ring wall (conserve): the chaos byte → aChaos (crack glow, read by the chaos program only)
       if (this.field.wall) geo.setAttribute("aChaos", new THREE.InterleavedBufferAttribute(reg, 1, 7, true));
       geo.setIndex(new THREE.BufferAttribute(r.indices, 1));
+      // the sonar scan (scene/sonarScan) reads the surface vertices (skirts excluded) straight from here
+      geo.userData.surfaceVerts = r.surfaceVerts;
+      geo.userData.lod = e.lod;
       // Tight bounds from the actual vertices (worker-computed): full-height column boxes
       // (~240 m tall) let about half of the drawn triangles through the frustum test off-screen.
       const bb = r.bounds;

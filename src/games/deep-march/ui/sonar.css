@@ -46,3 +46,59 @@
   background: #6ff3ff;
   box-shadow: 0 0 4px rgb(90 230 255 / 0.7);
 }
+.dm-sonar-foot {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 3px;
+  font-size: 9px;
+  white-space: nowrap;
+}
+.dm-sonar-foot small {
+  opacity: 0.6;
+  letter-spacing: 0.06em;
+}
+.dm-sonar-observe {
+  margin-left: auto;
+  padding: 3px 8px;
+  min-height: 24px;
+  border: 1px solid rgb(111 243 255 / 0.5);
+  border-radius: 3px;
+  background: rgb(0 30 50 / 0.6);
+  color: #6ff3ff;
+  font: inherit;
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  pointer-events: auto;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.dm-sonar-observe.on {
+  background: rgb(90 230 255 / 0.25);
+  border-color: #6ff3ff;
+  box-shadow: 0 0 8px rgb(90 230 255 / 0.6);
+}
+.dm-observe-banner {
+  position: absolute;
+  top: calc(52px + var(--dm-st, 0px));
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 14px;
+  border: 1px solid rgb(111 243 255 / 0.35);
+  background: rgb(0 20 35 / 0.6);
+  color: #6ff3ff;
+  text-align: center;
+  max-width: min(92vw, 520px);
+}
+.dm-observe-banner b {
+  font-size: 12px;
+  letter-spacing: 0.16em;
+}
+.dm-observe-banner small {
+  font-size: 10px;
+  opacity: 0.75;
+}

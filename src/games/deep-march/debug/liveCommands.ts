@@ -72,6 +72,16 @@ export const LIVE_COMMANDS: readonly DebugCommand[] = [
     set: (c, v) => c.port?.setLight(v as Parameters<NonNullable<DebugCtx["port"]>["setLight"]>[0]),
   },
   { id: "light.ping", section: "light", label: "ping", kind: "action", when: live, apply: (c) => c.port?.ping() },
+  {
+    id: "light.observe",
+    section: "light",
+    label: "observe",
+    kind: "toggle",
+    when: live,
+    get: (c) => c.port?.observe() ?? false,
+    set: (c, on) => c.port?.setObserve(on),
+  },
+  { id: "light.forgetScans", section: "light", label: "forgetScans", kind: "action", when: live, apply: (c) => c.port?.forgetScans() },
   { id: "resources.battery", section: "resources", label: "fillBattery", kind: "action", when: live, apply: (c) => c.port?.fillBattery() },
   {
     id: "overlay.markers",

@@ -79,6 +79,8 @@ export function DeepMarchGame() {
   const diveTide = conservePlay && conserveDive.status === "open" ? conserveDive.tide : null;
   // conserve (M8): the generation's chaos (or the debug panel's preview)
   const diveChaos = conservePlay && conserveDive.status === "open" ? conserveDive.chaos : null;
+  // the sonar scan record: conserve keeps it in the save; the free dive in this session (world.ts default)
+  const diveScans = conservePlay && conserveDive.status === "open" ? conserveDive.scans : null;
 
   useEffect(() => {
     if (screen !== "playing" || diveSeed === null) return;
@@ -104,6 +106,7 @@ export function DeepMarchGame() {
           base: diveBase,
           tide: diveTide,
           chaos: diveChaos,
+          scans: diveScans,
           calmLights,
           debug: debugRef.current?.createDebugPort ?? null,
         });
@@ -121,7 +124,7 @@ export function DeepMarchGame() {
     };
     // Settings/labels are read once per dive; the panel toggle is pushed via setPanelMode.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [screen, diveSeed, diveWorld, diveExpedition, diveBase, diveTide, diveChaos, diveEpoch]);
+  }, [screen, diveSeed, diveWorld, diveExpedition, diveBase, diveTide, diveChaos, diveScans, diveEpoch]);
 
   // Volume / mute: live into the running dive, persisted
   const soundRef = useRef(sound);

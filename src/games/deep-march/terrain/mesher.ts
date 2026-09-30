@@ -64,6 +64,8 @@ export type ColumnMeshData = {
   /** Per-vertex macro-region weights, 8 bytes per vertex (regionWeights.ts). */
   region: Uint8Array;
   indices: Uint16Array | Uint32Array;
+  /** Vertices before the skirts (the real surface; the sonar scan records only these). */
+  surfaceVerts: number;
   /** Tight AABB of `positions` (incl. skirts): minX, minY, minZ, maxX, maxY, maxZ (empty mesh: zeros). */
   bounds: Float32Array;
   /** Removed (floating) lattice points owned by this column: (i, j, k) triplets, j relative to gjMin. */
@@ -820,5 +822,5 @@ export function generateColumnMesh(
       }
     }
   }
-  return { positions, normals, ao, region, indices, bounds, removed: Int32Array.from(removedList), stats, info, infoMs };
+  return { positions, normals, ao, region, indices, surfaceVerts, bounds, removed: Int32Array.from(removedList), stats, info, infoMs };
 }

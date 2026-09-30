@@ -24,6 +24,8 @@ import { createParticleLightUniforms } from "./particleLight";
 import { createSeabedMaterial } from "./seabedMaterial";
 import { SONAR_TUNING, SonarPulses, createSonarUniforms } from "./sonar";
 import { createLongPulses } from "./sonarLong";
+import { SonarScanner } from "./sonarScan/sonarScanner";
+import { sessionScanStore } from "./sonarScan/scanStore";
 import { SpawnDebugView } from "./spawnDebug";
 import { createWallRing } from "./wallRing";
 import type { HomeSpot } from "./base/home";
@@ -72,6 +74,8 @@ export function createDeepMarch(host: HTMLElement, opts: DeepMarchOptions): Deep
   // active sonar: pings (survival/sonarPing.ts) → pulses + seabed-shader uniforms (sonar.ts)
   const sonarPulses = new SonarPulses(lowSpec ? SONAR_TUNING.maxPulsesLow : SONAR_TUNING.maxPulses);
   const sonar = createSonarUniforms(sonarPulses);
+  // what the pings recorded + the observation view (N); conserve: kept in the save, free dive: this session
+  const scanner = new SonarScanner(opts.scans ?? sessionScanStore(opts.seed), lowSpec, terrain.viewDistance);
   const particleLights = createParticleLightUniforms();
   // lighthouse light (scene/base): the free dive keeps uBLCount at 0
   const baseLight = createBaseLightUniforms();
@@ -190,6 +194,11 @@ export function createDeepMarch(host: HTMLElement, opts: DeepMarchOptions): Deep
   scene.add(snow.points);
 
   const controls = lightControls(survival, audio, cues);
+  const toggleObserve = (): boolean => {
+    const on = scanner.setObserve(!scanner.observing, gate.ready && !(tide?.active() ?? false));
+    audio.play("mode", { gain: 0.42, rate: on ? 1.15 : 0.9 });
+    return on;
+  };
   const input = new InputController(renderer.domElement, {
     sensitivity: opts.sensitivity,
     invertY: opts.invertY,
@@ -197,6 +206,7 @@ export function createDeepMarch(host: HTMLElement, opts: DeepMarchOptions): Deep
     onLightCycle: controls.cycleLight,
     onLightSelect: controls.selectLight,
     onPing: controls.ping,
+    onObserveToggle: () => void toggleObserve(),
     onMuteToggle: () => opts.onMuteToggle?.(),
     onLockChange: () => updatePrompt(),
     holdKeys: conserve?.holdKeys(),
@@ -236,6 +246,7 @@ export function createDeepMarch(host: HTMLElement, opts: DeepMarchOptions): Deep
     sonar,
     longPulses,
     wallRing,
+    scanner,
     cues,
     hud,
     stats: overlay.stats,
@@ -260,11 +271,12 @@ export function createDeepMarch(host: HTMLElement, opts: DeepMarchOptions): Deep
     health,
     survival,
     sonar,
+    scanner,
     audio,
     input,
     diver,
     hud,
-    controls,
+    controls: { ...controls, toggleObserve },
     updatePrompt,
     setLabels: (next) => {
       labels = next;
@@ -276,6 +288,7 @@ export function createDeepMarch(host: HTMLElement, opts: DeepMarchOptions): Deep
     debug: null,
     destroy: () => {
       loop.stop();
+      scanner.dispose();
       audio.dispose();
       sizing.dispose();
       input.dispose();

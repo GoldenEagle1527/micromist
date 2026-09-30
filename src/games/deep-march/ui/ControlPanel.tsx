@@ -6,7 +6,7 @@ import { IconBase, IconExit, IconFlip, IconMute, IconPanel, IconSound } from "./
 import { LookPad } from "./LookPad";
 import { MoveDial } from "./MoveDial";
 import { Readout, type ReadoutLabels } from "./Readout";
-import { SonarGauge, type SonarHudLabels } from "./SonarGauge";
+import { ObserveBanner, SonarGauge, type SonarHudLabels } from "./SonarGauge";
 import { useTelemetry } from "./useTelemetry";
 import { ConserveOverlays } from "./ConserveOverlays";
 import type { ExpeditionDict } from "./expedition/i18n";
@@ -104,12 +104,13 @@ export function ControlPanel({
         labels={labels}
         extra={
           <>
-            {tel ? <SonarGauge tel={tel} labels={labels.sonar} /> : null}
+            {tel ? <SonarGauge tel={tel} labels={labels.sonar} onObserve={game ? () => (game.toggleObserve(), force((n) => n + 1)) : undefined} /> : null}
             {exp ? <TankGauge exp={exp} labels={labels.expedition} /> : null}
             {exp && base ? <BaseEnergy base={base} labels={labels.base} /> : null}
           </>
         }
       />
+      {tel?.scan.observe ? <ObserveBanner labels={labels.sonar} /> : null}
       <ConserveOverlays game={game} tel={tel} exp={exp} base={base} tide={tide} panelOn={panelOn} labels={labels} />
       <div className="dm-hud-buttons">
         {base && game ? (
