@@ -78,17 +78,36 @@ export const REGION_PALETTES: readonly RegionPalettes[] = [
   { main: [L.ooze, L.nodules, L.darkrock, L.basalt, L.darkrock], alt: [L.mud, L.ooze, L.darkrock, L.basalt, L.darkrock], altAt: 0.6 },
 ];
 
-/** Palette index in the shader: 2·region (+1 for alt). */
-export const PALETTE_COUNT = REGION_PALETTES.length * 2;
+/**
+ * 「界壁」 — the ring wall's material (bounded world; material slot WALL_MATERIAL =
+ * the wall weight of terrain/regionWeights.ts). Stratified dark rock on the big
+ * facets (horizontal banding reads the scale), black basalt / lichen patches with the
+ * rotated second scale (no visible tiling on flat faces), scree and nodules as the
+ * talus at its foot. Albedo toned by WALL_TINT (materialShader.ts).
+ */
+export const WALL_PALETTES: RegionPalettes = {
+  main: [L.scree, L.nodules, L.strata, L.basalt, L.darkrock],
+  alt: [L.gravel, L.scree, L.darkrock, L.lichen, L.darkrock],
+  altAt: 0.55,
+};
+/** Material slot of the wall (after the 6 regions). */
+export const WALL_MATERIAL = REGION_PALETTES.length;
+/** Albedo multiplier on the wall (linear): darker and a little colder than the seabed. */
+export const WALL_TINT = [0.72, 0.8, 0.86] as const;
+/** Material slots: the region palettes, then the wall's. */
+export const MATERIAL_PALETTES: readonly RegionPalettes[] = [...REGION_PALETTES, WALL_PALETTES];
+
+/** Palette index in the shader: 2·slot (+1 for alt); slot = region id, or WALL_MATERIAL. */
+export const PALETTE_COUNT = MATERIAL_PALETTES.length * 2;
 
 export function paletteOf(p: number): Palette {
-  const r = REGION_PALETTES[p >> 1];
+  const r = MATERIAL_PALETTES[p >> 1];
   return p & 1 ? r.alt : r.main;
 }
 
-/** Layers a region can show (both palettes). */
+/** Layers a material slot (region, or the wall) can show (both palettes). */
 export function layersOfRegion(region: number): number[] {
-  const r = REGION_PALETTES[region];
+  const r = MATERIAL_PALETTES[region];
   return [...new Set([...r.main, ...r.alt])];
 }
 
