@@ -1,38 +1,48 @@
 /**
  * GLSL of the sonar observation view (scanView.ts), free of three / asset imports
- * so test:shaders compiles it and runs the Mali budget on it. One additive point
- * per recorded surface cell: brighter where it faces the diver and on the 4 m
- * height contours, fading with distance; the latest ping's wavefront runs over the
- * record as a bright band. No textures, no discard, no depth.
+ * so test:shaders compiles it and runs the Mali budget on it. The recorded surfaces
+ * are shaded the way the old continuous SONAR light mode shaded the live seabed
+ * (sonar.ts SONAR_OPAQUE, before the active ping): world-height contour lines
+ * anti-aliased in screen space with a minimum pixel width (blended to their mean
+ * where they crowd), a rim from the normals and a faint facing echo, held at a
+ * steady level instead of a decaying trail; the latest ping's front runs over the
+ * record as the bright band. Opaque on black, no textures.
  */
 export const SCAN_VERT = /* glsl */ `
-uniform float uPointSize;
-uniform vec3 uPx;
-uniform vec4 uFront;
-uniform vec4 uScan;
-varying float vI;
+varying vec3 vWPos;
+varying vec3 vNormal;
 void main() {
-  vec4 mv = modelViewMatrix * vec4(position, 1.0);
-  float d = max(-mv.z, 0.05);
-  gl_PointSize = clamp(uPointSize * uPx.x / d, uPx.y, uPx.z);
-  float facing = abs(dot(normal, normalize(cameraPosition - position)));
-  float h = fract(position.y / uScan.x);
-  float line = 1.0 - smoothstep(0.0, uScan.w, min(h, 1.0 - h));
-  float fade = 1.0 - smoothstep(uScan.y, uScan.z, d);
-  float x = (uFront.w - distance(position, uFront.xyz)) * 0.16;
-  float front = uFront.w > 0.0 ? exp(-x * x) : 0.0;
-  vI = ((0.2 + 0.55 * facing) * (1.0 + 0.8 * line) + 0.9 * front) * fade;
-  gl_Position = projectionMatrix * mv;
+  vWPos = position;
+  vNormal = normal;
+  gl_Position = projectionMatrix * viewMatrix * vec4(position, 1.0);
 }
 `;
 
 export const SCAN_FRAG = /* glsl */ `
 uniform vec3 uColor;
-varying float vI;
+uniform vec3 uLine;
+uniform vec4 uFront;
+uniform vec4 uLook;
+varying vec3 vWPos;
+varying vec3 vNormal;
 void main() {
-  vec2 c = gl_PointCoord - 0.5;
-  float a = 1.0 - smoothstep(0.16, 0.5, length(c));
-  gl_FragColor = vec4(uColor * (vI * a), 1.0);
+  // height contours, AA'd in screen space with a minimum pixel width (as SONAR_OPAQUE)
+  float hs = vWPos.y / uLine.x;
+  float fw = max(fwidth(hs), 1e-5);
+  float dl = abs(fract(hs + 0.5) - 0.5);
+  float hw = max(0.5 * uLine.y / uLine.x, 0.5 * uLine.z * fw);
+  float line = 1.0 - smoothstep(hw - 0.5 * fw, hw + 0.5 * fw, dl);
+  line = mix(line, min(1.0, 2.0 * hw), smoothstep(0.12, 0.3, fw));
+  vec3 toCam = cameraPosition - vWPos;
+  float dist = length(toCam);
+  float facing = abs(dot(normalize(vNormal), toCam / max(dist, 1e-3)));
+  float rim = pow(1.0 - facing, 3.0);
+  float echo = 0.25 + 0.75 * facing;
+  float x = (uFront.w - distance(vWPos, uFront.xyz)) / uLook.w;
+  float front = uFront.w > 0.0 ? exp(-x * x) : 0.0;
+  vec3 col = uColor * (uLook.z * (0.07 * echo + 0.75 * line + 0.45 * rim) + front * (0.3 + 0.7 * echo));
+  col *= 1.0 - smoothstep(uLook.x, uLook.y, dist);
+  gl_FragColor = vec4(col, 1.0);
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
 }

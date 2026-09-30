@@ -1,36 +1,38 @@
 /**
- * The sonar scan record (pure, no three): what the pings have seen, as recorded
- * points in 32 m tiles (scanGrid.ts). It is never refreshed from the live terrain:
- * only a ping overwrites it, and only inside that ping's sphere — so after a tide
- * the record shows the old terrain until the diver pings there again, and places
- * never pinged hold nothing.
+ * The sonar scan record (pure, no three): the seabed surfaces the pings have seen,
+ * one quantised mesh per 32 m tile (tileMesh.ts). It is never refreshed from the
+ * live terrain: only a ping overwrites it, and only inside that ping's sphere — so
+ * after a tide the record shows the old terrain until the diver pings there again,
+ * and places never pinged hold nothing.
  *
- * A ping (ScanPing) adds the surface points it sweeps over (the first per 2 m cell
- * wins) and clears every older point inside its sphere that it did not see again
- * (terrain that fell away, rock that is now water). Memory is bounded: past `cap`
- * points the least recently pinged tiles go first (LRU), never the current ping's.
+ * A ping commits tile by tile (ScanPing.commit): the old surface is cut along the
+ * sphere and its outside part kept, the surface the ping saw is cut the same way and
+ * its inside part added (sphereClip.ts: the two meet exactly). Terrain that fell away
+ * or became open water inside the sphere is therefore gone from the record. Memory is
+ * bounded: past `cap` vertices the least recently pinged tiles go first (LRU), never
+ * the current ping's.
  */
-import { SCAN_GRID, cellKey, packPoint, packedDist2, tileKey } from "./scanGrid";
+import { SCAN_GRID, tileKey } from "./scanGrid";
+import { clipSoup, type Sphere } from "./sphereClip";
+import { buildMesh, meshVerts, newSoup, soupOf, soupTris, type Soup, type TileMesh } from "./tileMesh";
 
 export type ScanTile = {
   readonly key: number;
   readonly tx: number;
   readonly tz: number;
-  /** cell → packed point. */
-  readonly pts: Map<number, number>;
-  /** LRU stamp: the record clock of the last ping that touched the tile. */
+  mesh: TileMesh;
+  /** LRU stamp: the record clock of the last ping that changed the tile. */
   used: number;
   /** Record-wide change stamp of its last change (the view rebuilds its buffers). */
   version: number;
 };
 
-const CELL_KEYS = 1 << 19; // cellKey < 16 · 16 · 2048
-
 export class ScanRecord {
   readonly tiles = new Map<number, ScanTile>();
-  /** Point budget (LRU eviction beyond it). */
+  /** Vertex budget (LRU eviction beyond it). */
   readonly cap: number;
   private total = 0;
+  private surveyed = 0;
   private clock = 0;
   private changes = 0;
 
@@ -38,8 +40,14 @@ export class ScanRecord {
     this.cap = cap;
   }
 
-  get points(): number {
+  /** Recorded vertices (the memory measure). */
+  get verts(): number {
     return this.total;
+  }
+
+  /** Surveyed seabed (m², footprint of the recorded surfaces). */
+  get area(): number {
+    return this.surveyed;
   }
 
   /** Record clock: +1 per ping. */
@@ -47,42 +55,31 @@ export class ScanRecord {
     return this.clock;
   }
 
-  tile(tx: number, tz: number, create: boolean): ScanTile | null {
+  /** Put (or with null remove) a tile's surface; `used`: its LRU stamp. */
+  set(tx: number, tz: number, mesh: TileMesh | null, used = this.clock): void {
     const key = tileKey(tx, tz);
-    let t = this.tiles.get(key) ?? null;
-    if (!t && create) {
-      t = { key, tx, tz, pts: new Map(), used: this.clock, version: 0 };
-      this.tiles.set(key, t);
-    }
-    return t;
-  }
-
-  /** Decoding / tests: put a packed point straight into a tile. */
-  put(t: ScanTile, cell: number, packed: number): void {
-    if (!t.pts.has(cell)) this.total++;
-    t.pts.set(cell, packed);
-    this.bump(t);
-  }
-
-  /** Mark a tile changed. */
-  bump(t: ScanTile): void {
-    t.version = ++this.changes;
+    const old = this.tiles.get(key);
+    if (old) this.dropTile(old);
+    if (!mesh) return;
+    this.tiles.set(key, { key, tx, tz, mesh, used, version: ++this.changes });
+    this.total += meshVerts(mesh);
+    this.surveyed += mesh.area;
   }
 
   /** A ping from (ox, oy, oz) reaching `radius` m. */
   begin(ox: number, oy: number, oz: number, radius: number): ScanPing {
     this.clock++;
-    return new ScanPing(this, ox, oy, oz, radius, this.clock);
+    return new ScanPing(this, { x: ox, y: oy, z: oz, r: radius });
   }
 
-  /** Drop least recently pinged tiles until ≤ cap points (tiles stamped `keep` stay). Returns the points dropped. */
+  /** Drop least recently pinged tiles until ≤ cap vertices (tiles stamped `keep` stay). Returns the vertices dropped. */
   evict(keep = this.clock): number {
     if (this.total <= this.cap) return 0;
     const order = [...this.tiles.values()].filter((t) => t.used < keep).sort((a, b) => a.used - b.used);
     let dropped = 0;
     for (const t of order) {
       if (this.total <= this.cap) break;
-      dropped += t.pts.size;
+      dropped += meshVerts(t.mesh);
       this.dropTile(t);
     }
     return dropped;
@@ -93,96 +90,66 @@ export class ScanRecord {
     this.clock = 0;
   }
 
-  /** @internal ScanPing */
-  count(delta: number): void {
-    this.total += delta;
-  }
-
-  /** Remove a tile (eviction, or emptied by a ping). */
   dropTile(t: ScanTile): void {
-    this.total -= t.pts.size;
+    if (this.tiles.get(t.key) !== t) return;
+    this.total -= meshVerts(t.mesh);
+    this.surveyed -= t.mesh.area;
     this.tiles.delete(t.key);
   }
 }
 
-/** One ping's write into the record: add what it sees, then clear what it no longer sees. */
+/** One ping's write into the record, tile by tile. */
 export class ScanPing {
-  readonly ox: number;
-  readonly oy: number;
-  readonly oz: number;
-  readonly radius: number;
-  private readonly r2: number;
+  readonly sphere: Sphere;
   private readonly rec: ScanRecord;
-  private readonly stamp: number;
-  /** Cells written by this ping (global keys). */
-  private readonly fresh = new Set<number>();
-  private readonly cleared = new Set<number>();
+  private readonly done = new Set<number>();
+  /** Triangles written / old triangles cut or removed (tests, debug). */
   added = 0;
-  removed = 0;
+  cut = 0;
 
-  constructor(rec: ScanRecord, ox: number, oy: number, oz: number, radius: number, stamp: number) {
+  constructor(rec: ScanRecord, sphere: Sphere) {
     this.rec = rec;
-    this.ox = ox;
-    this.oy = oy;
-    this.oz = oz;
-    this.radius = radius;
-    this.r2 = radius * radius;
-    this.stamp = stamp;
+    this.sphere = sphere;
   }
 
-  /** A surface point the pulse reached (ignored outside the sphere, or if its cell already has this ping's point). */
-  add(x: number, y: number, z: number, nx: number, ny: number, nz: number): boolean {
-    const dx = x - this.ox, dy = y - this.oy, dz = z - this.oz;
-    if (dx * dx + dy * dy + dz * dz > this.r2) return false;
-    const T = SCAN_GRID.tile;
-    const tx = Math.floor(x / T), tz = Math.floor(z / T);
-    const lx = x - tx * T, lz = z - tz * T;
-    const cell = cellKey(lx, y, lz);
-    const t = this.rec.tile(tx, tz, true)!;
-    const g = t.key * CELL_KEYS + cell;
-    if (this.fresh.has(g)) return false;
-    this.fresh.add(g);
-    if (!t.pts.has(cell)) this.rec.count(1);
-    t.pts.set(cell, packPoint(lx, y, lz, nx, ny, nz));
-    t.used = this.stamp;
-    this.rec.bump(t);
-    this.added++;
-    return true;
-  }
-
-  /** Clear tile (tx, tz): drop its older points inside the sphere (once per ping). */
-  clearTile(tx: number, tz: number): void {
+  /**
+   * Tile (tx, tz): keep the old surface outside the sphere, add the part of `seen`
+   * (the ping's soup for this tile, or null) inside it. Once per tile per ping.
+   * Returns the triangles processed (the sweep's work measure).
+   */
+  commit(tx: number, tz: number, seen: Soup | null): number {
     const key = tileKey(tx, tz);
-    if (this.cleared.has(key)) return;
-    this.cleared.add(key);
-    const t = this.rec.tiles.get(key);
-    if (!t) return;
-    let n = 0;
-    for (const [cell, p] of t.pts) {
-      if (this.fresh.has(key * CELL_KEYS + cell)) continue;
-      if (packedDist2(p, tx, tz, this.ox, this.oy, this.oz) > this.r2) continue;
-      t.pts.delete(cell);
-      n++;
-    }
-    if (n === 0) return;
-    this.rec.count(-n);
-    this.removed += n;
-    t.used = this.stamp;
-    this.rec.bump(t);
-    if (t.pts.size === 0) this.rec.dropTile(t);
+    if (this.done.has(key)) return 0;
+    this.done.add(key);
+    const old = this.rec.tiles.get(key);
+    const next = newSoup();
+    let cut = 0;
+    if (old) cut = clipSoup(soupOf(old.mesh, tx, tz, newSoup()), this.sphere, "out", next);
+    const kept = soupTris(next);
+    if (seen) clipSoup(seen, this.sphere, "in", next);
+    const added = soupTris(next) - kept;
+    const work = (old ? old.mesh.idx.length / 3 : 0) + (seen ? soupTris(seen) : 0);
+    if (cut === 0 && added === 0) return work; // untouched: no rebuild, no LRU bump
+    this.cut += cut;
+    this.added += added;
+    this.rec.set(tx, tz, buildMesh(next, tx, tz), this.rec.now);
+    return work;
   }
 
-  /** Every tile the sphere overlaps (x / z), nearest first by its farthest corner: the clearing order. */
+  /**
+   * Every tile whose triangles can reach into the sphere (its footprint grown by the
+   * pad overlaps it, x / z) with its farthest corner's distance (m).
+   */
   tilesInReach(): { tx: number; tz: number; far: number }[] {
-    const T = SCAN_GRID.tile;
+    const T = SCAN_GRID.tile, { x, z, r } = this.sphere, reach = r + SCAN_GRID.pad;
     const out: { tx: number; tz: number; far: number }[] = [];
-    for (let tx = Math.floor((this.ox - this.radius) / T); tx <= Math.floor((this.ox + this.radius) / T); tx++)
-      for (let tz = Math.floor((this.oz - this.radius) / T); tz <= Math.floor((this.oz + this.radius) / T); tz++) {
-        const nx = Math.max(tx * T - this.ox, 0, this.ox - (tx + 1) * T), nz = Math.max(tz * T - this.oz, 0, this.oz - (tz + 1) * T);
-        if (nx * nx + nz * nz > this.r2) continue;
-        const fx = Math.max(Math.abs(tx * T - this.ox), Math.abs((tx + 1) * T - this.ox)), fz = Math.max(Math.abs(tz * T - this.oz), Math.abs((tz + 1) * T - this.oz));
+    for (let tx = Math.floor((x - reach) / T); tx <= Math.floor((x + reach) / T); tx++)
+      for (let tz = Math.floor((z - reach) / T); tz <= Math.floor((z + reach) / T); tz++) {
+        const nx = Math.max(tx * T - x, 0, x - (tx + 1) * T), nz = Math.max(tz * T - z, 0, z - (tz + 1) * T);
+        if (nx * nx + nz * nz > reach * reach) continue;
+        const fx = Math.max(Math.abs(tx * T - x), Math.abs((tx + 1) * T - x)), fz = Math.max(Math.abs(tz * T - z), Math.abs((tz + 1) * T - z));
         out.push({ tx, tz, far: Math.hypot(fx, fz) });
       }
-    return out.sort((a, b) => a.far - b.far);
+    return out;
   }
 }

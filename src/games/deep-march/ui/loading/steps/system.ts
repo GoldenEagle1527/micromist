@@ -17,7 +17,7 @@ export const systemStep: LoadingStepDef = {
     const mark = (ok: boolean) => (ok ? "✓" : "·");
     const broken = !!s.shaderError || s.gpuLost;
     const lines = [
-      `${mark(s.battery > 0)} ${L.battery(Math.round(s.battery * 100))} · ${mark(s.sonar)} ${L.sonar}${s.scanPoints !== undefined ? ` · ${L.scanRecord(s.scanPoints)}` : ""}`,
+      `${mark(s.battery > 0)} ${L.battery(Math.round(s.battery * 100))} · ${mark(s.sonar)} ${L.sonar}${s.scanArea !== undefined ? ` · ${L.scanRecord(s.scanArea / 1e6)}` : ""}`,
       `${mark(s.lamps.length > 0)} ${L.lamps(s.lamps.map((m) => L.lightModes[m]).join(" · "))}`,
       s.gpuLost ? `✗ ${L.gpuLost}` : s.shaderError ? `✗ ${L.shaderErrorShort}` : `${mark(s.shaders)} ${L.shaders}`,
     ];

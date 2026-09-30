@@ -1,8 +1,8 @@
 /**
  * The dive's active-sonar record and observation view, wired together:
- *  - ping(): a ScanSweep over the terrain surfaces built right now (the column
- *    meshes' own vertex arrays, skirts excluded), capped at the terrain's reach;
- *  - frame(): advances the sweep with the wavefront (vertex budget per frame), keeps
+ *  - ping(): a ScanSweep over the terrain surfaces drawn right now (the column
+ *    meshes' own buffers, skirts excluded), capped at the terrain's reach;
+ *  - frame(): advances the sweep with the wavefront (triangle budget per frame), keeps
  *    the record in its memory budget (LRU), writes a conserve save's record when it
  *    changed (throttled; also on page hide and at the end of the dive), and picks
  *    what to render: the live scene, or — in observation mode — the record.
@@ -15,17 +15,17 @@ import { ScanSweep, type ScanSource } from "./scanSweep";
 import { ScanView } from "./scanView";
 
 export const SCAN_TUNING = {
-  /** Recorded point budget (~7 B each in a save, ~70 B in memory). */
-  cap: { desktop: 150_000, phone: 90_000 },
-  /** Terrain vertices scanned per frame. */
-  budget: { desktop: 24_000, phone: 8_000 },
+  /** Recorded vertex budget (~20 B each with their triangles, in memory and in a save). */
+  cap: { desktop: 400_000, phone: 150_000 },
+  /** Triangles read / cut per frame (a full phone ping is ~200k: done ~0.3 s after its front). */
+  budget: { desktop: 16_000, phone: 4_000 },
   /** Metres inside the terrain's view distance a ping records (the columns there are built). */
   reachPad: 24,
   /** Least time between two save writes of the record (ms). */
   writeEveryMs: 20_000,
 };
 
-type FrameInput = { time: number; nowMs: number; camera: THREE.PerspectiveCamera; renderer: THREE.WebGLRenderer; allowed: boolean };
+type FrameInput = { time: number; nowMs: number; camera: THREE.Camera; allowed: boolean };
 
 export class SonarScanner {
   readonly record: ScanRecord;
@@ -72,8 +72,7 @@ export class SonarScanner {
     const sw = this.sweep;
     if (sw) {
       const front = (i.time - sw.t0) * SONAR_TUNING.speed;
-      if (front >= this.radius) sw.s.finish();
-      else sw.s.step(front, this.budget);
+      sw.s.step(front >= this.radius ? Infinity : front, this.budget); // past the rim: the rest, still within budget
       if (sw.s.done) {
         this.sweep = null;
         this.record.evict(this.record.now);
@@ -87,11 +86,11 @@ export class SonarScanner {
     const r = l ? (i.time - l.t0) * SONAR_TUNING.speed : -1;
     if (l && r <= SONAR_TUNING.range) this.front.set(l.x, l.y, l.z, r);
     else this.front.w = -1;
-    this.view.update(this.record, i.camera, i.renderer, this.front);
+    this.view.update(this.record, i.camera, this.front);
     return this.view.scene;
   }
 
-  /** Forget every recorded point (debug): the view empties, the saved record too. */
+  /** Forget every recorded surface (debug): the view empties, the saved record too. */
   forget(): void {
     this.sweep = null;
     this.record.clear();
@@ -123,15 +122,20 @@ export class SonarScanner {
   }
 }
 
-/** The column meshes' surfaces (chunks.ts tags each geometry with its surface vertex count). */
+/**
+ * The column meshes' surfaces as drawn now: chunks.ts tags each geometry with its
+ * surface vertex count (skirts follow) and a mesh dissolving away in a LOD crossfade
+ * with userData.fadeDir < 0 — skipped, its replacement covers the same ground.
+ */
 export function sourcesOf(terrain: THREE.Object3D): ScanSource[] {
   const out: ScanSource[] = [];
   for (const o of terrain.children) {
     const g = (o as THREE.Mesh).geometry as THREE.BufferGeometry | undefined;
     const n = g?.userData.surfaceVerts;
     const pos = g?.getAttribute("position"), nrm = g?.getAttribute("normal"), bb = g?.boundingBox;
-    if (typeof n !== "number" || !pos || !nrm || !bb) continue;
-    out.push({ positions: pos.array, normals: nrm.array, count: n, box: [bb.min.x, bb.min.y, bb.min.z, bb.max.x, bb.max.y, bb.max.z] });
+    if (!o.visible || (o.userData.fadeDir ?? 0) < 0 || typeof n !== "number" || !pos || !nrm || !bb) continue;
+    const index = g!.getIndex()?.array ?? null;
+    out.push({ positions: pos.array, normals: nrm.array, index, surface: n, box: [bb.min.x, bb.min.y, bb.min.z, bb.max.x, bb.max.y, bb.max.z] });
   }
   return out;
 }
