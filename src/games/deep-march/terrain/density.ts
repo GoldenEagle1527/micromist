@@ -13,7 +13,9 @@
  *         + floorWeight · smoothstep(...)        undulating hard floor (region height)
  *         + ceilingSlope · ramp(y − ceilH)       undulating rock ceiling (C1 ramp)
  *         + extra_r(p')                          region-only terms (caves, boulders)
- *   raw   = Σ_r w_r(x,z) · D_r                   region weights, C1 across ~15–20-unit bands
+ *   raw   = Σ_r w_r(x,z) · D_r + Σ_i w_i δ_i     region weights, C1 across ~15–20-unit bands;
+ *                                                δ_i = per-site bias of an explicit site layout
+ *                                                (bounded world, siteLayout.ts; 0 otherwise)
  *   final = Σ w_i · raw(x, y + (i − 2)·h, z)    vertical binomial [1 4 6 4 1]/16 smoothing
  *
  * The shared noise shapes (warp, ridged, layer, erosion) are evaluated once per
@@ -35,12 +37,15 @@
  * combination, [min_r lo_r, max_r hi_r] over the regions present is a valid
  * bound. `bounds(y)` uses all regions (global, for the column height);
  * `boundsForMask(mask, y)` only the regions in `mask` (per-column row skipping).
+ * The site bias is a convex combination of the layout's δ and 0 (sites outside it),
+ * so the bounds widen by [min(0, min δ), max(0, max δ)].
  */
 import type { TerrainSettings } from "./config";
 import { createSimplex3, mulberry32, simplexTables } from "./noise";
 import { getWasmNoise } from "./noiseWasm";
 import { REGION_PARAMS, type RegionParams } from "./regionParams";
 import { REGION, REGION_COUNT, createRegionField, createRegionSample, scaleRegionField, type RegionField } from "./regions";
+import { layoutBiasRange, type SiteLayout } from "./siteLayout";
 
 export type DensityField = {
   settings: TerrainSettings;
@@ -117,7 +122,13 @@ const CACHE_BITS = 12;
 const CACHE = 1 << CACHE_BITS;
 const R6 = REGION_COUNT;
 
-export function createDensityField(seed: number, s: TerrainSettings, params: readonly RegionParams[] = REGION_PARAMS): DensityField {
+/** layout: explicit finite site layout (bounded world); null = the endless seeded field. */
+export function createDensityField(
+  seed: number,
+  s: TerrainSettings,
+  params: readonly RegionParams[] = REGION_PARAMS,
+  layout: SiteLayout | null = null,
+): DensityField {
   const snoise = createSimplex3(seed);
   // Reference: System.Random(seed) → per-octave offsets in ±1000.
   const rand = mulberry32(seed);
@@ -140,7 +151,8 @@ export function createDensityField(seed: number, s: TerrainSettings, params: rea
   const S = s.worldScale;
   const invS = 1 / S;
   const iso = s.isoLevel;
-  const baseRegions = createRegionField(seed);
+  const baseRegions = createRegionField(seed, layout);
+  const [biasLo, biasHi] = layoutBiasRange(layout);
   const regions = S === 1 ? baseRegions : scaleRegionField(baseRegions, S);
 
   const fw = s.warpFrequency;
@@ -252,6 +264,7 @@ export function createDensityField(seed: number, s: TerrainSettings, params: rea
   const cNb = new Float64Array(CACHE);
   const cWarp = new Float64Array(CACHE);
   const cLayer = new Uint8Array(CACHE);
+  const cBias = new Float64Array(CACHE); // Σ w_i δ_i (exactly 0 without a layout)
   // Sand boulders overlapping (x, z) (≤ 2 per slot): horizontal normalised distance²,
   // centre height, vertical radius, size scale.
   const cBN = new Uint8Array(CACHE);
@@ -353,6 +366,7 @@ export function createDensityField(seed: number, s: TerrainSettings, params: rea
     cNb[slot] = nb;
     cWarp[slot] = warp;
     cLayer[slot] = layer;
+    cBias[slot] = rs.bias;
     cX[slot] = x;
     cZ[slot] = z;
     return slot;
@@ -443,7 +457,9 @@ export function createDensityField(seed: number, s: TerrainSettings, params: rea
     // --- region terms without the ridged noise (a lower bound: noise weights are ≥ 0) ---
     const n = cN[slot];
     const o = slot * R6;
-    let lower = 0;
+    // site bias (+0 without a layout: d + 0 === d for every d ≠ −0, and d starts at +0)
+    const bias = cBias[slot];
+    let lower = bias;
     for (let q = 0; q < n; q++) {
       const r = cReg[o + q];
       let v =
@@ -497,7 +513,7 @@ export function createDensityField(seed: number, s: TerrainSettings, params: rea
       }
     }
 
-    let d = 0;
+    let d = bias;
     for (let q = 0; q < n; q++) {
       const r = cReg[o + q];
       let v = part[q] + pNw[r] * noise;
@@ -529,6 +545,7 @@ export function createDensityField(seed: number, s: TerrainSettings, params: rea
     const o = slot * R6;
     let lo = 0, hi = 0;
     const layerOn = cLayer[slot] !== 0;
+    lo = hi = cBias[slot];
     for (let q = 0; q < n; q++) {
       const r = cReg[o + q];
       const w = cW[o + q];
@@ -577,6 +594,10 @@ export function createDensityField(seed: number, s: TerrainSettings, params: rea
       const ryMax = b.rMax * b.flatMax; // flatMax ≤ 1.2 ⇒ size scale cbrt(rx·ry·rz) ≤ 1.2·rMax
       const yLo = Hlo - sandIso - b.sink * ryMax - 1.6 * ryMax, yHi = Hhi - sandIso + 1.6 * ryMax;
       if (y >= yLo && y <= yHi) hi = Math.max(hi, s.isoLevel + b.gain * (b.rMax * 1.2 + b.bump * 1.5)) + b.k / 4;
+    }
+    if (layout) {
+      lo += biasLo;
+      hi += biasHi;
     }
     out[0] = Math.min(lo, capHi);
     out[1] = Math.min(hi, capHi);
