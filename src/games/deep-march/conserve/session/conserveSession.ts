@@ -19,6 +19,7 @@ import { buildNodeTable, type NodeTable } from "../nodes/nodeTable";
 import { NodeState } from "../nodes/nodeState";
 import { Expedition } from "../expedition/expedition";
 import { Base } from "../base/base";
+import { TideController } from "../tide/controller";
 import type { OpenedReport } from "./openReport";
 
 export type SessionDeps = { backend: SaveBackend; clock?: WriterClock; throttleMs?: number };
@@ -36,6 +37,8 @@ export class ConserveSession {
   private nodes: NodeTable | null = null;
   private exp: Expedition | null = null;
   private home: Base | null = null;
+  private tides: TideController | null = null;
+  private expeditionLocked = false;
 
   /** report: built from the site table (so the table is computed once, at open). */
   constructor(save: WorldSave, ledger: ParticleLedger, report: (table: SiteTable) => OpenedReport, deps: SessionDeps) {
@@ -94,6 +97,7 @@ export class ConserveSession {
       const h = this.header;
       const { state } = NodeState.fromSave(this.nodeTable, h.generation);
       this.exp = new Expedition({ ledger: this.ledger, nodes: state, caches: h.caches, gen: h.gen, sitesX: h.size.sitesX, sitesZ: h.size.sitesZ, onLoss: () => this.writer.flush() });
+      this.exp.lock(this.expeditionLocked);
     }
     return this.exp;
   }
@@ -111,6 +115,40 @@ export class ConserveSession {
       });
     }
     return this.home;
+  }
+
+  /** The tide (M7): created once; it replaces this session's generation at its commit (advance). */
+  get tide(): TideController {
+    this.tides ??= new TideController({
+      ledger: this.ledger,
+      snapshot: () => this.snapshot(),
+      gen: () => this.header.gen,
+      siteHarvest: () => this.expedition.siteHarvest(),
+      readiness: () => this.base.tide(),
+      dome: () => {
+        const { center: c, radius } = this.base.view();
+        return c && { x: c[0], y: c[1], z: c[2], radius };
+      },
+      lockExpedition: (on) => {
+        this.expeditionLocked = on;
+        this.exp?.lock(on);
+      },
+      advance: (next) => this.advance(next),
+    });
+    return this.tides;
+  }
+
+  /**
+   * The tide's commit: gen + 1 becomes the save; the site table, nodes, expedition
+   * and base are rebuilt from it on next use (the old objects must not be used
+   * again); written at once, before the show.
+   */
+  private advance(next: WorldSave): void {
+    this.header = { ...next, savedAt: this.clock.now() };
+    this.table = this.nodes = null;
+    this.exp = null;
+    this.home = null;
+    writeSlot(this.backend, this.snapshot());
   }
 
   /** The save as it would be written now. */

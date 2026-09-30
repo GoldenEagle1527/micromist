@@ -39,6 +39,7 @@ export class Expedition implements ExpeditionPort {
   private readonly meter = new FlowMeter();
   private readonly onLoss: () => void;
   private rev = 0;
+  private locked = false;
 
   constructor(deps: ExpeditionDeps) {
     this.ledger = deps.ledger;
@@ -66,9 +67,19 @@ export class Expedition implements ExpeditionPort {
     return Math.max(0, this.tankCapacity - this.carried());
   }
 
+  /** During a tide nothing may leave the world or the caches (the tide's R' is fixed, tide/commit.ts). */
+  lock(on: boolean): void {
+    this.locked = on;
+    this.meter.reset();
+  }
+
+  get isLocked(): boolean {
+    return this.locked;
+  }
+
   absorb(nodeId: number, dt: number): FlowResult {
     const spec = this.nodes.spec(nodeId);
-    if (!spec) return NONE;
+    if (!spec || this.locked) return NONE;
     const type = PARTICLE_TYPES[spec.kind];
     const left = this.nodes.remaining(nodeId);
     const room = this.room();
@@ -89,7 +100,7 @@ export class Expedition implements ExpeditionPort {
 
   retrieve(cacheId: number, dt: number): FlowResult {
     const cache = this.list.find((c) => c.id === cacheId);
-    if (!cache) return NONE;
+    if (!cache || this.locked) return NONE;
     const left = cacheTotal(cache);
     const room = this.room();
     if (room === 0) return { moved: 0, left, full: true };
