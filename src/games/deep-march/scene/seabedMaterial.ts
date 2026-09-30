@@ -29,6 +29,8 @@ import { SONAR_DECLS, type SonarUniforms } from "./sonar";
 import { MAT_VERT_DECLS, MAT_VERT_MAIN } from "./materialShader";
 import type { MaterialUniforms } from "./materialLibrary";
 import { DETAIL_GLSL } from "./detailNormal";
+import { BL_DECLS } from "./base/baseLightShader";
+import type { BaseLightUniforms } from "./base/baseLight";
 import { DECLS, EMISSIVE_FRAGMENT, LIGHTS_END_FRAGMENT, MAP_FRAGMENT, OPAQUE_FRAGMENT, WATER_GLSL } from "./seabedShader";
 
 export { WATER_GLSL };
@@ -73,6 +75,8 @@ export type SeabedOptions = {
   beam: BeamUniforms;
   /** Fluorescent-plankton point lights, see particleLight.ts. */
   particleLights: ParticleLightUniforms;
+  /** Lighthouse light (conserve base, base/baseLight.ts); uBLCount 0 skips it. */
+  baseLight: BaseLightUniforms;
   /** Shader detail normal (detailNormal.ts); false = ?detail=0. Default true. */
   detail?: boolean;
 };
@@ -109,6 +113,7 @@ export function createSeabedMaterial(opts: SeabedOptions): SeabedMaterial {
     ...opts.sonar,
     ...opts.beam,
     ...opts.particleLights,
+    ...opts.baseLight,
     uEnvLight: { value: 1 },
   };
 
@@ -124,7 +129,7 @@ export function createSeabedMaterial(opts: SeabedOptions): SeabedMaterial {
         "#include <project_vertex>\n  vWPos = (modelMatrix * vec4(transformed, 1.0)).xyz;\n  vWNrm = normalize(mat3(modelMatrix) * objectNormal);\n  vAO = ao;" + MAT_VERT_MAIN,
       );
     shader.fragmentShader = shader.fragmentShader
-      .replace("#include <common>", "#include <common>\n" + DECLS + DETAIL_GLSL + WATER_GLSL + FOG_GLSL + SONAR_DECLS + BEAM_DECLS + PL_DECLS)
+      .replace("#include <common>", "#include <common>\n" + DECLS + DETAIL_GLSL + WATER_GLSL + FOG_GLSL + SONAR_DECLS + BEAM_DECLS + PL_DECLS + BL_DECLS)
       .replace("#include <map_fragment>", MAP_FRAGMENT)
       .replace("#include <roughnessmap_fragment>", "float roughnessFactor = clamp(mix(0.55, 1.0, dmRough), 0.3, 1.0);")
       .replace(

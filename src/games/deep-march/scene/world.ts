@@ -28,6 +28,7 @@ import { BumpCue, CueLimiter } from "./audioCues";
 import type { ExpeditionPort } from "../conserve";
 import { ExpeditionScene } from "./expedition/expeditionScene";
 import type { ExpeditionTelemetry } from "./expedition/telemetry";
+import { createBaseLightUniforms } from "./base/baseLight";
 
 export type HudLabels = {
   chunks: string;
@@ -271,6 +272,8 @@ void main() {
   const sonarPulses = new SonarPulses(lowSpec ? SONAR_TUNING.maxPulsesLow : SONAR_TUNING.maxPulses);
   const sonar = createSonarUniforms(sonarPulses);
   const particleLights = createParticleLightUniforms();
+  // lighthouse light (scene/base): the free dive keeps uBLCount at 0
+  const baseLight = createBaseLightUniforms();
   const camForward = new THREE.Vector3();
 
   // Down-welling light: teal sky fill from above, very dark from below,
@@ -298,6 +301,7 @@ void main() {
     beam: rig.beam,
     particleLights,
     materials: materials.uniforms,
+    baseLight,
   });
   const terrainMat = seabed.material;
   const baseAbsorb = seabed.absorb.clone();

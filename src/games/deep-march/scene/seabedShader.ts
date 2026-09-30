@@ -8,6 +8,7 @@ import { PL_LIGHT } from "./particleLight";
 import { FOG_OPAQUE } from "./fog";
 import { SONAR_OPAQUE } from "./sonar";
 import { MAT_DECLS, MAT_FRAGMENT, WALL_TINT_GLSL } from "./materialShader";
+import { BL_LIGHT } from "./base/baseLightShader";
 
 /** Open-water colour seen along a view direction (bright toward the surface, black below). */
 export const WATER_GLSL = /* glsl */ `
@@ -192,7 +193,8 @@ export const LIGHTS_END_FRAGMENT = /* glsl */ `#include <lights_fragment_end>
     reflectedLight.directDiffuse *= mix(0.55, 1.0, occ);
   }
 ${BEAM_LIGHT}
-${PL_LIGHT}`;
+${PL_LIGHT}
+${BL_LIGHT}`;
 
 /** Replaces <opaque_fragment>: absorption, haze, high beam, turbidity (fog.ts), far fade. */
 export const OPAQUE_FRAGMENT = /* glsl */ `{
