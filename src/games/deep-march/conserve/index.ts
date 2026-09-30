@@ -11,6 +11,7 @@ export { flushOnPageHide } from "./platform/pageLifecycle";
 export { terrainLayoutOf } from "./platform/terrainLayout";
 export type { SiteTable, Site } from "./world/siteTable";
 export type { WallState } from "./chaos/wallModel";
+export type { BasePort, BaseView, BaseBuilding, BaseAction, StructureInfo, StructureKind, PlacementReason, WorldRect, TideReadiness, TideForecast } from "./base/port";
 export type { ExpeditionPort, ExpeditionNode, ExpeditionCache, FlowResult, NodeSurface } from "./expedition/port";
 export { withWorldSaveStep } from "./loading/worldSaveStep";
 export type { OpenReport } from "./session/openReport";

@@ -12,8 +12,11 @@ import type { PoolVectors } from "../ledger/particleLedger";
 import { PARTICLE_TYPES, type ParticleType } from "../particles/particleTypes";
 import type { ReadonlyParticleVector } from "../particles/particleVector";
 
-/** caches: `delta` particles of the lost pool that no cache claims, moved to the suspended pool (reconcileCaches.ts). */
-export type RepairCause = "sanitized" | "deficit" | "excess" | "caches";
+/**
+ * caches: `delta` particles of the lost pool that no cache claims, moved to the suspended pool (reconcileCaches.ts);
+ * base: the base's free storage changed by `delta` to fit pool B, no pool moved (reconcileBase.ts).
+ */
+export type RepairCause = "sanitized" | "deficit" | "excess" | "caches" | "base";
 /** One correction: `delta` particles of `type` added to (> 0) or removed from (< 0) `pool`. */
 export type Repair = { type: ParticleType; pool: PoolId; delta: number; cause: RepairCause };
 export type Reconciled = { pools: PoolVectors; repairs: Repair[] };
@@ -63,5 +66,5 @@ export function reconcilePools(totals: ReadonlyParticleVector, pools: Readonly<R
 
 /** Particles moved by the conservation repairs (sanitizing aside). */
 export function repairedParticles(repairs: readonly Repair[]): number {
-  return repairs.filter((r) => r.cause !== "sanitized").reduce((sum, r) => sum + Math.abs(r.delta), 0);
+  return repairs.filter((r) => r.cause !== "sanitized" && r.cause !== "base").reduce((sum, r) => sum + Math.abs(r.delta), 0);
 }

@@ -43,3 +43,9 @@ export function isCountVector(v: unknown): v is ParticleVector {
 export function isNumberVector(v: unknown): v is number[] {
   return Array.isArray(v) && v.length === PARTICLE_TYPE_COUNT && v.every((n) => typeof n === "number" && Number.isFinite(n));
 }
+
+/** a += b, in place. */
+export function addInto(a: ParticleVector, b: ReadonlyParticleVector): ParticleVector {
+  for (let k = 0; k < a.length; k++) a[k] += b[k];
+  return a;
+}

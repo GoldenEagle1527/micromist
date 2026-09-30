@@ -7,6 +7,7 @@ import { POOL_IDS } from "../ledger/pools";
 import { isCountVector, isNumberVector } from "../particles/particleVector";
 import type { RawSave } from "./migrate";
 import { SAVE_VERSION, type EndingA, type WorldSave } from "./schema";
+import { baseProblem } from "./validateBase";
 
 export type ValidateResult = { ok: true; save: WorldSave } | { ok: false; reason: string };
 
@@ -46,6 +47,7 @@ function generationProblem(raw: RawSave): string | null {
   const { harvested, partial } = raw.generation;
   if (!isString(harvested) || harvested.length % 4 !== 0 || !BASE64.test(harvested)) return "generation.harvested";
   if (!Array.isArray(partial) || !partial.every((e) => Array.isArray(e) && e.length === 2 && e.every(isCount))) return "generation.partial";
+  if (!isCount(raw.generation.dives)) return "generation.dives";
   return null;
 }
 
@@ -66,7 +68,7 @@ function extrasProblem(raw: RawSave): string | null {
 }
 
 export function validateSave(raw: RawSave): ValidateResult {
-  const problem = fieldProblem(raw) ?? ledgerProblem(raw) ?? generationProblem(raw) ?? cachesProblem(raw) ?? extrasProblem(raw);
+  const problem = fieldProblem(raw) ?? ledgerProblem(raw) ?? generationProblem(raw) ?? cachesProblem(raw) ?? baseProblem(raw.base) ?? extrasProblem(raw);
   if (problem) return { ok: false, reason: `invalid ${problem}` };
   return { ok: true, save: raw as unknown as WorldSave };
 }
