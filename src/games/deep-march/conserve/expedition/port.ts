@@ -47,6 +47,8 @@ export interface ExpeditionPort {
   remaining(nodeId: number): number;
   /** Particles in the tank (ledger pool P). */
   carried(): number;
+  /** A tide is running: absorbing and retrieving are refused (M7). */
+  readonly isLocked: boolean;
   /** Hold-to-absorb step on a node: W → P. */
   absorb(nodeId: number, dt: number): FlowResult;
   caches(): readonly ExpeditionCache[];
