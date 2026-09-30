@@ -244,6 +244,7 @@ console.log("loading steps + dive gate");
     check(created.model.status.worldSave === "done" && ws.lines[0] === loadingEn.world.created("reef") && ws.lines[1] === loadingEn.world.ledger("100,000"), "new world: done, seed + conserved ledger lines");
     check((ws.diag ?? []).some((e) => e.value === "save/main") && (ws.diag ?? []).some((e) => e.value === "99,320 · 0 · 680 · 0 · 0"), "diagnostics: slot key, pool totals W · P · B · S · L");
     check(ws.lines[2] === loadingEn.world.sites(10, 10, Object.values(opened.session.report.sites.byBiome).filter((n) => n > 0).length), "new world: site-table line (10 × 10, biome count)");
+    check(ws.lines[3] === loadingEn.world.wall(160, "stable") && opened.session.report.wall.thickness === opened.session.wall.thickness && (ws.diag ?? []).some((e) => e.label === loadingEn.world.diag.wall && e.value.endsWith("160.0 m")), "new world: ring-wall line (160 m, stable) = the session's wall");
     check((ws.diag ?? []).some((e) => e.label === loadingEn.world.diag.biomes && e.value.startsWith("sand ")) && (ws.diag ?? []).some((e) => e.label === loadingEn.world.diag.bias && e.value.includes("…")), "diagnostics: sites per biome, δ range");
     check(canBeginDive(created.model, steps, snap, false), "world save done + everything loaded → begin dive");
     check(runSteps(steps, null).model.status.worldSave === "done", "settled before the world exists (the seed comes from the save)");
@@ -261,7 +262,7 @@ console.log("loading steps + dive gate");
     }
     for (const [name, dict] of [["en", loadingEn], ["zh", loadingZh]] as const) {
       const w = dict.world;
-      const strings = [dict.steps.worldSave, w.created("1"), w.continued("1", 2, 3), w.ledger("1"), w.ledgerBroken, w.repaired("1"), w.sites(10, 10, 6), w.unreadable, w.ended, w.missing, ...Object.values(w.diag).map((v) => (typeof v === "function" ? v(1, 1, "1") : v))];
+      const strings = [dict.steps.worldSave, w.created("1"), w.continued("1", 2, 3), w.ledger("1"), w.ledgerBroken, w.repaired("1"), w.sites(10, 10, 6), w.wall(160, "stable"), w.wall(98, "thinning"), w.wall(24, "thinnest"), w.unreadable, w.ended, w.missing, ...Object.values(w.diag).map((v) => (typeof v === "function" ? v(1, 1, "1") : v))];
       check(strings.every((x) => typeof x === "string" && x.length > 0), `${name}: every world-save string present`);
     }
   }

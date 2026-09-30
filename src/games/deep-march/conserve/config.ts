@@ -1,5 +1,5 @@
 /**
- * Conserve-mode tunables, in one place (design doc v0.5, MVP plan M1–M2). Modules
+ * Conserve-mode tunables, in one place (design doc v0.5, MVP plan M1–M3). Modules
  * import these; none hard-codes a number a designer might want to change.
  */
 import type { PoolId } from "./ledger/pools";
@@ -72,6 +72,18 @@ export const SITE_SPLIT: Readonly<Record<ParticleType, SiteShares>> = {
   resonite: { terrain: 0, nodes: 0.9, creatures: 0.1 },
   abyssal: { terrain: 0, nodes: 0.9, creatures: 0.1 },
 };
+
+/**
+ * The ring wall (§4.1): external variable share m = Σ R / Σ N at the tide,
+ * stability σ = clamp((m − mBreak) / (mFull − mBreak), 0, 1), thickness
+ * T = minThickness + (fullThickness − minThickness) · smoothstep(σ), metres.
+ */
+export const WALL = {
+  fullThickness: 160,
+  minThickness: 24,
+  mFull: 0.95,
+  mBreak: 0.78,
+} as const;
 
 export const SAVE = {
   /** The single MVP save slot (G11: 1 slot until phase 4). */

@@ -2,6 +2,7 @@
 import type { PoolId } from "../ledger/pools";
 import type { Repair } from "../save/reconcile";
 import type { SiteSummary } from "../world/siteSummary";
+import type { WallState } from "../chaos/wallModel";
 
 export type OpenedReport = {
   kind: "created" | "continued";
@@ -19,6 +20,8 @@ export type OpenedReport = {
   bytes: number;
   /** The generation's site table (biomes, bias range). */
   sites: SiteSummary;
+  /** The generation's ring wall (thickness from m = Σ R / Σ N). */
+  wall: WallState;
 };
 
 export type BlockedReport = {
