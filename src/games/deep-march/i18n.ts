@@ -14,6 +14,9 @@ export type DeepMarchDict = {
   randomSeed: string;
   sensitivity: string;
   invertY: string;
+  /** Accessibility (M8): shallower, slower light changes near cracks. */
+  calmLights: string;
+  calmLightsHint: string;
   panelToggle: string;
   panelToggleHint: string;
   start: string;
@@ -91,6 +94,8 @@ export const deepMarchEn: DeepMarchDict = {
   randomSeed: "Random",
   sensitivity: "Look sensitivity",
   invertY: "Invert look Y",
+  calmLights: "Reduce light flicker",
+  calmLightsHint: "Near cracks the lamp and the glow pulse only gently and slowly.",
   panelToggle: "On-screen control panel",
   panelToggleHint: "Dial + buttons for touch; on by default on phones and tablets.",
   start: "Dive",
@@ -190,6 +195,8 @@ export const deepMarchZh: DeepMarchDict = {
   randomSeed: "随机",
   sensitivity: "视角灵敏度",
   invertY: "反转视角上下",
+  calmLights: "减弱灯光起伏",
+  calmLightsHint: "裂缝附近的灯光和辉光只做轻微、缓慢的变化。",
   panelToggle: "屏幕操控面板",
   panelToggleHint: "触屏用的摇盘和按钮；手机、平板上默认开启。",
   start: "下潜",
