@@ -17,6 +17,8 @@ import { DiverController, type DiverState } from "./diver";
 import { LampRig } from "./lampRig";
 import { FOG_GLSL, FOG_TUNING, createFogUniforms, parseFogParam } from "./fog";
 import { SONAR_TUNING, SonarPulses, createSonarUniforms } from "./sonar";
+import { createLongPulses } from "./sonarLong";
+import { createWallRing } from "./wallRing";
 import { FramePacer } from "./framePacer";
 import { TerrainOcclusion } from "./occlusion";
 import { createParticleLightUniforms } from "./particleLight";
@@ -292,9 +294,14 @@ void main() {
   const layout = opts.world ?? null;
   const field = createDensityField(opts.seed, terrain, undefined, layout);
   const chunks = new ChunkManager(scene, field, opts.seed, terrainMat, lowSpec, seabed.fadeMaterial);
+  // bounded world with a ring wall: near = terrain columns (density Wall term), far = the
+  // proxy ring, lit by long sonar pulses (wallRing.ts, sonarLong.ts)
+  const longPulses = createLongPulses();
+  const wallRing = createWallRing(field, { water, fog, sonar, long: longPulses, far: terrain.viewDistance });
+  if (wallRing) scene.add(wallRing.mesh);
   // GPU occlusion culling of terrain columns (?occ=0 disables)
   const occlusion = new TerrainOcclusion(renderer, scene, new URLSearchParams(window.location.search).get("occ") !== "0");
-  // System check: compile the terrain programs (base + LOD crossfade) before the dive,
+  // System check: compile the terrain programs (base + LOD crossfade, wall ring) before the dive,
   // so neither the first frame nor the first LOD swap hitches.
   // A program that fails to link is skipped by three at draw time (nothing drawn, no
   // exception), so the check touches every compiled program (three's link check runs on
@@ -318,6 +325,8 @@ void main() {
     const geo = new THREE.BufferGeometry();
     const warm = new THREE.Group();
     warm.add(new THREE.Mesh(geo, terrainMat), new THREE.Mesh(geo, seabed.fadeMaterial().material));
+    // the wall ring's program too (drawn only in sonar mode: no hitch on the first ping)
+    if (wallRing) warm.add(new THREE.Mesh(geo, wallRing.mesh.material as THREE.Material));
     renderer
       .compileAsync(warm, camera, scene)
       .catch((e: unknown) => console.error("[deep-march] shader compile failed:", e))
@@ -569,6 +578,10 @@ void main() {
     // SONAR: pulses from the diver while the mode is on; plankton dimmed underneath
     const ls = lights.state();
     const pings = sonarPulses.update(now / 1000, ls.on && ls.mode === "sonar", camera.position);
+    if (wallRing) {
+      longPulses.update(now / 1000, ls.on && ls.mode === "sonar", camera.position);
+      wallRing.update(rig.sonar);
+    }
     if (pings > 0 && cues.allow("sonar", now / 1000)) audio.play("sonar", { gain: 0.48 });
     const moving = Math.min(1, Math.max(0, (diver.speed - 0.6) / 6));
     audio.setLoop("ambience", 0.4);
@@ -734,6 +747,7 @@ void main() {
       seabed.dispose();
       materials.dispose();
       dome.geometry.dispose();
+      wallRing?.dispose();
       (dome.material as THREE.Material).dispose();
       renderer.dispose();
       renderer.domElement.remove();

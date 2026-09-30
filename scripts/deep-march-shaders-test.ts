@@ -21,7 +21,10 @@
  *  - Mali-G57 cost budget on every captured seabed fragment program (Mali Offline
  *    Compiler, scripts/lib/malioc.ts; skipped with a warning when not installed):
  *    stack, longest-path load/store and texture cycles, and the LOD fade program
- *    discarding before any shading.
+ *    discarding before any shading;
+ *  - the ring wall's far proxy ring (wallRing.ts / wallRingShader.ts): the exact
+ *    programs three builds (highp / mediump), glslang + glslangValidator ES 300,
+ *    array precision, no samplers, and its own Mali-G57 budget (RING_MALI_BUDGET).
  * Run: npm run test:shaders
  */
 import glslangInit from "@webgpu/glslang/dist/node-devel/glslang.js";
@@ -52,6 +55,18 @@ import { createFogUniforms } from "../src/games/deep-march/scene/fog";
 import { SonarPulses, createSonarUniforms } from "../src/games/deep-march/scene/sonar";
 import { createBeamUniforms } from "../src/games/deep-march/scene/highBeam";
 import { createParticleLightUniforms } from "../src/games/deep-march/scene/particleLight";
+import { RING_FRAG, RING_VERT } from "../src/games/deep-march/scene/wallRingShader";
+import { createWallRing } from "../src/games/deep-march/scene/wallRing";
+import { createLongPulses } from "../src/games/deep-march/scene/sonarLong";
+import { createDensityField } from "../src/games/deep-march/terrain/density";
+import { TERRAIN } from "../src/games/deep-march/terrain/config";
+import { genesisLayout } from "./lib/worldFixture";
+
+/**
+ * Far proxy ring on Mali-G57: no textures, a handful of pulses — a small fraction of
+ * the seabed's budget (it covers a thin band of the screen, sonar mode only).
+ */
+const RING_MALI_BUDGET = { stack: 0, longestLS: 4, longestTex: 0, longestArith: 12 };
 
 let failed = 0;
 const check = (ok: boolean, name: string, detail: string) => {
@@ -244,6 +259,8 @@ function exactPrograms(compile: Compile) {
       check(!/\buPalC?\s*\[[^\]]+\]\s*\[/.test(pf), `no dynamic vector component indexing of palettes ${t}`, "");
     });
   }
+  // the ring wall's material slot reaches the shader (7th weight → palettes 12 / 13)
+  check(fragments.every((f) => /dmTop2\(vRegB\.z, 6,/.test(preprocess(f.fragment))), "ring-wall weight (vRegB.z, material slot 6) enters the region top-2", "");
   const mats = Object.values(materialOf);
   check(mats[0].length > 1000 && mats.every((m) => m === mats[0]), "one material shader for phones and desktop", `${mats.length} programs, ${mats[0].length} chars`);
   maliBudget(fragments);
@@ -274,6 +291,47 @@ function maliBudget(fragments: { tag: string; kind: string; fragment: string }[]
     check(issues.length === 0, `Mali-G57 budget (stack <= ${b.stack} B, load/store <= ${b.longestLS}, texture <= ${b.longestTex}) ${t}`, issues.length ? `${issues.join("; ")} | ${fmtMalioc(s)}` : fmtMalioc(s));
     if (f.kind === "fade") check(s.shortest.arith < 2 && s.shortest.ls === 0 && s.shortest.tex === 0, `LOD fade discards before shading ${t}`, `shortest path A/LS/T ${s.shortest.arith}/${s.shortest.ls}/${s.shortest.tex}`);
   }
+}
+
+/** The wall ring as world.ts builds it (genesis wall), for both float precisions. */
+function wallRingPrograms(compile: Compile) {
+  const field = createDensityField(7, TERRAIN, undefined, genesisLayout(7));
+  const long = createLongPulses();
+  const ring = createWallRing(field, { water: createWaterUniforms(new THREE.Color(0, 0.1, 0.2), 420), fog: createFogUniforms(), sonar: createSonarUniforms(new SonarPulses(5)), long, far: 420 })!;
+  check(!!ring && ring.triangles <= 2200, "wall ring built from the genesis wall", `${ring.triangles} triangles`);
+  for (const [name, src] of Object.entries({ RING_VERT, RING_FRAG })) {
+    const issues = arrayPrecisionIssues(src);
+    check(issues.length === 0, `array types carry explicit precision, no array constructors: ${name}`, issues.join(" | ") || "clean");
+  }
+  const bin = findMalioc();
+  for (const highp of [true, false]) {
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera();
+    scene.add(ring.mesh);
+    ring.mesh.visible = true;
+    const progs = capturePrograms(scene, camera, { highp });
+    const t = `[wall ring, ${highp ? "highp" : "mediump"}]`;
+    check(progs.length === 1, `three builds one wall-ring program ${t}`, `${progs.length}`);
+    const p = progs[0];
+    check(!/[^\x00-\x7f]/.test(p.vertex + p.fragment), `sources are pure ASCII ${t}`, "");
+    check(samplerUniforms(p.fragment).count === 0, `no texture fetches ${t}`, samplerUniforms(p.fragment).names.join(", ") || "none");
+    compile(`exact three vertex ES ${t}`, esForGlslang(p.vertex, "vertex"), "vertex");
+    compile(`exact three fragment ES ${t}`, esForGlslang(p.fragment, "fragment"), "fragment");
+    es300(`exact three vertex, glslangValidator ES 300 ${t}`, p.vertex, "vert");
+    es300(`exact three fragment, glslangValidator ES 300 ${t}`, p.fragment, "frag");
+    if (!bin) continue;
+    let st: MaliocStats;
+    try {
+      st = maliocFragment(bin, p.fragment);
+    } catch (e) {
+      check(false, `malioc compiles the wall-ring fragment ${t}`, String(e).slice(0, 400));
+      continue;
+    }
+    const b = RING_MALI_BUDGET;
+    const issues = [...budgetIssues(st, b), ...(st.longest.arith > b.longestArith ? [`arith ${st.longest.arith} > ${b.longestArith}`] : [])];
+    check(issues.length === 0, `Mali-G57 budget (stack <= ${b.stack} B, load/store <= ${b.longestLS}, texture <= ${b.longestTex}, arith <= ${b.longestArith}) ${t}`, issues.length ? `${issues.join("; ")} | ${fmtMalioc(st)}` : fmtMalioc(st));
+  }
+  ring.dispose();
 }
 
 (async () => {
@@ -310,6 +368,7 @@ function maliBudget(fragments: { tag: string; kind: string; fragment: string }[]
   }
   arrayLint();
   exactPrograms(compile);
+  wallRingPrograms(compile);
   compile("background dome fragment", domeSource(), "fragment");
   const [sv, sf] = snowSources();
   compile("plankton vertex", sv, "vertex");
