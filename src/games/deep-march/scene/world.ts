@@ -7,6 +7,8 @@ import * as THREE from "three";
 import { TERRAIN, isLowSpecDevice } from "../terrain/config";
 import { createDensityField } from "../terrain/density";
 import { ChunkManager } from "../terrain/chunks";
+import { mesherWorkerCount, WorkerPool } from "../terrain/jobPool";
+import { PoolRouter } from "../terrain/poolRouter";
 import { findSpawn } from "../terrain/spawn";
 import { SURVIVAL_TUNING, createSurvival } from "../survival";
 import { createDiveAudio } from "./audio";
@@ -24,17 +26,20 @@ import { SONAR_TUNING, SonarPulses, createSonarUniforms } from "./sonar";
 import { createLongPulses } from "./sonarLong";
 import { SpawnDebugView } from "./spawnDebug";
 import { createWallRing } from "./wallRing";
+import type { HomeSpot } from "./base/home";
 import { CameraSync } from "./dive/cameraSync";
-import { ConserveLayer } from "./dive/conserveLayer";
+import { ConserveLayer, type ConserveLayerDeps } from "./dive/conserveLayer";
 import { listenSpawnDebugKey } from "./dive/debugKey";
 import { DiveCues, lightControls } from "./dive/diveCues";
-import { startDiveLoop } from "./dive/diveLoop";
+import { startDiveLoop, type DiveParts } from "./dive/diveLoop";
 import { GpuHealth } from "./dive/gpuHealth";
-import { createHandle } from "./dive/handle";
+import { createHandle, type HandleParts } from "./dive/handle";
 import { HudChips } from "./dive/hudChips";
 import { LoadingGate } from "./dive/loadingGate";
 import { diveTerrain, parseViewpoint, readDiveParams } from "./dive/params";
 import { createOverlay, createRenderer, watchResize } from "./dive/rendererRig";
+import { createTideDirector } from "./dive/tideWiring";
+import type { TideDirector } from "./tide/tideDirector";
 import type { DeepMarchHandle, DeepMarchOptions } from "./dive/types";
 import { WaterLook } from "./dive/waterLook";
 
@@ -92,51 +97,70 @@ export function createDeepMarch(host: HTMLElement, opts: DeepMarchOptions): Deep
 
   const layout = opts.world ?? null;
   const field = createDensityField(opts.seed, terrain, undefined, layout);
-  const chunks = new ChunkManager(scene, field, opts.seed, seabed.material, lowSpec, seabed.fadeMaterial);
+  const conserveWorld = !!(opts.expedition && layout);
+  // conserve: one worker pool for the current terrain and, during a tide, gen + 1's (terrain/poolRouter.ts)
+  const router = conserveWorld ? new PoolRouter(new WorkerPool(opts.seed, field.settings, mesherWorkerCount(lowSpec), layout)) : null;
+  const chunks = new ChunkManager(scene, field, opts.seed, seabed.material, lowSpec, seabed.fadeMaterial, router?.view(0));
   // bounded world with a ring wall: near = terrain columns (density Wall term), far = the
   // proxy ring, lit by long sonar pulses (wallRing.ts, sonarLong.ts)
   const longPulses = createLongPulses();
-  const wallRing = createWallRing(field, { water, fog, sonar, long: longPulses, far: terrain.viewDistance });
-  if (wallRing) scene.add(wallRing.mesh);
-  // conserve: nodes, absorbing, lost caches, recall, the base (dive/conserveLayer.ts); the free dive has none
-  const conserve =
-    opts.expedition && layout
-      ? new ConserveLayer(scene, {
-          expedition: opts.expedition,
-          base: opts.base,
-          field,
-          layout,
-          rect: chunks.worldRect,
-          resources: survival.resources,
-          audio,
-          overlay: overlay.root,
-          lowSpec,
-          water,
-          fog,
-          sonar,
-          beam: rig.beam,
-          absorb: seabed.absorb,
-          baseLight,
-          far: terrain.viewDistance + 40,
-          respawn: (home) => {
-            const at = home ?? spawnAt;
-            diver.spawnAt(at.x, at.y, at.z, at.yaw);
-            survival.resources.add("battery", SURVIVAL_TUNING.battery.capacity);
-          },
-          releaseLock: () => input.releaseLock(),
-        })
-      : null;
+  const ringFor = (f: typeof field) => {
+    const ring = createWallRing(f, { water, fog, sonar, long: longPulses, far: terrain.viewDistance });
+    if (ring) scene.add(ring.mesh);
+    return ring;
+  };
+  const wallRing = ringFor(field);
+  let tide: TideDirector | null = null;
+  // after a recall / death / the tide: the base core once it stands, else the lander spawn; battery full
+  const respawn = (home: HomeSpot | null) => {
+    const at = home ?? spawnAt;
+    diver.spawnAt(at.x, at.y, at.z, at.yaw);
+    survival.resources.add("battery", SURVIVAL_TUNING.battery.capacity);
+  };
+  // conserve: nodes, absorbing, lost caches, recall, the base (dive/conserveLayer.ts); the free dive has none.
+  // Built on a generation's ports and field (the tide builds the next one at its commit).
+  const layerFor = (ports: Pick<ConserveLayerDeps, "expedition" | "base">, f: typeof field) =>
+    new ConserveLayer(scene, {
+      ...ports,
+      field: f,
+      layout: f.regions.layout!,
+      rect: chunks.worldRect,
+      resources: survival.resources,
+      audio,
+      overlay: overlay.root,
+      lowSpec,
+      water,
+      fog,
+      sonar,
+      beam: rig.beam,
+      absorb: seabed.absorb,
+      baseLight,
+      far: terrain.viewDistance + 40,
+      respawn,
+      releaseLock: () => input.releaseLock(),
+      tide: { call: () => tide?.call() ?? false, active: () => tide?.active() ?? false },
+    });
+  const conserve = conserveWorld ? layerFor({ expedition: opts.expedition!, base: opts.base }, field) : null;
   const bornAt = performance.now();
   // GPU occlusion culling of terrain columns (?occ=0 disables)
   const occlusion = new TerrainOcclusion(renderer, scene, params.occlusion);
   const health = new GpuHealth(renderer, audio, overlay.alert, () => labels);
-  // the wall ring's program too (drawn only in sonar mode: no hitch on the first ping)
-  const warmMaterials = [seabed.material, seabed.fadeMaterial().material, ...(wallRing ? [wallRing.mesh.material as THREE.Material] : [])];
-  health.warm(warmMaterials, conserve?.warmObjects() ?? [], camera, scene);
-  health.listen();
-
   const diver = new DiverController(field, (gi, gj, gk) => chunks.isRemovedPoint(gi, gj, gk));
   diver.edge = chunks.worldRect;
+  // conserve with a tide port (M7): 唤潮, the show, the switch to gen + 1 (scene/tide)
+  let parts: { loop: DiveParts; handle: HandleParts } | null = null;
+  if (conserveWorld && opts.tide && router) {
+    tide = createTideDirector({
+      port: opts.tide, scene, camera, renderer, router, seed: opts.seed, settings: field.settings, lowSpec,
+      viewDistance: terrain.viewDistance, seabed, look, audio, diver, simple: params.tideSimple, gpuLost: () => health.gpuLost,
+      conserveLayer: layerFor, wallRing: ringFor, wake: () => respawn(parts!.loop.conserve?.home() ?? null), parts: () => parts!,
+    });
+  }
+  // the wall ring's program too (drawn only in sonar mode: no hitch on the first ping); conserve: the tide's
+  const warmMaterials = [seabed.material, seabed.fadeMaterial().material, ...(wallRing ? [wallRing.mesh.material as THREE.Material] : [])];
+  if (tide) warmMaterials.push(seabed.tideMaterial().material);
+  health.warm(warmMaterials, [...(conserve?.warmObjects() ?? []), ...(tide?.warmObjects ?? [])], camera, scene);
+  health.listen();
   const hud = new HudChips(chunks.terrain, field.regions);
   // Debug: spawn-candidate markers (B, or ?debugSpawns=1); off in normal play.
   const spawnDebug = new SpawnDebugView(scene, chunks.terrain, field.regions, overlay.root, labels);
@@ -185,7 +209,7 @@ export function createDeepMarch(host: HTMLElement, opts: DeepMarchOptions): Deep
   const sizing = watchResize(host, renderer, camera);
 
   const gate = new LoadingGate(chunks, audio, health, diver.position, () => texturesReady);
-  const loop = startDiveLoop({
+  const loopParts: DiveParts = {
     renderer,
     pacer,
     scene,
@@ -196,6 +220,7 @@ export function createDeepMarch(host: HTMLElement, opts: DeepMarchOptions): Deep
     gate,
     survival,
     conserve,
+    tide,
     rig,
     chunks,
     occlusion,
@@ -216,14 +241,18 @@ export function createDeepMarch(host: HTMLElement, opts: DeepMarchOptions): Deep
     onDiveStart: () => updatePrompt(),
     resize: sizing.resize,
     bornAt,
-  });
+  };
+  const loop = startDiveLoop(loopParts);
 
-  return createHandle({
+  // the generation-bound parts (terrain, field, conserve layer, HUD lookups, wall ring) are read
+  // from these two objects: the tide rebinds them at its switch (dive/tideWiring.ts)
+  const handleParts: HandleParts = {
     opts,
     startAt,
     field,
     chunks,
     conserve,
+    tide,
     materials,
     gate,
     health,
@@ -240,7 +269,7 @@ export function createDeepMarch(host: HTMLElement, opts: DeepMarchOptions): Deep
       overlay.lockPrompt.textContent = next.lockPrompt;
       spawnDebug.setLabels(next);
       health.updateAlert();
-      hud.refreshSoon();
+      handleParts.hud.refreshSoon();
     },
     destroy: () => {
       loop.stop();
@@ -249,20 +278,24 @@ export function createDeepMarch(host: HTMLElement, opts: DeepMarchOptions): Deep
       input.dispose();
       unbindDebugKey();
       spawnDebug.dispose();
-      chunks.dispose();
+      tide?.dispose();
+      loopParts.chunks.dispose();
+      router?.dispose();
       snow.dispose();
       rig.dispose();
-      conserve?.dispose();
+      loopParts.conserve?.dispose();
       survival.dispose();
       occlusion.dispose();
       health.dispose();
       seabed.dispose();
       materials.dispose();
       look.dispose();
-      wallRing?.dispose();
+      loopParts.wallRing?.dispose();
       renderer.dispose();
       renderer.domElement.remove();
       overlay.root.remove();
     },
-  });
+  };
+  parts = { loop: loopParts, handle: handleParts };
+  return createHandle(handleParts);
 }

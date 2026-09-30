@@ -11,7 +11,8 @@ export type BaseNotice =
   | { kind: "deposited"; total: number }
   | { kind: "moved"; action: "deposit" | "withdraw" | "release"; total: number }
   | { kind: "demolished"; structure: StructureKind }
-  | { kind: "tide" };
+  /** 唤潮 pressed: the warning began (ok), or it could not (away: not at the base). */
+  | { kind: "tide"; ok: boolean; away?: boolean };
 
 export type BaseTelemetry = {
   view: BaseView;
@@ -23,7 +24,9 @@ export type BaseTelemetry = {
   build: { active: boolean; kind: StructureKind; reason: BuildReason | null; ok: boolean; shortfall: readonly number[] };
   panel: boolean;
   tide: TideReadiness;
-  /** The tide forecast (M6): computed only while the panel shows it, else null. */
+  /** A tide is running (M7): the 唤潮 button and the forecast are off. */
+  tideActive: boolean;
+  /** The tide forecast (M6): computed only while the panel shows it and no tide runs, else null. */
   forecast: TideForecast | null;
   notice: BaseNotice | null;
   /** Particle kinds of this world, in storage order. */

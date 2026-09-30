@@ -36,6 +36,8 @@ export type BaseSceneDeps = StructureMaterialOptions & {
   far: number;
   /** The panel opened: release the mouse. */
   onPanel?: (open: boolean) => void;
+  /** 唤潮 (scene/tide); absent: the command does nothing. */
+  tide?: { call: () => boolean; active: () => boolean };
 };
 
 export type BaseFrame = {
@@ -157,7 +159,8 @@ export class BaseScene {
   }
 
   command(cmd: BaseCommand): void {
-    const r = runCommand(cmd, { port: this.deps.port, audio: this.deps.audio, build: this.build, view: this.view, atBase: this.atBase, panel: this.panel });
+    const tide = this.deps.tide;
+    const r = runCommand(cmd, { port: this.deps.port, audio: this.deps.audio, build: this.build, view: this.view, atBase: this.atBase, panel: this.panel, callTide: () => tide?.call() ?? false });
     if (r.panel !== this.panel) this.deps.onPanel?.((this.panel = r.panel));
     if (r.notice) (this.notice = r.notice), (this.noticeLeft = NOTICE_S);
     if (cmd.type !== "kind" && cmd.type !== "panel") this.view = this.deps.port.view();
@@ -177,7 +180,8 @@ export class BaseScene {
       build: { active: s.active, kind: s.kind, reason: s.spot?.reason ?? null, ok: s.spot?.reason === "ok", shortfall: port.shortfall(s.kind) },
       panel: this.panel,
       tide: port.tide(),
-      forecast: this.panel ? port.forecast() : null,
+      tideActive: this.deps.tide?.active() ?? false,
+      forecast: this.panel && !this.deps.tide?.active() ? port.forecast() : null,
       notice: this.notice,
       kinds: port.activeKinds,
       structures: this.structures,
