@@ -42,6 +42,7 @@
     "test:regions": "esbuild scripts/deep-march-regions-test.ts --bundle --platform=node --outfile=node_modules/.cache/dm-regions-test.cjs --log-level=warning && node node_modules/.cache/dm-regions-test.cjs",
     "test:chaos": "esbuild scripts/deep-march-chaos-test.ts --bundle --platform=node --outfile=node_modules/.cache/dm-chaos-test.cjs --log-level=warning && node node_modules/.cache/dm-chaos-test.cjs",
     "test:economy": "esbuild scripts/deep-march-economy-test.ts --bundle --platform=node --outfile=node_modules/.cache/dm-economy-test.cjs --log-level=warning && node node_modules/.cache/dm-economy-test.cjs",
+    "test:hints": "esbuild scripts/deep-march-hints-test.ts --bundle --platform=node --outfile=node_modules/.cache/dm-hints-test.cjs --log-level=warning && node node_modules/.cache/dm-hints-test.cjs",
     "test:tide": "esbuild scripts/deep-march-tide-test.ts --bundle --platform=node --outfile=node_modules/.cache/dm-tide-test.cjs --log-level=warning && node node_modules/.cache/dm-tide-test.cjs",
     "cf-typegen": "wrangler types --include-runtime false",
     "deploy:staging": "npm run build && node scripts/patch-staging-wrangler.mjs && wrangler deploy"
