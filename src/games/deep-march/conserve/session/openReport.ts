@@ -1,6 +1,7 @@
 /** What opening the world save found — shown by the "world save" loading step. */
 import type { PoolId } from "../ledger/pools";
 import type { Repair } from "../save/reconcile";
+import type { SiteSummary } from "../world/siteSummary";
 
 export type OpenedReport = {
   kind: "created" | "continued";
@@ -16,6 +17,8 @@ export type OpenedReport = {
   conserved: boolean;
   repairs: Repair[];
   bytes: number;
+  /** The generation's site table (biomes, bias range). */
+  sites: SiteSummary;
 };
 
 export type BlockedReport = {

@@ -3,13 +3,10 @@
  * A migration upgrades version n to n + 1; they run in sequence. A save from a
  * newer build than this one is refused (never downgraded, never overwritten).
  */
+import { SAVE_MIGRATIONS, type Migration, type RawSave } from "./migrations";
 import { SAVE_VERSION } from "./schema";
 
-export type RawSave = Record<string, unknown>;
-export type Migration = (raw: RawSave) => RawSave;
-
-/** Keyed by the version they upgrade from. Empty while v1 is the only format. */
-export const SAVE_MIGRATIONS: Readonly<Record<number, Migration>> = {};
+export type { Migration, RawSave };
 
 export type MigrateFailure = "not-an-object" | "no-version" | "future-version" | "missing-migration";
 export type MigrateResult = { ok: true; raw: RawSave; from: number } | { ok: false; reason: MigrateFailure };

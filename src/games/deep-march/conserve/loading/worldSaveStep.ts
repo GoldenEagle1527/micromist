@@ -5,6 +5,7 @@
  * save can't be entered (unreadable / annihilated / missing) — then no dive.
  */
 import type { DiagEntry, LoadingLabels, LoadingStepDef, StepEval } from "../../ui/loading/steps/types";
+import { BIOMES } from "../config";
 import { POOL_IDS } from "../ledger/pools";
 import { repairedParticles } from "../save/reconcile";
 import { isOpened, type BlockedReport, type OpenReport, type OpenedReport } from "../session/openReport";
@@ -16,7 +17,9 @@ function openedLines(r: OpenedReport, L: LoadingLabels): string[] {
   const head = r.kind === "created" ? W.created(r.seedText) : W.continued(r.seedText, r.gen, r.divesStarted);
   const ledger = r.conserved ? W.ledger(groupDigits(r.totalParticles)) : W.ledgerBroken;
   const moved = repairedParticles(r.repairs);
-  return moved > 0 ? [head, ledger, W.repaired(groupDigits(moved))] : [head, ledger];
+  const biomes = BIOMES.filter((b) => r.sites.byBiome[b] > 0).length;
+  const sites = W.sites(r.sites.sitesX, r.sites.sitesZ, biomes);
+  return moved > 0 ? [head, ledger, W.repaired(groupDigits(moved)), sites] : [head, ledger, sites];
 }
 
 function openedDiag(r: OpenedReport, L: LoadingLabels): DiagEntry[] {
@@ -25,6 +28,8 @@ function openedDiag(r: OpenedReport, L: LoadingLabels): DiagEntry[] {
     { label: D.slot, value: r.slotKey },
     { label: D.format, value: D.formatValue(r.version, r.migratedFrom, (r.bytes / 1024).toFixed(1)) },
     { label: D.pools, value: POOL_IDS.map((id) => groupDigits(r.poolTotals[id])).join(" · ") },
+    { label: D.biomes, value: BIOMES.map((b) => `${L.regionNames[b]} ${r.sites.byBiome[b]}`).join(" · ") },
+    { label: D.bias, value: `${r.sites.deltaMin.toFixed(2)} … ${r.sites.deltaMax.toFixed(2)}` },
   ];
   if (r.repairs.length > 0) diag.push({ label: D.repairs, value: r.repairs.map((x) => `${x.pool}.${x.type} ${x.delta > 0 ? "+" : ""}${x.delta} (${x.cause})`).join(", ") });
   return diag;

@@ -9,7 +9,10 @@
  *   block the dive (no "dive anyway"), zh / en strings complete;
  * - region map rasterization: deterministic per seed (fresh fields → identical
  *   pixels), independent of how rows are sliced, differs between seeds, spawn at
- *   the centre, pixel ↔ world mapping, time per row (UI budget).
+ *   the centre, pixel ↔ world mapping, time per row (UI budget); bounded world
+ *   (conserve): the whole 10 × 10 rectangle, void outside (never sampled), an edge
+ *   line on every side, the spawn inside, slicing-independent; the map-span line
+ *   and the world-save step's site-table line / diagnostics.
  * Run: npm run test:loading
  */
 import { LoadingModel, formatMB, settled } from "../src/games/deep-march/ui/loading/loadingModel";
@@ -21,7 +24,11 @@ import { openConserveSession } from "../src/games/deep-march/conserve/session/op
 import { seedFromString } from "../src/games/deep-march/terrain/noise";
 import { loadingEn, loadingZh } from "../src/games/deep-march/ui/loading/i18n";
 import type { LoadingSnapshot } from "../src/games/deep-march/scene/world";
-import { REGION_MAP, RegionMapRaster, hexToRgb, mapSpec, pixelToWorld, worldToPixel } from "../src/games/deep-march/ui/loading/regionMap";
+import { OUTSIDE, REGION_MAP, RegionMapRaster, hexToRgb, mapSpec, mapSpecFor, pixelToWorld, worldToPixel } from "../src/games/deep-march/ui/loading/regionMap";
+import { MACRO } from "../src/games/deep-march/terrain/regions";
+import { insideRect, layoutRect } from "../src/games/deep-march/terrain/siteLayout";
+import { findSpawn } from "../src/games/deep-march/terrain/spawn";
+import { genesisLayout } from "./lib/worldFixture";
 import { createDensityField } from "../src/games/deep-march/terrain/density";
 import { TERRAIN } from "../src/games/deep-march/terrain/config";
 import { REGION_COLORS, REGION_COUNT, REGION_KEYS } from "../src/games/deep-march/terrain/regions";
@@ -236,6 +243,8 @@ console.log("loading steps + dive gate");
     const ws = created.evals.get("worldSave")!;
     check(created.model.status.worldSave === "done" && ws.lines[0] === loadingEn.world.created("reef") && ws.lines[1] === loadingEn.world.ledger("100,000"), "new world: done, seed + conserved ledger lines");
     check((ws.diag ?? []).some((e) => e.value === "save/main") && (ws.diag ?? []).some((e) => e.value === "99,320 · 0 · 680 · 0 · 0"), "diagnostics: slot key, pool totals W · P · B · S · L");
+    check(ws.lines[2] === loadingEn.world.sites(10, 10, Object.values(opened.session.report.sites.byBiome).filter((n) => n > 0).length), "new world: site-table line (10 × 10, biome count)");
+    check((ws.diag ?? []).some((e) => e.label === loadingEn.world.diag.biomes && e.value.startsWith("sand ")) && (ws.diag ?? []).some((e) => e.label === loadingEn.world.diag.bias && e.value.includes("…")), "diagnostics: sites per biome, δ range");
     check(canBeginDive(created.model, steps, snap, false), "world save done + everything loaded → begin dive");
     check(runSteps(steps, null).model.status.worldSave === "done", "settled before the world exists (the seed comes from the save)");
     opened.session.close();
@@ -252,7 +261,7 @@ console.log("loading steps + dive gate");
     }
     for (const [name, dict] of [["en", loadingEn], ["zh", loadingZh]] as const) {
       const w = dict.world;
-      const strings = [dict.steps.worldSave, w.created("1"), w.continued("1", 2, 3), w.ledger("1"), w.ledgerBroken, w.repaired("1"), w.unreadable, w.ended, w.missing, ...Object.values(w.diag).map((v) => (typeof v === "function" ? v(1, 1, "1") : v))];
+      const strings = [dict.steps.worldSave, w.created("1"), w.continued("1", 2, 3), w.ledger("1"), w.ledgerBroken, w.repaired("1"), w.sites(10, 10, 6), w.unreadable, w.ended, w.missing, ...Object.values(w.diag).map((v) => (typeof v === "function" ? v(1, 1, "1") : v))];
       check(strings.every((x) => typeof x === "string" && x.length > 0), `${name}: every world-save string present`);
     }
   }
@@ -313,6 +322,55 @@ console.log("region map");
   check(seen.size === REGION_COUNT, `all 6 landforms appear across seeds (${seen.size})`);
   console.log(`  info map ${S}² px over ${REGION_MAP.span} u: full raster ${full.toFixed(0)} ms · worst ${a.worst.toFixed(2)} ms/row (sliced ${b.worst.toFixed(2)})`);
   check(b.worst < 8, `one row fits a frame slice (${b.worst.toFixed(2)} ms)`);
+
+  // bounded world (conserve): the whole 10 × 10 rectangle
+  const layout = genesisLayout(7);
+  const field = createDensityField(7, TERRAIN, undefined, layout);
+  const rect = layoutRect(layout, MACRO.cell * TERRAIN.worldScale);
+  const spawn = findSpawn(field);
+  const bounded = (slice: number) => {
+    const r = new RegionMapRaster(field.regions, mapSpecFor(spawn, rect));
+    const rgba = new Uint8ClampedArray(S * S * 4);
+    let worst = 0;
+    while (!r.done) {
+      const y0 = r.rows;
+      const t = performance.now();
+      r.computeRows(slice);
+      r.paintRows(rgba, y0, r.rows, colors);
+      worst = Math.max(worst, (performance.now() - t) / (r.rows - y0));
+    }
+    return { r, rgba, worst };
+  };
+  const m1 = bounded(1), m7 = bounded(7), mAll = bounded(S);
+  check(hash(m1.rgba) === hash(m7.rgba) && hash(m1.rgba) === hash(mAll.rgba), `bounded map: same pixels for any row slicing (${hash(m1.rgba)})`);
+  const spec = m1.r.spec;
+  check(spec.world === rect && Math.abs(spec.span - 4160 * (1 + 2 * REGION_MAP.worldPad)) < 1e-9 && spec.cx === 0 && spec.cz === 0, `bounded map: centred on the world, span ${spec.span.toFixed(0)} u (10 × 416 m + margin)`);
+  let wrongSide = 0, outside = 0;
+  for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+    const [wx, wz] = pixelToWorld(spec, x, y);
+    const out = !insideRect(rect, wx, wz);
+    if (out) outside++;
+    if (out !== (m1.r.ids[y * S + x] === OUTSIDE)) wrongSide++;
+  }
+  check(wrongSide === 0 && outside > 0, `bounded map: void exactly outside the world (${outside} px), regions inside`);
+  const rgbAt = (x: number, y: number) => Array.from(m1.rgba.slice((y * S + x) * 4, (y * S + x) * 4 + 3)).join();
+  const line = [98, 243, 255].join();
+  const [ex0] = worldToPixel(spec, rect.x0, 0), [ex1] = worldToPixel(spec, rect.x1, 0);
+  const mid = S / 2;
+  const nearLine = (x: number, y: number) => [-1, 0, 1].some((d) => rgbAt(x + d, y) === line);
+  const nearLineV = (x: number, y: number) => [-1, 0, 1].some((d) => rgbAt(x, y + d) === line);
+  check(nearLine(Math.round(ex0), mid) && nearLine(Math.round(ex1), mid) && nearLineV(mid, Math.round(worldToPixel(spec, 0, rect.z0)[1])) && nearLineV(mid, Math.round(worldToPixel(spec, 0, rect.z1)[1])), "bounded map: edge line on all four sides");
+  check(rgbAt(0, 0) !== line && m1.r.ids[0] === OUTSIDE, "bounded map: corner is void");
+  const inner = new Set(Array.from(m1.r.ids).filter((i) => i !== OUTSIDE));
+  check(inner.size >= 4, `bounded map: ${inner.size} landforms inside the world`);
+  const [sx, sy] = worldToPixel(spec, spawn.x, spawn.z);
+  check(sx > 0 && sy > 0 && sx < S && sy < S && m1.r.ids[Math.floor(sy) * S + Math.floor(sx)] !== OUTSIDE, `bounded map: spawn marker inside (${sx.toFixed(0)}, ${sy.toFixed(0)})`);
+  check(m1.worst < 8, `bounded map: one row fits a frame slice (${m1.worst.toFixed(2)} ms)`);
+  const regionsStep = LOADING_STEPS.find((d) => d.id === "regions")!;
+  const labels = { ...loadingEn, regionNames: Object.fromEntries(REGION_KEYS.map((k) => [k, k])), lightModes: { beam: "Beam", high: "High", sonar: "Sonar" } } as LoadingLabels;
+  const ctxB: StepContext = { L: labels, seedText: "7", seed: 7, mapRows: S, mapSize: S };
+  const snapB = { world: rect } as unknown as LoadingSnapshot, snapF = { world: null } as unknown as LoadingSnapshot;
+  check(regionsStep.evaluate(snapB, ctxB).lines[0] === loadingEn.mapProgress(100, "4.2") && regionsStep.evaluate(snapF, ctxB).lines[0] === loadingEn.mapProgress(100, (REGION_MAP.span / 1000).toFixed(1)), "map line: the bounded world's width (4.2 km), the fixed window otherwise");
 }
 
 if (fails) {

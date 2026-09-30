@@ -1,6 +1,7 @@
 /**
- * A world opened for a dive: the save header, the live ledger and the throttled
- * writer. Every ledger transfer marks the save dirty; close() writes what is left.
+ * A world opened for a dive: the save header, the live ledger, the generation's
+ * site table and the throttled writer. Every ledger transfer marks the save dirty;
+ * close() writes what is left.
  * No rendering, no DOM (the page lifecycle binding lives in platform/pageLifecycle.ts).
  */
 import { SAVE } from "../config";
@@ -10,6 +11,7 @@ import type { SaveBackend } from "../save/saveBackend";
 import { writeSlot } from "../save/saveRepository";
 import { createSaveWriter, systemClock, type SaveWriter, type WriterClock } from "../save/saveWriter";
 import type { WorldSave } from "../save/schema";
+import { buildSiteTable, type SiteTable } from "../world/siteTable";
 import type { OpenedReport } from "./openReport";
 
 export type SessionDeps = { backend: SaveBackend; clock?: WriterClock; throttleMs?: number };
@@ -23,11 +25,13 @@ export class ConserveSession {
   private readonly writer: SaveWriter;
   private readonly unsubscribe: () => void;
   private closed = false;
+  private table: SiteTable | null = null;
 
-  constructor(save: WorldSave, ledger: ParticleLedger, report: OpenedReport, deps: SessionDeps) {
+  /** report: built from the site table (so the table is computed once, at open). */
+  constructor(save: WorldSave, ledger: ParticleLedger, report: (table: SiteTable) => OpenedReport, deps: SessionDeps) {
     this.header = save;
     this.ledger = ledger;
-    this.report = report;
+    this.report = report(this.siteTable);
     this.backend = deps.backend;
     this.clock = deps.clock ?? systemClock;
     this.writer = createSaveWriter(() => this.writeNow(), deps.throttleMs ?? SAVE.throttleMs, this.clock);
@@ -44,6 +48,13 @@ export class ConserveSession {
 
   get gen(): number {
     return this.header.gen;
+  }
+
+  /** This generation's site table: (seed, gen, R) → sites; fixed until the next tide. */
+  get siteTable(): SiteTable {
+    const h = this.header;
+    this.table ??= buildSiteTable({ seed: h.seed, gen: h.gen, allocInput: h.generation.allocInput, totals: h.totals, size: h.size });
+    return this.table;
   }
 
   /** The save as it would be written now. */

@@ -30,6 +30,7 @@
     "test:refine": "esbuild scripts/deep-march-refine-test.ts --bundle --platform=node --outfile=node_modules/.cache/dm-refine-test.cjs --log-level=warning && node node_modules/.cache/dm-refine-test.cjs",
     "test:audio": "esbuild scripts/deep-march-audio-test.ts --bundle --platform=node --outfile=node_modules/.cache/dm-audio-test.cjs --define:import.meta.env.BASE_URL='\"/\"' --log-level=warning && node node_modules/.cache/dm-audio-test.cjs",
     "test:sfx": "node scripts/deep-march-sfx-sync-test.mjs",
+    "test:world": "esbuild scripts/deep-march-world-test.ts --bundle --platform=node --outfile=node_modules/.cache/dm-world-test.cjs --log-level=warning && node node_modules/.cache/dm-world-test.cjs",
     "test:free-baseline": "esbuild scripts/deep-march-free-baseline-test.ts --bundle --platform=node --outfile=node_modules/.cache/dm-free-baseline-test.cjs --log-level=warning && node node_modules/.cache/dm-free-baseline-test.cjs",
     "test:ledger": "esbuild scripts/deep-march-ledger-test.ts --bundle --platform=node --outfile=node_modules/.cache/dm-ledger-test.cjs --log-level=warning && node node_modules/.cache/dm-ledger-test.cjs",
     "test:save": "esbuild scripts/deep-march-save-test.ts --bundle --platform=node --outfile=node_modules/.cache/dm-save-test.cjs --log-level=warning && node node_modules/.cache/dm-save-test.cjs",

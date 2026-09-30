@@ -6,7 +6,7 @@
 import type { PoolId } from "../ledger/pools";
 import type { ParticleVector } from "../particles/particleVector";
 
-export const SAVE_VERSION = 1;
+export const SAVE_VERSION = 2;
 
 /** Ending A outcome: sealed = survived the gaze; annihilated = the save is over for good (D14). */
 export type EndingA = "sealed" | "annihilated";
@@ -31,7 +31,16 @@ export type WorldSaveV1 = {
   flags: { endingA?: EndingA; endingB?: boolean };
 };
 
-export type WorldSave = WorldSaveV1;
+/** The current generation's fixed inputs (v2). */
+export type GenerationState = {
+  /** R_k at the start of this generation: the site table is (seed, gen, R) → … (world/siteTable.ts). */
+  allocInput: ParticleVector;
+};
+
+/** v2 (M2): + generation.allocInput, so the site table stays fixed until the next tide. */
+export type WorldSaveV2 = Omit<WorldSaveV1, "v"> & { v: 2; generation: GenerationState };
+
+export type WorldSave = WorldSaveV2;
 
 /** An annihilated world can only be looked back on, never entered again (D14). */
 export function isReadOnlySave(save: WorldSave): boolean {
