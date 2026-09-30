@@ -6,9 +6,15 @@
  * bilinearly, so a given (x, z) gets exactly the same weights in every column and
  * at every LOD level: no material pop when LOD levels swap. The weights are a pure
  * function of (seed, x, z), baked at generation time (mesher.ts) and packed as
- * 8 bytes per vertex (6 weights, largest-remainder quantised to sum exactly 255,
- * + 2 padding bytes) → shader attributes aRegA (sand, reef, canyon, cave) and
- * aRegB (terrace, trench), normalised.
+ * 8 bytes per vertex (6 weights + the ring-wall weight, largest-remainder quantised
+ * to sum exactly 255, + 1 padding byte) → shader attributes aRegA (sand, reef,
+ * canyon, cave) and aRegB (terrace, trench, wall), normalised.
+ *
+ * Ring wall (bounded world): the wall material weight w (density.wallWeight, a pure
+ * function of the vertex position, so equal at every LOD) takes its share and the
+ * region weights are scaled by 1 − w. Without a wall byte 6 stays 0 and bytes 0–5
+ * are exactly what they were before the wall existed (a zero weight never wins a
+ * remainder).
  */
 import { REGION_COUNT, createRegionSample, type RegionField } from "./regions";
 
@@ -16,6 +22,9 @@ import { REGION_COUNT, createRegionSample, type RegionField } from "./regions";
 export const REGION_GRID = 2;
 /** Bytes per vertex in the packed buffer. */
 export const REGION_STRIDE = 8;
+/** Byte (weight slot) of the ring-wall material. */
+export const WALL_SLOT = REGION_COUNT;
+const SLOTS = REGION_COUNT + 1;
 
 export class RegionWeightSampler {
   private readonly cache = new Map<number, Float32Array>();
@@ -62,17 +71,21 @@ export function regionGridSpacing(worldScale: number): number {
   return REGION_GRID * worldScale;
 }
 
-/** Quantise 6 weights to bytes summing exactly to 255 (largest remainder, ties → lower index). */
+/**
+ * Quantise the 6 region weights (+ the wall weight w[6], if w has 7 entries) to
+ * bytes summing exactly to 255 (largest remainder, ties → lower index).
+ */
 export function quantizeWeights(w: ArrayLike<number>, out: Uint8Array, o: number): void {
+  const n = Math.min(SLOTS, w.length);
   let sum = 0;
-  for (let r = 0; r < REGION_COUNT; r++) sum += Math.max(0, w[r]);
+  for (let r = 0; r < n; r++) sum += Math.max(0, w[r]);
   if (sum <= 0) {
-    for (let r = 0; r < REGION_COUNT; r++) out[o + r] = r === 0 ? 255 : 0;
+    for (let r = 0; r < n; r++) out[o + r] = r === 0 ? 255 : 0;
     return;
   }
   let used = 0;
-  const rem = [0, 0, 0, 0, 0, 0];
-  for (let r = 0; r < REGION_COUNT; r++) {
+  const rem = [0, 0, 0, 0, 0, 0, 0];
+  for (let r = 0; r < n; r++) {
     const v = (Math.max(0, w[r]) / sum) * 255;
     const f = Math.floor(v);
     out[o + r] = f;
@@ -81,7 +94,7 @@ export function quantizeWeights(w: ArrayLike<number>, out: Uint8Array, o: number
   }
   for (let left = 255 - used; left > 0; left--) {
     let best = 0;
-    for (let r = 1; r < REGION_COUNT; r++) if (rem[r] > rem[best]) best = r;
+    for (let r = 1; r < n; r++) if (rem[r] > rem[best]) best = r;
     out[o + best]++;
     rem[best] = -1;
   }
@@ -89,7 +102,8 @@ export function quantizeWeights(w: ArrayLike<number>, out: Uint8Array, o: number
 
 /**
  * Packed weights for `count` vertices (xyz positions); `copyFrom[i]` (optional)
- * makes vertex surfaceCount + i reuse another vertex's weights (skirts).
+ * makes vertex surfaceCount + i reuse another vertex's weights (skirts); `wallWeight`
+ * (optional, world position → 0 … 1): the ring-wall material share.
  */
 export function packRegionWeights(
   positions: Float32Array,
@@ -97,11 +111,17 @@ export function packRegionWeights(
   totalCount: number,
   sampler: RegionWeightSampler,
   copyFrom: ArrayLike<number> = [],
+  wallWeight: ((x: number, y: number, z: number) => number) | null = null,
 ): Uint8Array {
   const out = new Uint8Array(totalCount * REGION_STRIDE);
-  const w = new Float64Array(REGION_COUNT);
+  const w = new Float64Array(wallWeight ? SLOTS : REGION_COUNT);
   for (let v = 0; v < surfaceCount; v++) {
     sampler.at(positions[v * 3], positions[v * 3 + 2], w);
+    if (wallWeight) {
+      const ww = wallWeight(positions[v * 3], positions[v * 3 + 1], positions[v * 3 + 2]);
+      for (let r = 0; r < REGION_COUNT; r++) w[r] *= 1 - ww;
+      w[WALL_SLOT] = ww;
+    }
     quantizeWeights(w, out, v * REGION_STRIDE);
   }
   for (let q = surfaceCount; q < totalCount; q++) out.copyWithin(q * REGION_STRIDE, copyFrom[q - surfaceCount] * REGION_STRIDE, copyFrom[q - surfaceCount] * REGION_STRIDE + REGION_STRIDE);

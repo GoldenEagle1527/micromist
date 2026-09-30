@@ -39,13 +39,21 @@
  * `boundsForMask(mask, y)` only the regions in `mask` (per-column row skipping).
  * The site bias is a convex combination of the layout's δ and 0 (sites outside it),
  * so the bounds widen by [min(0, min δ), max(0, max δ)].
+ *
+ * Ring wall (bounded world with layout.wall; wallDensity.ts): raw = W(raw_terrain)
+ * where some (x, z) reach past the term's skip distance (else W is an exact identity
+ * and is not evaluated). W is monotone in the terrain value, so per-point bounds map
+ * through it; masks carry WALL_BIT for columns near the wall, whose row bounds become
+ * [min(lo, void floor / roof), cap].
  */
 import type { TerrainSettings } from "./config";
 import { createSimplex3, mulberry32, simplexTables } from "./noise";
 import { getWasmNoise } from "./noiseWasm";
 import { REGION_PARAMS, type RegionParams } from "./regionParams";
-import { REGION, REGION_COUNT, createRegionField, createRegionSample, scaleRegionField, type RegionField } from "./regions";
-import { layoutBiasRange, type SiteLayout } from "./siteLayout";
+import { MACRO, REGION, REGION_COUNT, createRegionField, createRegionSample, scaleRegionField, type RegionField } from "./regions";
+import { layoutBiasRange, layoutRect, type SiteLayout } from "./siteLayout";
+import { createWallTerm, type WallTerm } from "./wallDensity";
+import { createWallShape } from "./wallGeometry";
 
 export type DensityField = {
   settings: TerrainSettings;
@@ -75,17 +83,27 @@ export type DensityField = {
   rawBoundsForMask: (mask: number, y: number, out: Float64Array) => void;
   /**
    * Cheap conservative class of sampleRaw at a world point (no noise evaluated):
-   * 2 = certainly the deep-rock cap — out[0] is then exactly sampleRaw's value;
-   * 1 = certainly water — out[0] is an upper bound (< isoLevel); 0 = unknown.
+   * 2 = certainly solid with a known value (the deep-rock cap, or ring-wall rock the
+   *     wall alone fixes) — out[0] is then exactly sampleRaw's value;
+   * 1 = certainly water — out[0] is an upper bound (< isoLevel; exact in the wall's
+   *     void); 0 = unknown.
    * Lets the mesher skip noise where the exact value provably can't matter.
    */
   rawClass: (x: number, y: number, z: number, out: Float64Array) => number;
   /** Gradient pointing toward solid (central difference; the field is continuous). */
   gradient: (x: number, y: number, z: number, out: Float64Array, h?: number) => void;
+  /** Ring-wall term (base units), null without a wall. */
+  wall: WallTerm | null;
+  /** WALL_BIT if the wall term can act anywhere in the world-space rectangle, else 0. */
+  wallMask: (x0: number, z0: number, x1: number, z1: number) => number;
+  /** Wall material weight at a world position (0 … 1); null without a wall. */
+  wallWeight: ((x: number, y: number, z: number) => number) | null;
 };
 
 /** Every region bit set. */
 export const ALL_REGIONS_MASK = (1 << REGION_COUNT) - 1;
+/** Mask bit (above the region bits): the column is near the ring wall. */
+export const WALL_BIT = 1 << REGION_COUNT;
 
 /** Binomial smoothing weights (sum 1) for 1, 3 or 5 taps. */
 export function smoothWeights(taps: number): number[] {
@@ -265,6 +283,14 @@ export function createDensityField(
   const cWarp = new Float64Array(CACHE);
   const cLayer = new Uint8Array(CACHE);
   const cBias = new Float64Array(CACHE); // Σ w_i δ_i (exactly 0 without a layout)
+  // ring wall: the term is an exact identity for terrain values ≥ cWallTh (−∞: everywhere,
+  // sd ≤ skipSd), signed distance to the outline and arc length
+  const cWallTh = new Float64Array(CACHE).fill(-Infinity);
+  const cWallSd = new Float64Array(CACHE);
+  const cWallS = new Float64Array(CACHE);
+  const wallLoc = new Float64Array(2), wallB = new Float64Array(2);
+  const wallShape = layout && layout.wall ? createWallShape(layoutRect(layout, MACRO.cell), layout.wall, seed) : null;
+  let wall: WallTerm | null = null; // set once the bounds exist (below)
   // Sand boulders overlapping (x, z) (≤ 2 per slot): horizontal normalised distance²,
   // centre height, vertical radius, size scale.
   const cBN = new Uint8Array(CACHE);
@@ -367,6 +393,12 @@ export function createDensityField(
     cWarp[slot] = warp;
     cLayer[slot] = layer;
     cBias[slot] = rs.bias;
+    if (wall) {
+      wall.shape.locate(x, z, wallLoc);
+      cWallSd[slot] = wallLoc[0];
+      cWallS[slot] = wallLoc[1];
+      cWallTh[slot] = wall.identityFrom(wallLoc[0]);
+    }
     cX[slot] = x;
     cZ[slot] = z;
     return slot;
@@ -490,7 +522,7 @@ export function createDensityField(
     // Deep inside rock the exact value is irrelevant: raw is capped at iso + RAW_CAP
     // (≥ RAW_CAP / |∇| units from any surface, beyond the smoothing reach), so the
     // expensive octave loop is skipped once the lower bound already exceeds the cap.
-    if (lower >= capHi) return capHi;
+    if (lower >= capHi) return capHi < cWallTh[slot] ? wall!.apply(capHi, cWallSd[slot], cWallS[slot], y) : capHi;
 
     // --- reference ridged noise (on warped position) ---
     let noise = 0;
@@ -533,7 +565,8 @@ export function createDensityField(
       }
       d += cW[o + q] * v;
     }
-    return d < capHi ? d : capHi;
+    const t = d < capHi ? d : capHi;
+    return t < cWallTh[slot] ? wall!.apply(t, cWallSd[slot], cWallS[slot], y) : t;
   };
 
   // |erosion| bound: e = n(1 − r) + r(1 − 2|n|) with |n| ≤ NB
@@ -562,7 +595,21 @@ export function createDensityField(
       lo += w * l;
       hi += w * h;
     }
-    if (lo >= capHi + 1e-7) {
+    if (lo - 1e-7 < cWallTh[slot]) {
+      // W is monotone in the terrain value: map the (rounding-padded) bounds through it;
+      // where the wall alone fixes the value (solid behind the face, the void) it is exact
+      const exact = wall!.bounds(Math.min(lo - 1e-7, capHi), hi + 1e-7, cWallSd[slot], cWallS[slot], y, wallB);
+      lo = wallB[0];
+      hi = wallB[1];
+      if (exact && lo < capHi && lo !== iso) {
+        out[0] = S === 1 ? lo : iso + S * (lo - iso);
+        return lo > iso ? 2 : 1;
+      }
+      if (lo >= capHi) {
+        out[0] = capWorld;
+        return 2;
+      }
+    } else if (lo >= capHi + 1e-7) {
       out[0] = capWorld;
       return 2;
     }
@@ -614,13 +661,22 @@ export function createDensityField(
     return v;
   };
   const tb = new Float64Array(2);
+  /** Raw bounds of region r at base height y, widened by the wall term if `nearWall`. */
+  const maskRawBounds = (r: number, y: number, nearWall: boolean, out: Float64Array) => {
+    regionRawBounds(r, y, out);
+    if (nearWall && wall) {
+      out[0] = wall.lowerAt(y, out[0]);
+      out[1] = capHi;
+    }
+  };
   const boundsForMask = (mask: number, y: number, out: Float64Array) => {
     let LO = Infinity, HI = -Infinity;
+    const nearWall = (mask & WALL_BIT) !== 0;
     for (let r = 0; r < R6; r++) {
       if (!(mask & (1 << r))) continue;
       let lo = 0, hi = 0;
       for (let i = 0; i < SW.length; i++) {
-        regionRawBounds(r, (y + (i - half) * hs) * invS, tb);
+        maskRawBounds(r, (y + (i - half) * hs) * invS, nearWall, tb);
         lo += SW[i] * (iso + S * (tb[0] - iso));
         hi += SW[i] * (iso + S * (tb[1] - iso));
       }
@@ -630,12 +686,12 @@ export function createDensityField(
     out[0] = LO;
     out[1] = HI;
   };
-  const bounds = (y: number, out: Float64Array) => boundsForMask(ALL_REGIONS_MASK, y, out);
   const rawBoundsForMask = (mask: number, y: number, out: Float64Array) => {
     let LO = Infinity, HI = -Infinity;
+    const nearWall = (mask & WALL_BIT) !== 0;
     for (let r = 0; r < R6; r++) {
       if (!(mask & (1 << r))) continue;
-      regionRawBounds(r, y * invS, tb);
+      maskRawBounds(r, y * invS, nearWall, tb);
       const lo = iso + S * (tb[0] - iso), hi = iso + S * (tb[1] - iso);
       if (lo < LO) LO = lo;
       if (hi > HI) HI = hi;
@@ -644,6 +700,31 @@ export function createDensityField(
     out[1] = HI;
   };
 
+  // --- ring wall: tMin = a lower bound of the terrain's raw value at any height ---
+  let wallMask = (_x0: number, _z0: number, _x1: number, _z1: number) => 0;
+  let wallWeight: DensityField["wallWeight"] = null;
+  if (wallShape) {
+    let tMin = Infinity;
+    for (let y = -80; y <= 60; y += 0.25) for (let r = 0; r < R6; r++) {
+      regionRawBounds(r, y, tb);
+      if (tb[0] < tMin) tMin = tb[0];
+    }
+    const w = (wall = createWallTerm(wallShape, iso, capHi, tMin));
+    const loc = new Float64Array(2);
+    const sdAt = (x: number, z: number) => {
+      wallShape.locate(x * invS, z * invS, loc);
+      return loc[0];
+    };
+    // sd is convex (the outline is convex): its maximum over a rectangle is at a corner
+    wallMask = (x0, z0, x1, z1) => (Math.max(sdAt(x0, z0), sdAt(x1, z0), sdAt(x0, z1), sdAt(x1, z1)) > w.skipSd ? WALL_BIT : 0);
+    wallWeight = (x, y, z) => {
+      wallShape.locate(x * invS, z * invS, loc);
+      return w.weight(loc[0], loc[1], y * invS);
+    };
+  }
+  const allMask = ALL_REGIONS_MASK | (wallShape ? WALL_BIT : 0);
+  const bounds = (y: number, out: Float64Array) => boundsForMask(allMask, y, out);
+
   const gradient = (x: number, y: number, z: number, out: Float64Array, h = 0.1) => {
     const inv = 1 / (2 * h);
     out[0] = (sample(x + h, y, z) - sample(x - h, y, z)) * inv;
@@ -651,5 +732,8 @@ export function createDensityField(
     out[2] = (sample(x, y, z + h) - sample(x, y, z - h)) * inv;
   };
 
-  return { settings: s, seed, regions, sample, sampleRaw, sampleRawCoarse, rawClass, smoothStep, smoothWeights: SW, bounds, boundsForMask, rawBoundsForMask, gradient };
+  return {
+    settings: s, seed, regions, sample, sampleRaw, sampleRawCoarse, rawClass, smoothStep, smoothWeights: SW, bounds, boundsForMask, rawBoundsForMask, gradient,
+    wall, wallMask, wallWeight,
+  };
 }

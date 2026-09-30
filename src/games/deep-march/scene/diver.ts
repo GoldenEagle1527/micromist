@@ -16,8 +16,9 @@
  *
  * Collision is a single small sphere at the camera, pushed out of rock along
  * the density gradient (sub-stepped so fast swims can't tunnel). In a bounded
- * world (`edge` set) the diver is also held EDGE_MARGIN inside the world
- * rectangle — a temporary hard edge until the boundary wall exists.
+ * world the ring wall is rock of the same density field, so it stops the diver
+ * like any cliff; `edge` (the world rectangle) is only a backstop behind it: the
+ * diver is held EDGE_MARGIN inside it (reached only without a wall).
  */
 import * as THREE from "three";
 import type { DensityField } from "../terrain/density";

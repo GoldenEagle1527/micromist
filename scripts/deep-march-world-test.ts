@@ -219,8 +219,8 @@ c.section("spawn and edge");
     c.check(insideRect(rect, sp.x, sp.z, MACRO.cell * TERRAIN.worldScale), `seed ${seed}: spawn on an inner site (≥ one site from the edge)`, `(${sp.x.toFixed(0)}, ${sp.y.toFixed(0)}, ${sp.z.toFixed(0)}) ${REGION_KEYS[sp.region]}, clearance ${sp.clearance.toFixed(1)}`);
   }
   {
-    // a diver swimming at the edge is held EDGE_MARGIN inside
-    const layout = genesisLayout(1);
+    // backstop: with an open edge (no wall) a diver swimming at it is held EDGE_MARGIN inside
+    const layout = genesisLayout(1, false);
     const f = createDensityField(1, TERRAIN, undefined, layout);
     const world = layoutRect(layout, MACRO.cell * TERRAIN.worldScale);
     const d = new DiverController(f);
@@ -248,8 +248,9 @@ c.section("performance (δ term)");
 {
   // Same sites with δ vs δ = 0: δ also reshapes the rock (more / less surface to
   // mesh), so the term's own cost is the time per evaluated noise sample; the raw
-  // column times are reported alongside (fastest of interleaved rounds).
-  const layout = genesisLayout(7);
+  // column times are reported alongside (fastest of interleaved rounds). No wall
+  // here: its cost is test:wall's.
+  const layout = genesisLayout(7, false);
   const fD = createDensityField(7, TERRAIN, undefined, layout), f0 = createDensityField(7, TERRAIN, undefined, unbiased(layout));
   const rows = columnRows(fD);
   const cols = [[3, 2], [-20, 11], [40, -33], [-51, -48], [12, 57], [60, 5], [-8, -30], [25, 25]];
