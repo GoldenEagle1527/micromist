@@ -92,6 +92,7 @@ Add multiplayer: implement `worker/games/<slug>/adapter.ts`, register it on the 
 | `dev` | Vite + local Workers runtime |
 | `build` | `tsc -b` then Vite production build |
 | `deploy` | Build and `wrangler deploy` |
+| `deploy:staging` | Build with `--mode staging` and deploy to staging (Deep March's debug panel exists only in this build, never in production) |
 | `check` / `typecheck` | TypeScript project check |
 | `preview` | Preview the production build in the Workers runtime |
 | `cf-typegen` | Regenerate `worker-configuration.d.ts` from bindings |

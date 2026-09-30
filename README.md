@@ -92,6 +92,7 @@ wrangler.jsonc       Static Assets + GAME_ROOM + sqlite migration
 | `dev` | Vite + 本地 Workers 运行时 |
 | `build` | `tsc -b` + Vite 生产构建 |
 | `deploy` | 构建并 `wrangler deploy` |
+| `deploy:staging` | 以 `--mode staging` 构建并部署到测试站（深潜的调试面板只在这种构建里，生产构建不含） |
 | `check` / `typecheck` | TypeScript 检查 |
 | `preview` | 用 Workers 运行时预览生产构建 |
 | `cf-typegen` | 按绑定重新生成 `worker-configuration.d.ts` |
