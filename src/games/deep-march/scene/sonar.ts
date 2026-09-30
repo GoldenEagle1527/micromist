@@ -66,7 +66,8 @@ export function sonarAmp(age: number, life: number): number {
   return 1 - smooth(life - 1, life, age);
 }
 
-type Pulse = { x: number; y: number; z: number; t0: number };
+/** gain: amplitude scale (1 = the diver's ping; a chaos ghost echo is fainter). */
+type Pulse = { x: number; y: number; z: number; t0: number; gain: number };
 
 export class SonarPulses {
   /** xyz = origin, w = radius (negative = unused slot). */
@@ -103,7 +104,7 @@ export class SonarPulses {
     let emitted = 0;
     if (active) {
       while (time >= this.next) {
-        this.list.push({ x: origin.x, y: origin.y, z: origin.z, t0: this.next });
+        this.list.push({ x: origin.x, y: origin.y, z: origin.z, t0: this.next, gain: 1 });
         this.next += T.period;
         emitted++;
       }
@@ -115,13 +116,22 @@ export class SonarPulses {
       if (p) {
         const age = time - p.t0;
         this.pulse[i].set(p.x, p.y, p.z, age * T.speed);
-        this.amp[i] = sonarAmp(age, this.life);
+        this.amp[i] = sonarAmp(age, this.life) * p.gain;
       } else {
         this.pulse[i].w = -1e4;
         this.amp[i] = 0;
       }
     }
     return emitted;
+  }
+
+  /**
+   * An extra pulse from (x, y, z) starting at `time` (M8: the chaos ghost echo). It
+   * takes an ordinary slot: with every slot in use the oldest pulse retires early.
+   */
+  echo(time: number, x: number, y: number, z: number, gain: number): void {
+    const at = Math.max(time, this.list.length ? this.list[this.list.length - 1].t0 : time);
+    this.list.push({ x, y, z, t0: at, gain });
   }
 
   clear() {

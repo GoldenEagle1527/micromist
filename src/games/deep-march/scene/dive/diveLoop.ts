@@ -1,7 +1,7 @@
 /**
  * The per-frame loop, in a fixed order: look and move (or the loading gate),
  * camera, survival, conserve layer, lamp rig, terrain streaming and occlusion,
- * the tide (conserve), marine snow, lighting, sonar, sounds, render, pacing, the 4 Hz HUD. Paused
+ * the tide (conserve), marine snow, lighting, chaos (conserve), sonar, sounds, render, pacing, the 4 Hz HUD. Paused
  * while the tab is hidden (rAF mostly stops anyway; this also halts terrain
  * streaming and resets the pacing history on return).
  */
@@ -26,6 +26,7 @@ import type { LoadingGate } from "./loadingGate";
 import type { SeabedMaterial } from "../seabedMaterial";
 import type { WaterLook } from "./waterLook";
 import type { TideDirector } from "../tide/tideDirector";
+import type { ChaosDirector } from "../chaos/chaosDirector";
 
 /** No movement (the recall's black screen). */
 const STILL = { forward: 0, strafe: 0, up: false, down: false, sprint: false };
@@ -43,6 +44,8 @@ export type DiveParts = {
   conserve: ConserveLayer | null;
   /** Conserve with a tide port (M7): the tide's frame, after the terrain; null in the free dive. */
   tide: TideDirector | null;
+  /** Conserve (M8): the chaos presentation, after the water look and the sonar; null in the free dive. */
+  chaos: ChaosDirector | null;
   rig: LampRig;
   chunks: ChunkManager;
   occlusion: TerrainOcclusion;
@@ -100,6 +103,7 @@ export function startDiveLoop(p: DiveParts): { stop: () => void } {
     p.snow.fillLights(camera.position, camera.getWorldDirection(camForward), p.particleLights);
     p.seabed.update(now / 1000);
     p.look.update(camera.position.y, p.worldScale, rig, p.seabed, p.snow);
+    p.chaos?.frame({ dt, time, camera: camera.position, suppressed: p.tide?.active() ?? false });
   };
 
   const sonarAndSound = (now: number, dt: number) => {
@@ -112,6 +116,7 @@ export function startDiveLoop(p: DiveParts): { stop: () => void } {
       p.wallRing.update(rig.sonar);
     }
     if (pings > 0) p.cues.ping(now / 1000);
+    p.chaos?.sonar({ dt, pulseTime: now / 1000, time: (now - p.bornAt) / 1000, pings, sonar: rig.sonar, diver: camera.position, blocked: !p.gate.ready || (p.tide?.active() ?? false) });
     p.cues.loops(dt, p.gate.ready, p.diver);
     p.sonar.uSonar.value = rig.sonar;
     p.snow.setDim(1 - 0.85 * rig.sonar);

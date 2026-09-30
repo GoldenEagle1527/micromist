@@ -83,6 +83,20 @@ check(rig.sonar === 1 && e.water === 0 && e.ambientMul === 0 && e.ambientAdd ===
 rig.update(0, { mode: "sonar", on: false, locked: false, available: LIGHT_MODES }, true);
 check(rig.sonar === 0, "off: sonar strength 0", `${rig.sonar}`);
 
+console.log("ghost echo pulses (M8: SonarPulses.echo)");
+{
+  const g = new SonarPulses(5);
+  const o = new THREE.Vector3(0, -20, 0);
+  g.update(0, true, o);
+  g.echo(0.6, 180, -20, 40, 0.55);
+  g.update(1.0, true, o);
+  const ghost = g.pulse[1], real = g.pulse[0];
+  check(g.count === 2 && ghost.x === 180 && ghost.z === 40 && near(ghost.w, 0.4 * T.speed, 1e-6) && near(g.amp[1], 0.55 * sonarAmp(0.4, g.life)) && near(g.amp[0], sonarAmp(1, g.life)) && real.x === 0, "an echo is an ordinary slot: its own origin and start, amplitude × gain", `R ${ghost.w.toFixed(0)} m, amp ${g.amp[1].toFixed(2)}`);
+  for (let i = 0; i < 12; i++) g.echo(1 + i * 0.01, 100, 0, 0, 0.5);
+  g.update(1.2, true, o);
+  check(g.count <= g.max && g.pulse.every((p, i) => (p.w < 0 ? g.amp[i] === 0 : true)), "echoes never exceed the slots (the oldest retire)", `${g.count} of ${g.max}`);
+}
+
 if (failed) {
   console.log(`${failed} check(s) FAILED`);
   process.exit(1);

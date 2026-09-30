@@ -49,7 +49,7 @@ export class TideVisuals {
     const dome = v.dome;
     const reach = dome ? frontReach(dome.radius, this.d.viewDistance, TIDE_VIEW.front.width) : 0;
     const r = dome ? frontRadius(v, dome.radius, reach) : null;
-    this.front.apply(chunks, this.d.seabed.material, dome?.x ?? 0, dome?.z ?? 0, r);
+    this.front.apply(chunks, chunks.baseMaterial, dome?.x ?? 0, dome?.z ?? 0, r);
     this.edge += ((dome && dome.zone !== "inside" ? 1 : 0) - this.edge) * Math.min(1, dt * 4);
     this.dome.update(dome, this.glow(v), this.edge, diver, time);
     // the particles run on the time since the commit (the show's clock, or the murk's)
@@ -80,9 +80,9 @@ export class TideVisuals {
     return { dark: Math.max(v.dark, fate), clear, darkVis: V.darkVisibility, clearVis: V.inhaleVisibility };
   }
 
-  /** The tide is over (or the dive ends): everything back as it was. */
-  end(): void {
-    this.front.clear(this.d.seabed.material);
+  /** The tide is over (or the dive ends): everything back as it was (`base`: the columns' resting material). */
+  end(base: THREE.Material): void {
+    this.front.clear(base);
     this.dome.mesh.visible = false;
     this.particles.points.visible = false;
     this.particles.burst(0, 0, 0, -1e4);

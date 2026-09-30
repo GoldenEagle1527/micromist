@@ -39,6 +39,9 @@ import { LoadingGate } from "./dive/loadingGate";
 import { diveTerrain, parseViewpoint, readDiveParams } from "./dive/params";
 import { createOverlay, createRenderer, watchResize } from "./dive/rendererRig";
 import { createTideDirector } from "./dive/tideWiring";
+import { crackViewpoint } from "./dive/chaosWiring";
+import { ChaosDirector, needsChaosProgram } from "./chaos/chaosDirector";
+import { createChaosUniforms } from "./chaos/seabedChaos";
 import type { TideDirector } from "./tide/tideDirector";
 import type { DeepMarchHandle, DeepMarchOptions } from "./dive/types";
 import { WaterLook } from "./dive/waterLook";
@@ -80,6 +83,10 @@ export function createDeepMarch(host: HTMLElement, opts: DeepMarchOptions): Deep
   const materials = new MaterialLibrary(renderer, lowSpec, Math.min(8, renderer.capabilities.getMaxAnisotropy()), () => {
     texturesReady = true;
   });
+  const layout = opts.world ?? null;
+  const conserveWorld = !!(opts.expedition && layout);
+  // conserve (M8): the chaos program's uniforms (its columns use it only while their generation shows chaos)
+  const chaosUniforms = conserveWorld ? createChaosUniforms() : null;
   const seabed = createSeabedMaterial({
     // ?detail=0: no shader detail normal (creases + facet blend, detailNormal.ts)
     detail: params.detail,
@@ -92,15 +99,15 @@ export function createDeepMarch(host: HTMLElement, opts: DeepMarchOptions): Deep
     particleLights,
     materials: materials.uniforms,
     baseLight,
+    chaos: chaosUniforms,
   });
   look.captureBase(seabed.absorb);
+  const seabedNow = seabed.variant(needsChaosProgram(opts.chaos ?? null));
 
-  const layout = opts.world ?? null;
   const field = createDensityField(opts.seed, terrain, undefined, layout);
-  const conserveWorld = !!(opts.expedition && layout);
   // conserve: one worker pool for the current terrain and, during a tide, gen + 1's (terrain/poolRouter.ts)
   const router = conserveWorld ? new PoolRouter(new WorkerPool(opts.seed, field.settings, mesherWorkerCount(lowSpec), layout)) : null;
-  const chunks = new ChunkManager(scene, field, opts.seed, seabed.material, lowSpec, seabed.fadeMaterial, router?.view(0));
+  const chunks = new ChunkManager(scene, field, opts.seed, seabedNow.material, lowSpec, seabedNow.fadeMaterial, router?.view(0));
   // bounded world with a ring wall: near = terrain columns (density Wall term), far = the
   // proxy ring, lit by long sonar pulses (wallRing.ts, sonarLong.ts)
   const longPulses = createLongPulses();
@@ -110,6 +117,9 @@ export function createDeepMarch(host: HTMLElement, opts: DeepMarchOptions): Deep
     return ring;
   };
   const wallRing = ringFor(field);
+  const chaos = chaosUniforms
+    ? new ChaosDirector({ uniforms: chaosUniforms, fog, rig, audio, pulses: sonarPulses, sonar, long: longPulses, scene, calm: opts.calmLights ?? false, seed: opts.seed }, opts.chaos ?? null)
+    : null;
   let tide: TideDirector | null = null;
   // after a recall / death / the tide: the base core once it stands, else the lander spawn; battery full
   const respawn = (home: HomeSpot | null) => {
@@ -154,10 +164,11 @@ export function createDeepMarch(host: HTMLElement, opts: DeepMarchOptions): Deep
       port: opts.tide, scene, camera, renderer, router, seed: opts.seed, settings: field.settings, lowSpec,
       viewDistance: terrain.viewDistance, seabed, look, audio, diver, simple: params.tideSimple, gpuLost: () => health.gpuLost,
       conserveLayer: layerFor, wallRing: ringFor, wake: () => respawn(parts!.loop.conserve?.home() ?? null), parts: () => parts!,
+      chaos, warm: (ms) => health.warm(ms, [], camera, scene),
     });
   }
   // the wall ring's program too (drawn only in sonar mode: no hitch on the first ping); conserve: the tide's
-  const warmMaterials = [seabed.material, seabed.fadeMaterial().material, ...(wallRing ? [wallRing.mesh.material as THREE.Material] : [])];
+  const warmMaterials = [seabedNow.material, seabedNow.fadeMaterial().material, ...(wallRing ? [wallRing.mesh.material as THREE.Material] : [])];
   if (tide) warmMaterials.push(seabed.tideMaterial().material);
   health.warm(warmMaterials, [...(conserve?.warmObjects() ?? []), ...(tide?.warmObjects ?? [])], camera, scene);
   health.listen();
@@ -174,7 +185,7 @@ export function createDeepMarch(host: HTMLElement, opts: DeepMarchOptions): Deep
   const startAt = conserve?.home() ?? spawnAt;
   diver.spawnAt(startAt.x, startAt.y, startAt.z, startAt.yaw);
   // Optional viewpoint for sharing / screenshots: ?at=x,y,z,yawDeg,pitchDeg.
-  const view = parseViewpoint(params.at);
+  const view = parseViewpoint(params.at) ?? crackViewpoint(params.at, opts.chaos ?? null, field);
   if (view) {
     diver.position.set(view.x, view.y, view.z);
     diver.prev.copy(diver.position);
@@ -221,6 +232,7 @@ export function createDeepMarch(host: HTMLElement, opts: DeepMarchOptions): Deep
     survival,
     conserve,
     tide,
+    chaos,
     rig,
     chunks,
     occlusion,
@@ -279,6 +291,7 @@ export function createDeepMarch(host: HTMLElement, opts: DeepMarchOptions): Deep
       unbindDebugKey();
       spawnDebug.dispose();
       tide?.dispose();
+      chaos?.dispose();
       loopParts.chunks.dispose();
       router?.dispose();
       snow.dispose();

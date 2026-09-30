@@ -15,12 +15,36 @@ export class FakeParam {
 
 export class FakeNode {
   connected = 0;
-  connect() {
+  /** Nodes connected to (connect(node) targets; disconnect(node) removes one). */
+  targets: unknown[] = [];
+  connect(to?: unknown) {
     this.connected++;
+    this.targets.push(to);
     return this;
   }
-  disconnect() {
-    this.connected = 0;
+  disconnect(to?: unknown) {
+    if (to === undefined) {
+      this.connected = 0;
+      this.targets = [];
+      return;
+    }
+    const i = this.targets.indexOf(to);
+    if (i < 0) throw new Error("InvalidAccessError: not connected");
+    this.targets.splice(i, 1);
+    this.connected--;
+  }
+}
+
+export class FakeOscillator extends FakeNode {
+  type = "sine";
+  frequency = new FakeParam(440);
+  started = 0;
+  stopped = 0;
+  start() {
+    this.started++;
+  }
+  stop() {
+    this.stopped++;
   }
 }
 
@@ -57,6 +81,9 @@ export class FakeAudioContext extends EventTarget {
   suspends = 0;
   sources: FakeSource[] = [];
   gains: FakeGain[] = [];
+  /** Every node created (any kind), for build-nothing checks. */
+  created = 0;
+  oscillators: FakeOscillator[] = [];
   decoded: ArrayBuffer[] = [];
   /** decodeAudioData result per call (default: a buffer of `length` frames at 48 kHz). */
   decode: (data: ArrayBuffer) => Promise<unknown> = async (data) => ({ length: 48000, sampleRate: 48000, duration: 1, numberOfChannels: 1, bytes: data.byteLength });
@@ -80,17 +107,30 @@ export class FakeAudioContext extends EventTarget {
     this.setState("closed");
   }
   createGain() {
+    this.created++;
     const g = new FakeGain();
     this.gains.push(g);
     return g;
   }
   createBufferSource() {
+    this.created++;
     const s = new FakeSource();
     this.sources.push(s);
     return s;
   }
   createBiquadFilter() {
+    this.created++;
     return Object.assign(new FakeNode(), { type: "", frequency: new FakeParam(350) });
+  }
+  createDelay() {
+    this.created++;
+    return Object.assign(new FakeNode(), { delayTime: new FakeParam(0) });
+  }
+  createOscillator() {
+    this.created++;
+    const o = new FakeOscillator();
+    this.oscillators.push(o);
+    return o;
   }
   async decodeAudioData(data: ArrayBuffer) {
     this.decoded.push(data);

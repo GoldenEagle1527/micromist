@@ -3,6 +3,8 @@
  * ?dpr ?lodNear ?refine=0 ?bricks=0 ?wasm=0|1 ?fog ?detail=0 ?occ=0
  * ?debugSpawns=1 ?at=x,y,z,yawDeg,pitchDeg ?light=off|beam|high|sonar
  * ?tide=simple (conserve: always the 浊潮 murk instead of the tide's show).
+ * Conserve (M8): ?at=crack (in front of the first open crack, chaosWiring.ts) and
+ * ?chaos=0|1|2 [&cracks=2] [&scar=1] (read by conserve/platform/diveChaos.ts).
  */
 import { terrainForDevice, type TerrainSettings } from "../../terrain/config";
 
