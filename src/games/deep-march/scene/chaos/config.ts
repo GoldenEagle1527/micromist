@@ -2,7 +2,7 @@
  * Every strength of the chaos presentation (MVP plan M8, design doc §4.2 / §4.5 /
  * §7.3) in one table, so tuning after the visual check changes numbers only.
  * Stage 0 is all zeros (nothing is built or run). Stages 3–5 reuse stage 2's row
- * until later milestones give them their own effects. Colours are linear RGB.
+ * (their own effects are in the follow-up backlog). Colours are linear RGB.
  */
 export type ChaosStageLook = {
   /** Glowing hairline veins on the wall (emissive gain). */
@@ -113,5 +113,3 @@ export const CHAOS_LOOK = {
     look: { trail: 0.55, front: 0.9, rim: 0.6 },
   },
 } as const;
-
-export type ChaosLook = typeof CHAOS_LOOK;

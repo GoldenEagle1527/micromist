@@ -189,12 +189,5 @@ export function anchorAttempt(probe: AnchorProbe, q: AnchorQuery, attempt: numbe
   return hit;
 }
 
+/** Attempts per anchor (strict first, then relaxed); the caller spreads them over frames (placement.ts). */
 export const ANCHOR_ATTEMPTS = ANCHOR.strictAttempts + ANCHOR.relaxedAttempts;
-/** All attempts in order; null if none succeeds (the feature is then not placed). */
-export function findAnchor(probe: AnchorProbe, q: AnchorQuery, taken: readonly Anchor[]): Anchor | null {
-  for (let i = 0; i < ANCHOR_ATTEMPTS; i++) {
-    const a = anchorAttempt(probe, q, i, taken);
-    if (a) return a;
-  }
-  return null;
-}

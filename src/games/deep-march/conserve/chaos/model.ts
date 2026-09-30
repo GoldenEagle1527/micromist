@@ -12,7 +12,6 @@ import { externalShare, wallThickness } from "./wallModel";
 import type { ReadonlyParticleVector } from "../particles/particleVector";
 
 export type ChaosStage = 0 | 1 | 2 | 3 | 4 | 5;
-export const CHAOS_STAGES: readonly ChaosStage[] = [0, 1, 2, 3, 4, 5];
 
 /** A crack of the ring (§4.3), placed at its first opening and kept for good (a healed one is a scar). */
 export type ChaosCrack = {
