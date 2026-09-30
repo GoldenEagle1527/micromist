@@ -8,7 +8,7 @@ Rendering and interaction for resource nodes, the particle tank and lost caches.
 | `placement.ts` | Deterministic node anchors, sites queued nearest first, time-sliced | no |
 | `selection.ts` | Visible set (caches + nearest nodes) and aim target | no |
 | `interaction.ts` | Hold to absorb / retrieve through the port; tank-full and flat-battery blocks; battery drain | no |
-| `recall.ts` | Emergency recall timing (hold 2 s, fade, the loss in the dark, fade in) | no |
+| `recall.ts` | Emergency recall timing (hold 2 s, fade, the loss in the dark, fade in). M5: inside the base the tank goes into storage (`safeLoss`), and the diver wakes at the base core once built | no |
 | `beacon.ts` | Cache flash phase and audio tick timing / gain | no |
 | `telemetry.ts` | HUD data types, compass bearings | no |
 | `nodeGeometry.ts`, `nodeInstances.ts` | Low-poly crystal cluster (75 tris) + cache bipyramid (12 tris) in one InstancedMesh | yes |
