@@ -22,7 +22,10 @@
  *             sites sharing a region add up.
  *
  * API:
- *   createRegionField(seed) → RegionField
+ *   createRegionField(seed, layout?) → RegionField
+ *     layout (siteLayout.ts): explicit sites for a finite rectangle of cells (bounded
+ *     world); cells outside keep the seeded sites. sample() then also returns the
+ *     blended site bias Σ w_i δ_i (0 without a layout).
  *     sample(x, z, out)    per-region weights (+ dominant id, edge distance) into a RegionSample
  *     regionAt(x, z)       dominant region id
  *     maskInRect(…)        bitmask of regions with non-zero weight anywhere in a rectangle
@@ -31,6 +34,7 @@
  *     spawnRegion()        seeded spawn region (uniform over the 6; see spawn.ts)
  */
 import { createSimplex3, mulberry32 } from "./noise";
+import { layoutIndex, type SiteLayout } from "./siteLayout";
 
 export const REGION = { SAND: 0, REEF: 1, CANYON: 2, CAVE: 3, TERRACE: 4, TRENCH: 5 } as const;
 export type RegionKey = "sand" | "reef" | "canyon" | "cave" | "terrace" | "trench";
@@ -67,10 +71,14 @@ export type RegionSample = {
   siteRegion: Int8Array;
   /** Site hash in [0, 1) (orientation / variation seed). */
   siteHash: Float64Array;
+  /** Blended site density bias Σ siteW_i · δ_i (layout fields; 0 otherwise). */
+  bias: number;
 };
 
 export type RegionField = {
   seed: number;
+  /** Explicit site layout (bounded world) or null (endless seeded sites). */
+  layout: SiteLayout | null;
   sample: (x: number, z: number, out: RegionSample) => RegionSample;
   regionAt: (x: number, z: number) => number;
   maskInRect: (x0: number, z0: number, x1: number, z1: number) => number;
@@ -90,6 +98,7 @@ export function createRegionSample(): RegionSample {
     siteW: new Float64Array(25),
     siteRegion: new Int8Array(25),
     siteHash: new Float64Array(25),
+    bias: 0,
   };
 }
 
@@ -111,10 +120,11 @@ function smooth01(t: number): number {
 }
 
 const fieldCache = new Map<number, RegionField>();
+const layoutCache = new WeakMap<SiteLayout, RegionField>();
 
-export function createRegionField(seed: number): RegionField {
-  const cached = fieldCache.get(seed);
-  if (cached) return cached;
+export function createRegionField(seed: number, layout: SiteLayout | null = null): RegionField {
+  const cached = layout ? layoutCache.get(layout) : fieldCache.get(seed);
+  if (cached && cached.seed === seed) return cached;
   const noise = createSimplex3(seed ^ 0x51ab7e3);
   const rnd = mulberry32(seed ^ 0x77ac31);
   const ox = rnd() * 512, oz = rnd() * 512, oy = rnd() * 512;
@@ -137,15 +147,26 @@ export function createRegionField(seed: number): RegionField {
   const mZ = new Float64Array(MEMO);
   const mR = new Int8Array(MEMO);
   const mH = new Float64Array(MEMO);
+  const mB = new Float64Array(MEMO);
   const site = (cx: number, cz: number): number => {
     const slot = (Math.imul(cx, 0x9e3779b1) ^ Math.imul(cz, 0x85ebca77)) >>> 22;
     if (mCx[slot] !== cx || mCz[slot] !== cz) {
       mCx[slot] = cx;
       mCz[slot] = cz;
-      mX[slot] = (cx + (1 - J) / 2 + J * hash(seed, cx, cz, 11)) * G;
-      mZ[slot] = (cz + (1 - J) / 2 + J * hash(seed, cx, cz, 12)) * G;
-      mR[slot] = regionOfSite(cx, cz);
-      mH[slot] = hash(seed, cx, cz, 31);
+      const li = layout ? layoutIndex(layout, cx, cz) : -1;
+      if (li >= 0) {
+        mX[slot] = (cx + (1 - J) / 2 + J * layout!.jx[li]) * G;
+        mZ[slot] = (cz + (1 - J) / 2 + J * layout!.jz[li]) * G;
+        mR[slot] = layout!.region[li];
+        mH[slot] = layout!.hash[li];
+        mB[slot] = layout!.bias[li];
+      } else {
+        mX[slot] = (cx + (1 - J) / 2 + J * hash(seed, cx, cz, 11)) * G;
+        mZ[slot] = (cz + (1 - J) / 2 + J * hash(seed, cx, cz, 12)) * G;
+        mR[slot] = regionOfSite(cx, cz);
+        mH[slot] = hash(seed, cx, cz, 31);
+        mB[slot] = 0;
+      }
     }
     return slot;
   };
@@ -155,6 +176,7 @@ export function createRegionField(seed: number): RegionField {
   const dist = new Float64Array(25);
   const reg = new Int8Array(25);
   const hs = new Float64Array(25);
+  const bs = new Float64Array(25);
   const sxs = new Float64Array(25);
   const szs = new Float64Array(25);
   const cand = new Int32Array(25);
@@ -173,6 +195,7 @@ export function createRegionField(seed: number): RegionField {
         dist[n] = d;
         reg[n] = mR[sl];
         hs[n] = mH[sl];
+        bs[n] = mB[sl];
         sxs[n] = mX[sl];
         szs[n] = mZ[sl];
         if (d < dmin) {
@@ -192,6 +215,7 @@ export function createRegionField(seed: number): RegionField {
     out.w.fill(0);
     let sum = 0;
     out.sites = 0;
+    let bias = 0;
     for (let a = 0; a < nc; a++) {
       const i = cand[a];
       const di2 = dist[i] * dist[i];
@@ -212,6 +236,7 @@ export function createRegionField(seed: number): RegionField {
       out.sites++;
       out.w[reg[i]] += w;
       sum += w;
+      bias += w * bs[i];
     }
     let best = 0;
     for (let r = 0; r < REGION_COUNT; r++) {
@@ -219,6 +244,7 @@ export function createRegionField(seed: number): RegionField {
       if (out.w[r] > out.w[best]) best = r;
     }
     for (let i = 0; i < out.sites; i++) out.siteW[i] /= sum;
+    out.bias = layout ? bias / sum : 0;
     out.id = best;
     out.dominant = out.w[best];
     // exact distance (warped space) to the nearest bisector with a site of another region
@@ -335,8 +361,9 @@ export function createRegionField(seed: number): RegionField {
   /** Spawn region: uniform over the 6 regions, drawn from the seed. */
   const spawnRegion = () => Math.min(REGION_COUNT - 1, Math.floor(hash(seed, 7, 13, 97) * REGION_COUNT));
 
-  const f: RegionField = { seed, sample, regionAt, maskInRect, coresOf, spawnRegion };
-  fieldCache.set(seed, f);
+  const f: RegionField = { seed, layout, sample, regionAt, maskInRect, coresOf, spawnRegion };
+  if (layout) layoutCache.set(layout, f);
+  else fieldCache.set(seed, f);
   return f;
 }
 
@@ -349,6 +376,7 @@ export function scaleRegionField(base: RegionField, S: number): RegionField {
   const inv = 1 / S;
   return {
     seed: base.seed,
+    layout: base.layout,
     sample: (x, z, out) => {
       base.sample(x * inv, z * inv, out);
       out.edge *= S;
