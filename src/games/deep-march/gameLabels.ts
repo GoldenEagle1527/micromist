@@ -49,6 +49,8 @@ export function panelLabels(dm: DeepMarchDict): PanelLabels {
     btnDown: dm.btnDown,
     btnSwim: dm.btnSwim,
     btnLamp: dm.btnLamp,
+    btnPing: dm.btnPing,
+    sonar: dm.sonarHud,
     dialMove: dm.dialMove,
     showPanel: dm.showPanel,
     hidePanel: dm.hidePanel,

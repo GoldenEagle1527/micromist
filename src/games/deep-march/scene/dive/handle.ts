@@ -31,7 +31,7 @@ export type HandleParts = {
   input: InputController;
   diver: DiverController;
   hud: HudChips;
-  controls: { toggleLamp: () => boolean; cycleLight: () => LightMode };
+  controls: { toggleLamp: () => boolean; cycleLight: () => LightMode; ping: () => boolean };
   updatePrompt: () => void;
   setLabels: (labels: HudLabels) => void;
   destroy: () => void;
@@ -40,11 +40,10 @@ export type HandleParts = {
 };
 
 function systemState(p: HandleParts): LoadingSnapshot["system"] {
-  const avail = p.survival.lights.available();
   return {
     battery: p.survival.resources.view("battery").ratio,
-    lamps: avail.filter((m) => m !== "sonar"),
-    sonar: avail.includes("sonar") && p.sonar.uSonarPulse.value.length > 0,
+    lamps: p.survival.lights.available(),
+    sonar: p.survival.sonar.state(performance.now() / 1000).available && p.sonar.uSonarPulse.value.length > 0,
     shaders: p.health.shadersReady,
     shaderError: p.health.shaderError,
     gpu: p.health.gpu,
@@ -89,6 +88,7 @@ function telemetry(p: HandleParts): Telemetry {
     region: p.hud.region,
     lamp: light.on,
     light,
+    sonar: survival.sonar.state(performance.now() / 1000),
     battery: { value: b.value, capacity: b.capacity, ratio: b.ratio, rate: b.rate, low: b.ratio <= SURVIVAL_TUNING.battery.lowFraction },
     swimLatch: p.input.panel.swimLatch,
     ready: p.gate.ready,
@@ -117,6 +117,7 @@ export function createHandle(p: HandleParts): DeepMarchHandle {
     addLook: (dx, dy, touch) => input.addLookPx(dx, dy, touch),
     toggleLamp: p.controls.toggleLamp,
     cycleLight: p.controls.cycleLight,
+    ping: p.controls.ping,
     toggleSwimLatch: () => {
       input.panel.swimLatch = !input.panel.swimLatch;
       return input.panel.swimLatch;

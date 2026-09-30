@@ -3,7 +3,7 @@
  * the loading snapshot and the handle the page drives. Types only.
  */
 import type { BasePort, ChaosView, ExpeditionPort, TidePort } from "../../conserve";
-import type { LightMode, LightState } from "../../survival";
+import type { LightMode, LightState, SonarState } from "../../survival";
 import type { RegionField, RegionKey } from "../../terrain/regions";
 import type { SiteLayout, WorldRect } from "../../terrain/siteLayout";
 import type { EnvironmentKind, SurfaceType } from "../../terrain/terrainInfo";
@@ -76,6 +76,8 @@ export type Telemetry = {
   region: RegionKey | null;
   lamp: boolean;
   light: LightState;
+  /** Active sonar: unit equipped, ready, cooldown (survival/sonarPing.ts). */
+  sonar: SonarState;
   battery: { value: number; capacity: number; ratio: number; rate: number; low: boolean };
   swimLatch: boolean;
   ready: boolean;
@@ -137,6 +139,8 @@ export type DeepMarchHandle = {
   toggleLamp: () => boolean;
   /** Next available light mode (turns the light on). */
   cycleLight: () => LightMode;
+  /** Sonar ping (key 3); false if refused (cooldown, battery, no unit). */
+  ping: () => boolean;
   toggleSwimLatch: () => boolean;
   /** Master volume 0..1 / mute. */
   setSound: (s: { muted: boolean; volume: number }) => void;

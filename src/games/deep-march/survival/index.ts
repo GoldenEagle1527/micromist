@@ -6,17 +6,21 @@ import { SURVIVAL_TUNING } from "./config";
 import { CapacityStorage, Equipment } from "./items";
 import { LightController } from "./lightModes";
 import { ResourceSystem } from "./resources";
+import { SonarPinger } from "./sonarPing";
 
 export { SURVIVAL_TUNING } from "./config";
 export { ResourceSystem, type ResourceView, type ResourceSnapshot, type ResourceEvent } from "./resources";
 export { CapacityStorage, Equipment, ITEMS, type ItemId, type ItemStack, type Storage, type EquipSlot } from "./items";
 export { LightController, LIGHT_MODES, type LightMode, type LightState } from "./lightModes";
+export { SonarPinger, type SonarRefusal, type SonarState } from "./sonarPing";
 
 export type Survival = {
   resources: ResourceSystem;
   backpack: CapacityStorage;
   equipment: Equipment;
   lights: LightController;
+  /** Active sonar pings (sonarPing.ts). */
+  sonar: SonarPinger;
   tick: (dt: number) => void;
   dispose: () => void;
 };
@@ -35,11 +39,13 @@ export function createSurvival(): Survival {
   equipment.equip("sonar-unit");
 
   const lights = new LightController(resources, equipment);
+  const sonar = new SonarPinger(resources, equipment);
   return {
     resources,
     backpack,
     equipment,
     lights,
+    sonar,
     tick: (dt) => resources.tick(dt),
     dispose: () => {
       lights.dispose();

@@ -67,10 +67,11 @@ export const LIVE_COMMANDS: readonly DebugCommand[] = [
     label: "lightMode",
     kind: "choice",
     when: live,
-    options: (c) => (c.port?.lightChoices() ?? []).map((m) => ({ value: m, label: m === "off" ? "lightOff" : m === "beam" ? "lightBeam" : m === "high" ? "lightHigh" : "lightSonar" })),
+    options: (c) => (c.port?.lightChoices() ?? []).map((m) => ({ value: m, label: m === "off" ? "lightOff" : m === "beam" ? "lightBeam" : "lightHigh" })),
     get: (c) => c.port?.light() ?? "off",
     set: (c, v) => c.port?.setLight(v as Parameters<NonNullable<DebugCtx["port"]>["setLight"]>[0]),
   },
+  { id: "light.ping", section: "light", label: "ping", kind: "action", when: live, apply: (c) => c.port?.ping() },
   { id: "resources.battery", section: "resources", label: "fillBattery", kind: "action", when: live, apply: (c) => c.port?.fillBattery() },
   {
     id: "overlay.markers",

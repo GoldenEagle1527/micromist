@@ -1,5 +1,5 @@
 /**
- * 05 System check: battery, lamps, sonar, seabed programs compiled / linked. The GPU
+ * 05 System check: battery, lamps, the active sonar, seabed programs compiled / linked. The GPU
  * facts and full shader logs go to the diagnostics drawer (a long ANGLE renderer
  * string used to overflow the row on phones). A shader failure can be overridden with
  * "Dive anyway"; a lost GPU context cannot.

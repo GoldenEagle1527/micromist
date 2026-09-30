@@ -1,0 +1,48 @@
+/* Active sonar strip under the battery (SonarGauge.tsx) */
+.dm-sonar {
+  margin-top: 4px;
+  padding: 3px 10px 4px 8px;
+  width: 132px;
+  border-left: 2px solid #6ff3ff;
+  background: linear-gradient(90deg, rgb(0 40 60 / 0.55), rgb(0 40 60 / 0.08));
+  font-variant-numeric: tabular-nums;
+}
+.dm-sonar-head {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 9.5px;
+  white-space: nowrap;
+}
+.dm-sonar-head small {
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  opacity: 0.65;
+}
+.dm-sonar-head span {
+  margin-left: auto;
+  letter-spacing: 0.08em;
+  opacity: 0.8;
+}
+.dm-sonar[data-state="ready"] .dm-sonar-head span {
+  color: #6ff3ff;
+  opacity: 1;
+  text-shadow: 0 0 6px rgb(90 230 255 / 0.8);
+}
+.dm-sonar[data-state="battery"] {
+  border-left-color: var(--hud-warn);
+}
+.dm-sonar[data-state="battery"] .dm-sonar-head span {
+  color: var(--hud-warn);
+}
+.dm-sonar-bar {
+  margin-top: 3px;
+  height: 3px;
+  background: rgb(98 243 255 / 0.12);
+}
+.dm-sonar-bar i {
+  display: block;
+  height: 100%;
+  background: #6ff3ff;
+  box-shadow: 0 0 4px rgb(90 230 255 / 0.7);
+}

@@ -2,9 +2,9 @@
  * Far proxy ring of the ring wall (design doc §4.4, MVP plan M3): one draw, ≈ 1k
  * triangles (terrain/wallRing.ts builds them on the wall's facet lattice). Near the
  * diver the wall is ordinary terrain columns (density.ts Wall term, same LOD fade);
- * beyond the columns' reach the ring stands in for it. In normal light the fog
- * swallows it (not drawn at all); in SONAR mode the long pulses (sonarLong.ts) run
- * out across the world and light it kilometres away.
+ * beyond the columns' reach the ring stands in for it. Without a ping the fog
+ * swallows it (not drawn at all); a ping's long pulse (sonarLong.ts) runs out
+ * across the world and lights it kilometres away (additive, over any light mode).
  */
 import * as THREE from "three";
 import type { DensityField } from "../terrain/density";
@@ -38,7 +38,7 @@ export type WallRing = {
   triangles: number;
   /** Far plane that keeps the whole ring in front of it (the world's diagonal + margin). */
   reach: number;
-  /** Per frame: the long pulses' state and the sonar strength (0 = not drawn). */
+  /** Per frame: 1 while a long pulse is alive, 0 = not drawn. */
   update: (sonar: number) => void;
   dispose: () => void;
 };
@@ -73,6 +73,8 @@ export function createWallRing(
     vertexShader: RING_VERT,
     fragmentShader: RING_FRAG,
     defines: { DM_LONG_N: opts.long.max },
+    transparent: true,
+    blending: THREE.AdditiveBlending,
     depthWrite: false,
   });
   const mesh = new THREE.Mesh(geo, material);

@@ -5,7 +5,7 @@
  * tone of the same colour, so far masses loom as silhouettes and resolve as the
  * diver closes in (seabedMaterial.ts). Plus the down-welling lights, and the
  * per-frame lighting: depth-driven base (deeper = darker) × light mode (lights
- * off = black water and no ambient; sonar draws on a dark background).
+ * off = black water and no ambient).
  */
 import * as THREE from "three";
 import { SEA_COLORS } from "../../terrain/config";

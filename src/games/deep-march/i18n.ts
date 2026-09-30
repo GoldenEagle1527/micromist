@@ -7,6 +7,7 @@ import { expeditionEn, expeditionZh, type ExpeditionDict } from "./ui/expedition
 import { tideEn, tideZh, type TideDict } from "./ui/tide/i18n";
 import { baseEn, baseZh, type BaseDict } from "./ui/base/i18n";
 import { hintsEn, hintsZh, type HintDict } from "./ui/hints/i18n";
+import type { SonarHudLabels } from "./ui/SonarGauge";
 
 export type DeepMarchDict = {
   setupTitle: string;
@@ -70,6 +71,10 @@ export type DeepMarchDict = {
   btnDown: string;
   btnSwim: string;
   btnLamp: string;
+  /** Fan sector: the active sonar ping. */
+  btnPing: string;
+  /** Sonar strip under the battery. */
+  sonarHud: SonarHudLabels;
   /** Survival HUD: battery + light modes. */
   hudBattery: string;
   lightOff: string;
@@ -108,11 +113,12 @@ export const deepMarchEn: DeepMarchDict = {
     "Mouse — look (click the view to capture the mouse, Esc releases)",
     "WASD / arrows — move along your heading · Space — swim up · Shift — sink",
     "Double-tap W, or hold W and press Ctrl / R — swim fast toward where you look",
-    "Release W to stop swimming · F — lights on / off · L — next light mode · 1 / 2 / 3 — beam / high beam / sonar · M — mute / unmute",
-    "Lights run on the battery (beam drains least, sonar most); it slowly recharges while the lights are off",
-    "Touch panel: left dial moves (push to the outer SWIM arc to swim), right fan = up / down / swim / lamp / light mode, drag elsewhere to look",
+    "Release W to stop swimming · F — lights on / off · L — next light mode · 1 / 2 — beam / high beam · M — mute / unmute",
+    "3 — sonar ping: a cyan wavefront sweeps the terrain around you (costs battery, short recharge)",
+    "Lights and pings run on the battery (beam drains least); it slowly recharges while nothing draws on it",
+    "Touch panel: left dial moves (push to the outer SWIM arc to swim), right fan = up / down / swim / lamp / light mode / ping, drag elsewhere to look",
   ],
-  hint: "Click to look · WASD move · double-tap W swim · Space/Shift up/down · F lights · L mode",
+  hint: "Click to look · WASD move · double-tap W swim · Space/Shift up/down · F lights · L mode · 3 sonar",
   hintPanel: "Left dial moves · right fan acts · drag the view to look",
   stageAria: "Deep March underwater view",
   hudDepth: "Depth",
@@ -174,9 +180,11 @@ export const deepMarchEn: DeepMarchDict = {
   btnDown: "DOWN",
   btnSwim: "SWIM",
   btnLamp: "LAMP",
+  btnPing: "PING",
+  sonarHud: { title: "Sonar", ready: "READY", cooling: "RECHARGING", noBattery: "LOW BATTERY" },
   hudBattery: "Battery",
   lightOff: "LIGHTS OFF",
-  lightModes: { beam: "BEAM", high: "HIGH BEAM", sonar: "SONAR" },
+  lightModes: { beam: "BEAM", high: "HIGH BEAM" },
   batteryEmpty: "Battery flat — lights offline",
   batteryCharging: "Recharging…",
   dialMove: "Move",
@@ -209,11 +217,12 @@ export const deepMarchZh: DeepMarchDict = {
     "鼠标 — 转动视角（点击画面锁定鼠标，Esc 释放）",
     "WASD / 方向键 — 沿朝向移动 · 空格 — 上浮 · Shift — 下沉",
     "双击 W，或按住 W 再按 Ctrl / R — 朝视线方向快速游泳",
-    "松开 W 停止游泳 · F — 开关灯光 · L — 切换灯光模式 · 1 / 2 / 3 — 光束 / 远光 / 声呐 · M — 静音 / 取消静音",
-    "灯光消耗电池（光束最省电，声呐最耗电）；关灯时电池会缓慢回充",
-    "触屏面板：左侧摇盘移动（推到外圈「游泳」弧区即游泳），右侧扇形按钮为上浮 / 下沉 / 游泳 / 头灯 / 灯光模式，拖动其余画面转动视角",
+    "松开 W 停止游泳 · F — 开关灯光 · L — 切换灯光模式 · 1 / 2 — 光束 / 远光 · M — 静音 / 取消静音",
+    "3 — 声呐脉冲：一道青色波前扫过周围地形（耗电，短暂冷却）",
+    "灯光和声呐脉冲消耗电池（光束最省电）；不耗电时电池会缓慢回充",
+    "触屏面板：左侧摇盘移动（推到外圈「游泳」弧区即游泳），右侧扇形按钮为上浮 / 下沉 / 游泳 / 头灯 / 灯光模式 / 声呐，拖动其余画面转动视角",
   ],
-  hint: "点击画面转视角 · WASD 移动 · 双击 W 游泳 · 空格/Shift 上浮/下沉 · F 灯光 · L 模式",
+  hint: "点击画面转视角 · WASD 移动 · 双击 W 游泳 · 空格/Shift 上浮/下沉 · F 灯光 · L 模式 · 3 声呐",
   hintPanel: "左摇盘移动 · 右扇形按钮操作 · 拖动画面转视角",
   stageAria: "深潜水下画面",
   hudDepth: "深度",
@@ -275,9 +284,11 @@ export const deepMarchZh: DeepMarchDict = {
   btnDown: "下沉",
   btnSwim: "游泳",
   btnLamp: "头灯",
+  btnPing: "声呐",
+  sonarHud: { title: "声呐", ready: "就绪", cooling: "充能", noBattery: "电量不足" },
   hudBattery: "电池",
   lightOff: "灯光关闭",
-  lightModes: { beam: "光束", high: "远光", sonar: "声呐" },
+  lightModes: { beam: "光束", high: "远光" },
   batteryEmpty: "电量耗尽 · 灯光离线",
   batteryCharging: "回充中…",
   dialMove: "移动",

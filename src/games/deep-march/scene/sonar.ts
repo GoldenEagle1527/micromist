@@ -1,6 +1,7 @@
 /**
- * SONAR render mode (drawn inside the seabed shader, no extra pass). While
- * active the diver emits a pulse every `period` seconds; each pulse is a sphere expanding from where it was emitted at `speed` to `range`.
+ * Active SONAR overlay (drawn inside the seabed shader, no extra pass). Each ping
+ * (key 3, survival/sonarPing.ts) is a sphere expanding from where it was emitted
+ * at `speed` to `range`, added on top of whatever the lamps show.
  * Terrain the wavefront crosses lights up as cyan scan lines — world-space height
  * contours (anti-aliased with screen-space derivatives and a minimum pixel width,
  * blended to a flat tone where they would get denser than a few pixels), rim /
@@ -8,16 +9,16 @@
  * keeps glowing, fading over `trail` seconds. Turbidity doesn't apply (sound
  * carries), so distant masses resolve out to the pulse range.
  *
- *  - SonarPulses: pure scheduling / fade logic + the uniform arrays;
+ *  - SonarPulses: pure pulse / fade logic + the uniform arrays;
  *  - sonarFront / sonarTrail / sonarRangeFade / sonarAmp: JS mirrors of the GLSL
  *    (scripts/deep-march-sonar-test.ts);
  *  - SONAR_DECLS / SONAR_OPAQUE: shader chunks (seabedShader.ts), strength uSonar
- *    (0 = off: one uniform branch, nothing evaluated).
+ *    (1 while a pulse is alive, 0 = one uniform branch, nothing evaluated).
  */
 import * as THREE from "three";
 
 export const SONAR_TUNING = {
-  /** Seconds between pulses. */
+  /** Shortest time between pings (s, the sonar cooldown): caps the pulse lifetime so `maxPulses` fit. */
   period: 2.5,
   /** Wavefront speed (m/s, stylised: real sound is ~1500 m/s). */
   speed: 120,
@@ -75,8 +76,6 @@ export class SonarPulses {
   /** Per-pulse amplitude (0…1). */
   readonly amp: number[];
   private readonly list: Pulse[] = [];
-  private next = 0;
-  private wasActive = false;
   readonly life: number;
   readonly max: number;
   readonly tuning: SonarTuning;
@@ -93,28 +92,25 @@ export class SonarPulses {
     return this.list.length;
   }
 
-  /**
-   * time: seconds (monotonic); active: sonar selected and on; origin: diver position.
-   * Returns how many pulses were emitted this call (a hitch can bunch several).
-   */
-  update(time: number, active: boolean, origin: THREE.Vector3): number {
+  /** Emission time of the newest pulse (s), -Infinity if none yet. */
+  get lastPing(): number {
+    return this.list.length ? this.list[this.list.length - 1].t0 : -Infinity;
+  }
+
+  /** A ping from `origin` at `time` (s, monotonic); the wavefront stays where it was emitted. */
+  ping(time: number, origin: THREE.Vector3): void {
+    this.list.push({ x: origin.x, y: origin.y, z: origin.z, t0: time, gain: 1 });
+  }
+
+  /** Per frame: retire old pulses, refresh the uniform arrays. */
+  update(time: number): void {
     const T = this.tuning;
-    if (active && !this.wasActive) this.next = time; // first ping right away
-    this.wasActive = active;
-    let emitted = 0;
-    if (active) {
-      while (time >= this.next) {
-        this.list.push({ x: origin.x, y: origin.y, z: origin.z, t0: this.next, gain: 1 });
-        this.next += T.period;
-        emitted++;
-      }
-    }
     // retire expired pulses, and the oldest beyond capacity
     while (this.list.length && (time - this.list[0].t0 >= this.life || this.list.length > this.max)) this.list.shift();
     for (let i = 0; i < this.max; i++) {
       const p = this.list[i];
       if (p) {
-        const age = time - p.t0;
+        const age = Math.max(0, time - p.t0);
         this.pulse[i].set(p.x, p.y, p.z, age * T.speed);
         this.amp[i] = sonarAmp(age, this.life) * p.gain;
       } else {
@@ -122,7 +118,6 @@ export class SonarPulses {
         this.amp[i] = 0;
       }
     }
-    return emitted;
   }
 
   /**
@@ -136,7 +131,6 @@ export class SonarPulses {
 
   clear() {
     this.list.length = 0;
-    this.wasActive = false;
   }
 }
 
@@ -206,6 +200,6 @@ export const SONAR_OPAQUE = /* glsl */ `
       float echo = 0.25 + 0.75 * facing;
       vec3 sonarCol = uSonarColor * (trail * (0.07 * echo + 0.75 * line + 0.45 * rim) + front * (0.3 + 0.7 * echo));
       sonarCol *= 1.0 - smoothstep(uFar * 0.85, uFar, dist);
-      outgoingLight = mix(outgoingLight, sonarCol, uSonar);
+      outgoingLight += sonarCol; // overlaid on the lamps' image (uSonar only gates)
     }
 `;

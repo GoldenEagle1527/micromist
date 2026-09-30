@@ -48,7 +48,7 @@ export class DiveCues {
   }
 }
 
-/** F / L / 1–3 and the HUD buttons, with their switch / mode / refusal cues. */
+/** F / L / 1–2, the sonar ping (3) and the HUD buttons, with their switch / mode / refusal cues. */
 export function lightControls(survival: Survival, audio: DiveAudio, cues: DiveCues) {
   const lights = survival.lights;
   const allow = (id: "switch" | "mode" | "warn") => cues.limiter.allow(id, cues.now());
@@ -73,6 +73,12 @@ export function lightControls(survival: Survival, audio: DiveAudio, cues: DiveCu
       const before = lights.state().mode;
       lights.select(m);
       if (lights.state().mode !== before && allow("mode")) audio.play("mode", { gain: 0.42 });
+    },
+    /** Sonar ping (the frame emits it and plays the ping); a flat battery / missing unit buzzes. */
+    ping: (): boolean => {
+      const refused = survival.sonar.ping(cues.now());
+      if ((refused === "battery" || refused === "gear") && allow("warn")) audio.play("warn", { gain: 0.28, rate: 1.2 });
+      return refused === null;
     },
   };
 }

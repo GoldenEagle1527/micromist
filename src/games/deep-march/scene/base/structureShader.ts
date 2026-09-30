@@ -103,7 +103,7 @@ ${BEAM_OPAQUE}${FOG_OPAQUE}    outgoingLight = mix(outgoingLight, dmBackground(d
         trail = max(trail, behind >= 0.0 ? exp(-behind / (uSonarWave.x * uSonarWave.y)) * rf : 0.0);
       }
       vec3 echo = uSonarColor * (trail * (0.16 + 0.5 * dmHullGlow) + front * (0.5 + 0.5 * dmHullGlow));
-      outgoingLight = mix(outgoingLight, echo, uSonar);
+      outgoingLight += echo * uSonar; // overlaid on the lamps' image
     }
   }
   #include <opaque_fragment>`;

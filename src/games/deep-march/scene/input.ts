@@ -1,6 +1,7 @@
 /**
  * Diver input: keyboard (WASD / arrows, Space, Shift, sprint = double-tap W /
- * Ctrl / R; lights: F on/off, L cycle, 1-3 mode; M mute), mouse-look via pointer lock (desktop, panel off), drag-look on
+ * Ctrl / R; lights: F on/off, L cycle, 1-2 mode; sonar: 3 ping, N observation
+ * view; M mute), mouse-look via pointer lock (desktop, panel off), drag-look on
  * touch, plus analog state pushed in by the sci-fi control panel. Modes add
  * hold keys (`holdKeys`, e.g. conserve's E absorb / X recall; the free dive
  * passes none and keeps its key set) read with `held()`, and one-shot presses
@@ -10,7 +11,7 @@ import type { DiverInput } from "./diver";
 import { screenDelta } from "../viewRotation";
 
 const HANDLED = new Set([
-  "KeyW", "KeyA", "KeyS", "KeyD", "KeyR", "KeyF", "KeyL", "KeyM", "Digit1", "Digit2", "Digit3",
+  "KeyW", "KeyA", "KeyS", "KeyD", "KeyR", "KeyF", "KeyL", "KeyM", "KeyN", "Digit1", "Digit2", "Digit3",
   "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight",
   "ShiftLeft", "ShiftRight", "Space", "ControlLeft", "ControlRight",
 ]);
@@ -28,8 +29,12 @@ export type InputOptions = {
   onLampToggle?: () => void;
   /** L: next light mode. */
   onLightCycle?: () => void;
-  /** 1 / 2 / 3: light mode by index. */
+  /** 1 / 2: light mode by index. */
   onLightSelect?: (index: number) => void;
+  /** 3: sonar ping. */
+  onPing?: () => void;
+  /** N: sonar observation view on / off. */
+  onObserveToggle?: () => void;
   /** M: mute / unmute. */
   onMuteToggle?: () => void;
   /** Extra key codes held for actions (read with held()); "Mouse0" = left button while the mouse is captured. */
@@ -116,6 +121,14 @@ export class InputController {
     }
     if (e.code === "KeyM") {
       if (!e.repeat) this.opts.onMuteToggle?.();
+      return;
+    }
+    if (e.code === "Digit3") {
+      if (!e.repeat) this.opts.onPing?.();
+      return;
+    }
+    if (e.code === "KeyN") {
+      if (!e.repeat) this.opts.onObserveToggle?.();
       return;
     }
     if (e.code.startsWith("Digit")) {

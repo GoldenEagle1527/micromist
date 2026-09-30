@@ -1,7 +1,7 @@
 /**
  * Item catalogue, capacity-based storage and equipment slots.
  * Deliberately small: enough to model gear that gates abilities (sonar unit →
- * sonar light mode) and to grow into loot / crafting later.
+ * active sonar pings) and to grow into loot / crafting later.
  */
 
 export type EquipSlot = "head" | "face" | "body" | "back";

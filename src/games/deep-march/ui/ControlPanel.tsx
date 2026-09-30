@@ -6,6 +6,7 @@ import { IconBase, IconExit, IconFlip, IconMute, IconPanel, IconSound } from "./
 import { LookPad } from "./LookPad";
 import { MoveDial } from "./MoveDial";
 import { Readout, type ReadoutLabels } from "./Readout";
+import { SonarGauge, type SonarHudLabels } from "./SonarGauge";
 import { useTelemetry } from "./useTelemetry";
 import { ConserveOverlays } from "./ConserveOverlays";
 import type { ExpeditionDict } from "./expedition/i18n";
@@ -28,6 +29,8 @@ export type PanelLabels = ReadoutLabels & {
   btnDown: string;
   btnSwim: string;
   btnLamp: string;
+  btnPing: string;
+  sonar: SonarHudLabels;
   dialMove: string;
   showPanel: string;
   hidePanel: string;
@@ -87,6 +90,7 @@ export function ControlPanel({
       else if (id === "place") game.baseCommand({ type: "place" });
       else if (id === "swim") game.toggleSwimLatch();
       else if (id === "mode") game.cycleLight();
+      else if (id === "ping") game.ping();
       else game.toggleLamp();
       force((n) => n + 1);
     },
@@ -99,12 +103,11 @@ export function ControlPanel({
         tel={tel}
         labels={labels}
         extra={
-          exp ? (
-            <>
-              <TankGauge exp={exp} labels={labels.expedition} />
-              {base ? <BaseEnergy base={base} labels={labels.base} /> : null}
-            </>
-          ) : null
+          <>
+            {tel ? <SonarGauge tel={tel} labels={labels.sonar} /> : null}
+            {exp ? <TankGauge exp={exp} labels={labels.expedition} /> : null}
+            {exp && base ? <BaseEnergy base={base} labels={labels.base} /> : null}
+          </>
         }
       />
       <ConserveOverlays game={game} tel={tel} exp={exp} base={base} tide={tide} panelOn={panelOn} labels={labels} />
@@ -170,6 +173,7 @@ export function ControlPanel({
             speed={tel?.speed ?? 0}
             onHold={onHold}
             onToggle={onToggle}
+            ping={tel?.sonar.available ? { label: labels.btnPing, ready: tel.sonar.ready } : undefined}
             absorb={exp && !building ? { label: labels.expedition.btnAbsorb, active: exp.absorbing } : undefined}
             place={building ? { label: labels.base.btnPlace, ok: base?.build.ok ?? false } : undefined}
             build={base ? { label: labels.base.btnBuild, active: building } : undefined}

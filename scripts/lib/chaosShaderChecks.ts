@@ -3,7 +3,8 @@
  * them, desktop / phone, highp / mediump.
  *  - stage 0 is zero-cost: with the chaos uniforms present, a calm generation's
  *    base and LOD-fade seabed programs are the M7 strings bit for bit (hashes
- *    recorded at deep-march-mvp-m7);
+ *    recorded at deep-march-mvp-m7) apart from the active sonar's one-line blend
+ *    (mix → additive overlay, SONAR_BLEND);
  *  - the chaos variant (DM_CHAOS: veins, crack light, scars) — ASCII, no array
  *    constructors, glslang ES, WebGL2 minimums, the seabed Mali-G57 budget, the
  *    fade variant still discarding first; its longest-path arithmetic over the M7
@@ -41,6 +42,9 @@ const M7_SEABED: Record<string, [string, string]> = {
   "phone, mediump": ["2233fc4e464ec26d", "3147291661193a38"],
 };
 
+/** The one line the active sonar changed since M7 (sonar.ts SONAR_OPAQUE): the M7 form is hashed. */
+const SONAR_BLEND = { now: "      outgoingLight += sonarCol; // overlaid on the lamps' image (uSonar only gates)", m7: "      outgoingLight = mix(outgoingLight, sonarCol, uSonar);" };
+const asM7 = (p: CapturedProgram): CapturedProgram => ({ ...p, fragment: p.fragment.replace(SONAR_BLEND.now, SONAR_BLEND.m7) });
 const hashOf = (p: CapturedProgram) => createHash("sha256").update(p.vertex + "\n----\n" + p.fragment).digest("hex").slice(0, 16);
 
 /** The seabed as world.ts builds it for a conserve dive (chaos uniforms present), its base + fade programs of one variant. */
@@ -83,7 +87,8 @@ function mali(bin: string, fragment: string, check: Check, t: string): MaliocSta
 function chaosSeabed(check: Check, compile: Compile, bin: string | null, lowSpec: boolean, highp: boolean): void {
   const tag = `${lowSpec ? "phone" : "desktop"}, ${highp ? "highp" : "mediump"}`;
   const calm = seabedPrograms(lowSpec, highp, false);
-  check(calm.length === 2 && calm.map(hashOf).join() === M7_SEABED[tag].join(), `stage 0: the M7 base + fade programs bit for bit (zero cost) [${tag}]`, calm.map(hashOf).join(" "));
+  const blend = calm.every((p) => p.fragment.split(SONAR_BLEND.now).length === 2);
+  check(calm.length === 2 && blend && calm.map((p) => hashOf(asM7(p))).join() === M7_SEABED[tag].join(), `stage 0: the M7 base + fade programs bit for bit but the sonar blend line (zero cost) [${tag}]`, calm.map((p) => hashOf(asM7(p))).join(" "));
   const progs = seabedPrograms(lowSpec, highp, true);
   check(progs.length === 2 && progs.every((p) => /#define DM_CHAOS/.test(p.fragment) && /attribute float aChaos;/.test(preprocess(p.vertex))), `chaos variant: base + fade programs with DM_CHAOS and aChaos [${tag}]`, `${progs.length} programs`);
   const base = bin && calm[0] ? mali(bin, calm[0].fragment, check, `[${tag}, M7 base]`) : null;

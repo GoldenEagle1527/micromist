@@ -35,6 +35,8 @@ export type DebugParts = {
     select(m: LightMode): LightMode;
     setOn(on: boolean): boolean;
   };
+  /** A sonar ping from the diver, bypassing its battery cost and cooldown. */
+  ping: () => void;
   /** The spawn-candidate / region overlay (the B key). */
   markers: { readonly visible: boolean; setVisible(on: boolean): void };
   /** Battery to full (the dive's own resource: not in any save). */
@@ -58,6 +60,8 @@ export type DebugPort = {
   light(): LightChoice;
   lightChoices(): LightChoice[];
   setLight(c: LightChoice): void;
+  /** A free sonar ping (no battery, no cooldown). */
+  ping(): void;
   markers(): boolean;
   setMarkers(on: boolean): void;
   fillBattery(): void;

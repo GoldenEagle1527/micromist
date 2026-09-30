@@ -2,8 +2,6 @@
  * Scene side of the diver's lights: turns the LightController state into
  *  - beam: the classic head-lamp SpotLight (bright centre, falls off with distance);
  *  - high: the shader-side fog-light cone (highBeam.ts), uniform with distance;
- *  - sonar: strength of the SONAR render mode (sonar.ts, drawn by the seabed
- *    shader); the lit environment goes fully dark underneath it;
  *  - off: total darkness — ambient, sun, caustics and water/haze colour fade to 0,
  *    leaving only the fluorescent plankton (particleLight.ts).
  * - turbidity (fog.ts): extinction per mode (visibility), murk colour and cone
@@ -53,7 +51,7 @@ export class LampRig {
   private readonly fog: FogVisibility | null;
   private readonly spotCone: THREE.Vector2;
   private readonly highCone: THREE.Vector2;
-  private readonly level: Record<LightMode, number> = { beam: 0, high: 0, sonar: 0 };
+  private readonly level: Record<LightMode, number> = { beam: 0, high: 0 };
   private readonly tmp = new THREE.Vector3();
 
   /** fog: visibility per mode (fog.ts parseFogParam), null = no turbidity. */
@@ -74,15 +72,10 @@ export class LampRig {
     this.spotCone = new THREE.Vector2(Math.cos(THREE.MathUtils.degToRad(s.angleDeg)), Math.cos(THREE.MathUtils.degToRad(s.angleDeg * (1 - s.penumbra))));
   }
 
-  /** SONAR mode strength (0…1). */
-  get sonar(): number {
-    return this.level.sonar;
-  }
-
   /** Call after the camera moved and its world matrix was updated. */
   update(dt: number, st: LightState, snap = false) {
     const k = snap ? 1 : 1 - Math.exp(-dt * LAMP_TUNING.fade);
-    for (const m of ["beam", "high", "sonar"] as const) {
+    for (const m of ["beam", "high"] as const) {
       const target = st.on && st.mode === m ? 1 : 0;
       this.level[m] += (target - this.level[m]) * k;
       if (Math.abs(target - this.level[m]) < 1e-3) this.level[m] = target;
@@ -102,7 +95,7 @@ export class LampRig {
     }
 
     const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
-    // beam / high keep the natural environment; off and sonar drop it (dark background)
+    // beam / high keep the natural environment; off drops it (dark background)
     const lamp = Math.min(1, beam + high);
     this.env.ambientMul = lamp;
     this.env.sunMul = lamp;

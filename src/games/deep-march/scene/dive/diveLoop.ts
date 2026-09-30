@@ -16,6 +16,7 @@ import type { TerrainOcclusion } from "../occlusion";
 import type { MarineSnow } from "../particles";
 import type { ParticleLightUniforms } from "../particleLight";
 import type { SonarPulses, SonarUniforms } from "../sonar";
+import { longPingDue } from "../sonarLong";
 import type { SpawnDebugView } from "../spawnDebug";
 import type { WallRing } from "../wallRing";
 import type { CameraSync } from "./cameraSync";
@@ -107,19 +108,22 @@ export function startDiveLoop(p: DiveParts): { stop: () => void } {
   };
 
   const sonarAndSound = (now: number, dt: number) => {
-    const { camera, rig } = p;
-    // SONAR: pulses from the diver while the mode is on; plankton dimmed underneath
-    const ls = p.survival.lights.state();
-    const pings = p.sonarPulses.update(now / 1000, ls.on && ls.mode === "sonar", camera.position);
-    if (p.wallRing) {
-      p.longPulses.update(now / 1000, ls.on && ls.mode === "sonar", camera.position);
-      p.wallRing.update(rig.sonar);
+    const { camera } = p;
+    const t = now / 1000;
+    // SONAR: the pings accepted since the last frame (key 3 / button) go out from the diver
+    const pings = p.survival.sonar.take();
+    for (let i = 0; i < pings; i++) {
+      p.sonarPulses.ping(t, camera.position);
+      if (p.wallRing && longPingDue(p.longPulses, t)) p.longPulses.ping(t, camera.position);
     }
-    if (pings > 0) p.cues.ping(now / 1000);
-    p.chaos?.sonar({ dt, pulseTime: now / 1000, time: (now - p.bornAt) / 1000, pings, sonar: rig.sonar, diver: camera.position, blocked: !p.gate.ready || (p.tide?.active() ?? false) });
+    p.sonarPulses.update(t);
+    const longAlive = p.wallRing ? (p.longPulses.update(t), p.longPulses.count > 0 ? 1 : 0) : 0;
+    p.wallRing?.update(longAlive);
+    if (pings > 0) p.cues.ping(t);
+    p.chaos?.sonar({ dt, pulseTime: t, time: (now - p.bornAt) / 1000, pings, sonar: longAlive, diver: camera.position, blocked: !p.gate.ready || (p.tide?.active() ?? false) });
     p.cues.loops(dt, p.gate.ready, p.diver);
-    p.sonar.uSonar.value = rig.sonar;
-    p.snow.setDim(1 - 0.85 * rig.sonar);
+    // additive overlay while any pulse (a ping or a ghost echo) is alive; 0 skips the shader branch
+    p.sonar.uSonar.value = p.sonarPulses.count > 0 ? 1 : 0;
   };
 
   const frame = (now: number) => {

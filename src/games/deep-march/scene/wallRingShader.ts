@@ -2,7 +2,8 @@
  * GLSL of the far proxy ring (wallRing.ts), kept free of three / asset imports so
  * test:shaders compiles it and runs the Mali budget on it.
  *
- * Only drawn in SONAR mode: beyond the terrain's view distance it shows the long
+ * Only drawn while a long sonar pulse is alive, added on top of the background:
+ * beyond the terrain's view distance it shows the long
  * pulses' echo (sonarLong.ts) — the same look as the terrain's sonar (contours with
  * screen-space AA and a minimum pixel width, blended to their mean coverage when
  * denser than a few pixels; facing / rim from the flat facet normal; bright front,
@@ -73,7 +74,7 @@ void main() {
   float k = smoothstep(uRing.x, uRing.y, dist)
           * smoothstep(uRing.z, uRing.z + uRingEdge.x, vWPos.y)
           * (1.0 - smoothstep(uRing.w - uRingEdge.y, uRing.w, vWPos.y));
-  gl_FragColor = vec4(mix(dmBackground(dir), sonarCol, uSonar * k), 1.0);
+  gl_FragColor = vec4(sonarCol * (uSonar * k), 1.0); // additive over the background dome
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
 }

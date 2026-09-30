@@ -7,8 +7,8 @@
  *   ceiling layers, blended by per-vertex region weights baked at generation time
  *   (terrain/regionWeights.ts) with noisy interfingering at the borders.
  * - Per-vertex AO attribute (from the mesher), animated caustics from above.
- * - SONAR mode (sonar.ts): expanding pulses light the terrain as cyan contour /
- *   scan lines (uSonar cross-fades it in; turbidity doesn't apply).
+ * - active SONAR (sonar.ts): each ping's expanding pulse adds cyan contour /
+ *   scan lines on top of the lamps (uSonar 1 while a pulse lives; turbidity doesn't apply).
  * - Turbidity (fog.ts): lit surfaces fade into a dark blue-green murk within tens
  *   of metres, with lamp backscatter in the cone.
  * - Detail normal (detailNormal.ts): world-space ridged creases at 2 scales stand in

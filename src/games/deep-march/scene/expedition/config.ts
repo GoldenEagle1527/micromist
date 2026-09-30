@@ -39,7 +39,7 @@ export const NODE_VIEW = {
   /** Extra glow on the target while aiming / absorbing. */
   targetGlow: 1.2,
   absorbGlow: 2.4,
-  /** Echo strength in sonar mode (nodes read as bright points on every ping). */
+  /** Sonar echo strength (nodes read as bright points on every ping). */
   sonarEcho: 0.9,
 } as const;
 

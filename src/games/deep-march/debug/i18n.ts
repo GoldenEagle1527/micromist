@@ -33,6 +33,7 @@ export type DebugDict = {
     customHere: string;
     customGo: string;
     lightMode: string;
+    ping: string;
     fillBattery: string;
     markers: string;
     chaosStage: string;
@@ -50,7 +51,7 @@ export type DebugDict = {
     occlusion: string;
     audioOn: string;
   };
-  opt: { auto: string; chaosOwn: string; fogOff: string; lightOff: string; lightBeam: string; lightHigh: string; lightSonar: string };
+  opt: { auto: string; chaosOwn: string; fogOff: string; lightOff: string; lightBeam: string; lightHigh: string };
   target: { spawn: string; base: string; crack: (n: string) => string; edge: Record<Edge, string>; corner: Record<Corner, string> };
 };
 
@@ -79,6 +80,7 @@ export const debugZh: DebugDict = {
     customHere: "取当前位置",
     customGo: "传送到自定位置（在岩石里会自动抬到水中）",
     lightMode: "灯光模式",
+    ping: "发射声呐脉冲（不耗电、无冷却）",
     fillBattery: "电池充满（不存档）",
     markers: "出生点与区域标记（B 键）",
     chaosStage: "混沌阶段（仅本次预览）",
@@ -96,7 +98,7 @@ export const debugZh: DebugDict = {
     occlusion: "遮挡剔除",
     audioOn: "声音（关 = 完全静音）",
   },
-  opt: { auto: "默认", chaosOwn: "本世代", fogOff: "无", lightOff: "关灯", lightBeam: "光束", lightHigh: "远光", lightSonar: "声呐" },
+  opt: { auto: "默认", chaosOwn: "本世代", fogOff: "无", lightOff: "关灯", lightBeam: "光束", lightHigh: "远光" },
   target: {
     spawn: "出生点",
     base: "基地",
@@ -129,6 +131,7 @@ export const debugEn: DebugDict = {
     customHere: "Use current position",
     customGo: "Teleport to custom point (lifted out of rock)",
     lightMode: "Light mode",
+    ping: "Sonar ping (free, no cooldown)",
     fillBattery: "Fill battery (not saved)",
     markers: "Spawn and region markers (B)",
     chaosStage: "Chaos stage (preview only)",
@@ -146,7 +149,7 @@ export const debugEn: DebugDict = {
     occlusion: "Occlusion culling",
     audioOn: "Sound (off = fully silent)",
   },
-  opt: { auto: "Default", chaosOwn: "This generation", fogOff: "None", lightOff: "Off", lightBeam: "Beam", lightHigh: "High beam", lightSonar: "Sonar" },
+  opt: { auto: "Default", chaosOwn: "This generation", fogOff: "None", lightOff: "Off", lightBeam: "Beam", lightHigh: "High beam" },
   target: {
     spawn: "Spawn",
     base: "Base",
