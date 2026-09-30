@@ -2,12 +2,13 @@
  * The base panel (plan M5; Q or the HUD 「基地」 button): energy, storage vs
  * tank per particle kind with deposit / withdraw / 放流 (release, unlimited),
  * the buildings with demolish (full refund, confirmed), and the tide (唤潮)
- * stub — its requirements and the forecast ring wall; the sequence is M7's.
+ * stub — its requirements and the forecast (TideForecastCard); the sequence is M7's.
  */
 import { useState } from "react";
 import type { BaseCommand, BaseTelemetry } from "../../scene/base/telemetry";
 import type { ExpeditionDict } from "../expedition/i18n";
 import type { BaseDict } from "./i18n";
+import { TideForecastCard } from "./TideForecastCard";
 
 type Props = { base: BaseTelemetry; labels: BaseDict; kinds: ExpeditionDict["kinds"]; send: (cmd: BaseCommand) => void };
 
@@ -132,7 +133,7 @@ function Tide({ base, labels, send }: { base: BaseTelemetry; labels: BaseDict; s
         </button>
       </div>
       <p className="dm-base-note">{labels.tideNeeds(t.energy, t.energyNeeded, t.dives, t.divesNeeded)}</p>
-      <p className="dm-base-note">{labels.tideForecast(f.m, f.thickness)}</p>
+      {f ? <TideForecastCard forecast={f} labels={labels.forecast} /> : null}
       <p className="dm-base-note dim">{labels.tideSoon}</p>
     </div>
   );

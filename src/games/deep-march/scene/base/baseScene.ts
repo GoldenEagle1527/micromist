@@ -177,7 +177,7 @@ export class BaseScene {
       build: { active: s.active, kind: s.kind, reason: s.spot?.reason ?? null, ok: s.spot?.reason === "ok", shortfall: port.shortfall(s.kind) },
       panel: this.panel,
       tide: port.tide(),
-      forecast: port.forecast(),
+      forecast: this.panel ? port.forecast() : null,
       notice: this.notice,
       kinds: port.activeKinds,
       structures: this.structures,

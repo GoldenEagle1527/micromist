@@ -23,7 +23,8 @@ export type BaseTelemetry = {
   build: { active: boolean; kind: StructureKind; reason: BuildReason | null; ok: boolean; shortfall: readonly number[] };
   panel: boolean;
   tide: TideReadiness;
-  forecast: TideForecast;
+  /** The tide forecast (M6): computed only while the panel shows it, else null. */
+  forecast: TideForecast | null;
   notice: BaseNotice | null;
   /** Particle kinds of this world, in storage order. */
   kinds: readonly number[];
