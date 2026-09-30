@@ -18,7 +18,7 @@ import { SAVE_VERSION, isReadOnlySave, type WorldSave } from "../save/schema";
 import { ConserveSession } from "./conserveSession";
 import type { BlockedReport, OpenedReport } from "./openReport";
 import { summarizeSites, type SiteSummary } from "../world/siteSummary";
-import { wallStateOf, type WallState } from "../chaos/wallModel";
+import { wallStateOfChaos, type WallState } from "../chaos/wallModel";
 
 export type OpenIntent = { kind: "continue" } | { kind: "new"; seedText: string };
 
@@ -67,7 +67,7 @@ function blocked(kind: BlockedReport["kind"], slotId: string, reason: string): O
 
 function startSession(save: WorldSave, report: ReportBuilder, opts: OpenOptions): OpenOutcome {
   const ledger = ledgerOf(save);
-  const session = new ConserveSession(save, ledger, (table) => report(ledger, summarizeSites(table), wallStateOf(table.allocInput, save.totals)), opts);
+  const session = new ConserveSession(save, ledger, (table) => report(ledger, summarizeSites(table), wallStateOfChaos(save.chaos)), opts);
   return { ok: true, session };
 }
 

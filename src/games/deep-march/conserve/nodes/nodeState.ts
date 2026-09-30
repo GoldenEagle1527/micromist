@@ -67,6 +67,18 @@ export class NodeState {
     return this.harvested.size;
   }
 
+  /** Per site of the table (row-major): absorbed / initial node particles, 0 … 1 (0 for a site without nodes). */
+  siteHarvest(): number[] {
+    return this.table.sites.map((sn) => {
+      let total = 0, left = 0;
+      for (const n of sn.nodes) {
+        total += n.amount;
+        left += this.remaining(n.id);
+      }
+      return total > 0 ? (total - left) / total : 0;
+    });
+  }
+
   toSave(): NodeStateSave {
     const partial = [...this.partial.entries()].sort((a, b) => a[0] - b[0]).map(([id, left]): [number, number] => [id, left]);
     return { harvested: encodeIdSet(this.harvested), partial };

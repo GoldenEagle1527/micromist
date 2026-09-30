@@ -8,6 +8,7 @@ import { isCountVector, isNumberVector } from "../particles/particleVector";
 import type { RawSave } from "./migrate";
 import { SAVE_VERSION, type EndingA, type WorldSave } from "./schema";
 import { baseProblem } from "./validateBase";
+import { chaosProblem } from "./validateChaos";
 
 export type ValidateResult = { ok: true; save: WorldSave } | { ok: false; reason: string };
 
@@ -68,7 +69,7 @@ function extrasProblem(raw: RawSave): string | null {
 }
 
 export function validateSave(raw: RawSave): ValidateResult {
-  const problem = fieldProblem(raw) ?? ledgerProblem(raw) ?? generationProblem(raw) ?? cachesProblem(raw) ?? baseProblem(raw.base) ?? extrasProblem(raw);
+  const problem = fieldProblem(raw) ?? ledgerProblem(raw) ?? generationProblem(raw) ?? cachesProblem(raw) ?? baseProblem(raw.base) ?? chaosProblem(raw.chaos) ?? extrasProblem(raw);
   if (problem) return { ok: false, reason: `invalid ${problem}` };
   return { ok: true, save: raw as unknown as WorldSave };
 }

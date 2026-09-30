@@ -52,8 +52,18 @@ export type BaseView = {
 
 export type TideReadiness = { energy: number; energyNeeded: number; dives: number; divesNeeded: number; ready: boolean };
 
-/** The ring wall the next tide would build if it came now (m = Σ R' / Σ N, R' = N − P − B). */
-export type TideForecast = { m: number; thickness: number };
+/**
+ * The chaos the next tide would bring if it came now (m = Σ R' / Σ N, R' = N − P − B):
+ * m, stage (0 静海 … 5 直视) and wall thickness (m) next to this generation's, and the cracks.
+ */
+export type TideForecast = {
+  m: number;
+  stage: number;
+  thickness: number;
+  now: { m: number; stage: number; thickness: number };
+  /** Would open (new or a scar reopening) / heal; open and through (passable) after the tide. */
+  cracks: { opening: number; healing: number; open: number; through: number };
+};
 
 export type BaseAction = { ok: true; id?: number } | { ok: false; reason: PlacementReason | "unknown" };
 

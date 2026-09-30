@@ -6,8 +6,13 @@
  *               input the generation's site table was (implicitly) built from.
  *   2 → 3 (M4): every node still full (harvested "", partial []), no lost caches
  *               (a lost pool no cache claims is moved to S by reconcileCaches.ts).
+ *   3 → 4 (M5): generation.dives from the dives started, no base.
+ *   4 → 5 (M6): chaos from generation.allocInput (m, stage, thickness), no
+ *               cracks yet (no tide has run before M7).
  */
+import { genesisChaos } from "../chaos/model";
 import { PARTICLE_TYPE_COUNT } from "../particles/particleTypes";
+import { isCountVector } from "../particles/particleVector";
 
 export type RawSave = Record<string, unknown>;
 export type Migration = (raw: RawSave) => RawSave;
@@ -29,8 +34,15 @@ const divesOfRaw = (raw: RawSave): unknown => (isRecord(raw.stats) ? raw.stats.d
 
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
 
+/** The generation's chaos from the raw input (malformed stays missing for validate.ts). */
+function chaosOfRaw(raw: RawSave): unknown {
+  const r = isRecord(raw.generation) ? raw.generation.allocInput : undefined;
+  return isCountVector(raw.totals) && isCountVector(r) ? genesisChaos(r, raw.totals) : undefined;
+}
+
 export const SAVE_MIGRATIONS: Readonly<Record<number, Migration>> = {
   1: (raw) => ({ ...raw, generation: { allocInput: allocInputOfRaw(raw) } }),
   2: (raw) => ({ ...raw, generation: isRecord(raw.generation) ? { ...raw.generation, harvested: "", partial: [] } : raw.generation, caches: [] }),
   3: (raw) => ({ ...raw, generation: isRecord(raw.generation) ? { ...raw.generation, dives: divesOfRaw(raw) } : raw.generation, base: null }),
+  4: (raw) => ({ ...raw, chaos: chaosOfRaw(raw) }),
 };

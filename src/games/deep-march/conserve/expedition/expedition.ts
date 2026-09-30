@@ -127,6 +127,11 @@ export class Expedition implements ExpeditionPort {
     return this.rev;
   }
 
+  /** Per site: the share of its node particles absorbed this generation (where the cracks lean, chaos/cracks.ts). */
+  siteHarvest(): number[] {
+    return this.nodes.siteHarvest();
+  }
+
   toSave(): ExpeditionSave {
     return { ...this.nodes.toSave(), caches: this.list.map((c) => ({ ...c, pos: [...c.pos] as LostCache["pos"], contents: c.contents.slice() })) };
   }

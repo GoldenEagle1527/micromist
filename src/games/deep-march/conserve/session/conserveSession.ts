@@ -13,7 +13,8 @@ import { writeSlot } from "../save/saveRepository";
 import { createSaveWriter, systemClock, type SaveWriter, type WriterClock } from "../save/saveWriter";
 import type { WorldSave } from "../save/schema";
 import { buildSiteTable, type SiteTable } from "../world/siteTable";
-import { wallStateOf, type WallState } from "../chaos/wallModel";
+import { wallStateOfChaos, type WallState } from "../chaos/wallModel";
+import type { ChaosState } from "../chaos/model";
 import { buildNodeTable, type NodeTable } from "../nodes/nodeTable";
 import { NodeState } from "../nodes/nodeState";
 import { Expedition } from "../expedition/expedition";
@@ -71,9 +72,14 @@ export class ConserveSession {
     return this.table;
   }
 
-  /** This generation's ring wall (thickness from m = Σ R / Σ N; cracks from M6). */
+  /** This generation's chaos (m, stage, wall thickness, cracks): set at the tide, fixed until the next. */
+  get chaos(): ChaosState {
+    return this.header.chaos;
+  }
+
+  /** This generation's ring wall, from its chaos (thickness, open cracks). */
   get wall(): WallState {
-    return wallStateOf(this.header.generation.allocInput, this.header.totals);
+    return wallStateOfChaos(this.header.chaos);
   }
 
   /** This generation's resource nodes (from the site table's node shares). */
@@ -98,6 +104,7 @@ export class ConserveSession {
       const h = this.header;
       this.home = new Base({
         ledger: this.ledger, save: h.base, table: this.siteTable, gen: h.gen, dives: h.generation.dives, totals: h.totals,
+        chaos: { now: () => this.header.chaos, seed: h.seed, size: h.size, siteHarvest: () => this.expedition.siteHarvest() },
         onCommit: () => this.writer.flush(),
         onDirty: () => this.writer.markDirty(),
         onDive: () => this.countDive(),
