@@ -40,7 +40,7 @@ export function noticeText(n: BaseNotice, labels: BaseDict): string {
     case "deposited":
       return labels.moved("deposit", n.total);
     case "tide":
-      return labels.tideSoon;
+      return n.ok ? labels.tideCalled : n.away ? labels.tideAway : labels.tideNotReady;
   }
 }
 

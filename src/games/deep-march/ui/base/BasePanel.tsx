@@ -128,13 +128,13 @@ function Tide({ base, labels, send }: { base: BaseTelemetry; labels: BaseDict; s
     <div className="dm-base-section dm-base-tide">
       <div className="dm-base-row-head">
         <b>{labels.tideTitle}</b>
-        <button type="button" className="dm-base-btn" disabled={!t.ready} onClick={() => send({ type: "tide" })}>
+        <button type="button" className="dm-base-btn" disabled={!t.ready || !base.atBase || base.tideActive} onClick={() => send({ type: "tide" })}>
           {labels.tideBtn}
         </button>
       </div>
       <p className="dm-base-note">{labels.tideNeeds(t.energy, t.energyNeeded, t.dives, t.divesNeeded)}</p>
       {f ? <TideForecastCard forecast={f} labels={labels.forecast} /> : null}
-      <p className="dm-base-note dim">{labels.tideSoon}</p>
+      {base.tideActive ? <p className="dm-base-note">{labels.tideRunning}</p> : !base.atBase ? <p className="dm-base-note dim">{labels.tideAway}</p> : null}
     </div>
   );
 }
