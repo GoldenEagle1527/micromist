@@ -8,23 +8,25 @@ This folder is its **own bundle chunk**. The shared game (free dive, terrain, re
 
 | Folder | Responsibility | May import |
 |---|---|---|
-| `config.ts` | Every tunable of the mode: genesis totals, lander cargo, world size, save slot and throttle, repair order; biomes (order, frequency, signature particle), affinity matrix A, site-table constants (γ, allocation jitter, edge factor, β, δmax), in-site split; the wall model (`WALL`: 160 / 24 m, m_full 0.95, m_break 0.78) | types only |
+| `config.ts` | Every tunable of the mode: genesis totals, lander cargo, world size, save slot and throttle, repair order; biomes (order, frequency, signature particle), affinity matrix A, site-table constants (γ, allocation jitter, edge factor, β, δmax), in-site split; the wall model (`WALL`: 160 / 24 m, m_full 0.95, m_break 0.78); M4: node sizes (`NODES`: 20 … 80, mean 50, ≤ 64 per site), each kind's preferred surface (`NODE_SURFACE`), the tank (`TANK`: 200, a node empties in 2 s, a cache at 100 / s), `CACHES.max` 5 | types only |
 | `particles/` | The 7 particle kinds, in fixed storage order, and particle count vectors | – |
 | `ledger/` | `ParticleLedger`: the five pools W · P · B · S · L and strict conservation (Σ pools = N_k after every operation). Transfers are validated in full, all-or-nothing, and emit events | `particles/` |
 | `world/` | World rules on top of the ledger. Genesis (all particles in the world, lander cargo already in the base). M2: the generation's allocation input R = N − P − B (`allocInput.ts`) and the **site table** (`siteTable.ts`): per-site hashes (`siteHash.ts`), region draw (`regionDraw.ts`), largest-remainder allocation (`allocate.ts`), in-site split (`siteSplit.ts`), rock → terrain bias δ (`terrainBias.ts`), summary (`siteSummary.ts`) | `ledger/`, `particles/`, `config` |
 | `chaos/` | M3: the ring wall's model (`wallModel.ts`, design doc §4.1): m = Σ R / Σ N, σ = clamp((m − 0.78) / 0.17), T = 24 + 136 · smoothstep(σ) → `WallState` { m, σ, thickness, cracks } (cracks: M6) | `particles/`, `config` |
-| `save/` | Save format v2 (`schema.ts`: v1 + `generation.allocInput`); new save; migrations (`migrate.ts` runs `migrations.ts`: 1 → 2); structural validation; `reconcile.ts` (the totals win, differences go to the suspended pool); slot read/write (`saveRepository.ts`); throttled writer (injected clock) | `ledger/`, `world/`, `particles/`, `config` |
-| `session/` | A world opened for a dive (`ConserveSession`): continue or create, repair on load, read-only annihilated worlds (D14), dive count, throttled and on-close writes, the generation's site table (built once from the save) and ring wall (`session.wall`). Setup peek (`peekSlot.ts`) | `save/`, `ledger/`, `world/`, `chaos/`, `config` |
+| `nodes/` | M4: the generation's resource nodes. `nodeTable.ts` splits each site's node share (the site table's `split.nodes`) into nodes of 20 … 80 particles (id = site · 64 + ordinal, a uint32 hash for the terrain's surface search); `nodeState.ts` = particles left per node, saved as a harvested bitset (`bitset.ts`, own base64) + partial counts | `world/`, `particles/`, `config` |
+| `expedition/` | M4: `Expedition` implements `ExpeditionPort` (`port.ts`, the scene's type-only view): absorb a node (W → P), the tank limit, death = everything carried becomes a lost cache (P → L; the oldest of 6 → S), retrieve a cache (L → P). `flow.ts` meters whole particles per frame, `caches.ts` the cache list rules | `ledger/`, `nodes/`, `particles/`, `config`; types from `save/` |
+| `save/` | Save format v3 (`schema.ts`: v2 + `generation.harvested` / `partial` + `caches`); new save; migrations (`migrate.ts` runs `migrations.ts`: 1 → 2 → 3); structural validation; `reconcile.ts` (the totals win, differences go to the suspended pool); `reconcileCaches.ts` (caches must equal pool L; the difference goes L ↔ S, repair cause "caches"); slot read/write (`saveRepository.ts`); throttled writer (injected clock) | `ledger/`, `world/`, `particles/`, `config` |
+| `session/` | A world opened for a dive (`ConserveSession`): continue or create, repair on load, read-only annihilated worlds (D14), dive count, throttled and on-close writes, the generation's site table (built once from the save), ring wall (`session.wall`), node table and expedition (`session.expedition`; a death writes at once). Setup peek (`peekSlot.ts`) | `save/`, `ledger/`, `world/`, `chaos/`, `nodes/`, `expedition/`, `config` |
 | `platform/` | The only browser/storage glue: `gameStoreBackend.ts` (platform game-store, key `deep-march/save/<slot>`), `pageLifecycle.ts` (flush on page hide). Adapter to the terrain: `terrainLayout.ts` (site table + wall → `terrain/siteLayout` data incl. `wall` { thickness, cracks }, type-only import) | `lib/game-store`, `settings`; types from `terrain/` |
 | `loading/` | The loading-registry step 「世界存档」, which shows the open report (incl. the wall line 「界壁厚 160 米 · 稳固」) | types from `ui/loading/steps` |
 | `index.ts` | Public API of the chunk | everything above |
 
 Rules, checked by `test:modes`:
-- `particles`, `ledger`, `world`, `chaos`, `save` and `session` are pure logic. They import nothing outside `conserve/` and never touch the DOM, storage or rendering.
+- `particles`, `ledger`, `world`, `chaos`, `nodes`, `expedition`, `save` and `session` are pure logic. They import nothing outside `conserve/` and never touch the DOM, storage or rendering.
 - No conserve file imports `three`, `react` or `scene/`. Rendering for later milestones lives in the shared scene code and reads conserve state through its API.
 - No conserve file is longer than 200 lines.
 
-## Data flow (M1 – M3)
+## Data flow (M1 – M4)
 
 ```
 Setup screen (ui/setup/SetupScreen)
@@ -54,6 +56,32 @@ Play (modes/useConserveDive)
   page hidden → session.flush();  leave dive → session.close() (final write)
 ```
 
+### M4: nodes, tank, lost caches
+
+```
+session.nodeTable  = buildNodeTable(siteTable)        (per site: split.nodes → nodes of 20 … 80)
+session.expedition = new Expedition({ ledger, NodeState.fromSave(table, generation), caches })
+  → useConserveDive → createDeepMarch({ …, expedition })        (the free dive passes null)
+      scene/expedition/expeditionScene.ts
+        placement.ts   sites within 420 m, nearest first, time-sliced (2.5 / 1.5 ms per frame);
+                       each node on a deterministic surface anchor (terrain/surfaceAnchor.ts, seeded
+                       by its hash: same spot on every device, in any visiting order)
+        nodeView.ts    caches + nearest nodes within 170 m → one InstancedMesh (≤ 96, 87 tris each),
+                       shrinking into the rock over the last 50 m (no LOD, no popping)
+        interaction.ts aim with the view / lamp → the target lights up → hold E / left mouse /
+                       「吸取」: port.absorb (W → P) or port.retrieve (L → P); battery drain 0.5 / s;
+                       blocked when the tank is full or the battery is flat
+        recall.ts      hold X / ⟲ 2 s → black → port.loseCarried at the nearest open water
+                       (terrain/openWater.ts, P → L) → back to the entry point, battery full
+        beacon.ts      every lost cache flashes and ticks (sonar clip, by distance) every 5 s
+        survival       resource "tank" (capacity 200) mirrors pool P for the HUD
+      HUD: ui/expedition (tank gauge, aim prompt, compass cache marks, recall button, 「吸取」 fan
+           button); loading map: cache dots
+  save: generation.harvested (bitset) + partial [[id, left]] + caches [{ id, pos, gen, contents }]
+```
+
+Conservation: every particle moves through `ParticleLedger.transfer`, so Σ W + P + B + S + L = N after every frame. The node state and the caches are derived views that are saved with the ledger. On load, `reconcileCaches` makes the caches equal pool L. A node that cannot be anchored is simply not drawn, and its particles stay in W.
+
 The terrain side (`terrain/siteLayout.ts`, `regions.ts`, `density.ts`, `wallGeometry.ts`, `wallDensity.ts`, `wallRing.ts`, `chunks.ts`, `spawn.ts`, `scene/diver.ts`, `scene/wallRing.ts`, `ui/loading/regionMap.ts`) knows only the mode-agnostic "explicit finite site layout" — plain typed arrays, sent to the mesher workers in `init`. Without a layout every new term is an identity, so the free dive stays bit-exact (`test:free-baseline`, and `test:streaming` checks the free request sequence).
 
 Site table (design doc §3.2, §3.3, §5.2), a pure function of (seed, gen, R, frozen):
@@ -80,15 +108,16 @@ Invariants:
 
 | Script | Covers |
 |---|---|
-| `test:ledger` | Kinds and vectors, genesis, every refusal, 10⁵ random operations conserve, state round trip |
-| `test:save` | New save, round trip, game-store key, migrations, validation, reconcile, throttled writer, sessions (new / continue / repaired / annihilated / unreadable / missing), setup peek |
+| `test:ledger` | Kinds and vectors, genesis, every refusal, 10⁵ random operations conserve, state round trip; the expedition (absorb, tank limit, loss, eviction, retrieval) conserves |
+| `test:save` | New save, round trip, game-store key, migrations (incl. v2 → v3), validation, reconcile, cache reconcile, throttled writer, sessions (new / continue / repaired / annihilated / unreadable / missing, expedition round trip), setup peek |
+| `test:nodes` | Node table (Σ = the site's node share, sizes, ids, determinism), node state and bitset codec; placement on the terrain (deterministic in any order, on the surface, surface rules, in disc / region / world, spacing, attempt cost), open water for caches; the draw (one InstancedMesh, ≤ 10k triangles, busiest spot of whole genesis worlds within the instance cap, selection and prefetch radii: no popping); absorbing, blocks, battery drain, recall timing, loss and retrieval (Σ = N every frame), beacon timing and gain |
 | `test:loading` | The 「世界存档」 step: order, done / error states, dive gate, site-table and ring-wall lines, zh and en strings; the bounded region map |
 | `test:world` | Site table: biome vocabulary = terrain regions, hashes, largest remainder, split, δ monotone and clamped, region draw monotone in R, determinism, Σ = R, frozen π = 0, edge factor; terrain layout: centred, region field and density (δ term exact, free dive untouched far outside), spawn on an inner site, hard edge; δ-term cost ≤ 2 % per column |
 | `test:modes` | Mode setting, setup start plan, bundle separation, module boundaries, file size |
 | `test:free-baseline` | Free-dive terrain bit-exact against the fixture recorded before the conserve work |
 | `test:wall` | Wall model (monotone, 160 / 24 m, stage table, genesis 160 m); geometry (locate / point, arc length, facets C0 / periodic / in range, cracks); density (inner face independent of T, solid through T, void beyond, exact identity past skipSd, rawClass and bounds); diver stopped by the rock; meshes LOD 0–3 (nothing past the outline, face within ¼ cell of level 0: no popping), wall material weight; far ring (≤ 2.2k triangles, one draw, on the facets, starts at the far plane); cost (non-wall columns identical and ≤ +2 %, wall columns ≤ +10 %, world ≤ +4 %) — run alone |
 | `test:wasm`, `test:bricks`, `test:streaming` | Bounded world (genesis wall, ±δmax, a thin cracked wall): δ and wall terms JS = WASM bit-exact; conservative bounds contain the density (1.5·10⁵ points, half near the edge / in the wall), bricks = dense on edge and wall columns; no request outside the world, free request sequence unchanged |
-| `test:shaders`, `test:materials` | The wall's material slot (palettes 12 / 13) in the seabed programs; the far ring's programs (glslang ES, no samplers) and its Mali-G57 budget |
+| `test:shaders`, `test:materials` | The wall's material slot (palettes 12 / 13) in the seabed programs; the far ring's and the node material's programs (glslang ES, no samplers) and their Mali-G57 budgets (nodes: arith ≤ 20, LS ≤ 8, no textures) |
 
 ## Adding to this mode (later milestones)
 
