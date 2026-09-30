@@ -797,7 +797,7 @@ export function generateColumnMesh(
   for (let q = surfaceVerts; q < vcount; q++) ao[q] = ao[skirtSrc[q - surfaceVerts]];
   // macro-region weights for the material system: global grid → identical at every LOD
   // (classification-only info jobs don't render the mesh)
-  const region = withInfo ? new Uint8Array(0) : packRegionWeights(positions, surfaceVerts, vcount, new RegionWeightSampler(field.regions, regionGridSpacing(field.settings.worldScale)), skirtSrc, field.wallWeight);
+  const region = withInfo ? new Uint8Array(0) : packRegionWeights(positions, surfaceVerts, vcount, new RegionWeightSampler(field.regions, regionGridSpacing(field.settings.worldScale)), skirtSrc, field.wallWeight, field.crackWeight);
   let info: ChunkTerrainInfo | null = null;
   let infoMs = 0;
   if (withInfo) {

@@ -54,6 +54,7 @@ import { MACRO, REGION, REGION_COUNT, createRegionField, createRegionSample, sca
 import { layoutBiasRange, layoutRect, type SiteLayout } from "./siteLayout";
 import { createWallTerm, type WallTerm } from "./wallDensity";
 import { createWallShape } from "./wallGeometry";
+import { createCrackWeight, type CrackWeight } from "./crackWeight";
 
 export type DensityField = {
   settings: TerrainSettings;
@@ -98,6 +99,8 @@ export type DensityField = {
   wallMask: (x0: number, z0: number, x1: number, z1: number) => number;
   /** Wall material weight at a world position (0 … 1); null without a wall. */
   wallWeight: ((x: number, y: number, z: number) => number) | null;
+  /** Crack glow weight at a world position (0 … 1, crackWeight.ts); null without open cracks. */
+  crackWeight: CrackWeight | null;
 };
 
 /** Every region bit set. */
@@ -703,6 +706,7 @@ export function createDensityField(
   // --- ring wall: tMin = a lower bound of the terrain's raw value at any height ---
   let wallMask = (_x0: number, _z0: number, _x1: number, _z1: number) => 0;
   let wallWeight: DensityField["wallWeight"] = null;
+  let crackWeight: CrackWeight | null = null;
   if (wallShape) {
     let tMin = Infinity;
     for (let y = -80; y <= 60; y += 0.25) for (let r = 0; r < R6; r++) {
@@ -721,6 +725,7 @@ export function createDensityField(
       wallShape.locate(x * invS, z * invS, loc);
       return w.weight(loc[0], loc[1], y * invS);
     };
+    crackWeight = createCrackWeight(wallShape, invS);
   }
   const allMask = ALL_REGIONS_MASK | (wallShape ? WALL_BIT : 0);
   const bounds = (y: number, out: Float64Array) => boundsForMask(allMask, y, out);
@@ -734,6 +739,6 @@ export function createDensityField(
 
   return {
     settings: s, seed, regions, sample, sampleRaw, sampleRawCoarse, rawClass, smoothStep, smoothWeights: SW, bounds, boundsForMask, rawBoundsForMask, gradient,
-    wall, wallMask, wallWeight,
+    wall, wallMask, wallWeight, crackWeight,
   };
 }

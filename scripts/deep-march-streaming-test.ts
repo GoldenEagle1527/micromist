@@ -12,7 +12,9 @@
  *     bounded world existed (scripts/fixtures/deep-march-free-streaming.json);
  *  5. bounded world (conserve site table → explicit layout): no request lies
  *     wholly outside the world, edge columns are built, the loading gate passes
- *     next to the edge, coverage never counts points outside.
+ *     next to the edge, coverage never counts points outside;
+ *  6. cracks (M8): without them the M7 sequence bit for bit; with one, extra
+ *     columns only in its reach rectangle.
  * Run: npm run test:streaming
  */
 import { readFileSync } from "node:fs";
@@ -25,6 +27,7 @@ import { createDensityField } from "../src/games/deep-march/terrain/density";
 import { MACRO } from "../src/games/deep-march/terrain/regions";
 import { insideRect, layoutRect, rectOverlaps } from "../src/games/deep-march/terrain/siteLayout";
 import { createSimManager, requestSequence } from "./lib/streamingSim";
+import { crackStreamingChecks } from "./lib/crackStreamingChecks";
 
 let failed = 0;
 const check = (ok: boolean, name: string, detail: string) => {
@@ -119,6 +122,7 @@ console.log("bounded world (seed 7, 10 × 10 site table)");
     check(r.path.every((p) => insideRect(rect, p.x, p.z)), `${name} swim stayed inside`, `last x ${r.path[r.path.length - 1].x.toFixed(0)}`);
   }
 }
+crackStreamingChecks(check);
 if (failed) {
   console.log(`${failed} check(s) FAILED`);
   process.exit(1);
