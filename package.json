@@ -31,6 +31,7 @@
     "test:audio": "esbuild scripts/deep-march-audio-test.ts --bundle --platform=node --outfile=node_modules/.cache/dm-audio-test.cjs --define:import.meta.env.BASE_URL='\"/\"' --log-level=warning && node node_modules/.cache/dm-audio-test.cjs",
     "test:sfx": "node scripts/deep-march-sfx-sync-test.mjs",
     "test:free-baseline": "esbuild scripts/deep-march-free-baseline-test.ts --bundle --platform=node --outfile=node_modules/.cache/dm-free-baseline-test.cjs --log-level=warning && node node_modules/.cache/dm-free-baseline-test.cjs",
+    "test:ledger": "esbuild scripts/deep-march-ledger-test.ts --bundle --platform=node --outfile=node_modules/.cache/dm-ledger-test.cjs --log-level=warning && node node_modules/.cache/dm-ledger-test.cjs",
     "test:regions": "esbuild scripts/deep-march-regions-test.ts --bundle --platform=node --outfile=node_modules/.cache/dm-regions-test.cjs --log-level=warning && node node_modules/.cache/dm-regions-test.cjs",
     "cf-typegen": "wrangler types --include-runtime false",
     "deploy:staging": "npm run build && node scripts/patch-staging-wrangler.mjs && wrangler deploy"
