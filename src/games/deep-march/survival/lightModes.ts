@@ -7,11 +7,11 @@ import { SURVIVAL_TUNING } from "./config";
 import type { Equipment, ItemTag } from "./items";
 import type { ResourceSystem } from "./resources";
 
-export type LightMode = "beam" | "high" | "sonar";
-export const LIGHT_MODES: readonly LightMode[] = ["beam", "high", "sonar"];
+export type LightMode = "beam" | "high";
+export const LIGHT_MODES: readonly LightMode[] = ["beam", "high"];
 
-/** Gear each mode needs. */
-const REQUIRES: Record<LightMode, ItemTag> = { beam: "headLamp", high: "headLamp", sonar: "sonar" };
+/** Gear each mode needs (the sonar is not a light: sonarPing.ts). */
+const REQUIRES: Record<LightMode, ItemTag> = { beam: "headLamp", high: "headLamp" };
 
 export type LightState = {
   mode: LightMode;
@@ -87,7 +87,7 @@ export class LightController {
     return this.select(list[(i + 1) % list.length]);
   }
 
-  /** 1 / 2 / 3: pick a mode directly (ignored if the gear is missing); switches the light on. */
+  /** 1 / 2: pick a mode directly (ignored if the gear is missing); switches the light on. */
   select(m: LightMode): LightMode {
     if (!this.isAvailable(m)) return this.mode;
     this.mode = m;

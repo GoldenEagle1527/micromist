@@ -80,7 +80,7 @@ import { chaosPrograms } from "./lib/chaosShaderChecks";
 
 /**
  * Far proxy ring on Mali-G57: no textures, a handful of pulses — a small fraction of
- * the seabed's budget (it covers a thin band of the screen, sonar mode only).
+ * the seabed's budget (it covers a thin band of the screen, only after a ping).
  */
 const RING_MALI_BUDGET = { stack: 0, longestLS: 4, longestTex: 0, longestArith: 12 };
 

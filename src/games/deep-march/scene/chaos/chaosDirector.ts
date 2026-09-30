@@ -41,6 +41,7 @@ export type ChaosDirectorDeps = {
 };
 
 export type ChaosFrameInput = { dt: number; time: number; camera: THREE.Vector3; suppressed: boolean };
+/** pings: the diver's pings this frame (key 3); sonar: 1 while a long pulse is alive (the omen can be seen), else 0. */
 export type ChaosSonarInput = { dt: number; pulseTime: number; time: number; pings: number; sonar: number; diver: THREE.Vector3; blocked: boolean };
 
 /** Whether a generation's terrain needs the chaos program (stage ≥ 1, or a scar). */

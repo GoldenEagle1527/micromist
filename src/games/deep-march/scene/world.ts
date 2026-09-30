@@ -69,7 +69,7 @@ export function createDeepMarch(host: HTMLElement, opts: DeepMarchOptions): Deep
   const audio = createDiveAudio(opts.audioContext ?? null, { sound: opts.sound });
   const cues = new DiveCues(survival, audio);
   const rig = new LampRig(camera, fogVis);
-  // SONAR mode: pulse scheduler + seabed-shader uniforms (sonar.ts)
+  // active sonar: pings (survival/sonarPing.ts) → pulses + seabed-shader uniforms (sonar.ts)
   const sonarPulses = new SonarPulses(lowSpec ? SONAR_TUNING.maxPulsesLow : SONAR_TUNING.maxPulses);
   const sonar = createSonarUniforms(sonarPulses);
   const particleLights = createParticleLightUniforms();
@@ -167,7 +167,7 @@ export function createDeepMarch(host: HTMLElement, opts: DeepMarchOptions): Deep
       chaos, warm: (ms) => health.warm(ms, [], camera, scene),
     });
   }
-  // the wall ring's program too (drawn only in sonar mode: no hitch on the first ping); conserve: the tide's
+  // the wall ring's program too (drawn only after a ping: no hitch on the first one); conserve: the tide's
   const warmMaterials = [seabedNow.material, seabedNow.fadeMaterial().material, ...(wallRing ? [wallRing.mesh.material as THREE.Material] : [])];
   if (tide) warmMaterials.push(seabed.tideMaterial().material);
   health.warm(warmMaterials, [...(conserve?.warmObjects() ?? []), ...(tide?.warmObjects ?? [])], camera, scene);
@@ -196,6 +196,7 @@ export function createDeepMarch(host: HTMLElement, opts: DeepMarchOptions): Deep
     onLampToggle: controls.toggleLamp,
     onLightCycle: controls.cycleLight,
     onLightSelect: controls.selectLight,
+    onPing: controls.ping,
     onMuteToggle: () => opts.onMuteToggle?.(),
     onLockChange: () => updatePrompt(),
     holdKeys: conserve?.holdKeys(),

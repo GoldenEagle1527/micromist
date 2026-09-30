@@ -1,7 +1,7 @@
 /**
  * Renders the omen (omen.ts OmenChain) as a sonar-only silhouette: one additive,
  * depth-tested draw of ≈ 1.2k triangles (omenGeometry.ts), lit by the long sonar
- * pulses (sonarLong.ts). Not drawn unless the omen is present and the sonar is on.
+ * pulses (sonarLong.ts). Not drawn unless the omen is present and a long pulse is alive.
  */
 import * as THREE from "three";
 import type { SonarPulses, SonarUniforms } from "../sonar";
@@ -13,7 +13,7 @@ import { OMEN_FRAG, OMEN_VERT } from "./omenShader";
 export type OmenMesh = {
   mesh: THREE.Mesh;
   triangles: number;
-  /** Per frame: the omen state, the sonar strength (0 … 1) and the time (s). */
+  /** Per frame: the omen state, 1 while a long pulse is alive (else 0) and the time (s). */
   update: (f: Readonly<OmenFrame>, sonar: number, time: number) => void;
   dispose: () => void;
 };

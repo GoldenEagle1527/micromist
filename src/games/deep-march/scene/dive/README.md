@@ -13,7 +13,7 @@
 | `conserveLayer.ts` | The conserve mode in the dive: `ExpeditionScene` + `BaseScene`, their per-frame input (base presses first, then absorbing), hold keys, respawn; the tide's lock (no build / recall in the show) and hold (particle-ized). Never built in the free dive |
 | `tideWiring.ts` | Conserve with a tide port: the tide's director (scene/tide) wired to the loop's and the handle's parts, which it rebinds at the switch to gen + 1 |
 | `debugWiring.ts` | Staging only: the debug panel's runtime port (`debug/port.ts`: teleport, light, overlay, battery) built from what the dive lends, when the page passes the factory (`DeepMarchOptions.debug`); production builds never do |
-| `diveCues.ts` | Battery warnings, bumps, sonar pings, ambience / swim loops; light controls with their cues |
+| `diveCues.ts` | Battery warnings, bumps, sonar pings, ambience / swim loops; light and ping controls (key 3) with their cues |
 | `cameraSync.ts` | First-person camera: sprint FOV, bob, stroke roll |
 | `hudChips.ts` | 4 Hz terrain / region chips (with hold / hysteresis), fps, the stats line |
 | `diveLoop.ts` | The per-frame loop in its fixed order (the tide, if any, right after occlusion; the chaos, if any, after the water look and after the sonar); pause while hidden |

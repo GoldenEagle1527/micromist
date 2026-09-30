@@ -14,11 +14,17 @@ export const SURVIVAL_TUNING = {
     /** HUD warning threshold (fraction of capacity). */
     lowFraction: 0.2,
   },
-  /** Drain per light mode (charge / s). Order: beam < high beam < sonar. */
+  /** Drain per light mode (charge / s). Order: beam < high beam. */
   lights: {
     beam: 0.25, // ~6.7 min on a full battery
     high: 0.6, // ~2.8 min
-    sonar: 1.2, // ~1.4 min
+  },
+  /** Active sonar (sonarPing.ts): one-shot pings, not a light mode. */
+  sonar: {
+    /** Charge per ping (the old always-on sonar spent ~3 per 2.5 s pulse). */
+    pingCost: 3,
+    /** Seconds between pings. */
+    cooldown: 2.5,
   },
   /** Drain per held action (charge / s), stacking with the lights. */
   actions: {

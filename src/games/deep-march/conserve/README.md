@@ -54,7 +54,7 @@ Play (modes/useConserveDive)
                     as covered, so edge columns keep the LOD hysteresis (no re-merge churn);
                     the diver meets the wall's rock (the 2 m hard edge stays as a backstop)
             far ring: scene/wallRing.ts — 996-triangle proxy of the face beyond the view
-                      distance, drawn only in sonar, lit by long pulses (scene/sonarLong.ts)
+                      distance, drawn only after a ping, lit by long pulses (scene/sonarLong.ts)
             spawn: an inner site (never wall-adjacent); loading map: the whole 10 × 10 world
   loading done → session.recordDiveStart()      (throttled write, 30 s)
   page hidden → session.flush();  leave dive → session.close() (final write)

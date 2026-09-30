@@ -260,10 +260,6 @@
   color: var(--hud-lamp);
   text-shadow: 0 0 6px rgb(255 210 120 / 0.7);
 }
-.dm-battery[data-mode="sonar"] .dm-light-mode.on {
-  color: #6ff3ff;
-  text-shadow: 0 0 6px rgb(90 230 255 / 0.8);
-}
 .dm-battery-bar {
   display: flex;
   gap: 2px;
@@ -526,17 +522,20 @@
 .dm-fan-mode.on .dm-fan-label {
   fill: var(--hud-lamp);
 }
-.dm-fan-mode.on[data-mode="sonar"] .dm-fan-seg {
+.dm-fan-ping.on .dm-fan-seg {
   fill: rgb(90 230 255 / 0.14);
   stroke: #6ff3ff;
 }
-.dm-fan-mode.on[data-mode="sonar"] .dm-fan-icon,
-.dm-fan-mode.on[data-mode="sonar"] .dm-fan-edge {
+.dm-fan-ping.on .dm-fan-icon,
+.dm-fan-ping.on .dm-fan-edge {
   stroke: #6ff3ff;
   filter: drop-shadow(0 0 4px rgb(90 230 255 / 0.9));
 }
-.dm-fan-mode.on[data-mode="sonar"] .dm-fan-label {
+.dm-fan-ping.on .dm-fan-label {
   fill: #6ff3ff;
+}
+.dm-fan-ping:not(.on) {
+  opacity: 0.55;
 }
 .dm-fan-btn.locked .dm-fan-seg {
   fill: rgb(80 20 0 / 0.35);

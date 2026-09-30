@@ -30,6 +30,7 @@ export function debugPortOf(factory: DeepMarchOptions["debug"], w: Lent): DebugP
       diver.setView(p.yaw, p.pitch);
     },
     lights: h.survival.lights,
+    ping: () => h.survival.sonar.queue(),
     markers: loop.spawnDebug,
     fillBattery: () => h.survival.resources.add("battery", SURVIVAL_TUNING.battery.capacity),
     conserve: w.conserve,

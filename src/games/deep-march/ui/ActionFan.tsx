@@ -1,8 +1,8 @@
 /**
  * Bottom-right fan-shaped button cluster: annular sectors along a quarter arc
  * around the corner — Down / Up (hold), Swim (toggle latch), Lamp (on/off),
- * Mode (cycle beam / high beam / sonar; icon + label show the current mode),
- * and in conserve mode Absorb (hold, plan M4) and Build (toggle, M5; while
+ * Mode (cycle beam / high beam; icon + label show the current mode), Ping (the
+ * active sonar; lit when ready, dim while it recharges), and in conserve mode Absorb (hold, plan M4) and Build (toggle, M5; while
  * building, Absorb's sector becomes Place).
  */
 import { useRef, useState, type PointerEvent as RPointerEvent, type ReactNode } from "react";
@@ -10,7 +10,7 @@ import { arcPath, polar, sectorPath, ticksPath } from "./geom";
 import type { LightMode } from "../survival";
 import { IconAbsorb, IconBeam, IconBuild, IconDown, IconHighBeam, IconLamp, IconPlace, IconSonar, IconSwim, IconUp } from "./icons";
 
-const MODE_ICON: Record<LightMode, ReactNode> = { beam: <IconBeam />, high: <IconHighBeam />, sonar: <IconSonar /> };
+const MODE_ICON: Record<LightMode, ReactNode> = { beam: <IconBeam />, high: <IconHighBeam /> };
 
 const VB = 240;
 const OX = VB;
@@ -23,7 +23,7 @@ const A1 = 360;
 const GAP = 1.6;
 
 type HoldId = "up" | "down" | "absorb";
-export type FanToggleId = "swim" | "lamp" | "mode" | "build" | "place";
+export type FanToggleId = "swim" | "lamp" | "mode" | "ping" | "build" | "place";
 
 type Btn = {
   id: HoldId | FanToggleId;
@@ -44,6 +44,7 @@ export function ActionFan({
   speed,
   onHold,
   onToggle,
+  ping,
   absorb,
   build,
   place,
@@ -59,6 +60,8 @@ export function ActionFan({
   speed: number;
   onHold: (id: HoldId, on: boolean) => void;
   onToggle: (id: FanToggleId) => void;
+  /** Sonar ping button (omitted without the sonar unit): lit when a ping would go out. */
+  ping?: { label: string; ready: boolean };
   /** Conserve: the absorb hold button (label; lit while particles flow). Omitted in the free dive. */
   absorb?: { label: string; active: boolean };
   /** Conserve with a base (M5): build mode toggle; omitted in the free dive. */
@@ -75,6 +78,7 @@ export function ActionFan({
     { id: "swim", label: labels.swim, icon: <IconSwim />, kind: "toggle", on: swimLatch || swimming },
     { id: "lamp", label: labels.lamp, icon: <IconLamp />, kind: "toggle", on: lampOn },
     { id: "mode", label: labels.mode, icon: MODE_ICON[lightMode], kind: "toggle", on: lampOn },
+    ...(ping ? [{ id: "ping", label: ping.label, icon: <IconSonar />, kind: "toggle", on: ping.ready } as Btn] : []),
     ...(absorb ? [{ id: "absorb", label: absorb.label, icon: <IconAbsorb />, kind: "hold", on: held.absorb || absorb.active } as Btn] : []),
     ...(place ? [{ id: "place", label: place.label, icon: <IconPlace />, kind: "toggle", on: place.ok } as Btn] : []),
     ...(build ? [{ id: "build", label: build.label, icon: <IconBuild />, kind: "toggle", on: build.active } as Btn] : []),
