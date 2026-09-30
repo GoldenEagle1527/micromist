@@ -144,6 +144,8 @@ export function DeepMarchGame() {
   const conservePlay = intent !== null;
   const diveSeed = !conservePlay ? seed || "1" : conserveDive.status === "open" ? conserveDive.seedText : null;
   const diveSteps = !conservePlay ? undefined : "steps" in conserveDive ? conserveDive.steps : null;
+  // conserve: the bounded 10 × 10 world of the save's current generation; free: endless (null)
+  const diveWorld = conservePlay && conserveDive.status === "open" ? conserveDive.world : null;
 
   useEffect(() => {
     if (screen !== "playing" || diveSeed === null) return;
@@ -164,6 +166,7 @@ export function DeepMarchGame() {
           audioContext: audioCtxRef.current,
           sound: soundRef.current,
           onMuteToggle: () => toggleMuteRef.current(),
+          world: diveWorld,
         });
         setGame(g);
       }, 0);
@@ -178,7 +181,7 @@ export function DeepMarchGame() {
     };
     // Settings/labels are read once per dive; the panel toggle is pushed via setPanelMode.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [screen, diveSeed]);
+  }, [screen, diveSeed, diveWorld]);
 
   // Volume / mute: live into the running dive, persisted
   const soundRef = useRef(sound);
