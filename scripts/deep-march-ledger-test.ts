@@ -6,7 +6,11 @@
  *     changes nothing; vector transfers are all-or-nothing;
  *   - 100,000 random operations (valid and invalid): Σ pools = N_k after every step;
  *   - saved state round trip, refusal of non-conserving / malformed state, copies
- *     are isolated, transfer events and unsubscribe.
+ *     are isolated, transfer events and unsubscribe;
+ *   - expedition moves (M4, conserve/expedition): absorb W → P (tank limit 200),
+ *     death P → L as a lost cache, retrieve L → P (tank limit), a 6th cache sends
+ *     the oldest L → S; Σ caches = L throughout; 20,000 random expedition steps
+ *     conserve.
  * Run: npm run test:ledger
  */
 import { GENESIS } from "../src/games/deep-march/conserve/config";
@@ -18,6 +22,11 @@ import { isCountVector, vectorFromCounts, vectorTotal, zeroVector } from "../src
 import { createGenesisLedger } from "../src/games/deep-march/conserve/world/genesis";
 import { mulberry32 } from "../src/games/deep-march/terrain/noise";
 import { createChecker } from "./lib/checks";
+import { Expedition } from "../src/games/deep-march/conserve/expedition/expedition";
+import { NodeState } from "../src/games/deep-march/conserve/nodes/nodeState";
+import { buildNodeTable } from "../src/games/deep-march/conserve/nodes/nodeTable";
+import { createWorldSave } from "../src/games/deep-march/conserve/save/createSave";
+import { buildSiteTable } from "../src/games/deep-march/conserve/world/siteTable";
 
 const c = createChecker();
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
@@ -128,6 +137,64 @@ c.section("saved state");
   const pool = ledger.pool("world");
   pool[0] = 0;
   c.check(ledger.amount("world", "lithic") !== 0, "pool() returns a copy");
+}
+
+c.section("expedition moves (world → carried → lost)");
+{
+  const save = createWorldSave({ id: "main", seedText: "7", seed: 7, now: 0 });
+  const table = buildNodeTable(buildSiteTable({ seed: 7, gen: 1, allocInput: save.generation.allocInput, totals: save.totals }));
+  const ledger = createGenesisLedger();
+  const exp = new Expedition({ ledger, nodes: NodeState.fresh(table), caches: [], gen: 1, sitesX: 10, sitesZ: 10 });
+  const nodes = table.sites.flatMap((x) => x.nodes);
+  const lostMatches = () => same(exp.toSave().caches.reduce((a, x) => a.map((n, k) => n + x.contents[k]), zeroVector()), ledger.pool("lost"));
+  // absorb until the tank is full
+  let full = false;
+  for (const n of nodes) {
+    for (let t = 0; t < 200 && exp.remaining(n.id) > 0; t++) full = exp.absorb(n.id, 0.05).full || full;
+    if (full) break;
+  }
+  c.check(exp.carried() === 200 && ledger.poolTotal("player") === 200 && full && ledger.isConserved(), "absorbing fills the tank to exactly 200, then reports full (W → P)", `${exp.carried()}`);
+  const worldBefore = ledger.poolTotal("world");
+  const blocked = exp.absorb(nodes[nodes.length - 1].id, 5);
+  c.check(blocked.moved === 0 && blocked.full && ledger.poolTotal("world") === worldBefore, "a full tank absorbs nothing");
+  // death: P → L
+  const carried = ledger.pool("player");
+  const c1 = exp.loseCarried([1, 2, 3]);
+  c.check(!!c1 && c1.total === 200 && ledger.poolTotal("player") === 0 && same(ledger.pool("lost"), carried) && lostMatches() && ledger.isConserved(), "death: carried → lost cache (P → L), Σ caches = L");
+  c.check(exp.loseCarried([0, 0, 0]) === null && exp.caches().length === 1, "death with an empty tank leaves no cache");
+  // retrieve half, then with room for less than the cache
+  let moved = 0;
+  for (let t = 0; t < 10; t++) moved += exp.retrieve(c1!.id, 0.1).moved;
+  c.check(moved === 100 && exp.carried() === 100 && ledger.poolTotal("lost") === 100 && lostMatches() && ledger.isConserved(), "retrieve at 100 / s for 1 s: 100 back (L → P)", `${moved}`);
+  // top the tank up with a node, then the cache only fills what room is left
+  const n2 = nodes.find((n) => exp.remaining(n.id) >= 30)!;
+  for (let t = 0; t < 10; t++) exp.absorb(n2.id, 0.1);
+  const room = 200 - exp.carried();
+  for (let t = 0; t < 40; t++) exp.retrieve(c1!.id, 0.1);
+  c.check(exp.carried() === 200 && ledger.poolTotal("lost") === 100 - room && exp.caches()[0]?.total === 100 - room && lostMatches(), "retrieval is limited by the tank: the rest stays in the cache", `room ${room}`);
+  // 5 more deaths: the 6th cache sends the oldest L → S
+  const deaths: number[] = [];
+  for (let d = 0; d < 5; d++) {
+    const n = nodes.find((x) => exp.remaining(x.id) > 0)!;
+    if (exp.carried() === 0) for (let t = 0; t < 40 && exp.remaining(n.id) > 0; t++) exp.absorb(n.id, 0.1);
+    deaths.push(exp.carried());
+    exp.loseCarried([d, 0, 0]);
+  }
+  const ids = exp.caches().map((x) => x.id);
+  c.check(exp.caches().length === 5 && !ids.includes(c1!.id) && ledger.poolTotal("suspended") === 100 - room && lostMatches() && ledger.isConserved(), "6th cache: the oldest goes L → S, 5 remain", `S ${ledger.poolTotal("suspended")}, ids ${ids.join(",")}`);
+  // random steps
+  const rnd = mulberry32(99);
+  let broke = 0;
+  for (let i = 0; i < 20_000; i++) {
+    const r = rnd();
+    const caches = exp.caches();
+    if (r < 0.6) exp.absorb(nodes[Math.floor(rnd() * nodes.length)].id, rnd() * 0.5);
+    else if (r < 0.9 && caches.length) exp.retrieve(caches[Math.floor(rnd() * caches.length)].id, rnd() * 0.5);
+    else if (r < 0.95) exp.loseCarried([rnd(), rnd(), rnd()]);
+    else exp.release();
+    if (!ledger.isConserved() || !lostMatches() || exp.carried() > 200 || exp.caches().length > 5) broke++;
+  }
+  c.check(broke === 0, "20,000 random absorb / retrieve / death steps: conserved, Σ caches = L, tank ≤ 200, ≤ 5 caches", `S ${ledger.poolTotal("suspended")}, L ${ledger.poolTotal("lost")}`);
 }
 
 c.finish();

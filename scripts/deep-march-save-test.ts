@@ -4,6 +4,7 @@
  *   - write → read round trip through a backend; the game-store adapter's key;
  *   - migrations: current version, chained upgrades, future / unknown versions refused;
  *     v1 → v2 (M2): generation.allocInput = N − P − B from the stored ledger;
+ *     v2 → v3 (M4): nodes all full (harvested "", partial []), no caches; v1 → v3 chained;
  *   - validation: every corrupted field makes the slot unreadable (never guessed);
  *   - reconcile: sanitizing, deficit → suspended, excess taken in the configured
  *     order, result conserves, input untouched;
@@ -13,6 +14,10 @@
  *     blocked opens never touch the stored save;
  *   - generation: the session's site table is built from generation.allocInput, so
  *     it stays fixed while the ledger changes within a generation;
+ *   - lost caches (M4): fitted to the lost pool on load (over-stated → cut from the
+ *     oldest, unclaimed L → S, only the newest 5 kept), conserved, written back;
+ *   - expedition in a session: node state and caches saved with the ledger, a
+ *     death written at once, continue restores them;
  *   - setup peek of each slot state.
  * Run: npm run test:save
  */
@@ -109,11 +114,24 @@ c.section("migrations");
   (v1.ledger as Record<string, number[]>).world[2] -= 30;
   const backend = createMemoryBackend({ "save/main": v1 });
   const read = readSlot(backend, "main");
-  c.check(SAVE_VERSION === 2 && read.status === "ok" && read.migratedFrom === 1 && read.save.v === 2, "v1 save (M1) migrates to v2 and reads ok");
+  c.check(SAVE_VERSION === 3 && read.status === "ok" && read.migratedFrom === 1 && read.save.v === 3, "v1 save (M1) migrates (1 → 2 → 3) and reads ok");
   c.check(read.status === "ok" && same(read.save.generation.allocInput, [65400, 0, 16970, 16920, 0, 0, 0]), "v1 → v2: allocInput = N − P − B (lander cargo in B, 30 lumen carried)");
   const opened = openConserveSession({ backend, intent: { kind: "continue" }, hashSeed: seedFromString });
-  c.check(opened.ok && (backend.read("save/main") as WorldSave).v === 2, "a migrated save is written back as v2 at once");
+  c.check(opened.ok && (backend.read("save/main") as WorldSave).v === 3, "a migrated save is written back as v3 at once");
   if (opened.ok) opened.session.close();
+  // v2 → v3: a stored M2/M3 save gains the node state and an empty cache list
+  const v2 = clone(newSave()) as unknown as Record<string, unknown>;
+  delete v2.caches;
+  v2.generation = { allocInput: (v2.generation as Record<string, unknown>).allocInput };
+  v2.v = 2;
+  const read2 = readSlot(createMemoryBackend({ "save/main": v2 }), "main");
+  c.check(read2.status === "ok" && read2.migratedFrom === 2 && read2.save.generation.harvested === "" && same(read2.save.generation.partial, []) && same(read2.save.caches, []) && read2.repairs.length === 0, "v2 save (M2/M3) → v3: every node full, no caches, no repairs");
+  const v2lost = clone(v2) as Record<string, unknown>;
+  (v2lost.ledger as Record<string, number[]>).player[2] = 0;
+  (v2lost.ledger as Record<string, number[]>).lost[2] = 12;
+  (v2lost.ledger as Record<string, number[]>).world[2] -= 12;
+  const read3 = readSlot(createMemoryBackend({ "save/main": v2lost }), "main");
+  c.check(read3.status === "ok" && read3.save.ledger.lost[2] === 0 && read3.save.ledger.suspended[2] === 12 && read3.repairs.some((r) => r.cause === "caches" && r.delta === 12), "v2 lost pool with no cache claiming it → suspended (repair \"caches\")");
 }
 
 c.section("validation");
@@ -133,6 +151,14 @@ c.section("validation");
     ["generation", (s) => (s.generation = null)],
     ["generation.allocInput shape", (s) => ((s.generation as Record<string, unknown>).allocInput = [1, 2])],
     ["generation.allocInput above the totals", (s) => ((s.generation as Record<string, number[]>).allocInput[0] = 70_000)],
+    ["generation.harvested not base64", (s) => ((s.generation as Record<string, unknown>).harvested = "a$b=")],
+    ["generation.harvested bad length", (s) => ((s.generation as Record<string, unknown>).harvested = "QQ")],
+    ["generation.partial shape", (s) => ((s.generation as Record<string, unknown>).partial = [[1, 2, 3]])],
+    ["generation.partial value", (s) => ((s.generation as Record<string, unknown>).partial = [[1, -2]])],
+    ["caches missing", (s) => delete s.caches],
+    ["cache shape", (s) => (s.caches = [{ id: 1, pos: [0, 0], gen: 1, contents: [0, 0, 0, 0, 0, 0, 0] }])],
+    ["cache id", (s) => (s.caches = [{ id: 0, pos: [0, 0, 0], gen: 1, contents: [0, 0, 0, 0, 0, 0, 0] }])],
+    ["cache contents", (s) => (s.caches = [{ id: 1, pos: [0, 0, 0], gen: 1, contents: [1, 2] }])],
   ];
   for (const [name, corrupt] of corruptions) {
     const raw = clone(newSave()) as unknown as Record<string, unknown>;
@@ -161,6 +187,64 @@ c.section("reconcile");
   c.check(repairedParticles(repairs) === 50 + 30, "repaired particle count excludes sanitizing", `${repairedParticles(repairs)}`);
   const order = reconcilePools([10, 0, 0, 0, 0, 0, 0], { world: [6, 0, 0, 0, 0, 0, 0], player: [0, 0, 0, 0, 0, 0, 0], base: [5, 0, 0, 0, 0, 0, 0], suspended: [3, 0, 0, 0, 0, 0, 0], lost: [1, 0, 0, 0, 0, 0, 0] });
   c.check(same(order.pools.suspended, [0, 0, 0, 0, 0, 0, 0]) && order.pools.world[0] === 4 && order.pools.base[0] === 5 && order.pools.lost[0] === 1, "excess 5: suspended (3) first, then world (2); lost / base untouched");
+}
+
+c.section("lost caches vs the lost pool");
+{
+  const base = newSave();
+  const zero = [0, 0, 0, 0, 0, 0, 0];
+  const cache = (id: number, contents: number[]) => ({ id, pos: [id, -10, 2 * id] as [number, number, number], gen: 1, contents });
+  // L holds 100 lumen + 20 ferro; caches claim 70 lumen (id 2) + 50 lumen (id 1) + 20 ferro
+  const s = clone(base);
+  s.ledger.world[2] -= 100;
+  s.ledger.world[3] -= 20;
+  s.ledger.lost = [0, 0, 100, 20, 0, 0, 0];
+  s.caches = [cache(2, [0, 0, 70, 0, 0, 0, 0]), cache(1, [0, 0, 50, 20, 0, 0, 0])];
+  const r = readSlot(createMemoryBackend({ "save/main": s }), "main");
+  const ok = r.status === "ok";
+  const lumen = (id: number) => (ok ? (r.save.caches.find((x) => x.id === id)?.contents[2] ?? -1) : -1);
+  c.check(ok && lumen(1) === 30 && lumen(2) === 70 && r.repairs.length === 0, "over-stated kind cut from the oldest cache first (50 → 30), newer untouched", ok ? `${lumen(1)} / ${lumen(2)}` : r.status);
+  const sums = (caches: { contents: number[] }[]) => caches.reduce((a, x) => a.map((n, k) => n + x.contents[k]), zero.slice());
+  c.check(ok && same(sums(r.save.caches), r.save.ledger.lost) && poolsConserve(r.save.totals, r.save.ledger), "afterwards Σ caches = L, pools conserve");
+  // L holds more than the caches claim → the rest to S; 7 caches → only the newest 5 kept
+  const t = clone(base);
+  t.ledger.world[0] -= 700;
+  t.ledger.lost = [700, 0, 0, 0, 0, 0, 0];
+  t.caches = [1, 2, 3, 4, 5, 6, 7].map((id) => cache(id, [100, 0, 0, 0, 0, 0, 0]));
+  const r2 = readSlot(createMemoryBackend({ "save/main": t }), "main");
+  c.check(r2.status === "ok" && same(r2.save.caches.map((x) => x.id), [3, 4, 5, 6, 7]) && r2.save.ledger.lost[0] === 500 && r2.save.ledger.suspended[0] === 200, "7 caches: newest 5 kept, the 2 oldest's 200 lithic L → S");
+  c.check(r2.status === "ok" && repairedParticles(r2.repairs) === 200 && poolsConserve(r2.save.totals, r2.save.ledger), "cache repair counted once (200), pools conserve");
+  const u = clone(base);
+  u.caches = [cache(1, [0, 0, 5, 0, 0, 0, 0])];
+  const r3 = readSlot(createMemoryBackend({ "save/main": u }), "main");
+  c.check(r3.status === "ok" && r3.save.caches.length === 0 && r3.repairs.length === 0, "a cache the pool cannot back (L empty) is dropped");
+}
+
+c.section("expedition in a session");
+{
+  const backend = createMemoryBackend();
+  const clock = fakeClock();
+  const opened = openConserveSession({ backend, intent: { kind: "new", seedText: "reef" }, hashSeed: seedFromString, clock });
+  if (!opened.ok) throw new Error("new session failed");
+  const session = opened.session;
+  const exp = session.expedition;
+  c.check(exp === session.expedition && exp.tankCapacity === 200 && exp.carried() === 0 && exp.caches().length === 0, "expedition created once: tank 200, empty, no caches");
+  const node = session.nodeTable.sites.flatMap((x) => x.nodes).find((n) => n.amount >= 40)!;
+  for (let i = 0; i < 30; i++) exp.absorb(node.id, 1 / 30);
+  const half = exp.remaining(node.id);
+  c.check(half > 0 && half < node.amount && exp.carried() === node.amount - half, "half a node absorbed: partial", `${node.amount - half} of ${node.amount}`);
+  session.flush();
+  const saved = backend.read("save/main") as WorldSave;
+  c.check(same(saved.generation.partial, [[node.id, half]]) && saved.generation.harvested === "" && saved.ledger.player[node.kind] === node.amount - half, "saved: partial [id, left], P holds the particles");
+  const cache = exp.loseCarried([12.5, -30, 40]);
+  const afterDeath = backend.read("save/main") as WorldSave;
+  c.check(!!cache && afterDeath.caches.length === 1 && afterDeath.ledger.lost[node.kind] === node.amount - half && afterDeath.ledger.player[node.kind] === 0, "death written at once: cache saved, P → L");
+  session.close();
+  const again = openConserveSession({ backend, intent: { kind: "continue" }, hashSeed: seedFromString, clock });
+  if (!again.ok) throw new Error("continue failed");
+  const e2 = again.session.expedition;
+  c.check(e2.remaining(node.id) === half && e2.caches().length === 1 && e2.caches()[0].total === node.amount - half && same(e2.caches()[0].pos, [12.5, -30, 40]), "continue: node state and cache restored");
+  again.session.close();
 }
 
 c.section("throttled writer");

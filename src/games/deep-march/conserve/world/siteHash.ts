@@ -3,8 +3,8 @@
  * only (Math.imul), so the main thread, the workers and node agree bit for bit.
  */
 
-/** Salt of each per-site stream; allocation jitter uses ALLOC + particle index. */
-export const HASH_SALT = { jitterX: 1, jitterZ: 2, variation: 3, region: 4, tie: 5, alloc: 16 } as const;
+/** Salt of each per-site stream; allocation jitter uses alloc + particle index, node sizes nodeSize + node ordinal, node placement node + ordinal (ordinals < 64, so the streams never overlap). */
+export const HASH_SALT = { jitterX: 1, jitterZ: 2, variation: 3, region: 4, tie: 5, alloc: 16, nodeSize: 128, node: 256 } as const;
 
 function mix(h: number, v: number): number {
   h = Math.imul(h ^ (v | 0), 0xcc9e2d51);
