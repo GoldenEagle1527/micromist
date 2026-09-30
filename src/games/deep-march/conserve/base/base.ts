@@ -17,7 +17,7 @@ import { freezeArea } from "./frozen";
 import { placementReason, shortfall, type WorldRect } from "./placementRules";
 import type { BaseAction, BasePort, BaseView, TideForecast, TideReadiness } from "./port";
 import * as store from "./storage";
-import { tideForecast, tideReadiness } from "./tide";
+import { TideForecaster, tideReadiness, type ChaosSource } from "./tide";
 
 export type BaseDeps = {
   ledger: ParticleLedger;
@@ -28,6 +28,8 @@ export type BaseDeps = {
   /** Departures this generation so far. */
   dives: number;
   totals: ReadonlyParticleVector;
+  /** The tide forecast's chaos inputs (omitted: forecast as from genesis). */
+  chaos?: ChaosSource;
   /** A building / storage change: the session writes at once. */
   onCommit?: () => void;
   /** Energy / fuel ticked: the session writes when the throttle allows. */
@@ -45,6 +47,7 @@ export class Base implements BasePort {
   private dives: number;
   private rev = 0;
   private readonly deps: BaseDeps;
+  private readonly forecaster = new TideForecaster();
 
   constructor(deps: BaseDeps) {
     this.deps = deps;
@@ -172,7 +175,7 @@ export class Base implements BasePort {
   }
 
   forecast(): TideForecast {
-    return tideForecast(this.ledger.toState(), this.deps.totals);
+    return this.forecaster.forecast({ state: this.ledger.toState(), totals: this.deps.totals, gen: this.deps.gen, center: this.state?.center ?? null, chaos: this.deps.chaos });
   }
 
   revision(): number {

@@ -6,10 +6,11 @@
 import type { PoolId } from "../ledger/pools";
 import type { ParticleVector } from "../particles/particleVector";
 import type { BaseSave } from "../base/baseState";
+import type { ChaosState } from "../chaos/model";
 
-export type { BaseSave };
+export type { BaseSave, ChaosState };
 
-export const SAVE_VERSION = 4;
+export const SAVE_VERSION = 5;
 
 /** Ending A outcome: sealed = survived the gaze; annihilated = the save is over for good (D14). */
 export type EndingA = "sealed" | "annihilated";
@@ -67,7 +68,10 @@ export type WorldSaveV3 = Omit<WorldSaveV2, "v" | "generation"> & { v: 3; genera
 export type GenerationStateV4 = GenerationState & { dives: number };
 export type WorldSaveV4 = Omit<WorldSaveV3, "v" | "generation"> & { v: 4; generation: GenerationStateV4; base: BaseSave | null };
 
-export type WorldSave = WorldSaveV4;
+/** v5 (M6): + chaos (this generation's m, stage, wall thickness and cracks, set at the tide). */
+export type WorldSaveV5 = Omit<WorldSaveV4, "v"> & { v: 5; chaos: ChaosState };
+
+export type WorldSave = WorldSaveV5;
 
 /** An annihilated world can only be looked back on, never entered again (D14). */
 export function isReadOnlySave(save: WorldSave): boolean {

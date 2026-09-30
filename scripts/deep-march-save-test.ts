@@ -118,10 +118,10 @@ c.section("migrations");
   (v1.ledger as Record<string, number[]>).world[2] -= 30;
   const backend = createMemoryBackend({ "save/main": v1 });
   const read = readSlot(backend, "main");
-  c.check(SAVE_VERSION === 4 && read.status === "ok" && read.migratedFrom === 1 && read.save.v === 4, "v1 save (M1) migrates (1 → 2 → 3 → 4) and reads ok");
+  c.check(SAVE_VERSION === 5 && read.status === "ok" && read.migratedFrom === 1 && read.save.v === 5, "v1 save (M1) migrates (1 → 2 → 3 → 4 → 5) and reads ok");
   c.check(read.status === "ok" && same(read.save.generation.allocInput, [65400, 0, 16970, 16920, 0, 0, 0]), "v1 → v2: allocInput = N − P − B (lander cargo in B, 30 lumen carried)");
   const opened = openConserveSession({ backend, intent: { kind: "continue" }, hashSeed: seedFromString });
-  c.check(opened.ok && (backend.read("save/main") as WorldSave).v === 4, "a migrated save is written back as v4 at once");
+  c.check(opened.ok && (backend.read("save/main") as WorldSave).v === 5, "a migrated save is written back as v5 at once");
   if (opened.ok) opened.session.close();
   // v2 → v3: a stored M2/M3 save gains the node state and an empty cache list
   const v2 = clone(newSave()) as unknown as Record<string, unknown>;
