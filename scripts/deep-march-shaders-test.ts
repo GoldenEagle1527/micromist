@@ -24,7 +24,9 @@
  *    discarding before any shading;
  *  - the ring wall's far proxy ring (wallRing.ts / wallRingShader.ts): the exact
  *    programs three builds (highp / mediump), glslang + glslangValidator ES 300,
- *    array precision, no samplers, and its own Mali-G57 budget (RING_MALI_BUDGET).
+ *    array precision, no samplers, and its own Mali-G57 budget (RING_MALI_BUDGET);
+ *  - the resource-node / lost-cache program (M4, lib/nodeShaderChecks.ts): one
+ *    instanced program, no samplers, WebGL2 minimums, its own Mali-G57 budget.
  * Run: npm run test:shaders
  */
 import glslangInit from "@webgpu/glslang/dist/node-devel/glslang.js";
@@ -61,6 +63,7 @@ import { createLongPulses } from "../src/games/deep-march/scene/sonarLong";
 import { createDensityField } from "../src/games/deep-march/terrain/density";
 import { TERRAIN } from "../src/games/deep-march/terrain/config";
 import { genesisLayout } from "./lib/worldFixture";
+import { nodePrograms } from "./lib/nodeShaderChecks";
 
 /**
  * Far proxy ring on Mali-G57: no textures, a handful of pulses — a small fraction of
@@ -369,6 +372,7 @@ function wallRingPrograms(compile: Compile) {
   arrayLint();
   exactPrograms(compile);
   wallRingPrograms(compile);
+  nodePrograms(check, compile);
   compile("background dome fragment", domeSource(), "fragment");
   const [sv, sf] = snowSources();
   compile("plankton vertex", sv, "vertex");

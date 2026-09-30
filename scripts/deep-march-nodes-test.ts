@@ -22,6 +22,7 @@ import { createGenesisLedger } from "../src/games/deep-march/conserve/world/gene
 import { buildSiteTable, type SiteTable } from "../src/games/deep-march/conserve/world/siteTable";
 import { mulberry32 } from "../src/games/deep-march/terrain/noise";
 import { createChecker } from "./lib/checks";
+import { drawChecks } from "./lib/nodeDrawChecks";
 import { placementChecks } from "./lib/nodePlacementChecks";
 
 const c = createChecker();
@@ -129,4 +130,5 @@ c.section("node state save");
 }
 
 placementChecks(c);
+drawChecks(c);
 c.finish();
