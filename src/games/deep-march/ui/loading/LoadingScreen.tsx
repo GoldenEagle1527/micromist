@@ -13,7 +13,7 @@ import type { DeepMarchHandle, LoadingSnapshot } from "../../scene/world";
 import { REGION_COLORS, REGION_KEYS } from "../../terrain/regions";
 import { applyStep, canBeginDive } from "./loadingGate";
 import { LoadingModel } from "./loadingModel";
-import { REGION_MAP, RegionMapRaster, hexToRgb, mapSpec } from "./regionMap";
+import { REGION_MAP, RegionMapRaster, hexToRgb, mapSpecFor, worldToPixel } from "./regionMap";
 import { LOADING_STEPS, type LoadingLabels, type LoadingStepDef, type StepAction, type StepContext, type StepEval } from "./steps";
 
 export type { LoadingLabels } from "./steps";
@@ -71,7 +71,7 @@ export function LoadingScreen({ game, seedText, seed, labels: L, steps: stepsPro
       // region map, computed in time slices and drawn as rows arrive
       if (snap) {
         if (!raster) {
-          raster = new RegionMapRaster(snap.regions, mapSpec(snap.spawn.x, snap.spawn.z));
+          raster = new RegionMapRaster(snap.regions, mapSpecFor(snap.spawn, snap.world));
           const c = canvasRef.current;
           if (c) {
             c.width = c.height = REGION_MAP.size;
@@ -131,6 +131,9 @@ export function LoadingScreen({ game, seedText, seed, labels: L, steps: stepsPro
   const overall = model.overall();
   const pct = (f: number) => Math.floor(f * 100);
   const mapHalf = view.mapRows >= REGION_MAP.size / 2;
+  // spawn marker: the centre of the endless map, its own pixel on a bounded world map
+  const spawnPx = snap ? worldToPixel(mapSpecFor(snap.spawn, snap.world), snap.spawn.x, snap.spawn.z) : null;
+  const spawnStyle = spawnPx ? { left: `${(spawnPx[0] / REGION_MAP.size) * 100}%`, top: `${(spawnPx[1] / REGION_MAP.size) * 100}%` } : undefined;
 
   // keep the focused row in view when the list scrolls (many steps / very short screens);
   // scrollTop only: scrollIntoView would also scroll the rotated immersive stage
@@ -222,7 +225,7 @@ export function LoadingScreen({ game, seedText, seed, labels: L, steps: stepsPro
             <div className="dm-load-mapbox">
               <canvas ref={canvasRef} width={REGION_MAP.size} height={REGION_MAP.size} />
               <div className="dm-load-scanline" style={{ top: `${(view.mapRows / REGION_MAP.size) * 100}%` }} hidden={view.mapRows >= REGION_MAP.size || view.mapRows === 0} />
-              {mapHalf && <span className="dm-load-spawn" title={L.spawn} />}
+              {mapHalf && <span className="dm-load-spawn" title={L.spawn} style={spawnStyle} />}
             </div>
             <figcaption className="dm-load-legend">
               <span className="dm-load-legend-title">{L.legend}</span>
