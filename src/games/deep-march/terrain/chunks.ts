@@ -33,9 +33,13 @@
  * `isRemovedPoint()` lets collision ignore exactly what the renderer dropped (the diver
  * is always inside the level-0 area).
  *
- * Bounded world (the field has an explicit site layout, siteLayout.ts): nodes whose
- * footprint lies wholly outside the layout's cell rectangle are never requested
- * (columns straddling the edge are built whole); the endless field is unaffected.
+ * Bounded world (the field has an explicit site layout, siteLayout.ts): one
+ * predicate, the terrain extent (terrainExtent.ts: the world rectangle grown by the
+ * ring wall's thickness, plus the open cracks' reach), decides which footprints hold
+ * terrain. Footprints wholly outside it are never requested, and a quadrant outside
+ * it counts as covered, so a column straddling the extent's edge (built whole) refines
+ * and merges exactly like any other (split hysteresis included). The endless field
+ * has no extent and is unaffected.
  *
  * Terrain classification (TerrainInfoStore `terrain`: getEnvAt / getSpawnCandidates)
  * is generated separately for the base-scale columns (world / worldScale, see
@@ -51,8 +55,8 @@ import type { LodFadeMaterial } from "../scene/seabedMaterial";
 import { TerrainInfoStore } from "./terrainInfo";
 import { REGION_STRIDE } from "./regionWeights";
 import { MACRO } from "./regions";
-import { insideRect, layoutRect, rectOverlaps, type WorldRect } from "./siteLayout";
-import { crackReachRects } from "./crackReach";
+import { insideRect, layoutRect, type WorldRect } from "./siteLayout";
+import { hasTerrain, terrainExtent, type TerrainExtent } from "./terrainExtent";
 
 type NodeState = "queued" | "pending" | "ready";
 
@@ -168,10 +172,10 @@ export class ChunkManager {
   readonly terrain: TerrainInfoStore;
   private floaters = 0;
   private disposed = false;
-  /** Bounded world: footprints outside this rectangle are skipped (null = endless). */
+  /** Bounded world: the layout's cell rectangle (the diver's edge, coverage); null = endless. */
   readonly worldRect: WorldRect | null;
-  /** Bounded world with open cracks: their notches' rectangles beyond the world one (crackReach.ts); empty otherwise. */
-  private readonly crackRects: WorldRect[];
+  /** Bounded world: where there is terrain to stream (terrainExtent.ts); null = endless. */
+  private readonly extent: TerrainExtent | null;
   /**
    * Loading screen up: swaps are instant (no crossfade) so the start area refines
    * quickly; world.ts clears it once coverageComplete() and the dive starts.
@@ -191,7 +195,7 @@ export class ChunkManager {
     const s = field.settings;
     const layout = field.regions.layout;
     this.worldRect = layout ? layoutRect(layout, MACRO.cell * s.worldScale) : null;
-    this.crackRects = field.wall && layout?.wall?.cracks.length ? crackReachRects(field.wall.shape, layout.wall.cracks, s.worldScale, s.boundsSize) : [];
+    this.extent = terrainExtent(field);
     this.levels = Math.max(1, s.lodLevels);
     this.lodTris = new Array(this.levels).fill(0);
     this.lodMsTotal = new Array(this.levels).fill(0);
@@ -315,7 +319,7 @@ export class ChunkManager {
       const size = s.boundsSize * (1 << lod);
       const d2 = this.sqrDstRect(viewer, x0, z0, size);
       if (d2 > (lod === top ? prefetch2 : view2)) return;
-      if (this.worldRect && !this.inWorld(x0, z0, size)) return;
+      if (!hasTerrain(this.extent, x0, z0, size)) return;
       const key = meshKey(lod, cx, cz);
       // hysteresis: an area already drawn finer merges back only SPLIT_HYST further out
       const finer = lod > 0 && this.coveredBelow(lod, cx, cz);
@@ -339,15 +343,16 @@ export class ChunkManager {
     const iz0 = Math.floor((viewer.z + bs / 2 - r) / bs), iz1 = Math.floor((viewer.z + bs / 2 + r) / bs);
     for (let cz = iz0; cz <= iz1; cz++) for (let cx = ix0; cx <= ix1; cx++) {
       const [x0, z0] = this.origin("info", 0, cx, cz);
-      if (this.worldRect && !rectOverlaps(this.worldRect, x0, z0, bs)) continue;
+      if (!hasTerrain(this.extent, x0, z0, bs)) continue;
       if (this.sqrDstRect(viewer, x0, z0, bs) <= r * r) out.set(infoKey(cx, cz), { kind: "info", lod: 0, cx, cz });
     }
     return out;
   }
 
-  /** A mesh footprint to stream in a bounded world: it touches the world rectangle or a crack's reach. */
-  private inWorld(x0: number, z0: number, size: number): boolean {
-    return rectOverlaps(this.worldRect!, x0, z0, size) || this.crackRects.some((r) => rectOverlaps(r, x0, z0, size));
+  /** Mesh footprint (lod, cx, cz) holds terrain (terrainExtent.ts; always in the endless world). */
+  private hasTerrainAt(lod: number, cx: number, cz: number): boolean {
+    const [x0, z0] = this.origin("mesh", lod, cx, cz);
+    return hasTerrain(this.extent, x0, z0, this.field.settings.boundsSize * (1 << lod));
   }
 
   /** Drawn on its own: built, not waiting to crossfade in, not mid-crossfade. */
@@ -360,18 +365,26 @@ export class ChunkManager {
     return !!n && n.state === "ready" && !n.awaitFade && (!n.mesh || n.mesh.visible);
   }
 
-  /** The footprint of mesh node (lod, cx, cz) is fully drawn by its descendants. */
+  /**
+   * The footprint of mesh node (lod, cx, cz) is fully drawn by its descendants;
+   * quadrants without terrain need nothing drawn.
+   */
   private coveredBelow(lod: number, cx: number, cz: number): boolean {
     if (lod === 0) return false;
     for (let dz = 0; dz <= 1; dz++) for (let dx = 0; dx <= 1; dx++) {
       const c = lod - 1, x = cx * 2 + dx, z = cz * 2 + dz;
+      if (!this.hasTerrainAt(c, x, z)) continue;
       if (!this.drawn(this.nodes.get(meshKey(c, x, z))) && !this.coveredBelow(c, x, z)) return false;
     }
     return true;
   }
 
-  /** Some drawn mesh node (ancestor, itself, or its full set of descendants) covers the footprint. */
+  /**
+   * Some drawn mesh node (ancestor, itself, or its full set of descendants with
+   * terrain) covers the footprint, or it holds no terrain.
+   */
   private coveredAt(lod: number, cx: number, cz: number): boolean {
+    if (!this.hasTerrainAt(lod, cx, cz)) return true;
     for (let l = lod; l < this.levels; l++) {
       const d = l - lod;
       if (this.drawn(this.nodes.get(meshKey(l, cx >> d, cz >> d)))) return true;

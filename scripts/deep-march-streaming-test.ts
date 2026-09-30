@@ -11,10 +11,14 @@
  *  4. free dive: the request sequence equals the fixture recorded before the
  *     bounded world existed (scripts/fixtures/deep-march-free-streaming.json);
  *  5. bounded world (conserve site table → explicit layout): no request lies
- *     wholly outside the world, edge columns are built, the loading gate passes
- *     next to the edge, coverage never counts points outside;
- *  6. cracks (M8): without them the M7 sequence bit for bit; with one, extra
- *     columns only in its reach rectangle.
+ *     wholly outside the terrain extent (terrainExtent.ts: the world grown by the
+ *     wall's thickness), edge columns are built, the loading gate passes next to
+ *     the edge, coverage never counts points outside;
+ *  6. cracks (M8): without them the recorded sequence bit for bit; with one, extra
+ *     columns only in its reach rectangle;
+ *  7. the terrain extent itself (pure);
+ *  8. holding still at the edge (sides, corners, in front of a crack): after
+ *     convergence no crossfade, no request, level 0 under the diver.
  * Run: npm run test:streaming
  */
 import { readFileSync } from "node:fs";
@@ -25,9 +29,12 @@ import { terrainLayoutOf } from "../src/games/deep-march/conserve/platform/terra
 import { INFO_GRID, terrainForDevice, TERRAIN, type TerrainSettings } from "../src/games/deep-march/terrain/config";
 import { createDensityField } from "../src/games/deep-march/terrain/density";
 import { MACRO } from "../src/games/deep-march/terrain/regions";
-import { insideRect, layoutRect, rectOverlaps } from "../src/games/deep-march/terrain/siteLayout";
+import { insideRect, layoutRect } from "../src/games/deep-march/terrain/siteLayout";
+import { hasTerrain, terrainExtent } from "../src/games/deep-march/terrain/terrainExtent";
 import { createSimManager, requestSequence } from "./lib/streamingSim";
 import { crackStreamingChecks } from "./lib/crackStreamingChecks";
+import { edgeStillChecks } from "./lib/edgeStillChecks";
+import { terrainExtentChecks } from "./lib/terrainExtentChecks";
 
 let failed = 0;
 const check = (ok: boolean, name: string, detail: string) => {
@@ -114,15 +121,18 @@ console.log("bounded world (seed 7, 10 × 10 site table)");
       const o = q.type === "info" ? -size / 2 : -b / 2;
       return { x0: o + q.cx * size, z0: o + q.cz * size, size };
     };
-    const outside = r.log.filter((q) => { const p = foot(q); return !rectOverlaps(rect, p.x0, p.z0, p.size); });
+    const extent = terrainExtent(field);
+    const outside = r.log.filter((q) => { const p = foot(q); return !hasTerrain(extent, p.x0, p.z0, p.size); });
     const straddle = r.log.filter((q) => { const p = foot(q); return p.x0 < rect.x1 && p.x0 + p.size > rect.x1; });
     check(r.covered, `${name} loading gate next to the edge`, `coverage complete 180 u from the edge (view ${st.viewDistance} u)`);
-    check(outside.length === 0, `${name} no request outside the world`, `${outside.length} of ${r.log.length} requests`);
+    check(outside.length === 0, `${name} no request outside the terrain extent`, `${outside.length} of ${r.log.length} requests`);
     check(straddle.length > 0, `${name} edge columns built`, `${straddle.length} requests straddle x = ${rect.x1}`);
     check(r.path.every((p) => insideRect(rect, p.x, p.z)), `${name} swim stayed inside`, `last x ${r.path[r.path.length - 1].x.toFixed(0)}`);
   }
 }
+terrainExtentChecks(check);
 crackStreamingChecks(check);
+edgeStillChecks(check);
 if (failed) {
   console.log(`${failed} check(s) FAILED`);
   process.exit(1);
