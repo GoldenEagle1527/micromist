@@ -1,9 +1,7 @@
 /**
- * The base on top of the ledger (plan M5, design doc §6, §8.1): founding the
- * core (+ the frozen 3 × 3), building and demolishing, storage moves, energy
- * and fuel, departures. Every particle moves through the ledger, and after
- * every step B = lockedOf(base) (before founding: B = the lander cargo).
- * Pure: no rendering, no storage — the session saves `toSave()`.
+ * The base on the ledger (plan M5, design doc §6, §8.1): the core (+ the frozen 3 × 3), build / demolish, storage
+ * moves, energy and fuel, the lighthouse switch (M9), departures. Every particle moves through the ledger; after every
+ * step B = lockedOf(base) (before founding: the lander cargo). Pure: no rendering or storage — the session saves `toSave()`.
  */
 import { STRUCTURES, STRUCTURE_KINDS, type StructureKind } from "../config";
 import type { ParticleLedger } from "../ledger/particleLedger";
@@ -11,7 +9,7 @@ import { PARTICLE_TYPES } from "../particles/particleTypes";
 import type { ParticleVector, ReadonlyParticleVector } from "../particles/particleVector";
 import type { SiteTable } from "../world/siteTable";
 import { cloneBase, costOf, structureInfo, energyCapacity, protectionRadius, storageCapacity, type BaseSave, type BaseStructure, type Vec3 } from "./baseState";
-import { tickEnergy } from "./energy";
+import { switchStructure, tickEnergy } from "./energy";
 import { viewOf } from "./baseView";
 import { freezeArea } from "./frozen";
 import { placementReason, shortfall, type WorldRect } from "./placementRules";
@@ -114,6 +112,10 @@ export class Base implements BasePort {
     return this.committed({ ok: true, id });
   }
 
+  setOn(id: number, on: boolean): BaseAction {
+    return this.state && switchStructure(this.state.structures, id, on) ? this.committed({ ok: true, id }) : { ok: false, reason: "unknown" };
+  }
+
   deposit(kind: number | null): number {
     return this.moved(this.state ? store.deposit(this.ledger, this.state.storage, storageCapacity(this.state.structures), kind) : 0);
   }
@@ -151,9 +153,7 @@ export class Base implements BasePort {
   }
 
   /** Departures this generation (saved as generation.dives). */
-  get departures(): number {
-    return this.dives;
-  }
+  get departures(): number { return this.dives; }
 
   tick(dt: number): void {
     const s = this.state;

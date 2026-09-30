@@ -7,7 +7,8 @@
  *     aim ray, slope (22° core, 15° others), roughness, skirt depth, clearance,
  *     biome blend; then on the real terrain: reasons agree with independent scans;
  *   - energy (conserve/base/energy.ts): core output, lighthouse drain and fuel,
- *     brown-out order and restart hysteresis, capacity, tide stub;
+ *     brown-out order and restart hysteresis, capacity, the tide's requirements;
+ *   - the lighthouse switch and the tide's energy (M9, lib/baseSwitchChecks.ts);
  *   - the base's draw calls and triangles (lib/structureDrawChecks.ts).
  * Run: npm run test:placement
  */
@@ -15,11 +16,13 @@ import { createChecker } from "./lib/checks";
 import { rulesChecks } from "./lib/placementRuleChecks";
 import { groundChecks } from "./lib/groundChecks";
 import { energyChecks } from "./lib/baseEnergyChecks";
+import { switchChecks } from "./lib/baseSwitchChecks";
 import { drawChecks } from "./lib/structureDrawChecks";
 
 const c = createChecker();
 rulesChecks(c);
 groundChecks(c);
 energyChecks(c);
+switchChecks(c);
 drawChecks(c);
 c.finish();

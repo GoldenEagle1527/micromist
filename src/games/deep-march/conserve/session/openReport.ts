@@ -22,6 +22,8 @@ export type OpenedReport = {
   sites: SiteSummary;
   /** The generation's ring wall (thickness from m = Σ R / Σ N). */
   wall: WallState;
+  /** The generation's chaos stage and cracks (open / healed scars) — for the diagnostics drawer (M9). */
+  chaos: { stage: number; open: number; scars: number };
 };
 
 export type BlockedReport = {

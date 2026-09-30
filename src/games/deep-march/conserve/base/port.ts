@@ -28,6 +28,8 @@ export type BaseBuilding = {
   yaw: number;
   /** Producing / consuming now (a lighthouse: lit). */
   working: boolean;
+  /** The player's switch (only consumers can be switched off: `switchable`, M9). */
+  on: boolean;
 };
 
 export type BaseView = {
@@ -82,6 +84,8 @@ export interface BasePort {
   build(kind: StructureKind, pos: readonly [number, number, number], yaw: number, rect: WorldRect): BaseAction;
   /** Take a building down; its cost goes back into storage in full (may exceed the capacity). */
   demolish(id: number): BaseAction;
+  /** Switch a consumer (lighthouse) on / off (M9); refused for producers and unknown ids. */
+  setOn(id: number, on: boolean): BaseAction;
   /** Tank → storage (P → B), up to the free capacity; `kind` null = everything. Returns particles moved. */
   deposit(kind: number | null): number;
   /** Storage → tank (B → P), up to the tank's room. */
