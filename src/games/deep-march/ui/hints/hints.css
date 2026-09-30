@@ -1,0 +1,59 @@
+/* New-player hint card (conserve mode, M9): top right under the HUD buttons, quiet, never centred. */
+.dm-hint {
+  position: absolute;
+  z-index: 2; /* above the look pad */
+  top: calc(52px + var(--dm-st, 0px));
+  right: calc(8px + var(--dm-sr, 0px));
+  width: min(42%, 270px);
+  padding: 5px 10px 7px;
+  border-right: 2px solid var(--hud-2);
+  background: linear-gradient(270deg, rgb(0 30 45 / 0.72), rgb(0 30 45 / 0.35));
+  font-size: 11px;
+  line-height: 1.45;
+  color: #d8f6ff;
+  animation: dm-hint-in 0.6s ease-out;
+}
+.dm-hint small {
+  display: block;
+  font-size: 9px;
+  letter-spacing: 0.2em;
+  color: var(--hud-2);
+  opacity: 0.85;
+}
+.dm-hint p {
+  margin: 2px 0 5px;
+}
+.dm-hint-actions {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+}
+.dm-hint kbd {
+  margin-left: 5px;
+  padding: 0 3px;
+  border: 1px solid var(--hud-dim);
+  border-radius: 2px;
+  font-size: 9px;
+}
+.dm-hint .dim {
+  opacity: 0.7;
+}
+@keyframes dm-hint-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+/* narrow views: the stats line takes the top right, so the card goes below it */
+@container dm-stage (max-width: 560px) {
+  .dm-hint {
+    top: calc(96px + var(--dm-st, 0px));
+    width: min(46%, 240px);
+    font-size: 10.5px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dm-hint {
+    animation: none;
+  }
+}

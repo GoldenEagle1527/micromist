@@ -1,4 +1,4 @@
-/** Sci-fi diving HUD: readout (always), plus dial / action fan / look pad when the panel is on. */
+/** Sci-fi diving HUD: readout (always), plus dial / action fan / look pad when the panel is on; conserve layers (tank, base, tide, hints). */
 import { useCallback, useState } from "react";
 import type { DeepMarchHandle } from "../scene/world";
 import { ActionFan, type FanToggleId } from "./ActionFan";
@@ -7,21 +7,17 @@ import { LookPad } from "./LookPad";
 import { MoveDial } from "./MoveDial";
 import { Readout, type ReadoutLabels } from "./Readout";
 import { useTelemetry } from "./useTelemetry";
-import { AbsorbPrompt } from "./expedition/AbsorbPrompt";
-import { CacheMarks } from "./expedition/CacheMarks";
+import { ConserveOverlays } from "./ConserveOverlays";
 import type { ExpeditionDict } from "./expedition/i18n";
 import { RecallButton } from "./expedition/RecallButton";
 import { TankGauge } from "./expedition/TankGauge";
 import { useExpedition } from "./expedition/useExpedition";
-import { BasePanel } from "./base/BasePanel";
-import { BaseEnergy, BaseNoticeLine } from "./base/BaseStatus";
-import { BuildBar } from "./base/BuildBar";
-import { HomeMark } from "./base/HomeMark";
+import { BaseEnergy } from "./base/BaseStatus";
 import type { BaseDict } from "./base/i18n";
 import { useBase } from "./base/useBase";
-import { TideHud } from "./tide/TideHud";
 import type { TideDict } from "./tide/i18n";
 import { useTide } from "./tide/useTide";
+import type { HintDict } from "./hints/i18n";
 import "./panel.css";
 import "./expedition/expedition.css";
 import "./base/base.css";
@@ -42,6 +38,7 @@ export type PanelLabels = ReadoutLabels & {
   expedition: ExpeditionDict;
   base: BaseDict;
   tide: TideDict;
+  hints: HintDict;
 };
 
 export function ControlPanel({
@@ -110,17 +107,7 @@ export function ControlPanel({
           ) : null
         }
       />
-      {exp ? <CacheMarks exp={exp} title={labels.expedition.cacheMark} /> : null}
-      {tide ? <TideHud tide={tide} labels={labels.tide} biomes={labels.regions} /> : null}
-      {base ? <HomeMark base={base} title={labels.base.homeMark} /> : null}
-      {exp && !building ? <AbsorbPrompt exp={exp} touch={panelOn} labels={labels.expedition} /> : null}
-      {base && game ? (
-        <>
-          <BaseNoticeLine base={base} labels={labels.base} />
-          <BuildBar base={base} touch={panelOn} labels={labels.base} kinds={labels.expedition.kinds} send={game.baseCommand} />
-          <BasePanel base={base} labels={labels.base} kinds={labels.expedition.kinds} send={game.baseCommand} />
-        </>
-      ) : null}
+      <ConserveOverlays game={game} tel={tel} exp={exp} base={base} tide={tide} panelOn={panelOn} labels={labels} />
       <div className="dm-hud-buttons">
         {base && game ? (
           <button
