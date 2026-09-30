@@ -26,7 +26,10 @@
  *    programs three builds (highp / mediump), glslang + glslangValidator ES 300,
  *    array precision, no samplers, and its own Mali-G57 budget (RING_MALI_BUDGET);
  *  - the resource-node / lost-cache program (M4, lib/nodeShaderChecks.ts): one
- *    instanced program, no samplers, WebGL2 minimums, its own Mali-G57 budget.
+ *    instanced program, no samplers, WebGL2 minimums, its own Mali-G57 budget;
+ *  - the base's programs (M5, lib/baseShaderChecks.ts): buildings (one instanced
+ *    program for all kinds), lighthouse beams, placement hologram; same checks,
+ *    their own Mali-G57 budgets. The seabed budget above includes the lighthouse light.
  * Run: npm run test:shaders
  */
 import glslangInit from "@webgpu/glslang/dist/node-devel/glslang.js";
@@ -35,6 +38,8 @@ import { DETAIL_GLSL } from "../src/games/deep-march/scene/detailNormal";
 import { FOG_GLSL } from "../src/games/deep-march/scene/fog";
 import { BEAM_DECLS } from "../src/games/deep-march/scene/highBeam";
 import { PL_DECLS } from "../src/games/deep-march/scene/particleLight";
+import { BL_DECLS, BL_LIGHT } from "../src/games/deep-march/scene/base/baseLightShader";
+import { createBaseLightUniforms } from "../src/games/deep-march/scene/base/baseLight";
 import { SONAR_DECLS } from "../src/games/deep-march/scene/sonar";
 import { SNOW_FRAG, SNOW_VERT } from "../src/games/deep-march/scene/particles";
 import { MAT_DECLS, MAT_FRAGMENT, MAT_VERT_DECLS, MAT_VERT_MAIN } from "../src/games/deep-march/scene/materialShader";
@@ -64,6 +69,7 @@ import { createDensityField } from "../src/games/deep-march/terrain/density";
 import { TERRAIN } from "../src/games/deep-march/terrain/config";
 import { genesisLayout } from "./lib/worldFixture";
 import { nodePrograms } from "./lib/nodeShaderChecks";
+import { basePrograms } from "./lib/baseShaderChecks";
 
 /**
  * Far proxy ring on Mali-G57: no textures, a handful of pulses — a small fraction of
@@ -91,7 +97,7 @@ function vulkanize(src: string, stage: "vertex" | "fragment", st: { binding: num
 
 function seabedSource(defines: string[]): string {
   const st = { binding: 0, inLoc: 0, outLoc: 0 };
-  const decls = DECLS + DETAIL_GLSL + WATER_GLSL + FOG_GLSL + SONAR_DECLS + BEAM_DECLS + PL_DECLS;
+  const decls = DECLS + DETAIL_GLSL + WATER_GLSL + FOG_GLSL + SONAR_DECLS + BEAM_DECLS + PL_DECLS + BL_DECLS;
   return [
     "#version 450",
     ...defines.map((d) => `#define ${d}`),
@@ -152,6 +158,7 @@ function seabedScene(lowSpec: boolean) {
     sonar: createSonarUniforms(new SonarPulses(lowSpec ? 3 : 5)),
     beam: createBeamUniforms(),
     particleLights: createParticleLightUniforms(),
+    baseLight: createBaseLightUniforms(),
     materials: createMaterialUniforms(new THREE.DataArrayTexture(new Uint8Array(4), 1, 1, 1)),
   });
   const fade = sb.fadeMaterial().material;
@@ -191,7 +198,7 @@ function es300(name: string, src: string, stage: "vert" | "frag") {
 
 /** Every GLSL block we inject: array types need explicit precision, no array constructors. */
 function arrayLint() {
-  const blocks: Record<string, string> = { DECLS, WATER_GLSL, DETAIL_GLSL, DETAIL_APPLY, FOG_GLSL, FOG_OPAQUE, SONAR_DECLS, SONAR_OPAQUE, BEAM_DECLS, BEAM_LIGHT, BEAM_OPAQUE, PL_LIGHT, MAT_DECLS, MAT_FRAGMENT, MAT_VERT_DECLS, MAT_VERT_MAIN, MAP_FRAGMENT, EMISSIVE_FRAGMENT, LIGHTS_END_FRAGMENT, OPAQUE_FRAGMENT, LOD_FADE_FRAGMENT, SNOW_VERT, SNOW_FRAG };
+  const blocks: Record<string, string> = { DECLS, WATER_GLSL, DETAIL_GLSL, DETAIL_APPLY, FOG_GLSL, FOG_OPAQUE, SONAR_DECLS, SONAR_OPAQUE, BEAM_DECLS, BEAM_LIGHT, BEAM_OPAQUE, PL_LIGHT, BL_DECLS, BL_LIGHT, MAT_DECLS, MAT_FRAGMENT, MAT_VERT_DECLS, MAT_VERT_MAIN, MAP_FRAGMENT, EMISSIVE_FRAGMENT, LIGHTS_END_FRAGMENT, OPAQUE_FRAGMENT, LOD_FADE_FRAGMENT, SNOW_VERT, SNOW_FRAG };
   for (const [name, src] of Object.entries(blocks)) {
     const issues = arrayPrecisionIssues(src);
     check(issues.length === 0, `array types carry explicit precision, no array constructors: ${name}`, issues.join(" | ") || "clean");
@@ -373,6 +380,7 @@ function wallRingPrograms(compile: Compile) {
   exactPrograms(compile);
   wallRingPrograms(compile);
   nodePrograms(check, compile);
+  basePrograms(check, compile);
   compile("background dome fragment", domeSource(), "fragment");
   const [sv, sf] = snowSources();
   compile("plankton vertex", sv, "vertex");
