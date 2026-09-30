@@ -32,9 +32,26 @@ export interface JobPool {
 
 const MAX_IN_FLIGHT_PER_WORKER = 1;
 
+/**
+ * Mesher workers for this device. Desktop: min(4, cores − 2) keeps two cores for
+ * the main thread + GPU driver (6 workers made the main thread stutter while
+ * streaming); low-spec: 2. 0 without Worker support (main-thread fallback).
+ */
+export function mesherWorkerCount(lowSpec: boolean): number {
+  if (typeof Worker === "undefined") return 0;
+  const cores = typeof navigator !== "undefined" ? navigator.hardwareConcurrency || 4 : 4;
+  return lowSpec ? Math.max(1, Math.min(2, cores - 1)) : Math.max(1, Math.min(4, cores - 2));
+}
+
+/** A pool whose workers can hold several terrain generations (poolRouter.ts). */
+export interface GenerationHost {
+  addGen(gen: number, layout: SiteLayout | null): void;
+  dropGen(gen: number): void;
+}
+
 type Slot = { worker: Worker; inFlight: Set<number>; alive: boolean };
 
-export class WorkerPool implements JobPool {
+export class WorkerPool implements JobPool, GenerationHost {
   private readonly slots: Slot[] = [];
   private readonly done: MesherResponse[] = [];
   onLost: ((ids: number[]) => void) | null = null;
@@ -88,6 +105,18 @@ export class WorkerPool implements JobPool {
     if (!best) throw new Error("WorkerPool.submit: no free slot");
     best.inFlight.add(req.id);
     best.worker.postMessage(req);
+  }
+
+  addGen(gen: number, layout: SiteLayout | null) {
+    this.post({ type: "addGen", gen, layout });
+  }
+
+  dropGen(gen: number) {
+    this.post({ type: "dropGen", gen });
+  }
+
+  private post(msg: MesherRequest) {
+    for (const s of this.slots) if (s.alive) s.worker.postMessage(msg);
   }
 
   drain(out: MesherResponse[]) {

@@ -46,7 +46,7 @@ import { INFO_GRID, baseTerrain } from "./config";
 import { createDensityField, type DensityField } from "./density";
 import { columnRows, generateColumnMesh, lodCoord, type ColumnRows } from "./mesher";
 import type { MesherResponse } from "./protocol";
-import { WorkerPool, type JobPool, type JobRequest } from "./jobPool";
+import { mesherWorkerCount, WorkerPool, type JobPool, type JobRequest } from "./jobPool";
 import type { LodFadeMaterial } from "../scene/seabedMaterial";
 import { TerrainInfoStore } from "./terrainInfo";
 import { REGION_STRIDE } from "./regionWeights";
@@ -193,13 +193,7 @@ export class ChunkManager {
     this.yMax = lodCoord(this.rows.gjMax, field, 0);
     scene.add(this.group);
     if (pool) this.pool = pool;
-    else {
-      const cores = typeof navigator !== "undefined" ? navigator.hardwareConcurrency || 4 : 4;
-      // Desktop: min(4, cores − 2) keeps two cores for the main thread + GPU driver
-      // (6 workers made the main thread stutter while streaming); low-spec: 2.
-      const count = lowSpec ? Math.max(1, Math.min(2, cores - 1)) : Math.max(1, Math.min(4, cores - 2));
-      this.pool = new WorkerPool(seed, s, typeof Worker === "undefined" ? 0 : count, layout);
-    }
+    else this.pool = new WorkerPool(seed, s, mesherWorkerCount(lowSpec), layout);
     this.pool.onLost = (ids) => {
       for (const id of ids) {
         const node = this.byId.get(id);
