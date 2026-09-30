@@ -1,6 +1,6 @@
 # scene/expedition — the conserve expedition in the dive (plan M4)
 
-Rendering and interaction for resource nodes, the particle tank and lost caches. `world.ts` creates `ExpeditionScene` only when the conserve mode passes an `ExpeditionPort` (a type-only import from `conserve/`; the object comes from the conserve chunk). The free dive never builds any of it and its input keys stay unchanged.
+Rendering and interaction for resource nodes, the particle tank and lost caches. `world.ts` (via `dive/conserveLayer.ts`) creates `ExpeditionScene` only when the conserve mode passes an `ExpeditionPort` (a type-only import from `conserve/`; the object comes from the conserve chunk). The free dive never builds any of it and its input keys stay unchanged.
 
 | File | Role | three.js |
 |---|---|---|

@@ -1,6 +1,6 @@
 # scene/base — the conserve base in the dive (plan M5)
 
-Buildings, the lighthouse light, build mode and the base's HUD data. `world.ts` creates `BaseScene` only when the conserve mode passes a `BasePort` (a type-only import from `conserve/`; the object comes from the conserve chunk) together with the expedition. The free dive never builds any of it: its input keys stay unchanged and the seabed's lighthouse block is skipped (`uBLCount` = 0, a uniform branch).
+Buildings, the lighthouse light, build mode and the base's HUD data. `world.ts` (via `dive/conserveLayer.ts`) creates `BaseScene` only when the conserve mode passes a `BasePort` (a type-only import from `conserve/`; the object comes from the conserve chunk) together with the expedition. The free dive never builds any of it: its input keys stay unchanged and the seabed's lighthouse block is skipped (`uBLCount` = 0, a uniform branch).
 
 | File | Role | three.js |
 |---|---|---|
