@@ -18,6 +18,8 @@ export type ExpeditionDict = {
   recallDark: string;
   lost: (n: number, evicted: boolean) => string;
   recalledEmpty: string;
+  /** Recalled inside the base (M5): the tank went into storage. */
+  deposited: (n: number) => string;
   cacheMark: (n: number, m: number) => string;
   /** Loading map legend: lost caches. */
   mapCache: string;
@@ -39,11 +41,12 @@ export const expeditionEn: ExpeditionDict = {
   blockedBattery: "Battery flat — pump offline",
   btnAbsorb: "ABSORB",
   recall: "Emergency recall (hold X)",
-  recallHint: "Hold to fire the emergency beacon: back to the entry point, the tank is left behind",
+  recallHint: "Hold to fire the emergency beacon: back to the entry point (the base core once built), the tank is left behind (inside the base it goes into storage)",
   recallHolding: "Emergency beacon — keep holding",
-  recallDark: "Emergency beacon fired — returning to the entry point",
+  recallDark: "Emergency beacon fired — returning",
   lost: (n, evicted) => `${n} particles left behind as a lost cache — follow the beacon to get them back${evicted ? " (the oldest cache dissolved into the tide)" : ""}`,
-  recalledEmpty: "Recalled to the entry point — the tank was empty, nothing lost",
+  recalledEmpty: "Recalled — the tank was empty, nothing lost",
+  deposited: (n) => `Recalled inside the base — ${n} particles went into storage, nothing lost`,
   cacheMark: (n, m) => `Cache · ${n} · ${m} m`,
   mapCache: "Lost cache",
   hint: " · E absorb · X recall",
@@ -63,11 +66,12 @@ export const expeditionZh: ExpeditionDict = {
   blockedBattery: "电量耗尽 · 吸取泵离线",
   btnAbsorb: "吸取",
   recall: "紧急召回（按住 X）",
-  recallHint: "按住发射紧急信标：回到入水点，罐中粒子会留在原地",
+  recallHint: "按住发射紧急信标：回到入水点（建成基地后回到基地核心），罐中粒子留在原地（在基地范围内则存入仓储）",
   recallHolding: "紧急信标 · 继续按住",
-  recallDark: "紧急信标已发射 · 正在返回入水点",
+  recallDark: "紧急信标已发射 · 正在返回",
   lost: (n, evicted) => `${n} 颗粒子留在原地成为遗失粒子包 · 循着信标回去取回${evicted ? "（最早的粒子包已被潮汐吞没）" : ""}`,
-  recalledEmpty: "已召回入水点 · 粒子罐为空，没有损失",
+  recalledEmpty: "已召回 · 粒子罐为空，没有损失",
+  deposited: (n) => `在基地范围内召回 · ${n} 颗粒子已存入仓储，没有损失`,
   cacheMark: (n, m) => `粒子包 · ${n} · ${m} 米`,
   mapCache: "遗失粒子包",
   hint: " · E 吸取 · X 召回",

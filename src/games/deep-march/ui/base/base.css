@@ -1,0 +1,167 @@
+/* Base HUD (plan M5): energy chip, home mark, build bar, base panel. */
+
+/* ---- energy chip (under the tank) ---- */
+.dm-base-energy {
+  margin-top: 4px;
+  padding: 3px 10px 4px 8px;
+  width: 132px;
+  border-left: 2px solid var(--hud-2);
+  background: linear-gradient(90deg, rgb(0 40 50 / 0.55), rgb(0 40 50 / 0.08));
+  font-variant-numeric: tabular-nums;
+}
+.dm-base-energy-bar {
+  height: 4px;
+  margin-top: 2px;
+  background: var(--hud-faint);
+}
+.dm-base-energy-bar i {
+  display: block;
+  height: 100%;
+  background: var(--hud-2);
+  box-shadow: 0 0 6px var(--hud-2);
+}
+.dm-base-energy[data-state="brownout"] {
+  border-left-color: var(--hud-warn);
+}
+.dm-base-energy[data-state="brownout"] .dm-tank-status {
+  color: var(--hud-warn);
+}
+
+/* ---- home mark on the compass ---- */
+.dm-home-mark {
+  pointer-events: none;
+}
+.dm-home path {
+  fill: rgb(45 224 196 / 0.35);
+  stroke: var(--hud-2);
+  stroke-width: 1.3;
+  filter: drop-shadow(0 0 3px rgb(45 224 196 / 0.9));
+}
+.dm-home.edge path {
+  fill: none;
+}
+.dm-home text {
+  fill: var(--hud-2);
+}
+.dm-base-notice {
+  top: 28%;
+  border-left-color: var(--hud-2);
+}
+
+/* ---- build bar (bottom centre) ---- */
+.dm-build {
+  position: absolute;
+  left: 50%;
+  bottom: 14px;
+  transform: translateX(-50%);
+  width: min(92%, 560px);
+  padding: 6px 10px 8px;
+  border-top: 1px solid var(--hud-dim);
+  background: linear-gradient(0deg, rgb(0 22 44 / 0.78), rgb(0 22 44 / 0.35));
+  pointer-events: auto;
+  font-size: 11px;
+  color: var(--hud);
+}
+.panel-on .dm-build {
+  bottom: auto;
+  top: 58px;
+}
+.dm-build-head {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+}
+.dm-build-head small,
+.dm-build-card small {
+  opacity: 0.75;
+  font-size: 9.5px;
+}
+.dm-build-cards {
+  display: flex;
+  gap: 6px;
+  margin-top: 5px;
+}
+.dm-build-card {
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 4px 6px;
+  text-align: left;
+  border: 1px solid var(--hud-faint);
+  background: rgb(0 30 50 / 0.5);
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.dm-build-card.on {
+  border-color: var(--hud-2);
+  box-shadow: inset 0 0 0 1px var(--hud-2);
+}
+.dm-build-card small {
+  display: block;
+  line-height: 1.25;
+}
+.dm-build-card ul {
+  margin: 3px 0 0;
+  padding: 0;
+  list-style: none;
+  font-variant-numeric: tabular-nums;
+}
+.dm-build-card li {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10px;
+}
+.dm-build-card li.short {
+  color: var(--hud-warn);
+}
+.dm-build-verdict {
+  margin-top: 5px;
+  font-size: 10.5px;
+}
+.dm-build-verdict.ok {
+  color: var(--hud-2);
+}
+.dm-build-verdict.bad {
+  color: var(--hud-warn);
+}
+.dm-build-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 5px;
+}
+.dm-build-btn,
+.dm-base-btn {
+  padding: 3px 10px;
+  border: 1px solid var(--hud-dim);
+  background: rgb(0 30 50 / 0.6);
+  color: var(--hud);
+  font: inherit;
+  font-size: 10.5px;
+  cursor: pointer;
+  pointer-events: auto;
+  touch-action: manipulation;
+}
+.dm-build-btn.place:not(:disabled) {
+  border-color: var(--hud-2);
+  color: var(--hud-2);
+}
+.dm-build-btn:disabled,
+.dm-base-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.dm-base-btn.warn,
+.dm-base-btn.release:not(:disabled) {
+  border-color: var(--hud-warn);
+  color: var(--hud-warn);
+}
+
+.dm-base-toggle.on {
+  border-color: var(--hud-2);
+  color: var(--hud-2);
+}
+.dm-fan-build.on .dm-fan-seg,
+.dm-fan-place.on .dm-fan-seg {
+  fill: rgb(45 224 196 / 0.3);
+}

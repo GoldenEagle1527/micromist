@@ -25,10 +25,12 @@ import { createParticleLightUniforms } from "./particleLight";
 import { SURVIVAL_TUNING, createSurvival, type LightMode, type LightState } from "../survival";
 import { createDiveAudio, type AudioStatus } from "./audio";
 import { BumpCue, CueLimiter } from "./audioCues";
-import type { ExpeditionPort } from "../conserve";
+import type { BasePort, ExpeditionPort } from "../conserve";
 import { ExpeditionScene } from "./expedition/expeditionScene";
 import type { ExpeditionTelemetry } from "./expedition/telemetry";
 import { createBaseLightUniforms } from "./base/baseLight";
+import { BaseScene } from "./base/baseScene";
+import type { BaseCommand, BaseTelemetry } from "./base/telemetry";
 
 export type HudLabels = {
   chunks: string;
@@ -64,6 +66,8 @@ export type DeepMarchOptions = {
   world?: SiteLayout | null;
   /** Conserve mode: this generation's nodes, tank and lost caches (scene/expedition); null / omitted in the free dive. */
   expedition?: ExpeditionPort | null;
+  /** Conserve mode (M5): the base — buildings, storage, energy (scene/base); needs `expedition`. */
+  base?: BasePort | null;
 };
 
 export type Telemetry = {
@@ -149,6 +153,10 @@ export type DeepMarchHandle = {
   telemetry: () => Telemetry;
   /** Tank, aim target, caches, recall (null in the free dive). */
   expedition: () => ExpeditionTelemetry | null;
+  /** Buildings, storage, energy, build mode (null in the free dive). */
+  base: () => BaseTelemetry | null;
+  /** HUD buttons (build, place, storage moves, demolish); ignored in the free dive. */
+  baseCommand: (cmd: BaseCommand) => void;
 };
 
 /** No movement (the recall's black screen). */
@@ -316,7 +324,7 @@ void main() {
   const wallRing = createWallRing(field, { water, fog, sonar, long: longPulses, far: terrain.viewDistance });
   if (wallRing) scene.add(wallRing.mesh);
   // conserve: nodes, absorbing, lost caches, recall (scene/expedition); the free dive has none
-  const expedition =
+  const expedition: ExpeditionScene | null =
     opts.expedition && layout
       ? new ExpeditionScene({
           port: opts.expedition,
@@ -333,12 +341,38 @@ void main() {
           beam: rig.beam,
           absorb: seabed.absorb,
           respawn: () => {
-            diver.spawnAt(spawnAt.x, spawnAt.y, spawnAt.z, spawnAt.yaw);
+            // M5: back at the base core once it stands, else the lander spawn
+            const home = baseScene?.home() ?? spawnAt;
+            diver.spawnAt(home.x, home.y, home.z, home.yaw);
             survival.resources.add("battery", SURVIVAL_TUNING.battery.capacity);
           },
+          safeLoss: opts.base ? (at) => baseScene?.safeLoss(at) ?? null : undefined,
         })
       : null;
   if (expedition) scene.add(expedition.mesh);
+  // conserve (M5): the base — buildings, lighthouse light, build mode (scene/base)
+  const baseScene: BaseScene | null =
+    opts.base && expedition && layout
+      ? new BaseScene({
+          port: opts.base,
+          field,
+          layout,
+          rect: chunks.worldRect,
+          resources: survival.resources,
+          audio,
+          water,
+          fog,
+          sonar,
+          beam: rig.beam,
+          baseLight,
+          absorb: seabed.absorb,
+          far: terrain.viewDistance + 40,
+          onPanel: (open) => {
+            if (open) input.releaseLock();
+          },
+        })
+      : null;
+  if (baseScene) scene.add(baseScene.group);
   const bornAt = performance.now();
   const viewDir = new THREE.Vector3();
   // GPU occlusion culling of terrain columns (?occ=0 disables)
@@ -371,6 +405,7 @@ void main() {
     // the wall ring's program too (drawn only in sonar mode: no hitch on the first ping)
     if (wallRing) warm.add(new THREE.Mesh(geo, wallRing.mesh.material as THREE.Material));
     if (expedition) warm.add(expedition.warmObject);
+    if (baseScene) warm.add(baseScene.warmObject);
     renderer
       .compileAsync(warm, camera, scene)
       .catch((e: unknown) => console.error("[deep-march] shader compile failed:", e))
@@ -451,7 +486,9 @@ void main() {
   // near that region's core, facing the longest sightline (terrain/spawn.ts).
   // Always searched on the desktop-preset field so a seed spawns at the same spot on every device.
   const spawnAt = findSpawn(lowSpec ? createDensityField(opts.seed, TERRAIN, undefined, layout) : field);
-  diver.spawnAt(spawnAt.x, spawnAt.y, spawnAt.z, spawnAt.yaw);
+  // conserve (M5): a dive starts at the base core once it stands
+  const startAt = baseScene?.home() ?? spawnAt;
+  diver.spawnAt(startAt.x, startAt.y, startAt.z, startAt.yaw);
   // Optional viewpoint for sharing / screenshots: ?at=x,y,z,yawDeg,pitchDeg.
   const at = new URLSearchParams(window.location.search).get("at");
   if (at) {
@@ -528,8 +565,9 @@ void main() {
     },
     onMuteToggle: () => opts.onMuteToggle?.(),
     onLockChange: () => updatePrompt(),
-    // conserve: E / left mouse (captured) absorb, X recall
-    holdKeys: expedition ? ["KeyE", "Mouse0", "KeyX"] : undefined,
+    // conserve: E / left mouse (captured) absorb, X recall; with a base (M5) also
+    // G build mode, T building kind, Q base panel, E / click place while building
+    holdKeys: expedition ? ["KeyE", "Mouse0", "KeyX", ...(baseScene ? ["KeyG", "KeyT", "KeyQ"] : [])] : undefined,
   });
   input.panelMode = opts.panel;
   const coarse = typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches;
@@ -587,14 +625,30 @@ void main() {
     syncCamera(dt);
     if (ready) survival.tick(dt);
     camera.updateMatrixWorld();
+    const time = (now - bornAt) / 1000;
+    if (baseScene) {
+      const act = ready && !expedition?.busy();
+      const press = (code: string) => input.takePress(code) && act;
+      const place = press("KeyE") || press("Mouse0");
+      baseScene.update({
+        dt,
+        time,
+        ready,
+        eye: camera.position,
+        dir: camera.getWorldDirection(viewDir),
+        diver: diver.position,
+        press: { build: press("KeyG"), kind: press("KeyT"), panel: press("KeyQ"), place: place && baseScene.building() },
+      });
+    }
+    const absorbHeld = !baseScene?.building() && (input.held("KeyE") || input.held("Mouse0") || input.panel.absorb);
     expedition?.update({
       dt,
-      time: (now - bornAt) / 1000,
+      time,
       ready,
       eye: camera.position,
       dir: camera.getWorldDirection(viewDir),
       diver: diver.position,
-      absorb: input.held("KeyE") || input.held("Mouse0") || input.panel.absorb,
+      absorb: absorbHeld,
       recall: input.held("KeyX") || input.panel.recall,
     });
     rig.update(dt, lights.state(), !ready);
@@ -725,7 +779,7 @@ void main() {
       const snd = audioGate();
       return {
         seed: opts.seed,
-        spawn: { x: spawnAt.x, y: spawnAt.y, z: spawnAt.z },
+        spawn: { x: startAt.x, y: startAt.y, z: startAt.z },
         regions: field.regions,
         world: chunks.worldRect,
         caches: expedition ? expedition.telemetry().caches.map((c) => ({ x: c.x, z: c.z })) : [],
@@ -785,6 +839,8 @@ void main() {
       z: diver.position.z,
     }),
     expedition: () => expedition?.telemetry() ?? null,
+    base: () => baseScene?.telemetry() ?? null,
+    baseCommand: (cmd) => baseScene?.command(cmd),
     destroy: () => {
       cancelAnimationFrame(raf);
       document.removeEventListener("visibilitychange", onVisibility);
@@ -797,6 +853,7 @@ void main() {
       snow.dispose();
       rig.dispose();
       expedition?.dispose();
+      baseScene?.dispose();
       survival.dispose();
       occlusion.dispose();
       destroyed = true;

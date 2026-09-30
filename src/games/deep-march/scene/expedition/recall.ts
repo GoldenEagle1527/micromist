@@ -4,7 +4,8 @@
  * suit's beacon fires — the screen goes black, everything in the tank is left
  * behind as a lost cache where the diver was (P → L, the port evicts the
  * oldest beyond 5), the diver wakes at the dive's start point with a full
- * battery, and the screen fades back in. Pure timing: the scene supplies the
+ * battery (M5: at the base core once built; inside the base the tank goes
+ * into storage instead), and the screen fades back in. Pure timing: the scene supplies the
  * effect (`fire`) and draws `blackout()`.
  */
 import { RECALL } from "./config";

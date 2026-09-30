@@ -30,8 +30,10 @@ export type ExpeditionSceneDeps = NodeMaterialOptions & {
   /** The canvas overlay (the blackout sits in it). */
   overlay: HTMLElement;
   lowSpec: boolean;
-  /** Wake at the dive's start point with a full battery (the diver, the lights). */
+  /** Wake at the dive's start point (the base core once built) with a full battery. */
   respawn: () => void;
+  /** Death inside the base (M5): the tank goes into storage instead of a cache; returns the particles moved, null outside. */
+  safeLoss?: (at: THREE.Vector3) => number | null;
 };
 
 export type ExpeditionFrame = {
@@ -120,10 +122,14 @@ export class ExpeditionScene {
 
   private fire(at: THREE.Vector3): void {
     const { port, field, rect } = this.deps;
-    const spot = findOpenWater(field, at.x, at.y, at.z, rect, 2);
-    const before = port.caches().length;
-    const cache = port.loseCarried([spot.x, spot.y, spot.z]);
-    this.notice = cache ? { kind: "lost", total: cache.total, evicted: port.caches().length === before } : { kind: "recalled" };
+    const saved = this.deps.safeLoss?.(at) ?? null;
+    if (saved !== null) this.notice = saved > 0 ? { kind: "deposited", total: saved } : { kind: "recalled" };
+    else {
+      const spot = findOpenWater(field, at.x, at.y, at.z, rect, 2);
+      const before = port.caches().length;
+      const cache = port.loseCarried([spot.x, spot.y, spot.z]);
+      this.notice = cache ? { kind: "lost", total: cache.total, evicted: port.caches().length === before } : { kind: "recalled" };
+    }
     this.noticeLeft = RECALL.notice;
     this.deps.audio.play("warn", { gain: 0.45, rate: 0.6, lowpass: 900 });
     this.deps.respawn();

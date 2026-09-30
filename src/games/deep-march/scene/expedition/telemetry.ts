@@ -20,7 +20,9 @@ export type ExpeditionNotice =
   /** The recall left the tank's particles behind (evicted: the oldest cache dissolved into the tide). */
   | { kind: "lost"; total: number; evicted: boolean }
   /** Recalled with an empty tank: nothing was lost. */
-  | { kind: "recalled" };
+  | { kind: "recalled" }
+  /** Recalled inside the base (M5): the tank went into the base's storage. */
+  | { kind: "deposited"; total: number };
 
 export type ExpeditionTelemetry = {
   tank: { value: number; capacity: number; ratio: number };

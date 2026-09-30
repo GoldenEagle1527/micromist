@@ -22,7 +22,8 @@ export function AbsorbPrompt({ exp, touch, labels }: { exp: ExpeditionTelemetry;
       </div>
     );
   }
-  const notice = exp.notice ? <div className="dm-exp-notice">{exp.notice.kind === "lost" ? labels.lost(exp.notice.total, exp.notice.evicted) : labels.recalledEmpty}</div> : null;
+  const n = exp.notice;
+  const notice = n ? <div className="dm-exp-notice">{n.kind === "lost" ? labels.lost(n.total, n.evicted) : n.kind === "deposited" ? labels.deposited(n.total) : labels.recalledEmpty}</div> : null;
   if (!t) return notice;
   const name = t.kind === "cache" ? labels.cache : (labels.kinds[t.particle ?? 0] ?? labels.kinds[0]);
   const done = t.amount > 0 ? 1 - t.left / t.amount : 0;

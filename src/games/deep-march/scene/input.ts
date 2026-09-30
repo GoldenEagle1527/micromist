@@ -3,7 +3,8 @@
  * Ctrl / R; lights: F on/off, L cycle, 1-3 mode; M mute), mouse-look via pointer lock (desktop, panel off), drag-look on
  * touch, plus analog state pushed in by the sci-fi control panel. Modes add
  * hold keys (`holdKeys`, e.g. conserve's E absorb / X recall; the free dive
- * passes none and keeps its key set) read with `held()`.
+ * passes none and keeps its key set) read with `held()`, and one-shot presses
+ * of them (base: G build, T kind, Q panel, E / click place) with `takePress()`.
  */
 import type { DiverInput } from "./diver";
 import { screenDelta } from "../viewRotation";
@@ -49,6 +50,8 @@ export type PanelInput = {
 
 export class InputController {
   private readonly keys = new Set<string>();
+  /** Hold keys pressed (not auto-repeated) since their last takePress(). */
+  private readonly pressed = new Set<string>();
   private readonly el: HTMLElement;
   private readonly opts: InputOptions;
   private lookX = 0; // degrees
@@ -86,6 +89,11 @@ export class InputController {
     return this.keys.has(code);
   }
 
+  /** The hold key was pressed since the last call (a one-shot; cleared by reading). */
+  takePress(code: string): boolean {
+    return this.pressed.delete(code);
+  }
+
   get locked(): boolean {
     return document.pointerLockElement === this.el;
   }
@@ -120,6 +128,7 @@ export class InputController {
       if (now - this.lastForwardDown < DOUBLE_TAP_MS) this.sprintPulse = true;
       this.lastForwardDown = now;
     }
+    if (!e.repeat && this.holdKeys.has(e.code)) this.pressed.add(e.code);
     this.keys.add(e.code);
   };
 
@@ -129,6 +138,7 @@ export class InputController {
 
   private onBlur = () => {
     this.keys.clear();
+    this.pressed.clear();
     this.touchId = null;
   };
 
@@ -138,7 +148,10 @@ export class InputController {
 
   private onMouseButton = (e: MouseEvent) => {
     if (e.button !== 0) return;
-    if (e.type === "mousedown" && this.locked) this.keys.add("Mouse0");
+    if (e.type === "mousedown" && this.locked) {
+      this.keys.add("Mouse0");
+      this.pressed.add("Mouse0");
+    }
     else if (e.type === "mouseup") this.keys.delete("Mouse0");
   };
 
