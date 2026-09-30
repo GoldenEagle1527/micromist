@@ -7,10 +7,11 @@
  *     against sampleRaw at level 0 (misses, and the 0-miss margin needed —
  *     REFINE_MARGIN4 must be ≥ 2× it);
  *  3. time per column and noise samples, dense vs bricks;
- *  4. bounded world (site layout with the δ term; genesis and ±δmax stress layouts):
- *     the conservative bounds (bounds, boundsForMask, rawBoundsForMask, rawClass)
- *     contain the real density at 10⁵ sampled points — half of them on the
- *     wall-adjacent sites and across the edge — and bricks == dense on edge columns.
+ *  4. bounded world (site layout with the δ term and the ring wall; genesis, ±δmax
+ *     stress and a thin cracked wall): the conservative bounds (bounds, boundsForMask,
+ *     rawBoundsForMask, rawClass incl. the wall's exact classes) contain the real
+ *     density at 1.5·10⁵ sampled points — half of them on the wall-adjacent sites,
+ *     the wall and the void beyond — and bricks == dense on edge / wall columns.
  * Run: npm run test:bricks
  */
 import { TERRAIN } from "../src/games/deep-march/terrain/config";
@@ -19,7 +20,7 @@ import { columnRegionMask, columnRowPlan, columnRows, generateColumnMesh, lodCoo
 import { coarseResolve } from "../src/games/deep-march/terrain/refine";
 import { REFINE_MARGIN4 } from "../src/games/deep-march/terrain/bricks";
 import { mulberry32 } from "../src/games/deep-march/terrain/noise";
-import { genesisLayout, stressLayout } from "./lib/worldFixture";
+import { crackedLayout, genesisLayout, stressLayout } from "./lib/worldFixture";
 
 let failed = 0;
 const check = (ok: boolean, name: string, detail: string) => {
@@ -141,7 +142,7 @@ for (let lod = 0; lod < REFINE_MARGIN4.length; lod++) {
   let n = 0, edgeN = 0, bad = { bounds: 0, mask: 0, raw: 0, cls: 0 }, loMargin = Infinity;
   const out = new Float64Array(2), cb = new Float64Array(1);
   for (const seed of [7, 42]) {
-    for (const [name, layout] of [["genesis", genesisLayout(seed)], ["stress ±δmax", stressLayout(seed)]] as const) {
+    for (const [name, layout] of [["genesis", genesisLayout(seed)], ["stress ±δmax", stressLayout(seed)], ["cracked thin wall", crackedLayout(seed)]] as const) {
       const f = createDensityField(seed, TERRAIN, undefined, layout);
       const rows = columnRows(f, 0);
       const y0 = lodCoord(rows.gjMin, f, 0), y1 = lodCoord(rows.gjMax, f, 0);
@@ -179,7 +180,8 @@ for (let lod = 0; lod < REFINE_MARGIN4.length; lod++) {
       for (let lod = 0; lod < 3; lod++) {
         const size = TERRAIN.boundsSize * (1 << lod);
         const r = columnRows(dense, lod);
-        for (const [wx, wz] of [[2080, 100], [-2080, -600], [900, 1950], [-1800, 1800]]) {
+        // + the ring wall: its face, the outer face / void, a rounded corner, the crack at s = 0
+        for (const [wx, wz] of [[2080, 100], [-2080, -600], [900, 1950], [-1800, 1800], [2020, -300], [2240, 40], [1880, 1880], [2050, 30]]) {
           const cx = Math.floor((wx + TERRAIN.boundsSize / 2) / size), cz = Math.floor((wz + TERRAIN.boundsSize / 2) / size);
           const fm = TERRAIN.floaterMargin * (1 << lod);
           const rd: number[] = [], rb: number[] = [];
@@ -195,7 +197,7 @@ for (let lod = 0; lod < REFINE_MARGIN4.length; lod++) {
   check(bad.bounds === 0, "bounds(y) contain sample", `${bad.bounds} of ${n} outside (${edgeN} in the edge band), min margin ${loMargin.toFixed(2)}`);
   check(bad.mask === 0, "boundsForMask(column mask) contain sample", `${bad.mask} of ${n}`);
   check(bad.raw === 0, "rawBoundsForMask contain sampleRaw", `${bad.raw} of ${n}`);
-  check(bad.cls === 0, "rawClass consistent (cap exact, water bound below iso)", `${bad.cls} of ${n}`);
+  check(bad.cls === 0, "rawClass consistent (class 2 exact — cap or wall rock —, water bound below iso)", `${bad.cls} of ${n}`);
 }
 
 if (failed) {
