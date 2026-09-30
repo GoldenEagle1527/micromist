@@ -6,7 +6,11 @@
  *  2. step-4 coarse margin: sign check of every step-4-resolvable raw sample
  *     against sampleRaw at level 0 (misses, and the 0-miss margin needed —
  *     REFINE_MARGIN4 must be ≥ 2× it);
- *  3. time per column and noise samples, dense vs bricks.
+ *  3. time per column and noise samples, dense vs bricks;
+ *  4. bounded world (site layout with the δ term; genesis and ±δmax stress layouts):
+ *     the conservative bounds (bounds, boundsForMask, rawBoundsForMask, rawClass)
+ *     contain the real density at 10⁵ sampled points — half of them on the
+ *     wall-adjacent sites and across the edge — and bricks == dense on edge columns.
  * Run: npm run test:bricks
  */
 import { TERRAIN } from "../src/games/deep-march/terrain/config";
@@ -14,6 +18,8 @@ import { createDensityField, type DensityField } from "../src/games/deep-march/t
 import { columnRegionMask, columnRowPlan, columnRows, generateColumnMesh, lodCoord, lodPoints, lodSpacing, type ColumnMeshData } from "../src/games/deep-march/terrain/mesher";
 import { coarseResolve } from "../src/games/deep-march/terrain/refine";
 import { REFINE_MARGIN4 } from "../src/games/deep-march/terrain/bricks";
+import { mulberry32 } from "../src/games/deep-march/terrain/noise";
+import { genesisLayout, stressLayout } from "./lib/worldFixture";
 
 let failed = 0;
 const check = (ok: boolean, name: string, detail: string) => {
@@ -128,6 +134,70 @@ for (let lod = 0; lod < REFINE_MARGIN4.length; lod++) {
   check(o.miss === 0, `L${lod} step-4 resolved samples on the right side of iso`, `${o.miss} misses in ${o.hit}`);
   check(m >= 2 * o.need, `L${lod} step-4 margin ≥ 2× the largest gap that still missed`, `${m} vs 2 × ${o.need.toFixed(2)} (20 fresh columns)`);
 }
+// 4. bounded world: bounds with the δ term
+{
+  console.log("bounded world: conservative bounds with the site bias δ");
+  const iso = TERRAIN.isoLevel, eps = 1e-9;
+  let n = 0, edgeN = 0, bad = { bounds: 0, mask: 0, raw: 0, cls: 0 }, loMargin = Infinity;
+  const out = new Float64Array(2), cb = new Float64Array(1);
+  for (const seed of [7, 42]) {
+    for (const [name, layout] of [["genesis", genesisLayout(seed)], ["stress ±δmax", stressLayout(seed)]] as const) {
+      const f = createDensityField(seed, TERRAIN, undefined, layout);
+      const rows = columnRows(f, 0);
+      const y0 = lodCoord(rows.gjMin, f, 0), y1 = lodCoord(rows.gjMax, f, 0);
+      const rnd = mulberry32(seed * 31 + name.length);
+      const half = 2080, cell = 416;
+      for (let q = 0; q < 25000; q++) {
+        let x: number, z: number;
+        if (q % 2) {
+          // wall-adjacent band: the outer site ring and one cell beyond the edge
+          const side = Math.floor(rnd() * 4), t = (rnd() - 0.5) * 2 * half, d = half - cell + rnd() * 2 * cell;
+          [x, z] = side === 0 ? [d, t] : side === 1 ? [-d, t] : side === 2 ? [t, d] : [t, -d];
+          edgeN++;
+        } else {
+          x = (rnd() - 0.5) * 2 * half;
+          z = (rnd() - 0.5) * 2 * half;
+        }
+        const y = y0 + rnd() * (y1 - y0);
+        const v = f.sample(x, y, z), raw = f.sampleRaw(x, y, z);
+        n++;
+        f.bounds(y, out);
+        if (v < out[0] - eps || v > out[1] + eps) bad.bounds++;
+        loMargin = Math.min(loMargin, v - out[0]);
+        const cx = Math.floor((x + TERRAIN.boundsSize / 2) / TERRAIN.boundsSize), cz = Math.floor((z + TERRAIN.boundsSize / 2) / TERRAIN.boundsSize);
+        const mask = columnRegionMask(f, cx, cz, 0);
+        f.boundsForMask(mask, y, out);
+        if (v < out[0] - eps || v > out[1] + eps) bad.mask++;
+        f.rawBoundsForMask(mask, y, out);
+        if (raw < out[0] - eps || raw > out[1] + eps) bad.raw++;
+        const k = f.rawClass(x, y, z, cb);
+        if ((k === 2 && raw !== cb[0]) || (k === 1 && !(raw <= cb[0] + eps && cb[0] < iso))) bad.cls++;
+      }
+      // bricks == dense on columns across the edge and on wall-adjacent sites
+      const dense = createDensityField(seed, { ...TERRAIN, bricks: false }, undefined, layout);
+      let cd = 0, cols = 0;
+      for (let lod = 0; lod < 3; lod++) {
+        const size = TERRAIN.boundsSize * (1 << lod);
+        const r = columnRows(dense, lod);
+        for (const [wx, wz] of [[2080, 100], [-2080, -600], [900, 1950], [-1800, 1800]]) {
+          const cx = Math.floor((wx + TERRAIN.boundsSize / 2) / size), cz = Math.floor((wz + TERRAIN.boundsSize / 2) / size);
+          const fm = TERRAIN.floaterMargin * (1 << lod);
+          const rd: number[] = [], rb: number[] = [];
+          const md = generateColumnMesh(dense, cx, cz, r, fm, rd, false, undefined, lod);
+          const mb = generateColumnMesh(f, cx, cz, r, fm, rb, false, undefined, lod);
+          cd += diff(md, mb, rd, rb);
+          cols++;
+        }
+      }
+      check(cd === 0, `seed ${seed} ${name}: bricks == dense on edge / wall-adjacent columns`, `${cols} columns (L0–L2), ${cd} differing values`);
+    }
+  }
+  check(bad.bounds === 0, "bounds(y) contain sample", `${bad.bounds} of ${n} outside (${edgeN} in the edge band), min margin ${loMargin.toFixed(2)}`);
+  check(bad.mask === 0, "boundsForMask(column mask) contain sample", `${bad.mask} of ${n}`);
+  check(bad.raw === 0, "rawBoundsForMask contain sampleRaw", `${bad.raw} of ${n}`);
+  check(bad.cls === 0, "rawClass consistent (cap exact, water bound below iso)", `${bad.cls} of ${n}`);
+}
+
 if (failed) {
   console.log(`${failed} check(s) FAILED`);
   process.exit(1);

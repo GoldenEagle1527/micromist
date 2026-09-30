@@ -3,6 +3,8 @@
  *  1. simplex: bit-exact on random points (incl. far / negative coordinates);
  *  2. density field (world + classification settings): sampleRaw bit-exact, wasm on vs off;
  *  3. column meshes of every LOD level identical, wasm on vs off;
+ *  3b. bounded world (explicit site layout with the δ term, genesis and ±δmax stress
+ *     layouts): sampleRaw and edge / wall-adjacent column meshes bit-exact, on vs off;
  *  4. speed: µs per sampleRaw and ms per column, on vs off (same process: shared JIT feedback
  *     favours WASM here; the separate-process benchmark is the fair one).
  * Run: npm run test:wasm
@@ -12,6 +14,7 @@ import { createDensityField } from "../src/games/deep-march/terrain/density";
 import { columnRows, generateColumnMesh } from "../src/games/deep-march/terrain/mesher";
 import { createSimplex3, mulberry32, simplexTables } from "../src/games/deep-march/terrain/noise";
 import { getWasmNoise } from "../src/games/deep-march/terrain/noiseWasm";
+import { genesisLayout, stressLayout } from "./lib/worldFixture";
 
 let failed = 0;
 const check = (ok: boolean, name: string, detail: string) => {
@@ -75,6 +78,41 @@ for (const seed of SEEDS.slice(0, 2)) {
   }
 }
 check(mDiff === 0, "column meshes identical at every LOD level", `${mDiff} differing columns`);
+
+{
+  let dDiff = 0, dTot = 0, cDiff = 0, cTot = 0;
+  const eq = (u: ArrayLike<number>, v: ArrayLike<number>) => u.length === v.length && Array.from(u).every((q, i) => Object.is(q, v[i]));
+  for (const seed of [7, 42]) {
+    for (const layout of [genesisLayout(seed), stressLayout(seed)]) {
+      for (const s of [TERRAIN, baseTerrain(TERRAIN)]) {
+        const a = createDensityField(seed, { ...s, wasm: true }, undefined, layout), b = createDensityField(seed, { ...s, wasm: false }, undefined, layout);
+        const rnd = mulberry32(seed * 5 + 3);
+        // world spans ±2080 world units (±520 base): sample it and a band beyond the edge
+        const span = 2300 / s.worldScale;
+        for (let q = 0; q < 25000; q++) {
+          const x = (rnd() - 0.5) * 2 * span, y = (-110 + rnd() * 250) / (s.worldScale === 1 ? 4 : 1), z = (rnd() - 0.5) * 2 * span;
+          dTot++;
+          if (!Object.is(a.sampleRaw(x, y, z), b.sampleRaw(x, y, z))) dDiff++;
+        }
+      }
+      const a = createDensityField(seed, { ...TERRAIN, wasm: true }, undefined, layout), b = createDensityField(seed, { ...TERRAIN, wasm: false }, undefined, layout);
+      for (let lod = 0; lod < 2; lod++) {
+        const rows = columnRows(a, lod);
+        const size = TERRAIN.boundsSize << lod;
+        // straddling the east edge, on a wall-adjacent site, and inside
+        for (const [wx, wz] of [[2080, 0], [1900, -700], [300, 200]]) {
+          const cx = Math.floor((wx + 16) / size), cz = Math.floor((wz + 16) / size);
+          const ma = generateColumnMesh(a, cx, cz, rows, TERRAIN.floaterMargin << lod, undefined, false, undefined, lod);
+          const mb = generateColumnMesh(b, cx, cz, rows, TERRAIN.floaterMargin << lod, undefined, false, undefined, lod);
+          cTot++;
+          if (!(eq(ma.positions, mb.positions) && eq(ma.normals, mb.normals) && eq(ma.ao, mb.ao) && eq(ma.region, mb.region) && eq(ma.indices, mb.indices))) cDiff++;
+        }
+      }
+    }
+  }
+  check(dDiff === 0, "bounded world: sampleRaw with the δ term bit-exact (genesis + ±δmax layouts, world + classification)", `${dDiff} differing of ${dTot}`);
+  check(cDiff === 0, "bounded world: edge / wall-adjacent / inner column meshes identical (L0, L1)", `${cDiff} differing of ${cTot} columns`);
+}
 
 // speed: sampleRaw on surface-band points (both fields warmed up)
 {

@@ -7,54 +7,24 @@
  *     inside viewDistance is ever uncovered (8 u grid, every frame);
  *  2. the job queue stays bounded;
  *  3. reports the coverage (loading) time and how often the diver's own footprint
- *     is drawn at level 0.
+ *     is drawn at level 0;
+ *  4. free dive: the request sequence equals the fixture recorded before the
+ *     bounded world existed (scripts/fixtures/deep-march-free-streaming.json);
+ *  5. bounded world (conserve site table → explicit layout): no request lies
+ *     wholly outside the world, edge columns are built, the loading gate passes
+ *     next to the edge, coverage never counts points outside.
  * Run: npm run test:streaming
  */
+import { readFileSync } from "node:fs";
 import * as THREE from "three";
-import { terrainForDevice, TERRAIN, type TerrainSettings } from "../src/games/deep-march/terrain/config";
+import { buildSiteTable } from "../src/games/deep-march/conserve/world/siteTable";
+import { createWorldSave } from "../src/games/deep-march/conserve/save/createSave";
+import { terrainLayoutOf } from "../src/games/deep-march/conserve/platform/terrainLayout";
+import { INFO_GRID, terrainForDevice, TERRAIN, type TerrainSettings } from "../src/games/deep-march/terrain/config";
 import { createDensityField } from "../src/games/deep-march/terrain/density";
-import { ChunkManager } from "../src/games/deep-march/terrain/chunks";
-import type { JobPool, JobRequest } from "../src/games/deep-march/terrain/jobPool";
-import type { MesherResponse } from "../src/games/deep-march/terrain/protocol";
-
-/** Desktop single-core ms per column job by level (node bench, sparse-brick mesher), info job ms. */
-const LEVEL_MS = [200, 166, 100, 84];
-const INFO_MS = 45;
-
-class SimPool implements JobPool {
-  now = 0;
-  onLost: ((ids: number[]) => void) | null = null;
-  private busy: { req: JobRequest; done: number }[] = [];
-  constructor(private readonly slots: number, private readonly factor: number, private readonly b: number) {}
-  live() { return this.slots; }
-  free() { return this.slots - this.busy.length; }
-  jobs = [0, 0, 0, 0, 0];
-  submit(req: JobRequest) {
-    this.jobs[req.type === "info" ? 4 : req.lod]++;
-    const ms = req.type === "info" ? INFO_MS : LEVEL_MS[Math.min(req.lod, LEVEL_MS.length - 1)];
-    this.busy.push({ req, done: this.now + (ms * this.factor) / 1000 });
-  }
-  drain(out: MesherResponse[]) {
-    const keep: typeof this.busy = [];
-    for (const j of this.busy) {
-      if (j.done > this.now) { keep.push(j); continue; }
-      const r = j.req;
-      const size = r.type === "info" ? 10 : this.b * (1 << r.lod);
-      const x0 = -this.b / 2 + r.cx * size, z0 = -this.b / 2 + r.cz * size;
-      out.push({
-        type: r.type, id: r.id,
-        positions: new Float32Array([x0, 0, z0, x0 + size, 0, z0, x0, 0, z0 + size]),
-        normals: new Float32Array([0, 1, 0, 0, 1, 0, 0, 1, 0]), ao: new Float32Array(3), region: new Uint8Array(24),
-        indices: r.type === "info" ? new Uint16Array(0) : new Uint16Array([0, 1, 2]),
-        bounds: new Float32Array([x0, -1, z0, x0 + size, 1, z0 + size]), removed: new Int32Array(0),
-        stats: { floaters: 0, floaterPoints: 0, ambiguous: 0, searched: 0, noiseSamples: 0, rawPoints: 0, coarseSamples: 0 },
-        info: null, infoMs: 0, ms: 0,
-      });
-    }
-    this.busy = keep;
-  }
-  dispose() {}
-}
+import { MACRO } from "../src/games/deep-march/terrain/regions";
+import { insideRect, layoutRect, rectOverlaps } from "../src/games/deep-march/terrain/siteLayout";
+import { createSimManager, requestSequence } from "./lib/streamingSim";
 
 let failed = 0;
 const check = (ok: boolean, name: string, detail: string) => {
@@ -64,11 +34,7 @@ const check = (ok: boolean, name: string, detail: string) => {
 
 function run(name: string, s: TerrainSettings, workers: number, factor: number, fps: number, seconds: number) {
   const field = createDensityField(7, s);
-  const scene = new THREE.Scene();
-  const pool = new SimPool(workers, factor, s.boundsSize);
-  const mat = new THREE.MeshBasicMaterial();
-  const fade = () => ({ material: new THREE.MeshBasicMaterial(), fade: new THREE.Vector2() });
-  const mgr = new ChunkManager(scene, field, 7, mat, workers <= 2, fade as never, pool);
+  const { mgr, pool } = createSimManager(field, 7, workers, factor);
   const camera = new THREE.PerspectiveCamera(70, 0.5, 0.05, s.viewDistance + 40);
   const pos = new THREE.Vector3(0, -40, 0);
   const dt = 1 / fps;
@@ -118,6 +84,41 @@ const phone = terrainForDevice(true);
 run("phone ×4 (2 workers)", phone, 2, 4, 30, 120);
 run("phone ×5 (2 workers)", phone, 2, 5, 30, 120);
 run("desktop (4 workers)", TERRAIN, 4, 1, 60, 90);
+
+console.log("free dive: request sequence vs the pre-bounded-world fixture");
+{
+  const fx = JSON.parse(readFileSync(new URL("./fixtures/deep-march-free-streaming.json", `file://${process.cwd()}/scripts/`), "utf8"));
+  for (const [name, st, w, f, fps] of [["phone", terrainForDevice(true), 2, 4, 30], ["desktop", TERRAIN, 4, 1, 60]] as const) {
+    const r = requestSequence(createDensityField(7, st), 7, w, f, fps, 40);
+    const want = fx[name] as { hash: string; requests: number };
+    check(r.hash === want.hash && r.log.length === want.requests, `${name} free request sequence unchanged`, `${r.log.length} requests, hash ${r.hash} (fixture ${want.requests} / ${want.hash})`);
+  }
+}
+
+console.log("bounded world (seed 7, 10 × 10 site table)");
+{
+  const save = createWorldSave({ id: "main", seedText: "7", seed: 7, now: 0 });
+  const layout = terrainLayoutOf(buildSiteTable({ seed: 7, gen: 1, allocInput: save.generation.allocInput, totals: save.totals }));
+  for (const [name, st, w, f, fps] of [["phone", terrainForDevice(true), 2, 4, 30], ["desktop", TERRAIN, 4, 1, 60]] as const) {
+    const field = createDensityField(7, st, undefined, layout);
+    const rect = layoutRect(layout, MACRO.cell * st.worldScale);
+    // start 180 u inside the east edge, swim toward it (stops short of it)
+    const start = new THREE.Vector3(rect.x1 - 180, -40, 0);
+    const r = requestSequence(field, 7, w, f, fps, 15, start, 0);
+    const b = st.boundsSize;
+    const foot = (q: (typeof r.log)[number]) => {
+      const size = q.type === "info" ? INFO_GRID.boundsSize * st.worldScale : b * (1 << q.lod);
+      const o = q.type === "info" ? -size / 2 : -b / 2;
+      return { x0: o + q.cx * size, z0: o + q.cz * size, size };
+    };
+    const outside = r.log.filter((q) => { const p = foot(q); return !rectOverlaps(rect, p.x0, p.z0, p.size); });
+    const straddle = r.log.filter((q) => { const p = foot(q); return p.x0 < rect.x1 && p.x0 + p.size > rect.x1; });
+    check(r.covered, `${name} loading gate next to the edge`, `coverage complete 180 u from the edge (view ${st.viewDistance} u)`);
+    check(outside.length === 0, `${name} no request outside the world`, `${outside.length} of ${r.log.length} requests`);
+    check(straddle.length > 0, `${name} edge columns built`, `${straddle.length} requests straddle x = ${rect.x1}`);
+    check(r.path.every((p) => insideRect(rect, p.x, p.z)), `${name} swim stayed inside`, `last x ${r.path[r.path.length - 1].x.toFixed(0)}`);
+  }
+}
 if (failed) {
   console.log(`${failed} check(s) FAILED`);
   process.exit(1);
