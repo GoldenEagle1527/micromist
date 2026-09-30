@@ -7,7 +7,8 @@
  *   - absorbing a node: W → P conserves, a full node drains in 2 s of holding,
  *     partial progress kept, harvested at 0;
  *   - node state save: base64 codec (vs Node's Buffer), harvested bitset + partial
- *     round trip over random states, foreign / invalid entries dropped.
+ *     round trip over random states, foreign / invalid entries dropped;
+ *   - placement on the terrain and open water for caches (lib/nodePlacementChecks.ts).
  * Run: npm run test:nodes
  */
 import { NODES, NODE_SURFACE } from "../src/games/deep-march/conserve/config";
@@ -21,6 +22,7 @@ import { createGenesisLedger } from "../src/games/deep-march/conserve/world/gene
 import { buildSiteTable, type SiteTable } from "../src/games/deep-march/conserve/world/siteTable";
 import { mulberry32 } from "../src/games/deep-march/terrain/noise";
 import { createChecker } from "./lib/checks";
+import { placementChecks } from "./lib/nodePlacementChecks";
 
 const c = createChecker();
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
@@ -126,4 +128,5 @@ c.section("node state save");
   c.check(foreign.dropped === expectDropped && foreign.state.remaining(all[2].id) === (all[2].amount > 3 ? 3 : all[2].amount), "foreign ids, remaining ≤ 0 or ≥ amount, duplicates dropped", `${foreign.dropped} dropped`);
 }
 
+placementChecks(c);
 c.finish();

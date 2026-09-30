@@ -47,6 +47,15 @@ export function layoutIndex(l: SiteLayout, cx: number, cz: number): number {
   return iz * l.nx + ix;
 }
 
+/**
+ * World position of layout site i's point (the region field's jittered site,
+ * regions.ts): cell = MACRO.cell · worldScale, jitter = MACRO.jitter.
+ */
+export function layoutSitePoint(l: SiteLayout, i: number, cell: number, jitter: number): { x: number; z: number } {
+  const ix = i % l.nx, iz = Math.floor(i / l.nx);
+  return { x: (l.cx0 + ix + (1 - jitter) / 2 + jitter * l.jx[i]) * cell, z: (l.cz0 + iz + (1 - jitter) / 2 + jitter * l.jz[i]) * cell };
+}
+
 /** [min, max] of the bias over the layout, including 0 (pseudo-sites outside). */
 export function layoutBiasRange(l: SiteLayout | null | undefined): [number, number] {
   let lo = 0, hi = 0;
