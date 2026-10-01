@@ -52,7 +52,7 @@ function manifestFor(only: readonly string[] = CLIP_IDS, formats: readonly ("web
   for (const id of only) {
     const files: Record<string, unknown> = {};
     for (const f of formats) files[f] = { file: `${id}.abc123.${f}`, bytes: 1000, priming: f === "m4a" ? 1024 / 44100 : 312 / 48000, padding: f === "m4a" ? 888 / 44100 : 648 / 48000 };
-    clips[id] = { loop: id === "ambience" || id === "swim", frames: 22050, sampleRate: 22050, channels: 1, files };
+    clips[id] = { loop: ["ambience", "swim", "flow", "dread"].includes(id), frames: 22050, sampleRate: 22050, channels: 1, files };
   }
   return { version: 1, clips } as SfxManifest;
 }

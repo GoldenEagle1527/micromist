@@ -8,6 +8,7 @@ Rendering and interaction for resource nodes, the particle tank and lost caches.
 | `placement.ts` | Deterministic node anchors, sites queued nearest first, time-sliced | no |
 | `selection.ts` | Visible set (caches + nearest nodes) and aim target | no |
 | `interaction.ts` | Hold to absorb / retrieve through the port; tank-full and flat-battery blocks; battery drain | no |
+| `absorbFlow.ts`, `absorbFlowShader.ts` | The inflow while particles move: one `THREE.Points` draw (phone 48 / desktop 160) spiralling from the node / cache into the tank below the view, tinted by the particle kind, all motion in the vertex shader; the `flow` loop follows its fade. Hidden with the nodes (a child of their draw) | yes |
 | `recall.ts` | Emergency recall timing (hold 2 s, fade, the loss in the dark, fade in). M5: inside the base the tank goes into storage (`safeLoss`), and the diver wakes at the base core once built | no |
 | `beacon.ts` | Cache flash phase and audio tick timing / gain | no |
 | `telemetry.ts` | HUD data types, compass bearings | no |
