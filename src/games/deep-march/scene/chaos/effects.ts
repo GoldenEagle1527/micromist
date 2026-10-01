@@ -17,7 +17,17 @@ export function chaosLevels(view: ChaosView | null): ChaosStageLook {
   if (!view || view.stage === 0) return NO_CHAOS;
   const row = CHAOS_LOOK.stages[view.stage];
   const k = CHAOS_LOOK.withinStage + (1 - CHAOS_LOOK.withinStage) * view.within;
-  return { veins: row.veins * k, glow: row.glow * k, fog: row.fog * k, flicker: row.flicker * k, detune: row.detune * k, ghost: row.ghost, omen: row.omen };
+  return {
+    ...row,
+    veins: row.veins * k,
+    glow: row.glow * k,
+    fog: row.fog * k,
+    flicker: row.flicker * k,
+    detune: row.detune * k,
+    fogGlobal: row.fogGlobal * k,
+    plankton: row.plankton * k,
+    audioGlobal: row.audioGlobal * k,
+  };
 }
 
 /** Local reach r of a crack's effects (m), by its width. */

@@ -1,8 +1,10 @@
 /**
  * Every strength of the chaos presentation (MVP plan M8, design doc §4.2 / §4.5 /
  * §7.3) in one table, so tuning after the visual check changes numbers only.
- * Stage 0 is all zeros (nothing is built or run). Stages 3–5 reuse stage 2's row
- * (their own effects are in the follow-up backlog). Colours are linear RGB.
+ * Stage 0 is all zeros (nothing is built or run). Stages 3–5 add the deep effects
+ * (deepChaos.ts): global fog shift, plankton tint and distorted swarms, the global
+ * audio wobble, the surge, the eye's blink and the shell beyond through cracks.
+ * Colours are linear RGB.
  */
 export type ChaosStageLook = {
   /** Glowing hairline veins on the wall (emissive gain). */
@@ -19,14 +21,28 @@ export type ChaosStageLook = {
   ghost: number;
   /** The distant megafauna omen may run. */
   omen: boolean;
+  /** Stage 3+: fog colour shift everywhere (share), on top of the local one. */
+  fogGlobal: number;
+  /** Stage 3+: plankton tint toward the stage's colour (deep.plankton), share. */
+  plankton: number;
+  /** Stage 3+: share of the plankton that swims distorted (jerky, against the drift). */
+  warp: number;
+  /** Stage 4+: audio wobble everywhere (wetness floor). */
+  audioGlobal: number;
+  /** Stage 4+: the surge and the eye's blink / pupil run. */
+  events: boolean;
 };
 
-const CALM: ChaosStageLook = { veins: 0, glow: 0, fog: 0, flicker: 0, detune: 0, ghost: 0, omen: false };
-const ECHOES: ChaosStageLook = { veins: 0.55, glow: 0, fog: 0, flicker: 0, detune: 0, ghost: 0.25, omen: false };
-const FIRST_CRACKS: ChaosStageLook = { veins: 0.8, glow: 1, fog: 0.6, flicker: 0.32, detune: 1, ghost: 0.35, omen: true };
+const DEEP_OFF = { fogGlobal: 0, plankton: 0, warp: 0, audioGlobal: 0, events: false };
+const CALM: ChaosStageLook = { veins: 0, glow: 0, fog: 0, flicker: 0, detune: 0, ghost: 0, omen: false, ...DEEP_OFF };
+const ECHOES: ChaosStageLook = { veins: 0.55, glow: 0, fog: 0, flicker: 0, detune: 0, ghost: 0.25, omen: false, ...DEEP_OFF };
+const FIRST_CRACKS: ChaosStageLook = { veins: 0.8, glow: 1, fog: 0.6, flicker: 0.32, detune: 1, ghost: 0.35, omen: true, ...DEEP_OFF };
+const SEEPING: ChaosStageLook = { veins: 0.9, glow: 1.15, fog: 0.7, flicker: 0.34, detune: 1, ghost: 0.45, omen: true, fogGlobal: 0.1, plankton: 0.4, warp: 0.25, audioGlobal: 0, events: false };
+const EROSION: ChaosStageLook = { veins: 1, glow: 1.3, fog: 0.8, flicker: 0.36, detune: 1, ghost: 0.55, omen: true, fogGlobal: 0.16, plankton: 0.7, warp: 0.5, audioGlobal: 0.3, events: true };
+const GAZE: ChaosStageLook = { ...EROSION, glow: 1.45, fogGlobal: 0.22, plankton: 0.85, warp: 0.65, audioGlobal: 0.4 };
 
 export const CHAOS_LOOK = {
-  stages: [CALM, ECHOES, FIRST_CRACKS, FIRST_CRACKS, FIRST_CRACKS, FIRST_CRACKS] as readonly ChaosStageLook[],
+  stages: [CALM, ECHOES, FIRST_CRACKS, SEEPING, EROSION, GAZE] as readonly ChaosStageLook[],
   /** Within a stage the strengths grow with χ_g from this share of the row to all of it. */
   withinStage: 0.75,
   /** Local intensity χ_l = max exp(−d² / r²): r from the crack width (4 … 60 m → 150 … 400 m). */
@@ -111,5 +127,36 @@ export const CHAOS_LOOK = {
     sway: { amp: 2.2, hz: 0.11 },
     /** Sonar look: trail / front gains, rim share. */
     look: { trail: 0.55, front: 0.9, rim: 0.6 },
+  },
+  deep: {
+    /** Plankton tint per stage from 3 (sickly green-white, then red-violet). */
+    plankton: [[0.55, 0.95, 0.62], [0.95, 0.22, 0.62], [1, 0.16, 0.5]] as const,
+    /** Distorted specks: jitter amplitude (m) away from / at a crack (χ_l = 1). */
+    warpAmp: [0.25, 0.9] as const,
+    /** 混沌涌: every 180 … 300 s (first after `firstS`), ramp in / hold / out (s), its added strengths. */
+    surge: { firstS: 90, every: [180, 300] as const, ramp: 5, hold: 20, fog: 0.22, audio: 0.35, plankton: 0.25, warp: 0.25, dread: 0.55, ghostEveryS: 4 },
+    /** The eye blinks: every 150 … 300 s, a 2 s low warning, then the crack light dims to 0 for 1.5 s (0.35 s eases). */
+    blink: { firstS: 60, every: [150, 300] as const, leadS: 2, offS: 1.5, ease: 0.35, rumble: 0.35 },
+    /** The pupil, a dark vertical bar sweeping across a through crack's shell: every 40 … 90 s, over 7 s. */
+    pupil: { every: [40, 90] as const, sweepS: 7, width: 0.12, dark: 0.85 },
+  },
+  shell: {
+    /** Radius of the shell patch around a through crack's outer mouth (m), its half angle (rad), segments. */
+    radius: 90,
+    halfAngle: 1.3,
+    segments: 24,
+    /** Height band (m) and its soft edges. */
+    yBot: -60,
+    yTop: 110,
+    edge: 30,
+    /** Drawn while the camera is this close to the crack (m). */
+    near: 520,
+    /** Noise scale (m), drift (m/s), hue cycle (s), emissive gain, fog pierce (extinction ×). */
+    cell: 26,
+    drift: 2.5,
+    hueS: 48,
+    gain: 1.25,
+    pierce: 0.3,
+    colors: [[0.12, 0.75, 0.6], [0.55, 0.18, 0.85], [0.85, 0.2, 0.42]] as const,
   },
 } as const;

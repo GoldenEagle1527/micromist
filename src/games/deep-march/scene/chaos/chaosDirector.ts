@@ -9,6 +9,8 @@
  *    colour shift and the audio detune, all by the local intensity χ_l;
  *  sonar() — after the pulses: ghost echoes from the wall, the omen (rumble, then
  *    a far sonar silhouette).
+ * Stage 3+ adds the deep layer (deepChaos.ts: global fog / audio, plankton, the
+ * surge, the blink, the shell beyond through cracks).
  * During the tide (suppressed) the lamp / fog / audio return to normal, no ghost or
  * omen starts, and a running omen withdraws.
  */
@@ -20,8 +22,9 @@ import type { LampRig } from "../lampRig";
 import type { SonarPulses, SonarUniforms } from "../sonar";
 import { fillCrackSlots, fillScarSlots, nearest } from "./chaosSlots";
 import { CHAOS_LOOK } from "./config";
+import { DeepChaos, type DeepFrame, type PlanktonChaos } from "./deepChaos";
 import { NO_CHAOS, chaosAudioParams, chaosFrame, chaosLevels, followFactor, localChaos, shiftFog } from "./effects";
-import { GhostEchoes, wallToward, type WallToward } from "./ghostEcho";
+import { GhostEchoes, ghostOrigin, wallToward, type WallToward } from "./ghostEcho";
 import { OmenChain } from "./omen";
 import { createOmenMesh, type OmenMesh } from "./omenMesh";
 import { CHAOS_CRACK_N, CHAOS_SCAR_N, type ChaosUniforms } from "./seabedChaos";
@@ -35,6 +38,8 @@ export type ChaosDirectorDeps = {
   sonar: SonarUniforms;
   long: SonarPulses;
   scene: THREE.Scene;
+  /** The plankton (stage 3+ tint and distorted swarm), null in node tests. */
+  snow?: PlanktonChaos | null;
   /** 「减弱灯光起伏」 (settings): shallower, slower light changes. */
   calm: boolean;
   seed: number;
@@ -68,6 +73,8 @@ export class ChaosDirector {
   private scarClock = 0;
   /** Dive clock at the last sonar() (s): a generation's first omen counts from its start. */
   private clock = 0;
+  private deep: DeepChaos | null = null;
+  private deepOut: DeepFrame | null = null;
 
   constructor(d: ChaosDirectorDeps, view: ChaosView | null) {
     this.d = d;
@@ -100,6 +107,10 @@ export class ChaosDirector {
     fillScarSlots(u.uScar.value, u.uScarT.value, view ? nearest(view.scars, 0, 0, CHAOS_SCAR_N) : []);
     this.lag.set = false;
     this.scarClock = SCAR_REFRESH_S;
+    this.deep?.dispose();
+    const { scene, fog, snow = null } = this.d;
+    this.deep = new DeepChaos({ scene, fog, audio, snow, seed }, view, this.levels, this.clock);
+    this.deepOut = null;
     if (was && this.levels.detune <= 0) audio.chaos(chaosAudioParams(0, 0));
     if (was) audio.rumble(0);
   }
@@ -118,10 +129,12 @@ export class ChaosDirector {
     this.lag.set = true;
     const chiL = i.suppressed ? 0 : localChaos(v.cracks, i.camera.x, i.camera.z);
     const f = chaosFrame(this.levels, chiL, i.time, d.calm);
-    d.uniforms.uChaos.value.set(f.veins, v.cracks.length ? f.glow : 0, v.scars.length ? 1 : 0, 0);
+    const deep = (this.deepOut = this.deep!.frame({ ...i, chiL, watch: (c) => followFactor(c, this.lag.x, this.lag.z) }));
+    const glow = f.glow * deep.glow;
+    d.uniforms.uChaos.value.set(f.veins, v.cracks.length ? glow : 0, v.scars.length ? 1 : 0, 0);
     if (v.cracks.length) {
       const near = nearest(v.cracks, i.camera.x, i.camera.z, CHAOS_CRACK_N);
-      fillCrackSlots(d.uniforms.uCrack.value, near, (c) => f.glow * followFactor(c, this.lag.x, this.lag.z));
+      fillCrackSlots(d.uniforms.uCrack.value, near, (c) => glow * followFactor(c, this.lag.x, this.lag.z));
     }
     if (v.scars.length > CHAOS_SCAR_N && (this.scarClock += i.dt) >= SCAR_REFRESH_S) {
       this.scarClock = 0;
@@ -131,8 +144,8 @@ export class ChaosDirector {
       d.rig.spot.intensity *= f.lamp;
       d.rig.beam.uBeamGain.value *= f.lamp;
     }
-    shiftFog(d.fog.uFogColor.value, f.fog);
-    if (this.levels.detune > 0) d.audio.chaos(chaosAudioParams(f.audio, i.time));
+    shiftFog(d.fog.uFogColor.value, 1 - (1 - f.fog) * (1 - deep.fog));
+    if (this.levels.detune > 0) d.audio.chaos(chaosAudioParams(Math.max(f.audio, deep.audio), i.time));
   }
 
   /** Per frame, after the sonar pulses: ghost echoes and the omen. */
@@ -142,7 +155,8 @@ export class ChaosDirector {
     const d = this.d, G = CHAOS_LOOK.ghost;
     if (i.blocked) this.ghosts.clear();
     else if (i.pings > 0 && this.toward) this.ghosts.ping(i.pulseTime, i.diver.x, i.diver.y, i.diver.z, this.toward);
-    for (const g of this.ghosts.due(i.pulseTime)) {
+    const storm = !i.blocked && this.deepOut?.ghost && this.toward ? ghostOrigin(this.toward, i.diver.x, i.diver.y, i.diver.z) : null;
+    for (const g of storm ? [...this.ghosts.due(i.pulseTime), storm] : this.ghosts.due(i.pulseTime)) {
       d.pulses.echo(i.pulseTime, g.x, g.y, g.z, G.gain);
       d.audio.play("sonar", G.sound);
     }
@@ -150,10 +164,12 @@ export class ChaosDirector {
     const crack = nearest(this.view!.cracks, i.diver.x, i.diver.z, 1)[0] ?? null;
     const f = this.omen.update({ dt: i.dt, time: i.time, diver: i.diver, crack, blocked: i.blocked });
     this.omenMesh.update(f, i.sonar, i.time);
-    d.audio.rumble(f.rumble);
+    d.audio.rumble(Math.max(f.rumble, this.deepOut?.rumble ?? 0));
   }
 
   dispose(): void {
+    this.deep?.dispose();
+    this.deep = null;
     this.omenMesh?.mesh.removeFromParent();
     this.omenMesh?.dispose();
     this.omenMesh = null;

@@ -9,7 +9,7 @@ Replaces every URL debug switch (`?chaos= &cracks= &scar= ?at= ?light= ?tide=sim
 | Section | Commands | Takes effect |
 |---|---|---|
 | 传送 | spawn, base, crack N, the 4 edges and 4 corners of a bounded world, a custom x / y / z (steppers ±10 / ±100, "use current position") | at once; every destination is made safe (`teleport.ts`: eye height above the seabed, lifted out of rock, walked in from a rounded wall corner) |
-| 混沌预览 | stage (this generation / 0 / 1 / 2), cracks 1–2 at stage 2, a healed scar | restart; conserve only; never saved, the forecast and the tide keep the real chaos |
+| 混沌预览 | stage (this generation / 0 / 1 / 2 / 3 / 4), cracks 1–2 at stage 2 (3 at stage 3, 5 at stage 4 with the first through), a healed scar | restart; conserve only; never saved, the forecast and the tide keep the real chaos |
 | 灯光/声呐 | off / beam / high (the gear's modes); a free sonar ping (no battery, no cooldown); sonar observation mode (same as N); forget the scan record | at once; forgetting also clears the conserve world's saved record |
 | 潮汐 | simple tide (the 浊潮 murk instead of the show) | restart; conserve only |
 | 资源 | fill the battery | at once; the battery is the dive's own, not in the save |

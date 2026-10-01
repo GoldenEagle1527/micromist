@@ -38,13 +38,10 @@ export class GhostEchoes {
     const roll = this.rand();
     const delay = this.rand();
     if (roll >= this.chance) return;
-    const p = toward(x, z);
+    const p = ghostOrigin(toward, x, y, z);
     if (!p) return;
     const G = CHAOS_LOOK.ghost;
-    const dx = p.x - x, dz = p.z - z;
-    const d = Math.hypot(dx, dz);
-    const k = d > 1e-6 ? Math.min(d, G.reach) / d : 0;
-    this.queue.push({ at: t + G.delay[0] + (G.delay[1] - G.delay[0]) * delay, x: x + dx * k, y, z: z + dz * k });
+    this.queue.push({ at: t + G.delay[0] + (G.delay[1] - G.delay[0]) * delay, ...p });
     this.queue.sort((a, b) => a.at - b.at);
   }
 
@@ -58,6 +55,16 @@ export class GhostEchoes {
   clear(): void {
     this.queue.length = 0;
   }
+}
+
+/** Where a phantom pulse starts: toward the wall from (x, y, z), at most ghost.reach m away, at that height. */
+export function ghostOrigin(toward: WallToward, x: number, y: number, z: number): { x: number; y: number; z: number } | null {
+  const p = toward(x, z);
+  if (!p) return null;
+  const dx = p.x - x, dz = p.z - z;
+  const d = Math.hypot(dx, dz);
+  const k = d > 1e-6 ? Math.min(d, CHAOS_LOOK.ghost.reach) / d : 0;
+  return { x: x + dx * k, y, z: z + dz * k };
 }
 
 /**
