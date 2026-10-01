@@ -56,6 +56,9 @@ export class MarineSnow {
   private readonly material: THREE.ShaderMaterial;
   private readonly seeds: Float32Array;
   private t = 0;
+  /** A current carrying every speck (直视 ①: toward the base), m/s, and how far it has carried them. */
+  private readonly flow = new THREE.Vector3();
+  private readonly carried = new THREE.Vector3();
   private readonly candIdx: number[] = [];
   private readonly candD2: Float32Array;
 
@@ -116,17 +119,24 @@ export class MarineSnow {
     (u.uWarp.value as THREE.Vector2).set(warpAmp, warpShare);
   }
 
+  /** A current through the plankton (m/s; 0 = still water). */
+  setFlow(x: number, y: number, z: number) {
+    this.flow.set(x, y, z);
+  }
+
   update(center: THREE.Vector3, dt: number) {
     this.t += dt;
+    this.carried.addScaledVector(this.flow, dt);
+    const c = this.carried;
     this.material.uniforms.uTime.value = this.t;
     this.material.uniforms.uPixelRatio.value = Math.min(window.devicePixelRatio || 1, 2);
     const S = this.size;
     const h = S / 2;
     const drift = this.t * 0.15;
     for (let i = 0; i < this.base.length; i += 3) {
-      const bx = this.base[i] + Math.sin(this.t * 0.3 + i) * 0.2;
-      const by = this.base[i + 1] - drift;
-      const bz = this.base[i + 2] + Math.cos(this.t * 0.25 + i) * 0.2;
+      const bx = this.base[i] + c.x + Math.sin(this.t * 0.3 + i) * 0.2;
+      const by = this.base[i + 1] + c.y - drift;
+      const bz = this.base[i + 2] + c.z + Math.cos(this.t * 0.25 + i) * 0.2;
       this.pos[i] = center.x + ((((bx - center.x) % S) + S) % S) - h;
       this.pos[i + 1] = center.y + ((((by - center.y) % S) + S) % S) - h;
       this.pos[i + 2] = center.z + ((((bz - center.z) % S) + S) % S) - h;

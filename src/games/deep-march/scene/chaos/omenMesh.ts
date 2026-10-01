@@ -20,7 +20,8 @@ export type OmenMesh = {
   dispose: () => void;
 };
 
-export function createOmenMesh(opts: { sonar: SonarUniforms; long: SonarPulses }): OmenMesh {
+/** The omen's geometry (≈ 1.2k triangles) and its sonar-lit material: shared with the gaze's swarm (scene/gaze/). */
+export function omenParts(opts: { sonar: SonarUniforms; long: SonarPulses }) {
   const O = CHAOS_LOOK.omen;
   const g = buildOmenGeometry();
   const geo = new THREE.BufferGeometry();
@@ -50,6 +51,11 @@ export function createOmenMesh(opts: { sonar: SonarUniforms; long: SonarPulses }
     depthWrite: false,
     depthTest: false,
   });
+  return { geo, material, uniforms, triangles: g.triangles };
+}
+
+export function createOmenMesh(opts: { sonar: SonarUniforms; long: SonarPulses }): OmenMesh {
+  const { geo, material, uniforms, triangles } = omenParts(opts);
   const mesh = new THREE.Mesh(geo, material);
   mesh.frustumCulled = false;
   mesh.renderOrder = 11;
@@ -57,7 +63,7 @@ export function createOmenMesh(opts: { sonar: SonarUniforms; long: SonarPulses }
   mesh.name = "chaos-omen";
   return {
     mesh,
-    triangles: g.triangles,
+    triangles,
     update(f, sonar, time) {
       const k = f.presence * sonar;
       uniforms.uOmen.value = k;

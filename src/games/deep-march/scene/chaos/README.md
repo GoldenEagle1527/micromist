@@ -9,7 +9,7 @@ The rules (m, stage, χ_g, cracks, healing, the wall's thickness) are `conserve/
 | `seabedChaos.ts` | GLSL under `DM_CHAOS` + uniforms: scars (per vertex, darken the wall albedo), veins (iso-line of a 2-octave solid value noise, width from the pixel footprint, energy-conserving, faded before cells get small: no aliasing shimmer), crack light (baked `aChaos` weight on the notch + a water haze by the view ray's closest approach, piercing the turbidity) |
 | `chaosSlots.ts` | Fills the nearest-crack / nearest-scar uniform slots |
 | `chaosDirector.ts` | Per frame: uniforms, lamp modulation, fog shift, audio detune (`frame`, after the water look); ghost echoes and the omen (`sonar`, after the pulses). Does nothing for a calm generation; the tide hands it gen + 1's view at the switch |
-| `deepChaos.ts` | Stage 3+ layer owned by the director: global fog / audio, plankton tint and distorted swarm (uniforms in `particles.ts`), the timed events, the shell; the `dread` loop during a surge |
+| `deepChaos.ts` | Stage 3+ layer owned by the director: global fog / audio, plankton tint and distorted swarm (uniforms in `particles.ts`), the timed events, the shell (not on the main breach at stage 5: the eye is there, `scene/gaze/`); the `dread` loop during a surge, never below the gaze's floor (`ChaosDirector.floor`, also under the rumble) |
 | `chaosEvents.ts` | Pure, stage 4+: the surge (every 3–5 min, 5 s in / 20 s / 5 s out, a ghost pulse every 4 s at its height), the blink (2 s low rumble, then every crack light eases out for 1.5 s), the pupil sweep (every 40–90 s, 7 s) |
 | `chaosShell.ts`, `chaosShellShader.ts` | The chaos beyond the wall: a 48-triangle concave curtain 90 m beyond the nearest through crack's outer mouth, emissive 2-octave noise cycling through its palette, the eye's light (watch × blink) and the pupil's dark bar; additive, depth-tested (seen only through the crack), drawn only within 520 m of it |
 | `ghostEcho.ts` | Pure: a share of the pings (stage 1 25 %, stage 2 35 %) answered 0.3–1.2 s later by a fainter pulse from the wall's direction (`SonarPulses.echo`) |
@@ -41,6 +41,6 @@ Budgets (`test:shaders`, `test:chaos`): the chaos seabed variant within the seab
 
 ## Preview on staging
 
-The staging debug panel (`debug/`, 混沌预览) shows this dive at stage 0 | 1 | 2 | 3 | 4 (1–2 cracks at stage 2, 3 at stage 3, 5 at stage 4 with crack 0 through; optional scar; never saved; the forecast and the next tide keep the real chaos), and its 传送 puts the diver in front of any open crack (`debug/teleport.ts`). The surge comes 90 s and the first blink 60 s into the dive.
+The staging debug panel (`debug/`, 混沌预览) shows this dive at stage 0 | 1 | 2 | 3 | 4 | 5 (stage 5: the main breach and the eye, which turns toward the base 20 s into the dive) (1–2 cracks at stage 2, 3 at stage 3, 5 at stage 4 with crack 0 through; optional scar; never saved; the forecast and the next tide keep the real chaos), and its 传送 puts the diver in front of any open crack (`debug/teleport.ts`). The surge comes 90 s and the first blink 60 s into the dive.
 
 The four stage 3–4 omens have their own switches there (预览·声呐假读数 / 异常地形 / 基地灯塔变暗 / 基地的幽灵回波): on at any stage, first event about 8 s in (`late.previewS`), never saved; the anomalous terrain bakes into this dive's wall layout at full strength (with no open crack it previews stage 2 with two).

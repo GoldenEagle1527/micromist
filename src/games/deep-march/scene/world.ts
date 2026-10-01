@@ -42,6 +42,7 @@ import { LoadingGate } from "./dive/loadingGate";
 import { diveParams, diveTerrain } from "./dive/params";
 import { createOverlay, createRenderer, watchResize } from "./dive/rendererRig";
 import { createTideDirector } from "./dive/tideWiring";
+import { createGazeDirector } from "./dive/gazeWiring";
 import { ChaosDirector, needsChaosProgram } from "./chaos/chaosDirector";
 import { createChaosUniforms } from "./chaos/seabedChaos";
 import type { TideDirector } from "./tide/tideDirector";
@@ -176,6 +177,8 @@ export function createDeepMarch(host: HTMLElement, opts: DeepMarchOptions): Deep
   diver.edge = chunks.worldRect;
   // conserve with a tide port (M7): 唤潮, the show, the switch to gen + 1 (scene/tide)
   let parts: { loop: DiveParts; handle: HandleParts } | null = null;
+  // conserve, stage 5 (直视): the eye, the anchors, the berserk swarm, 封界 / 湮灭 (scene/gaze)
+  const gaze = chaos ? createGazeDirector(opts, { chaos, scene, fog, sonar, long: longPulses, snow, look, audio, baseLight, survival, tide: () => tide, layer: () => parts?.loop.conserve ?? null, input: () => input }) : null;
   if (conserveWorld && opts.tide && router) {
     tide = createTideDirector({
       port: opts.tide, scene, camera, renderer, router, seed: opts.seed, settings: field.settings, lowSpec,
@@ -256,6 +259,7 @@ export function createDeepMarch(host: HTMLElement, opts: DeepMarchOptions): Deep
     conserve,
     tide,
     chaos,
+    gaze,
     rig,
     chunks,
     occlusion,
@@ -290,6 +294,7 @@ export function createDeepMarch(host: HTMLElement, opts: DeepMarchOptions): Deep
     chunks,
     conserve,
     tide,
+    gaze,
     materials,
     gate,
     health,
@@ -322,6 +327,7 @@ export function createDeepMarch(host: HTMLElement, opts: DeepMarchOptions): Deep
       unbindDebugKey();
       spawnDebug.dispose();
       tide?.dispose();
+      gaze?.dispose();
       chaos?.dispose();
       loopParts.chunks.dispose();
       router?.dispose();

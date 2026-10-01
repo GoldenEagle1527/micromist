@@ -9,7 +9,9 @@
  *    (chaosEvents.ts): the surge (30 s swell of fog / audio / plankton, the dread
  *    loop, a ghost pulse storm), the eye's blink (all crack light eases out for
  *    1.5 s after a 2 s low rumble) and the pupil sweeping the shell;
- *  - a through crack nearby: the chaos shell beyond it (chaosShell.ts).
+ *  - a through crack nearby: the chaos shell beyond it (chaosShell.ts) — not the
+ *    main breach at stage 5: the eye is there (scene/gaze/);
+ *  - the dread loop never below the gaze's floor (`dread`, scene/gaze/).
  * During the tide (suppressed) every one returns to normal.
  */
 import type * as THREE from "three";
@@ -26,7 +28,7 @@ export type PlanktonChaos = { setChaos: (r: number, g: number, b: number, tint: 
 
 export type DeepChaosDeps = { scene: THREE.Scene; fog: FogUniforms; audio: DiveAudio; snow: PlanktonChaos | null; seed: number };
 
-export type DeepFrameInput = { dt: number; time: number; camera: THREE.Vector3; chiL: number; suppressed: boolean; watch: (c: ChaosCrackView) => number };
+export type DeepFrameInput = { dt: number; time: number; camera: THREE.Vector3; chiL: number; suppressed: boolean; watch: (c: ChaosCrackView) => number; dread: number };
 
 export type DeepFrame = {
   /** Global fog shift share and audio wetness floor (0 = none). */
@@ -56,7 +58,8 @@ export class DeepChaos {
     this.view = view;
     this.levels = levels;
     this.events = new ChaosEvents(levels.events, d.seed, clock);
-    this.through = view?.cracks.filter((c) => c.through) ?? [];
+    const eye = view?.stage === 5;
+    this.through = view?.cracks.filter((c) => c.through && !(c.breach && eye)) ?? [];
     if (this.through.length) {
       this.shell = new ChaosShell(d.fog);
       d.scene.add(this.shell.mesh);
@@ -81,7 +84,7 @@ export class DeepChaos {
     const col = D.plankton[Math.min(D.plankton.length - 1, Math.max(0, stage - 3))];
     const amp = D.warpAmp[0] + (D.warpAmp[1] - D.warpAmp[0]) * i.chiL;
     this.d.snow?.setChaos(col[0], col[1], col[2], on * Math.min(1, L.plankton + S.plankton * s), amp, on * Math.min(1, L.warp + S.warp * s));
-    this.d.audio.setLoop("dread", S.dread * s);
+    this.d.audio.setLoop("dread", Math.max(S.dread * s, i.dread));
     o.fog = on * Math.min(1, L.fogGlobal + S.fog * s);
     o.audio = on * Math.min(1, L.audioGlobal + S.audio * s);
     o.glow = i.suppressed ? 1 : ev.glow;

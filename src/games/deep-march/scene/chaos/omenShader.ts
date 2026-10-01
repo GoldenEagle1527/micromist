@@ -4,7 +4,8 @@
  * draw it — the same front / trail as the far wall ring (wallRingShader.ts) —
  * additive and not depth-tested (a sonar return through the rock), scaled by uOmen = presence ×
  * sonar strength (0: the mesh is not drawn at all). Limbs sway slowly in the
- * vertex shader; vertices past the far plane are pinned just inside it.
+ * vertex shader; vertices past the far plane are pinned just inside it. Instanced
+ * (USE_INSTANCING, scene/gaze/berserk.ts): one draw for a whole swarm of them.
  */
 export const OMEN_VERT = /* glsl */ `
 attribute float aSway;
@@ -16,9 +17,15 @@ varying vec3 vWNrm;
 void main() {
   float w = 6.2831853 * uOmenSway.y * uTime + aPhase;
   vec3 p = position + aSway * uOmenSway.x * vec3(sin(w + position.z * 0.12), 0.6 * cos(w * 0.8 + position.z * 0.1), 0.0);
-  vec4 wp = modelMatrix * vec4(p, 1.0);
+  vec4 lp = vec4(p, 1.0);
+  vec3 ln = normal;
+  #ifdef USE_INSTANCING
+  lp = instanceMatrix * lp;
+  ln = mat3(instanceMatrix) * ln;
+  #endif
+  vec4 wp = modelMatrix * lp;
   vWPos = wp.xyz;
-  vWNrm = mat3(modelMatrix) * normal;
+  vWNrm = mat3(modelMatrix) * ln;
   gl_Position = projectionMatrix * viewMatrix * wp;
   if (gl_Position.w > 0.0 && gl_Position.z > gl_Position.w) gl_Position.z = gl_Position.w * 0.999999;
 }

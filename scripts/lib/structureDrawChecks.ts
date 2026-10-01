@@ -23,7 +23,7 @@ const KINDS: readonly StructureKind[] = ["core", "lighthouse", "energy", "storag
 const RING_TRIS = 64 * 2;
 
 function placed(kinds: readonly StructureKind[]): PlacedBuilding[] {
-  return kinds.map((kind, i) => ({ id: i + 1, kind, pos: [i * 20, 0, 0] as const, yaw: i, working: true, birth: 0 }));
+  return kinds.map((kind, i) => ({ id: i + 1, kind, pos: [i * 20, 0, 0] as const, yaw: i, working: true, on: true, damage: 0, birth: 0 }));
 }
 
 export function drawChecks(c: Checker): void {

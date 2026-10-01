@@ -41,6 +41,7 @@ export function debugPortOf(factory: DeepMarchOptions["debug"], w: Lent): DebugP
       setVisible: (on) => void loop.stats.classList.toggle("on", on),
     },
     fillBattery: () => h.survival.resources.add("battery", SURVIVAL_TUNING.battery.capacity),
+    gaze: () => h.opts.gaze?.rehearsal ?? null,
     conserve: w.conserve,
   });
 }
