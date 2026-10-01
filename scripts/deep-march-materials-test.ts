@@ -208,7 +208,7 @@ for (const l of LAYERS) {
   check(shipped.join() === Object.keys(MATERIAL_FILE_BYTES).sort().join(), `materialFiles.ts lists exactly the shipped files (${shipped.length})`);
   for (const f of shipped) check(MATERIAL_FILE_BYTES[f] === statSync(`${dir}/${f}`).size, `${f}: size in materialFiles.ts`);
   check(existsSync("src/games/deep-march/scene/materialStream.ts") === false, "no runtime streaming module left");
-  const shader = readFileSync("src/games/deep-march/scene/materialShader.ts", "utf8");
+  const shader = ["materialShader", "materialDecls", "materialSelectGlsl"].map((f) => readFileSync(`src/games/deep-march/scene/${f}.ts`, "utf8")).join("\n");
   check(!/uLayerS|stand-in|dmFetch/.test(shader.replace(/no stand-ins/, "")), "shader has no stand-in / cross-fade path");
 }
 

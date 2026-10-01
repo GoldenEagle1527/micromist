@@ -4,7 +4,8 @@
  *    MeshStandardMaterial (map incl. LOD fade / emissive / lights_end / opaque blocks),
  *    three's built-ins stubbed, for detail on/off × desktop/low spec × LOD fade on/off;
  *  - seabed terrain vertex region-weight patch (materialShader.ts): compiles, its
- *    varyings match the fragment's, its attributes are the ones chunks.ts binds;
+ *    varyings match the fragment's, its attributes are the ones the chunk upload binds
+ *    (terrain/chunkUpload.ts);
  *  - background dome (water + turbidity);
  *  - plankton sprites (vertex + fragment);
  *  - the EXACT seabed programs three r186 sends to the driver (captured from a real
@@ -387,8 +388,8 @@ function wallRingPrograms(compile: Compile) {
     const vary = (src: string) => [...src.matchAll(/varying (\w+) (vReg\w*);/g)].map((m) => `${m[1]} ${m[2]}`).sort().join();
     check(vary(MAT_VERT_DECLS) === vary(MAT_DECLS) && vary(MAT_DECLS) !== "", "region varyings vertex = fragment", vary(MAT_VERT_DECLS));
     const attrs = [...MAT_VERT_DECLS.matchAll(/attribute \w+ (\w+);/g)].map((m) => m[1]);
-    const chunks = readFileSync("src/games/deep-march/terrain/chunks.ts", "utf8");
-    check(attrs.length === 2 && attrs.every((a) => chunks.includes(`setAttribute("${a}"`)), "region attributes bound by chunks.ts", attrs.join(", "));
+    const chunks = readFileSync("src/games/deep-march/terrain/chunkUpload.ts", "utf8");
+    check(attrs.length === 2 && attrs.every((a) => chunks.includes(`setAttribute("${a}"`)), "region attributes bound by chunkUpload.ts", attrs.join(", "));
   }
   arrayLint();
   exactPrograms(compile);
