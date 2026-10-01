@@ -34,6 +34,12 @@ export function debugPortOf(factory: DeepMarchOptions["debug"], w: Lent): DebugP
     observe: { get: () => loop.scanner.observing, set: (on) => (on !== loop.scanner.observing ? h.controls.toggleObserve() : on) },
     forgetScans: () => loop.scanner.forget(),
     markers: loop.spawnDebug,
+    stats: {
+      get visible() {
+        return loop.stats.classList.contains("on");
+      },
+      setVisible: (on) => void loop.stats.classList.toggle("on", on),
+    },
     fillBattery: () => h.survival.resources.add("battery", SURVIVAL_TUNING.battery.capacity),
     conserve: w.conserve,
   });

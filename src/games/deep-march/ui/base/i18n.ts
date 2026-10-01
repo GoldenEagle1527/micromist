@@ -60,9 +60,6 @@ export type BaseDict = {
   refused: (name: string, reason: string) => string;
   moved: (action: "deposit" | "withdraw" | "release", n: number) => string;
   demolished: (name: string) => string;
-  /** Play-bar hint suffix. */
-  hint: string;
-  hintPanel: string;
 };
 
 export const baseEn: BaseDict = {
@@ -126,8 +123,6 @@ export const baseEn: BaseDict = {
   refused: (n, r) => `Can't build the ${n}: ${r}`,
   moved: (a, n) => (a === "deposit" ? `${n} particles deposited` : a === "withdraw" ? `${n} particles taken` : `${n} particles released into the sea`),
   demolished: (n) => `${n} demolished — cost refunded`,
-  hint: " · G build · Q base",
-  hintPanel: " · BUILD in the fan · Base button",
 };
 
 export const baseZh: BaseDict = {
@@ -191,6 +186,4 @@ export const baseZh: BaseDict = {
   refused: (n, r) => `无法建造${n}：${r}`,
   moved: (a, n) => (a === "deposit" ? `已存入 ${n} 颗粒子` : a === "withdraw" ? `已取出 ${n} 颗粒子` : `已放流 ${n} 颗粒子`),
   demolished: (n) => `${n}已拆除 · 材料已退回`,
-  hint: " · G 建造 · Q 基地",
-  hintPanel: " · 扇形「建造」 · 「基地」按钮",
 };

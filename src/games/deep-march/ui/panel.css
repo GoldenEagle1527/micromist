@@ -76,11 +76,11 @@
   position: absolute;
   top: calc(10px + var(--dm-st, 0px));
   left: calc(10px + var(--dm-sl, 0px));
-  min-width: 118px;
+  min-width: 92px;
 }
 .dm-readout-frame {
   position: relative;
-  padding: 6px 12px 7px 10px;
+  padding: 5px 12px 6px 9px;
   background: linear-gradient(100deg, rgb(0 40 60 / 0.55), rgb(0 40 60 / 0.12));
   clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 12px 100%, 0 calc(100% - 12px));
   border-left: 2px solid var(--hud);
@@ -111,172 +111,30 @@
   font-variant-numeric: tabular-nums;
   text-shadow: 0 0 6px rgb(98 243 255 / 0.55);
 }
-.dm-readout-depth small,
-.dm-readout-speed small {
+.dm-readout-depth small {
   margin-left: 3px;
   font-size: 10px;
   font-weight: 400;
   opacity: 0.7;
 }
-.dm-readout-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-top: 4px;
-  font-size: 11px;
-  font-variant-numeric: tabular-nums;
-}
-.dm-state-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 1px 7px 1px 5px;
-  border: 1px solid var(--hud-dim);
-  font-size: 10px;
-  letter-spacing: 0.16em;
-  color: rgb(98 243 255 / 0.8);
-}
-.dm-state-chip i {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--hud-dim);
-}
-.dm-state-chip.on {
-  border-color: var(--hud-2);
-  color: #eafffb;
-  background: rgb(45 224 196 / 0.18);
-  text-shadow: 0 0 6px rgb(45 224 196 / 0.9);
-}
-.dm-state-chip.on i {
-  background: var(--hud-2);
-  box-shadow: 0 0 6px var(--hud-2);
-  animation: dm-pulse 1s ease-in-out infinite;
-}
-.dm-pitch {
-  position: absolute;
-  right: 4px;
-  top: 16px;
-  bottom: 8px;
-  width: 3px;
-  border-left: 1px solid var(--hud-faint);
-}
-.dm-pitch span {
-  position: absolute;
-  left: -3px;
-  width: 7px;
-  height: 1px;
-  background: var(--hud);
-  box-shadow: 0 0 4px var(--hud);
-}
-.dm-region {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-top: 4px;
-  padding: 2px 10px 2px 8px;
-  width: max-content;
-  max-width: 100%;
-  font-size: 11px;
-  letter-spacing: 0.1em;
-  white-space: nowrap;
-  color: #fff6e0;
-  border-left: 2px solid var(--hud);
-  background: linear-gradient(90deg, rgb(0 40 60 / 0.55), rgb(0 40 60 / 0.08));
-  text-shadow: 0 0 6px rgb(98 243 255 / 0.6);
-}
-.dm-region i {
-  width: 7px;
-  height: 7px;
-  flex: none;
-  transform: rotate(45deg);
-  box-shadow: 0 0 5px currentColor;
-}
-.dm-region small {
-  font-size: 9px;
-  opacity: 0.6;
-  letter-spacing: 0.14em;
-}
-.dm-terrain {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-top: 3px;
-  padding: 2px 10px 2px 8px;
-  width: max-content;
-  max-width: 100%;
-  font-size: 11px;
-  letter-spacing: 0.1em;
-  white-space: nowrap;
-  color: #eafffb;
-  border-left: 2px solid var(--hud-2);
-  background: linear-gradient(90deg, rgb(0 40 60 / 0.5), rgb(0 40 60 / 0.08));
-  text-shadow: 0 0 6px rgb(45 224 196 / 0.7);
-}
-.dm-terrain svg {
-  width: 16px;
-  height: 10px;
-  flex: none;
-}
-.dm-terrain path {
-  fill: none;
-  stroke: var(--hud-2);
-  stroke-width: 1.2;
-  stroke-linejoin: round;
-  filter: drop-shadow(0 0 2px rgb(45 224 196 / 0.8));
-}
 .dm-battery {
   margin-top: 4px;
-  padding: 3px 10px 4px 8px;
-  width: 132px;
-  border-left: 2px solid var(--hud-lamp);
-  background: linear-gradient(90deg, rgb(0 40 60 / 0.55), rgb(0 40 60 / 0.08));
-  font-variant-numeric: tabular-nums;
-}
-.dm-battery-head {
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
-  font-size: 11px;
-  white-space: nowrap;
-}
-.dm-battery-head small {
-  font-size: 9px;
-  letter-spacing: 0.14em;
-  opacity: 0.65;
-}
-.dm-battery-head b {
-  font-weight: 600;
-  color: #fff1d6;
-}
-.dm-light-mode {
-  margin-left: auto;
-  font-size: 9.5px;
-  letter-spacing: 0.12em;
-  opacity: 0.55;
-}
-.dm-light-mode.on {
-  opacity: 1;
-  color: var(--hud-lamp);
-  text-shadow: 0 0 6px rgb(255 210 120 / 0.7);
+  width: 100%;
+  min-width: 92px;
 }
 .dm-battery-bar {
-  display: flex;
-  gap: 2px;
-  margin-top: 3px;
-  height: 6px;
+  height: 3px;
+  background: rgb(255 226 160 / 0.14);
 }
 .dm-battery-bar i {
-  flex: 1;
-  background: rgb(98 243 255 / 0.12);
-  box-shadow: inset 0 0 0 1px rgb(98 243 255 / 0.18);
-}
-.dm-battery-bar i.on {
+  display: block;
+  height: 100%;
   background: var(--hud-lamp);
   box-shadow: 0 0 4px rgb(255 210 120 / 0.7);
+  transition: width 0.3s;
 }
-.dm-battery[data-state="low"] .dm-battery-bar i.on,
-.dm-battery[data-state="empty"] .dm-battery-bar i.on {
+.dm-battery[data-state="low"] .dm-battery-bar i,
+.dm-battery[data-state="empty"] .dm-battery-bar i {
   background: var(--hud-warn);
   box-shadow: 0 0 4px rgb(255 120 60 / 0.8);
 }
@@ -284,19 +142,69 @@
 .dm-battery[data-state="empty"] .dm-battery-status {
   animation: dm-pulse 1s ease-in-out infinite;
 }
-.dm-battery[data-state="low"],
-.dm-battery[data-state="empty"] {
-  border-left-color: var(--hud-warn);
-}
 .dm-battery-status {
-  margin-top: 2px;
-  font-size: 9.5px;
+  margin-top: 3px;
+  font-size: 10px;
   letter-spacing: 0.08em;
-  opacity: 0.8;
-}
-.dm-battery[data-state="empty"] .dm-battery-status {
   color: var(--hud-warn);
-  opacity: 1;
+  white-space: nowrap;
+}
+
+/* ---- toast lane under the compass: region entered, light switched (keyboard) ---- */
+.dm-toasts {
+  position: absolute;
+  top: calc(50px + var(--dm-st, 0px));
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+.dm-toast {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 12px;
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  white-space: nowrap;
+  background: linear-gradient(90deg, rgb(0 40 60 / 0), rgb(0 40 60 / 0.6), rgb(0 40 60 / 0));
+  animation: dm-toast 3s ease-out both;
+}
+.dm-region-toast {
+  color: #fff6e0;
+  text-shadow: 0 0 6px rgb(98 243 255 / 0.6);
+}
+.dm-region-toast i {
+  width: 7px;
+  height: 7px;
+  flex: none;
+  transform: rotate(45deg);
+  box-shadow: 0 0 5px currentColor;
+}
+.dm-region-toast small {
+  font-size: 9px;
+  opacity: 0.7;
+}
+.dm-light-toast {
+  color: var(--hud-lamp);
+  animation-duration: 1.4s;
+}
+.dm-light-toast[data-mode="off"] {
+  color: rgb(98 243 255 / 0.7);
+}
+@keyframes dm-toast {
+  0% {
+    opacity: 0;
+  }
+  10%,
+  75% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
 }
 .dm-readout-warn {
   margin-top: 5px;
@@ -309,7 +217,7 @@
   text-shadow: 0 0 6px rgb(255 120 60 / 0.6);
 }
 
-/* ---- panel toggle (top right) ---- */
+/* ---- top-right buttons: ≡ menu, plus base / recall when they apply ---- */
 .dm-hud-buttons {
   position: absolute;
   z-index: 2; /* above the look pad */
@@ -342,14 +250,21 @@
 .dm-hud-btn svg path {
   fill: none;
 }
-.dm-panel-toggle.on {
+.dm-menu-btn.on {
   border-color: var(--hud);
   box-shadow: 0 0 8px rgb(98 243 255 / 0.45), inset 0 0 6px rgb(98 243 255 / 0.25);
 }
 
-.dm-mute-btn.on {
-  color: var(--hud-warn);
-  border-color: var(--hud-warn);
+/* desktop: "? help · Esc menu" for the first seconds of a dive */
+.dm-key-chip {
+  position: absolute;
+  right: calc(52px + var(--dm-sr, 0px));
+  top: calc(16px + var(--dm-st, 0px));
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  color: rgb(98 243 255 / 0.75);
+  white-space: nowrap;
+  animation: dm-toast 9s ease-out both;
 }
 
 /* ---- look pad ---- */
@@ -444,14 +359,6 @@
   stroke: var(--hud-dim);
   stroke-width: 1;
 }
-.dm-fan-state {
-  font-size: 11px;
-  font-weight: 600;
-}
-.dm-fan.lit .dm-fan-state {
-  fill: #eafffb;
-  filter: drop-shadow(0 0 4px rgb(45 224 196 / 0.9));
-}
 .dm-fan-btn {
   pointer-events: all;
   cursor: pointer;
@@ -511,16 +418,27 @@
   fill: var(--hud-lamp);
 }
 
-.dm-fan-mode.on .dm-fan-seg {
-  fill: rgb(255 210 120 / 0.12);
-  stroke: var(--hud-lamp);
+.dm-fan-lamp[data-mode="high"].on .dm-fan-seg {
+  fill: rgb(255 226 160 / 0.3);
 }
-.dm-fan-mode.on .dm-fan-icon,
-.dm-fan-mode.on .dm-fan-edge {
-  stroke: var(--hud-lamp);
+/* tap-and-hold buttons: a held press glows before its long action fires */
+.dm-fan-btn.pressing .dm-fan-seg {
+  fill: rgb(98 243 255 / 0.24);
+  transition: fill 0.45s ease-in;
 }
-.dm-fan-mode.on .dm-fan-label {
-  fill: var(--hud-lamp);
+.dm-fan-charge {
+  stroke: #6ff3ff;
+  stroke-width: 2;
+  opacity: 0.8;
+}
+/* sonar observation view on: PING glows violet-cyan (hold again to return) */
+.dm-fan-ping.observe .dm-fan-seg {
+  fill: rgb(150 120 255 / 0.22);
+  stroke: #b9a8ff;
+}
+.dm-fan-ping.observe .dm-fan-edge {
+  stroke: #b9a8ff;
+  opacity: 1;
 }
 .dm-fan-ping.on .dm-fan-seg {
   fill: rgb(90 230 255 / 0.14);
@@ -560,27 +478,15 @@
 @container dm-stage (max-width: 560px) {
   .dm-readout {
     top: calc(52px + var(--dm-st, 0px));
-    min-width: 0;
   }
   .dm-readout-depth {
     font-size: 18px;
   }
-  .dm-terrain,
-  .dm-region {
-    font-size: 10px;
-    padding: 1px 8px 1px 6px;
-  }
-  .dm-region small {
-    display: none;
-  }
-  .dm-battery {
-    width: 112px;
-    padding: 2px 8px 3px 6px;
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .dm-state-chip.on i,
+  .dm-toast,
+  .dm-key-chip,
   .dm-battery[data-state="low"] .dm-battery-bar,
   .dm-battery[data-state="empty"] .dm-battery-status,
   .dm-dial.active .dm-thumb-ring {

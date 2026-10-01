@@ -92,4 +92,13 @@ export const LIVE_COMMANDS: readonly DebugCommand[] = [
     get: (c) => c.port?.markers() ?? false,
     set: (c, on) => c.port?.setMarkers(on),
   },
+  {
+    id: "overlay.stats",
+    section: "overlay",
+    label: "stats",
+    kind: "toggle",
+    when: live,
+    get: (c) => c.port?.stats() ?? false,
+    set: (c, on) => c.port?.setStats(on),
+  },
 ];

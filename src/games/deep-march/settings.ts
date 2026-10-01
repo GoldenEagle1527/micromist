@@ -18,6 +18,11 @@ export type DeepMarchSettings = {
   calmLights: boolean;
   /** Dive sound (the staging debug panel's sound switch still turns audio off entirely, whatever this says). */
   sound: SoundSettings;
+  /**
+   * True fullscreen (browser chrome hidden) when a dive starts; null = automatic
+   * (on for touch devices). The dive always fills the browser window either way.
+   */
+  fullscreen: boolean | null;
 };
 
 export type SoundSettings = {
@@ -49,6 +54,10 @@ export function panelEnabled(s: DeepMarchSettings): boolean {
   return s.panel ?? isTouchDevice();
 }
 
+export function fullscreenEnabled(s: DeepMarchSettings): boolean {
+  return s.fullscreen ?? isTouchDevice();
+}
+
 export function loadSettings(): DeepMarchSettings {
   const raw = gameStoreGet<Partial<DeepMarchSettings>>(DEEP_MARCH_GAME, KEY);
   const sens = typeof raw?.sensitivity === "number" && Number.isFinite(raw.sensitivity) ? raw.sensitivity : 1;
@@ -60,6 +69,7 @@ export function loadSettings(): DeepMarchSettings {
     invertY: raw?.invertY === true,
     calmLights: raw?.calmLights === true,
     sound: parseSound(raw?.sound),
+    fullscreen: typeof raw?.fullscreen === "boolean" ? raw.fullscreen : null,
   };
 }
 
@@ -72,5 +82,6 @@ export function saveSettings(s: DeepMarchSettings): void {
     invertY: s.invertY,
     calmLights: s.calmLights === true,
     sound: parseSound(s.sound),
+    fullscreen: typeof s.fullscreen === "boolean" ? s.fullscreen : null,
   });
 }

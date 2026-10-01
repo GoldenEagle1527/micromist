@@ -8,6 +8,7 @@ import { tideEn, tideZh, type TideDict } from "./ui/tide/i18n";
 import { baseEn, baseZh, type BaseDict } from "./ui/base/i18n";
 import { hintsEn, hintsZh, type HintDict } from "./ui/hints/i18n";
 import type { SonarHudLabels } from "./ui/SonarGauge";
+import { menuEn, menuZh, type MenuDict } from "./ui/menu/i18n";
 
 export type DeepMarchDict = {
   setupTitle: string;
@@ -21,13 +22,17 @@ export type DeepMarchDict = {
   calmLightsHint: string;
   panelToggle: string;
   panelToggleHint: string;
+  /** Setup: true fullscreen when the dive starts. */
+  fullscreenSetting: string;
+  fullscreenSettingHint: string;
   start: string;
-  backSetup: string;
   controlsTitle: string;
   controls: string[];
-  hint: string;
-  hintPanel: string;
   stageAria: string;
+  /** In-game ≡ menu, help sheet, desktop key chip. */
+  menu: MenuDict;
+  /** Region toast on entering a new region (followed by its name). */
+  regionEnter: string;
   hudDepth: string;
   hudSpeed: string;
   hudHeading: string;
@@ -69,7 +74,6 @@ export type DeepMarchDict = {
   stateHover: string;
   btnUp: string;
   btnDown: string;
-  btnSwim: string;
   btnLamp: string;
   /** Fan sector: the active sonar ping. */
   btnPing: string;
@@ -80,17 +84,11 @@ export type DeepMarchDict = {
   lightOff: string;
   lightModes: Record<LightMode, string>;
   batteryEmpty: string;
-  batteryCharging: string;
+  batteryLow: string;
   dialMove: string;
-  showPanel: string;
-  hidePanel: string;
-  exit: string;
-  flip: string;
-  /** Sound: setup toggle + volume, HUD mute button. */
+  /** Sound: setup toggle + volume (in the dive: the ≡ menu). */
   soundToggle: string;
   volume: string;
-  mute: string;
-  unmute: string;
   seedNow: (seed: string) => string;
 };
 
@@ -106,8 +104,9 @@ export const deepMarchEn: DeepMarchDict = {
   calmLightsHint: "Near cracks the lamp and the glow pulse only gently and slowly.",
   panelToggle: "On-screen control panel",
   panelToggleHint: "Dial + buttons for touch; on by default on phones and tablets.",
+  fullscreenSetting: "Fullscreen dive",
+  fullscreenSettingHint: "The dive always fills the browser window; this also hides the browser bars (Esc leaves). On by default on phones and tablets.",
   start: "Dive",
-  backSetup: "← Setup",
   controlsTitle: "Controls",
   controls: [
     "Mouse — look (click the view to capture the mouse, Esc releases)",
@@ -117,11 +116,12 @@ export const deepMarchEn: DeepMarchDict = {
     "3 — sonar ping: a cyan wavefront sweeps the terrain around you and records it (costs battery, short recharge)",
     "N — sonar observation mode: see only what your pings recorded (unscanned places stay empty; after a tide the record shows the old terrain until you ping there again) · N again returns",
     "Lights and pings run on the battery (beam drains least); it slowly recharges while nothing draws on it",
-    "Touch panel: left dial moves (push to the outer SWIM arc to swim), right fan = up / down / swim / lamp / light mode / ping, drag elsewhere to look · VIEW (under the battery) = sonar observation",
+    "Esc (mouse released) — the menu: sound, fullscreen, help, leave · ? — this help",
+    "Touch: left dial moves (push into the outer SWIM arc to swim, double-tap the dial to keep swimming) · drag the view to look · right fan: UP / DOWN (hold), LAMP (tap on / off, hold to switch beam / high beam), PING (tap to ping, hold for the sonar observation view); ABSORB appears when aiming at a node, BUILD inside the base · ≡ top right = menu",
   ],
-  hint: "Click to look · WASD move · double-tap W swim · Space/Shift up/down · F lights · L mode · 3 sonar · N scan view",
-  hintPanel: "Left dial moves · right fan acts · drag the view to look · VIEW under the battery = sonar observation",
   stageAria: "Deep March underwater view",
+  menu: menuEn,
+  regionEnter: "Entering",
   hudDepth: "Depth",
   hudSpeed: "Speed",
   hudHeading: "Heading",
@@ -179,7 +179,6 @@ export const deepMarchEn: DeepMarchDict = {
   stateHover: "HOVER",
   btnUp: "UP",
   btnDown: "DOWN",
-  btnSwim: "SWIM",
   btnLamp: "LAMP",
   btnPing: "PING",
   sonarHud: {
@@ -189,23 +188,19 @@ export const deepMarchEn: DeepMarchDict = {
     noBattery: "LOW BATTERY",
     observe: "VIEW",
     observeOn: "SONAR OBSERVATION",
-    observeHint: "Recorded scans, not the live seabed — after a tide they show the old terrain until you ping again (3)",
+    observeHint: "Recorded scans, not the live seabed — after a tide they show the old terrain until you ping again",
+    exitKey: "N returns",
+    exitTouch: "Hold PING to return",
     recorded: "Mapped",
   },
   hudBattery: "Battery",
   lightOff: "LIGHTS OFF",
   lightModes: { beam: "BEAM", high: "HIGH BEAM" },
   batteryEmpty: "Battery flat — lights offline",
-  batteryCharging: "Recharging…",
+  batteryLow: "Battery low",
   dialMove: "Move",
-  showPanel: "Show control panel",
-  hidePanel: "Hide control panel",
-  exit: "Exit dive",
-  flip: "Flip view 180°",
   soundToggle: "Sound effects",
   volume: "Volume",
-  mute: "Mute",
-  unmute: "Unmute",
   seedNow: (seed) => `Seed ${seed}`,
 };
 
@@ -220,8 +215,9 @@ export const deepMarchZh: DeepMarchDict = {
   calmLightsHint: "裂缝附近的灯光和辉光只做轻微、缓慢的变化。",
   panelToggle: "屏幕操控面板",
   panelToggleHint: "触屏用的摇盘和按钮；手机、平板上默认开启。",
+  fullscreenSetting: "全屏下潜",
+  fullscreenSettingHint: "下潜画面总会铺满浏览器窗口；勾选后还会隐藏浏览器界面（Esc 退出）。手机、平板上默认开启。",
   start: "下潜",
-  backSetup: "← 返回设置",
   controlsTitle: "操作",
   controls: [
     "鼠标 — 转动视角（点击画面锁定鼠标，Esc 释放）",
@@ -231,11 +227,12 @@ export const deepMarchZh: DeepMarchDict = {
     "3 — 声呐脉冲：一道青色波前扫过周围地形并记录下来（耗电，短暂冷却）",
     "N — 声呐观察模式：只显示声呐记录到的地形（没扫过的地方一片空白；潮汐之后记录仍是旧地形，要在那里重新扫描才会更新）· 再按 N 返回",
     "灯光和声呐脉冲消耗电池（光束最省电）；不耗电时电池会缓慢回充",
-    "触屏面板：左侧摇盘移动（推到外圈「游泳」弧区即游泳），右侧扇形按钮为上浮 / 下沉 / 游泳 / 头灯 / 灯光模式 / 声呐，拖动其余画面转动视角 · 电池下方「观察」= 声呐观察模式",
+    "Esc（鼠标释放后）— 菜单：音效、全屏、帮助、退出 · ? — 本操作说明",
+    "触屏：左摇盘移动（推到外圈「游泳」弧区即游泳，双击摇盘保持游泳）· 拖动画面转视角 · 右侧扇形：上浮 / 下沉（按住）、头灯（点按开关，长按切换光束 / 远光）、声呐（点按发射，长按进入声呐观察）；对准资源时出现「吸取」，在基地内出现「建造」· 右上角 ≡ 为菜单",
   ],
-  hint: "点击画面转视角 · WASD 移动 · 双击 W 游泳 · 空格/Shift 上浮/下沉 · F 灯光 · L 模式 · 3 声呐 · N 观察",
-  hintPanel: "左摇盘移动 · 右扇形按钮操作 · 拖动画面转视角 · 电池下方「观察」进入声呐观察",
   stageAria: "深潜水下画面",
+  menu: menuZh,
+  regionEnter: "进入",
   hudDepth: "深度",
   hudSpeed: "速度",
   hudHeading: "航向",
@@ -293,7 +290,6 @@ export const deepMarchZh: DeepMarchDict = {
   stateHover: "悬浮",
   btnUp: "上浮",
   btnDown: "下沉",
-  btnSwim: "游泳",
   btnLamp: "头灯",
   btnPing: "声呐",
   sonarHud: {
@@ -303,22 +299,18 @@ export const deepMarchZh: DeepMarchDict = {
     noBattery: "电量不足",
     observe: "观察",
     observeOn: "声呐观察模式",
-    observeHint: "显示的是扫描记录，不是实时海床——潮汐之后仍是旧地形，按 3 重新扫描才会更新",
+    observeHint: "显示的是扫描记录，不是实时海床——潮汐之后仍是旧地形，重新扫描才会更新",
+    exitKey: "按 N 返回",
+    exitTouch: "长按「声呐」返回",
     recorded: "已测绘",
   },
   hudBattery: "电池",
   lightOff: "灯光关闭",
   lightModes: { beam: "光束", high: "远光" },
   batteryEmpty: "电量耗尽 · 灯光离线",
-  batteryCharging: "回充中…",
+  batteryLow: "电量低",
   dialMove: "移动",
-  showPanel: "显示操控面板",
-  hidePanel: "隐藏操控面板",
-  exit: "退出下潜",
-  flip: "画面翻转 180°",
   soundToggle: "音效",
   volume: "音量",
-  mute: "静音",
-  unmute: "取消静音",
   seedNow: (seed) => `种子 ${seed}`,
 };

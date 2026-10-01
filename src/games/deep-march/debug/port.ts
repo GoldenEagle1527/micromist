@@ -1,6 +1,6 @@
 /**
  * The debug panel's runtime port: what the panel does to the running dive at
- * once (teleport, light mode, a free sonar ping, observation mode, forgetting the scan record, the B overlay, battery). Built by the dive from
+ * once (teleport, light mode, a free sonar ping, observation mode, forgetting the scan record, the B overlay, the stats line, battery). Built by the dive from
  * the parts it lends (scene/world.ts → DeepMarchOptions.debug); only staging
  * builds pass this factory. Nothing here writes a save except forgetting the scan record.
  */
@@ -33,6 +33,8 @@ export function createDebugPort(p: DebugParts): DebugPort {
     forgetScans: p.forgetScans,
     markers: () => p.markers.visible,
     setMarkers: (on) => p.markers.setVisible(on),
+    stats: () => p.stats.visible,
+    setStats: (on) => p.stats.setVisible(on),
     fillBattery: p.fillBattery,
   };
 }

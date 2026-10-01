@@ -98,3 +98,11 @@ export function IconMute() {
     </svg>
   );
 }
+/** ≡ (the in-game menu). */
+export function IconMenu() {
+  return (
+    <svg viewBox="-12 -12 24 24" aria-hidden="true">
+      <path d="M -8 -6 L 8 -6 M -8 0 L 8 0 M -8 6 L 8 6" fill="none" />
+    </svg>
+  );
+}
