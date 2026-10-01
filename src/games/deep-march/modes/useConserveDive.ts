@@ -5,7 +5,7 @@
  * hide and when the dive ends.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { BasePort, ChaosView, ConserveSession, ExpeditionPort, OpenIntent, TidePort } from "../conserve";
+import type { BasePort, ChaosView, ConserveSession, ExpeditionPort, GazePort, OpenIntent, TidePort } from "../conserve";
 import { seedFromString } from "../terrain/noise";
 import type { SiteLayout } from "../terrain/siteLayout";
 import { LOADING_STEPS, type LoadingStepDef } from "../ui/loading/steps";
@@ -21,8 +21,10 @@ export type ConserveDive =
    * (these stay the objects the world was built with; the world takes the new ones from the tide port).
    * `chaos`: the generation's chaos as the scene presents it (M8), or the debug panel's preview (never saved).
    * `scans`: the save's sonar scan record (game store `scan/<slot>`; a tide leaves it as it is).
+   * `gaze`: stage 5's sequence (idle without one). The debug panel's 结局演练 opens a sandboxed copy of
+   * the save instead (conserve/session/rehearsal.ts): it and its scans live in memory, the real slot is never written.
    */
-  | { status: "open"; seedText: string; world: SiteLayout; expedition: ExpeditionPort; base: BasePort; tide: TidePort; chaos: ChaosView; scans: ScanStore; steps: readonly LoadingStepDef[] }
+  | { status: "open"; seedText: string; world: SiteLayout; expedition: ExpeditionPort; base: BasePort; tide: TidePort; chaos: ChaosView; gaze: GazePort; scans: ScanStore; steps: readonly LoadingStepDef[] }
   /** The save can't be entered: the loading screen shows why (no world is built). */
   | { status: "blocked"; steps: readonly LoadingStepDef[] };
 
@@ -38,7 +40,11 @@ export function useConserveDive(intent: OpenIntent | null): { dive: ConserveDive
     loadConserve().then(
       (mod) => {
         if (cancelled) return;
-        const outcome = mod.openConserveSession({ backend: mod.createGameStoreBackend(), intent, hashSeed: seedFromString });
+        // the debug panel's 结局演练: a sandboxed copy in memory (save and scans), never the real slot
+        const phase = diveParams().rehearsal;
+        const store = () => (phase === null ? mod.createGameStoreBackend() : mod.createMemoryBackend());
+        const backend = phase === null ? store() : mod.rehearsalBackend(mod.createGameStoreBackend(), phase);
+        const outcome = mod.openConserveSession({ backend, intent, hashSeed: seedFromString, rehearsal: phase !== null });
         const report = outcome.ok ? outcome.session.report : outcome.report;
         const steps = mod.withWorldSaveStep(LOADING_STEPS, report);
         if (!outcome.ok) return setDive({ status: "blocked", steps });
@@ -48,8 +54,9 @@ export function useConserveDive(intent: OpenIntent | null): { dive: ConserveDive
         // the generation's chaos, or the debug panel's preview: the terrain's wall (cracks) and the scene's view agree
         const dc = mod.diveChaosOf(s, diveParams().chaos, diveParams().omens.anomaly);
         const sk = saveScanKey(s.identity);
-        const scans = savedScanStore(mod.createGameStoreBackend(), sk.key, sk.tag);
-        setDive({ status: "open", seedText: s.seedText, world: mod.terrainLayoutOf(s.siteTable, dc.wall), expedition: s.expedition, base: s.base, tide: mod.tidePortOf(s), chaos: dc.view, scans, steps });
+        const scans = savedScanStore(store(), sk.key, sk.tag);
+        const world = mod.terrainLayoutOf(s.siteTable, dc.wall);
+        setDive({ status: "open", seedText: s.seedText, world, expedition: s.expedition, base: s.base, tide: mod.tidePortOf(s), chaos: dc.view, gaze: mod.gazePortOf(s), scans, steps });
       },
       () => !cancelled && setDive({ status: "failed" }),
     );

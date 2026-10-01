@@ -46,6 +46,12 @@ export type DebugDict = {
     omenDimming: string;
     omenHomeGhost: string;
     tideSimple: string;
+    rehearsal: string;
+    gazeSkip: string;
+    gazeAnchors: string;
+    gazeReturn: string;
+    gazeSeal: string;
+    gazeEnd: string;
     ktx2: string;
     dpr: string;
     lodNear: string;
@@ -57,7 +63,7 @@ export type DebugDict = {
     occlusion: string;
     audioOn: string;
   };
-  opt: { auto: string; chaosOwn: string; fogOff: string; lightOff: string; lightBeam: string; lightHigh: string };
+  opt: { auto: string; chaosOwn: string; fogOff: string; lightOff: string; lightBeam: string; lightHigh: string; off: string };
   target: { spawn: string; base: string; crack: (n: string) => string; edge: Record<Edge, string>; corner: Record<Corner, string> };
 };
 
@@ -76,7 +82,7 @@ export const debugZh: DebugDict = {
   needsRestart: "需重开",
   on: "开",
   off: "关",
-  sections: { teleport: "传送", chaos: "混沌预览", light: "灯光/声呐", tide: "潮汐", resources: "资源", render: "渲染", audio: "声音", overlay: "调试叠加层" },
+  sections: { teleport: "传送", chaos: "混沌预览", light: "灯光/声呐", tide: "潮汐", ending: "结局演练", resources: "资源", render: "渲染", audio: "声音", overlay: "调试叠加层" },
   cmd: {
     targets: "去往",
     customX: "自定 x（东西）",
@@ -99,6 +105,12 @@ export const debugZh: DebugDict = {
     omenDimming: "预览·基地灯塔变暗（站在亮着的灯塔附近）",
     omenHomeGhost: "预览·基地的幽灵回波（离基地 160 m 外打声呐）",
     tideSimple: "简化潮汐（直接浊潮）",
+    rehearsal: "结局演练：直视沙盒（存档副本只在内存里，不写入真实存档）",
+    gazeSkip: "直视时间 +5 分钟",
+    gazeAnchors: "点亮全部锚点（不耗粒子）",
+    gazeReturn: "放流到预报 m ≥ 0.84",
+    gazeSeal: "立即封界（两件事完成 + 原地唤来封界潮）",
+    gazeEnd: "立即湮灭（只结束沙盒）",
     ktx2: "KTX2 纹理（关 = WebP）",
     dpr: "像素比",
     lodNear: "全精度半径",
@@ -110,7 +122,7 @@ export const debugZh: DebugDict = {
     occlusion: "遮挡剔除",
     audioOn: "声音（关 = 完全静音）",
   },
-  opt: { auto: "默认", chaosOwn: "本世代", fogOff: "无", lightOff: "关灯", lightBeam: "光束", lightHigh: "远光" },
+  opt: { auto: "默认", chaosOwn: "本世代", fogOff: "无", lightOff: "关灯", lightBeam: "光束", lightHigh: "远光", off: "关" },
   target: {
     spawn: "出生点",
     base: "基地",
@@ -133,7 +145,7 @@ export const debugEn: DebugDict = {
   needsRestart: "restart",
   on: "On",
   off: "Off",
-  sections: { teleport: "Teleport", chaos: "Chaos preview", light: "Lights / sonar", tide: "Tide", resources: "Resources", render: "Rendering", audio: "Sound", overlay: "Debug overlay" },
+  sections: { teleport: "Teleport", chaos: "Chaos preview", light: "Lights / sonar", tide: "Tide", ending: "Ending rehearsal", resources: "Resources", render: "Rendering", audio: "Sound", overlay: "Debug overlay" },
   cmd: {
     targets: "Go to",
     customX: "Custom x (east–west)",
@@ -156,6 +168,12 @@ export const debugEn: DebugDict = {
     omenDimming: "Preview · base lighthouse dimming (stay near a lit lighthouse)",
     omenHomeGhost: "Preview · the base's ghost echo (ping 160 m or more from the base)",
     tideSimple: "Simple tide (murk right away)",
+    rehearsal: "Ending rehearsal: a gaze sandbox (a copy of the save in memory; the real save is never written)",
+    gazeSkip: "Gaze time +5 minutes",
+    gazeAnchors: "Light every anchor (free)",
+    gazeReturn: "Release until the forecast m ≥ 0.84",
+    gazeSeal: "Seal now (both conditions + the sealing tide here)",
+    gazeEnd: "Annihilate now (ends the sandbox only)",
     ktx2: "KTX2 textures (off = WebP)",
     dpr: "Pixel ratio",
     lodNear: "Full-detail radius",
@@ -167,7 +185,7 @@ export const debugEn: DebugDict = {
     occlusion: "Occlusion culling",
     audioOn: "Sound (off = fully silent)",
   },
-  opt: { auto: "Default", chaosOwn: "This generation", fogOff: "None", lightOff: "Off", lightBeam: "Beam", lightHigh: "High beam" },
+  opt: { auto: "Default", chaosOwn: "This generation", fogOff: "None", lightOff: "Off", lightBeam: "Beam", lightHigh: "High beam", off: "Off" },
   target: {
     spawn: "Spawn",
     base: "Base",

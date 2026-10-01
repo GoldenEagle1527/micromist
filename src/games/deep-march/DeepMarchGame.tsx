@@ -87,6 +87,8 @@ export function DeepMarchGame() {
   const diveTide = conservePlay && conserveDive.status === "open" ? conserveDive.tide : null;
   // conserve (M8): the generation's chaos (or the debug panel's preview)
   const diveChaos = conservePlay && conserveDive.status === "open" ? conserveDive.chaos : null;
+  // conserve, stage 5 (直视): the session's gaze (idle without one)
+  const diveGaze = conservePlay && conserveDive.status === "open" ? conserveDive.gaze : null;
   // the sonar scan record: conserve keeps it in the save; the free dive in this session (world.ts default)
   const diveScans = conservePlay && conserveDive.status === "open" ? conserveDive.scans : null;
 
@@ -114,6 +116,7 @@ export function DeepMarchGame() {
           base: diveBase,
           tide: diveTide,
           chaos: diveChaos,
+          gaze: diveGaze,
           scans: diveScans,
           calmLights,
           debug: debugRef.current?.createDebugPort ?? null,

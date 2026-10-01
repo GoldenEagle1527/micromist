@@ -1,0 +1,112 @@
+/* 直视 HUD (stage 5) and the two endings: quiet type, slow fades, no flashing. */
+.dm-gaze-card {
+  position: absolute;
+  right: 14px;
+  top: 22%;
+  max-width: min(46%, 300px);
+  padding: 8px 12px;
+  border-right: 2px solid rgb(255 150 70 / 0.55);
+  background: rgb(20 6 4 / 0.42);
+  font-size: 12px;
+  line-height: 1.6;
+  letter-spacing: 0.05em;
+  color: #f3d9c4;
+  text-align: right;
+  pointer-events: none;
+}
+.dm-gaze-card .done {
+  color: #bff3ff;
+}
+.dm-gaze-watch {
+  font-size: 13px;
+  letter-spacing: 0.16em;
+  color: #ffcf9a;
+}
+.dm-gaze-prompt,
+.dm-gaze-line {
+  position: absolute;
+  left: 50%;
+  bottom: 30%;
+  transform: translateX(-50%);
+  padding: 5px 14px;
+  background: rgb(0 16 34 / 0.55);
+  font-size: 13px;
+  color: #d8f6ff;
+  pointer-events: none;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.dm-gaze-line {
+  color: #ffd9b8;
+  animation: dm-gaze-in 3s ease-out both;
+}
+.dm-gaze-hold {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 2px;
+  background: #8fe9ff;
+  transform-origin: left center;
+}
+.dm-ending {
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 24px;
+  text-align: center;
+  transition: opacity 1.5s linear;
+}
+.dm-ending p {
+  margin: 0;
+  max-width: 560px;
+  font-size: 15px;
+  letter-spacing: 0.08em;
+  animation: dm-gaze-in 4s ease-out both;
+}
+.dm-ending-dark {
+  background: rgb(0 0 0 / 0.92);
+  color: #d9d2cc;
+}
+.dm-ending-light {
+  background: rgb(0 14 30 / 0.6);
+  color: #d6f4ff;
+  animation: dm-gaze-in 5s ease-out both;
+}
+.dm-ending-end {
+  margin-top: 18px;
+  animation: dm-gaze-in 4s ease-out both;
+}
+.dm-ending-end h2 {
+  margin: 0 0 6px;
+  font-size: 22px;
+  font-weight: 400;
+  letter-spacing: 0.3em;
+}
+.dm-ending-end .dim {
+  opacity: 0.7;
+  font-size: 13px;
+}
+.dm-ending-btn {
+  margin-top: 14px;
+  padding: 8px 26px;
+  border: 1px solid rgb(200 230 255 / 0.5);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  letter-spacing: 0.2em;
+  cursor: pointer;
+}
+@keyframes dm-gaze-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}

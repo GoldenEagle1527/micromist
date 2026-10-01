@@ -12,7 +12,7 @@ import type { DiveParams } from "../scene/dive/params";
 import type { DebugDict } from "./i18n";
 import type { DebugPort, TeleportTarget } from "./types";
 
-export const SECTIONS = ["teleport", "chaos", "light", "tide", "resources", "render", "audio", "overlay"] as const;
+export const SECTIONS = ["teleport", "chaos", "light", "tide", "ending", "resources", "render", "audio", "overlay"] as const;
 export type SectionId = (typeof SECTIONS)[number];
 
 export type DebugCtx = {

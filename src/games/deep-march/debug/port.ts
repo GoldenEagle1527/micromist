@@ -36,5 +36,6 @@ export function createDebugPort(p: DebugParts): DebugPort {
     stats: () => p.stats.visible,
     setStats: (on) => p.stats.setVisible(on),
     fillBattery: p.fillBattery,
+    gaze: p.gaze,
   };
 }

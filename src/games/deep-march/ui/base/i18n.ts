@@ -58,6 +58,8 @@ export type BaseDict = {
   tideAway: string;
   tideNotReady: string;
   tideRunning: string;
+  /** Stage 5: only the sealing tide can come — not yet / now. */
+  tideGaze: { watching: string; seal: string };
   /** Why the tide can't be called yet, and what to do (ui/base/tideAdvice.ts, M9). */
   advice: AdviceDict;
   homeMark: (m: number) => string;
@@ -120,6 +122,7 @@ export const baseEn: BaseDict = {
   tideAway: "Call the tide from inside the base",
   tideNotReady: "The tide can't be called yet",
   tideRunning: "A tide is running",
+  tideGaze: { watching: "It is looking at this place: no tide comes but the sealing one (forecast m ≥ 0.84 and 4 anchors lit)", seal: "Sealing tide ready" },
   advice: adviceEn,
   homeMark: (m) => `Base · ${m} m`,
   built: (n) => `${n} built`,
@@ -181,6 +184,7 @@ export const baseZh: BaseDict = {
   tideAway: "请在基地保护范围内唤潮",
   tideNotReady: "现在还不能唤潮",
   tideRunning: "潮汐进行中",
+  tideGaze: { watching: "它在看着这里：唯一能来的潮是封界潮（预报 m ≥ 0.84，并点亮 4 个锚点）", seal: "封界潮已就绪" },
   advice: adviceZh,
   homeMark: (m) => `基地 · ${m} 米`,
   built: (n) => `${n}已建成`,

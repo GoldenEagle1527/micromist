@@ -4,7 +4,7 @@
  * resulting DebugPort out on its handle. Production builds never load the panel,
  * never pass a factory, and so no dive there builds a port.
  */
-import type { ChaosView } from "../conserve";
+import type { ChaosView, GazeRehearsal } from "../conserve";
 import type { LightMode } from "../survival";
 import type { WorldRect } from "../terrain/siteLayout";
 
@@ -47,6 +47,8 @@ export type DebugParts = {
   stats: { readonly visible: boolean; setVisible(on: boolean): void };
   /** Battery to full (the dive's own resource: not in any save). */
   fillBattery: () => void;
+  /** Conserve: the 结局演练 controls — only in a rehearsal dive (a sandboxed save), else null. */
+  gaze: () => GazeRehearsal | null;
   conserve: boolean;
 };
 
@@ -76,4 +78,6 @@ export type DebugPort = {
   stats(): boolean;
   setStats(on: boolean): void;
   fillBattery(): void;
+  /** The 结局演练 controls (a rehearsal dive only), else null. */
+  gaze(): GazeRehearsal | null;
 };
