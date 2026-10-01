@@ -7,6 +7,20 @@
 import type { ChaosPreviewSpec } from "../../conserve";
 import { terrainForDevice, type TerrainSettings } from "../../terrain/config";
 
+/** Conserve previews of the stage 3–4 omens (debug panel 混沌预览): on at any stage, first event within seconds, never saved. */
+export type OmenPreview = {
+  /** 声呐假读数: phantom contacts in the pings, readings jumping (anywhere). */
+  phantoms: boolean;
+  /** 异常地形 at full strength around the open cracks (none open: a stage-2 preview with two). */
+  anomaly: boolean;
+  /** 基地灯塔偶尔变暗 near a lit lighthouse. */
+  dimming: boolean;
+  /** 基地的幽灵回波 (no base yet: the lander spawn stands in). */
+  homeGhost: boolean;
+};
+
+export const NO_OMEN_PREVIEW: Readonly<OmenPreview> = Object.freeze({ phantoms: false, anomaly: false, dimming: false, homeGhost: false });
+
 export type DiveParams = {
   /** Pinned pixel ratio (> 0), else 0 (adaptive). */
   dpr: number;
@@ -28,6 +42,8 @@ export type DiveParams = {
   tideSimple: boolean;
   /** Conserve: a chaos preview for this dive (conserve/chaos/preview.ts; never saved), null = the generation's own. */
   chaos: ChaosPreviewSpec | null;
+  /** Conserve: the stage 3–4 omen previews. */
+  omens: Readonly<OmenPreview>;
   /** Material textures as WebP instead of KTX2 (materialLibrary.ts). */
   webp: boolean;
   /** No audio context at all (the dive runs silent, no mute button). */
@@ -45,6 +61,7 @@ export const DEFAULT_DIVE_PARAMS: Readonly<DiveParams> = Object.freeze({
   occlusion: true,
   tideSimple: false,
   chaos: null,
+  omens: NO_OMEN_PREVIEW,
   webp: false,
   noAudio: false,
 });

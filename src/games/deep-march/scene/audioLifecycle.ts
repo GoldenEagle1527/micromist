@@ -1,7 +1,8 @@
 /**
  * Keeps the dive's AudioContext running when it should and stopped when it shouldn't.
  *
- * Holds: reasons to keep audio stopped ("hidden" tab, "gpu" context lost, "muted").
+ * Holds: reasons to keep audio stopped ("hidden" tab, "gpu" context lost, "muted",
+ * "paused": the ≡ menu froze the dive).
  * With no hold active the context is resumed; with any hold it is suspended.
  *
  * Resuming is not always allowed without a user gesture: iOS Safari leaves a context
@@ -10,7 +11,7 @@
  * counts as user activation, pointerdown alone is not enough there) retries it, and
  * so do statechange, visibilitychange and pageshow (back-forward cache).
  */
-export type HoldReason = "hidden" | "gpu" | "muted";
+export type HoldReason = "hidden" | "gpu" | "muted" | "paused";
 
 /** The part of AudioContext this needs (fakeable in node tests). */
 export type LifecycleContext = {

@@ -67,6 +67,7 @@ export class InputController {
   private touchX = 0;
   private touchY = 0;
   panelMode = false;
+  private isPaused = false;
   readonly panel: PanelInput = { moveX: 0, moveY: 0, swimZone: false, up: false, down: false, swimLatch: false, absorb: false, recall: false };
   private readonly holdKeys: ReadonlySet<string>;
 
@@ -99,6 +100,16 @@ export class InputController {
     return this.pressed.delete(code);
   }
 
+  /** The dive is paused (≡ menu): dive keys are ignored (M still mutes) and held ones released. */
+  get paused(): boolean {
+    return this.isPaused;
+  }
+
+  set paused(on: boolean) {
+    this.isPaused = on;
+    if (on) this.onBlur();
+  }
+
   get locked(): boolean {
     return document.pointerLockElement === this.el;
   }
@@ -110,6 +121,7 @@ export class InputController {
 
   private onKeyDown = (e: KeyboardEvent) => {
     if (this.isTyping() || !(HANDLED.has(e.code) || this.holdKeys.has(e.code))) return;
+    if (this.isPaused && e.code !== "KeyM") return;
     e.preventDefault();
     if (e.code === "KeyF") {
       if (!e.repeat) this.opts.onLampToggle?.();
@@ -160,7 +172,7 @@ export class InputController {
   };
 
   private onMouseButton = (e: MouseEvent) => {
-    if (e.button !== 0) return;
+    if (e.button !== 0 || (this.isPaused && e.type === "mousedown")) return;
     if (e.type === "mousedown" && this.locked) {
       this.keys.add("Mouse0");
       this.pressed.add("Mouse0");
@@ -174,6 +186,7 @@ export class InputController {
   };
 
   private onPointerDown = (e: PointerEvent) => {
+    if (this.isPaused) return;
     if (e.pointerType === "mouse") {
       if (!this.panelMode && !this.locked) {
         const req = this.el.requestPointerLock() as unknown;

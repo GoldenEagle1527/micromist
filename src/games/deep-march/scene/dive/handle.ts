@@ -15,6 +15,7 @@ import type { HudChips } from "./hudChips";
 import type { LoadingGate } from "./loadingGate";
 import type { DeepMarchHandle, DeepMarchOptions, HudLabels, LoadingSnapshot, Telemetry } from "./types";
 import type { DebugPort } from "../../debug/types";
+import type { GameClock } from "../gameClock";
 
 export type HandleParts = {
   opts: DeepMarchOptions;
@@ -39,13 +40,17 @@ export type HandleParts = {
   destroy: () => void;
   /** Staging debug panel's port (opts.debug), else null. */
   debug: DebugPort | null;
+  /** The dive's game clock (≡ menu pause). */
+  clock: GameClock;
+  /** Chaos stage 3+ false readings: depth (m) / heading (°) offsets the HUD shows now (0, 0 = true). */
+  glitch: () => { depth: number; heading: number };
 };
 
 function systemState(p: HandleParts): LoadingSnapshot["system"] {
   return {
     battery: p.survival.resources.view("battery").ratio,
     lamps: p.survival.lights.available(),
-    sonar: p.survival.sonar.state(performance.now() / 1000).available && p.sonar.uSonarPulse.value.length > 0,
+    sonar: p.survival.sonar.state(p.clock.now() / 1000).available && p.sonar.uSonarPulse.value.length > 0,
     scanArea: p.scanner.record.area,
     shaders: p.health.shadersReady,
     shaderError: p.health.shaderError,
@@ -80,9 +85,10 @@ function telemetry(p: HandleParts): Telemetry {
   const { diver, survival } = p;
   const light = survival.lights.state();
   const b = survival.resources.view("battery");
+  const g = p.glitch();
   return {
-    depth: 100 - diver.position.y,
-    heading: ((((-diver.yaw * 180) / Math.PI) % 360) + 360) % 360,
+    depth: 100 - diver.position.y + g.depth,
+    heading: (((((-diver.yaw * 180) / Math.PI + g.heading) % 360) + 360) % 360),
     pitch: (diver.pitch * 180) / Math.PI,
     speed: diver.speed,
     state: diver.state,
@@ -91,7 +97,7 @@ function telemetry(p: HandleParts): Telemetry {
     region: p.hud.region,
     lamp: light.on,
     light,
-    sonar: survival.sonar.state(performance.now() / 1000),
+    sonar: survival.sonar.state(p.clock.now() / 1000),
     scan: { observe: p.scanner.observing, area: p.scanner.record.area },
     battery: { value: b.value, capacity: b.capacity, ratio: b.ratio, rate: b.rate, low: b.ratio <= SURVIVAL_TUNING.battery.lowFraction },
     swimLatch: p.input.panel.swimLatch,
@@ -118,6 +124,13 @@ export function createHandle(p: HandleParts): DeepMarchHandle {
       p.updatePrompt();
     },
     setLabels: p.setLabels,
+    // single player only (there is no multiplayer dive): the ≡ menu freezes the whole game
+    setPaused: (on) => {
+      if (on) input.releaseLock();
+      input.paused = on;
+      p.clock.hold("menu", on);
+    },
+    clock: p.clock,
     addLook: (dx, dy, touch) => input.addLookPx(dx, dy, touch),
     toggleLamp: p.controls.toggleLamp,
     cycleLight: p.controls.cycleLight,

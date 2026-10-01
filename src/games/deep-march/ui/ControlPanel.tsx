@@ -4,7 +4,8 @@
  * mode's gauges, warnings, region / light toasts, the base and recall buttons,
  * the fan's context button, the observation banner, conserve overlays (tank,
  * base, tide, hints). Everything else lives in the ≡ menu (also Esc) and the
- * help sheet (also ?).
+ * help sheet (also ?). While either is open the dive is paused (game.setPaused:
+ * every game clock, the sound, the dive keys), and the HUD's timers with it.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useOnce } from "./useOnce";
@@ -29,6 +30,7 @@ import { useTide } from "./tide/useTide";
 import type { HintDict } from "./hints/i18n";
 import { useHints } from "./hints/useHints";
 import { GameMenu, HelpSheet, type MenuSound } from "./menu/GameMenu";
+import { PauseClockContext, WALL_CLOCK, usePaused } from "./pauseClock";
 import type { MenuDict } from "./menu/i18n";
 import "./panel.css";
 import "./panelNotices.css";
@@ -93,8 +95,8 @@ export function ControlPanel({ game, panelOn, onTogglePanel, onExit, onFlip, sou
   const [menu, setMenu] = useState(false);
   const [help, setHelp] = useState(false);
   const swimming = tel?.state === "swim";
-  const observeTip = useOnce("observe", tel?.scan.observe ?? false);
-  const keysTip = useOnce("keys", (tel?.ready ?? false) && !panelOn);
+  const observeTip = useOnce("observe", tel?.scan.observe ?? false, game?.clock);
+  const keysTip = useOnce("keys", (tel?.ready ?? false) && !panelOn, game?.clock);
 
   // Esc: the menu (once the mouse is free; the debug panel keeps its own Esc); ? / F1: help
   const keys = useRef({ menu, help, debugOpen });
@@ -118,6 +120,14 @@ export function ControlPanel({ game, panelOn, onTogglePanel, onExit, onFlip, sou
   useEffect(() => {
     if ((menu || help) && document.pointerLockElement) document.exitPointerLock();
   }, [menu, help]);
+  // the menu / help sheet pause the dive; closing resumes it (and so does leaving: the dive is destroyed)
+  const pausing = menu || help;
+  useEffect(() => {
+    if (!game || !pausing) return;
+    game.setPaused(true);
+    return () => game.setPaused(false);
+  }, [game, pausing]);
+  const paused = usePaused(game?.clock ?? null);
 
   const onHold = useCallback(
     (id: "up" | "down" | "absorb", on: boolean) => {
@@ -154,8 +164,8 @@ export function ControlPanel({ game, panelOn, onTogglePanel, onExit, onFlip, sou
   const canBuild = !!base && !building && (!founded || atBase);
   const helpItems = exp ? [...labels.controls, ...labels.conserveControls] : labels.controls;
 
-  return (
-    <div className={`dm-hud-layer${panelOn ? " panel-on" : ""}`}>
+  const hud = (
+    <div className={`dm-hud-layer${panelOn ? " panel-on" : ""}${paused ? " dm-paused" : ""}`}>
       <Readout
         tel={tel}
         labels={labels}
@@ -246,4 +256,5 @@ export function ControlPanel({ game, panelOn, onTogglePanel, onExit, onFlip, sou
       {help ? <HelpSheet title={labels.menu.helpTitle} items={helpItems} closeLabel={labels.menu.close} onClose={() => setHelp(false)} /> : null}
     </div>
   );
+  return <PauseClockContext.Provider value={game?.clock ?? WALL_CLOCK}>{hud}</PauseClockContext.Provider>;
 }

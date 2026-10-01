@@ -46,7 +46,7 @@ export function useConserveDive(intent: OpenIntent | null): { dive: ConserveDive
         unbind = mod.flushOnPageHide(() => outcome.session.flush());
         const s = outcome.session;
         // the generation's chaos, or the debug panel's preview: the terrain's wall (cracks) and the scene's view agree
-        const dc = mod.diveChaosOf(s, diveParams().chaos);
+        const dc = mod.diveChaosOf(s, diveParams().chaos, diveParams().omens.anomaly);
         const sk = saveScanKey(s.identity);
         const scans = savedScanStore(mod.createGameStoreBackend(), sk.key, sk.tag);
         setDive({ status: "open", seedText: s.seedText, world: mod.terrainLayoutOf(s.siteTable, dc.wall), expedition: s.expedition, base: s.base, tide: mod.tidePortOf(s), chaos: dc.view, scans, steps });

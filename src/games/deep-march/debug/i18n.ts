@@ -41,6 +41,10 @@ export type DebugDict = {
     chaosStage: string;
     chaosCracks: string;
     chaosScar: string;
+    omenPhantoms: string;
+    omenAnomaly: string;
+    omenDimming: string;
+    omenHomeGhost: string;
     tideSimple: string;
     ktx2: string;
     dpr: string;
@@ -90,6 +94,10 @@ export const debugZh: DebugDict = {
     chaosStage: "混沌阶段（仅本次预览）",
     chaosCracks: "裂缝数",
     chaosScar: "加一道愈合的伤疤",
+    omenPhantoms: "预览·声呐假读数（任何阶段：打声呐偶有幻影回波，深度/航向读数跳变）",
+    omenAnomaly: "预览·异常地形（裂缝周围；没有裂缝时自动开两道）",
+    omenDimming: "预览·基地灯塔变暗（站在亮着的灯塔附近）",
+    omenHomeGhost: "预览·基地的幽灵回波（离基地 160 m 外打声呐）",
     tideSimple: "简化潮汐（直接浊潮）",
     ktx2: "KTX2 纹理（关 = WebP）",
     dpr: "像素比",
@@ -143,6 +151,10 @@ export const debugEn: DebugDict = {
     chaosStage: "Chaos stage (preview only)",
     chaosCracks: "Cracks",
     chaosScar: "Add a healed scar",
+    omenPhantoms: "Preview · false sonar readings (any stage: phantom returns on pings, depth / heading jumps)",
+    omenAnomaly: "Preview · anomalous terrain (around cracks; two are opened if there are none)",
+    omenDimming: "Preview · base lighthouse dimming (stay near a lit lighthouse)",
+    omenHomeGhost: "Preview · the base's ghost echo (ping 160 m or more from the base)",
     tideSimple: "Simple tide (murk right away)",
     ktx2: "KTX2 textures (off = WebP)",
     dpr: "Pixel ratio",

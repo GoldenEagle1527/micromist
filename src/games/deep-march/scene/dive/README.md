@@ -16,7 +16,8 @@
 | `diveCues.ts` | Battery warnings, bumps, sonar pings, ambience / swim loops; light and ping controls (key 3) with their cues |
 | `cameraSync.ts` | First-person camera: sprint FOV, bob, stroke roll |
 | `hudChips.ts` | 4 Hz terrain / region chips (with hold / hysteresis), fps, the stats line |
-| `diveLoop.ts` | The per-frame loop in its fixed order (the tide, if any, right after occlusion; the chaos, if any, after the water look and after the sonar; each ping also starts a scan sweep, and in observation mode the frame renders the scan record's scene instead of the live one — `scene/sonarScan`); pause while hidden |
+| `../gameClock.ts` | The dive's one game clock: the loop's time and every timer through it (survival, base energy, tide, chaos schedulers, sonar pulses and cooldown); held by the ≡ menu (`handle.setPaused`: also the sound, the dive keys, the mouse) and a hidden tab; paused time is cut out. The HUD's teaching notes / hint cards follow it (`ui/pauseClock.ts`, `useOnce`) |
+| `diveLoop.ts` | The per-frame loop in its fixed order (the tide, if any, right after occlusion; the chaos, if any, after the water look and after the sonar; each ping also starts a scan sweep, and in observation mode the frame renders the scan record's scene instead of the live one — `scene/sonarScan`); paused with the game clock (the last frame stays, re-drawn only after a resize) |
 | `handle.ts` | The handle: loading snapshot, controls, telemetry (incl. `tide()`) |
 | `debugKey.ts` | B toggles the spawn-candidate markers (also in the debug panel's 调试叠加层) |
 
