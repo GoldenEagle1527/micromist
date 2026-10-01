@@ -29,8 +29,10 @@ export type ForecastWorld = {
   chaos?: ChaosSource;
 };
 
-export function tideReadiness(energy: number, dives: number): TideReadiness {
+/** `gaze`: null outside stage 5, else whether the 封界 conditions hold (gaze/controller.ts). */
+export function tideReadiness(energy: number, dives: number, gaze: { sealReady: boolean } | null = null): TideReadiness {
   const { energy: energyNeeded, dives: divesNeeded } = BASE.tide;
+  if (gaze) return { energy, energyNeeded, dives, divesNeeded, ready: gaze.sealReady, gaze: gaze.sealReady ? "seal" : "watching" };
   return { energy, energyNeeded, dives, divesNeeded, ready: energy >= energyNeeded && dives >= divesNeeded };
 }
 

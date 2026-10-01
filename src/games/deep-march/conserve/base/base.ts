@@ -1,7 +1,7 @@
 /**
  * The base on the ledger (plan M5, design doc §6, §8.1): the core (+ the frozen 3 × 3), build / demolish, storage
- * moves, energy and fuel, the lighthouse switch (M9), departures. Every particle moves through the ledger; after every
- * step B = lockedOf(base) (before founding: the lander cargo). Pure: no rendering or storage — the session saves `toSave()`.
+ * moves, energy and fuel, the lighthouse switch (M9), departures, the gaze's harm (直视: sap, ruin). Every particle moves
+ * through the ledger; after every step B = lockedOf(base) (before founding: the lander cargo). Pure — the session saves `toSave()`.
  */
 import { STRUCTURES, STRUCTURE_KINDS, type StructureKind } from "../config";
 import type { ParticleLedger } from "../ledger/particleLedger";
@@ -34,6 +34,8 @@ export type BaseDeps = {
   onDirty?: () => void;
   /** A dive began (stats.divesStarted). */
   onDive?: () => void;
+  /** Stage 5 (conserve/gaze/): the 封界 state for the tide's readiness (null: no gaze), the crush per building. */
+  gaze?: { seal: () => { sealReady: boolean } | null; damage: (id: number) => number };
 };
 
 export class Base implements BasePort {
@@ -55,17 +57,13 @@ export class Base implements BasePort {
     this.activeKinds = deps.totals.flatMap((n, k) => (n > 0 ? [k] : []));
   }
 
-  private get structures(): readonly BaseStructure[] {
-    return this.state?.structures ?? [];
-  }
+  private get structures(): readonly BaseStructure[] { return this.state?.structures ?? []; }
 
   /** Free storage: after founding the tracked vector, before it the lander cargo (all of B). */
-  private storageNow(): ParticleVector {
-    return this.state ? this.state.storage : this.ledger.pool("base");
-  }
+  private storageNow(): ParticleVector { return this.state ? this.state.storage : this.ledger.pool("base"); }
 
   view(): BaseView {
-    return viewOf(this.state, this.storageNow(), this.ledger.pool("player"), this.dives);
+    return viewOf(this.state, this.storageNow(), this.ledger.pool("player"), this.dives, this.deps.gaze?.damage);
   }
 
   check(kind: StructureKind, x: number, z: number, rect: WorldRect) {
@@ -128,23 +126,30 @@ export class Base implements BasePort {
     return this.moved(this.state ? store.release(this.ledger, this.state.storage, kind, count) : 0);
   }
 
-  depositOnDeath(): number {
-    return this.moved(this.state ? store.depositAll(this.ledger, this.state.storage) : 0);
-  }
+  depositOnDeath(): number { return this.moved(this.state ? store.depositAll(this.ledger, this.state.storage) : 0); }
 
   inside(x: number, z: number): boolean {
     const c = this.state?.center;
     return !!c && Math.hypot(x - c[0], z - c[2]) <= protectionRadius(this.structures);
   }
 
-  recordDeparture(): void {
-    if (this.state) this.countDive();
-  }
+  recordDeparture(): void { if (this.state) this.countDive(); }
 
   /** A dive began from the lander (the loading screen finished): counts while there is no base. */
-  recordLanderDive(): void {
-    if (!this.state) this.countDive();
+  recordLanderDive(): void { if (!this.state) this.countDive(); }
+
+  /** 直视 ③: a building crushed — gone, its cost scattered (B → S); never the core. */
+  ruin(id: number): boolean {
+    const s = this.state, b = s?.structures.find((x) => x.id === id);
+    if (!s || !b || b.kind === "core") return false;
+    s.structures = s.structures.filter((x) => x !== b);
+    store.scatter(this.ledger, costOf(b.kind));
+    s.energy = Math.min(s.energy, energyCapacity(s.structures));
+    return !!this.committed({ ok: true, id });
   }
+
+  /** 直视 ②: the swarm drains the stored energy. */
+  sap(amount: number): void { if (this.state && amount > 0) this.state.energy = Math.max(0, this.state.energy - amount); }
 
   private countDive(): void {
     this.dives += 1;
@@ -171,25 +176,18 @@ export class Base implements BasePort {
   }
 
   tide(): TideReadiness {
-    return tideReadiness(this.state?.energy ?? 0, this.dives);
+    return tideReadiness(this.state?.energy ?? 0, this.dives, this.deps.gaze?.seal() ?? null);
   }
 
   forecast(): TideForecast {
     return this.forecaster.forecast({ state: this.ledger.toState(), totals: this.deps.totals, gen: this.deps.gen, center: this.state?.center ?? null, chaos: this.deps.chaos });
   }
 
-  revision(): number {
-    return this.rev;
-  }
+  revision(): number { return this.rev; }
 
-  toSave(): BaseSave | null {
-    return this.state && cloneBase(this.state);
-  }
+  toSave(): BaseSave | null { return this.state && cloneBase(this.state); }
 
-  private moved(n: number): number {
-    if (n > 0) this.committed({ ok: true });
-    return n;
-  }
+  private moved(n: number): number { if (n > 0) this.committed({ ok: true }); return n; }
 
   private committed(a: BaseAction): BaseAction {
     this.rev++;
