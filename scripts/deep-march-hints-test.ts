@@ -64,10 +64,12 @@ c.section("stored progress");
 c.section("telemetry → observation");
 {
   const exp = (o: Partial<ExpeditionTelemetry> = {}) => ({ tank: { value: 0, capacity: 200, ratio: 0 }, notice: null, recall: { phase: "idle", progress: 0 }, ...o }) as ExpeditionTelemetry;
-  const base = (o: Partial<BaseTelemetry> = {}) => ({ view: { founded: true }, notice: null, panel: false, ...o }) as unknown as BaseTelemetry;
+  const base = (o: Partial<BaseTelemetry> = {}) => ({ view: { founded: true, buildings: [{ kind: "core" }] }, notice: null, panel: false, ...o }) as unknown as BaseTelemetry;
   const tide = (state: TideTelemetry["state"], gen = 1) => ({ state, gen }) as TideTelemetry;
   const o1 = observationOf(exp({ tank: { value: 12, capacity: 200, ratio: 0.06 } }), base(), tide("idle"), true);
   c.check(o1.tank === 12 && o1.founded && !o1.busy && o1.gen === 1, "tank, core, generation; not busy");
+  const withReactor = base({ view: { founded: true, buildings: [{ kind: "core" }, { kind: "reactor" }] } } as unknown as Partial<BaseTelemetry>);
+  c.check(!o1.reactor && observationOf(exp(), withReactor, null, true).reactor && !observationOf(exp(), null, null, true).reactor, "a reactor (反应堆) in the base → reactor; none / no base → not");
   c.check(observationOf(exp(), base({ notice: { kind: "moved", action: "deposit", total: 30 } }), null, true).deposited, "a deposit notice (panel) → deposited");
   c.check(observationOf(exp({ notice: { kind: "deposited", total: 30 } }), base(), null, true).deposited, "recalled inside the base → deposited");
   c.check(!observationOf(exp(), base({ notice: { kind: "moved", action: "deposit", total: 0 } }), null, true).deposited, "an empty deposit does not count");

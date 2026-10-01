@@ -90,7 +90,8 @@ function run(c: Checker, name: string, settings: TerrainSettings, workers: numbe
     c.check(cur.meshGroup.children.length === 0 && after <= Math.ceil(base * 1.1), `${name}: resident columns back to the baseline`, `${after} (baseline ${base})`);
     // the front in P4 half way: plain inside, dither band, beyond not drawn
     const tideMat = new THREE.MeshBasicMaterial();
-    const front = new TerrainFront({ material: tideMat, front: new THREE.Vector4(), glow: new THREE.Color() });
+    const tideVariant = { material: tideMat, front: new THREE.Vector4(), glow: new THREE.Color() };
+    const front = new TerrainFront(() => tideVariant);
     const domeR = 60, reach = frontReach(domeR, settings.viewDistance, TIDE_VIEW.front.width);
     front.apply(next, mat, at.x, at.z, frontRadius({ state: "show", phase: "gather", u: 0.5 }, domeR, reach));
     const k = front.counts, total = k.drawn + k.band + k.hidden;

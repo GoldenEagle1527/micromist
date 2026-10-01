@@ -13,6 +13,7 @@ import { DEBUG_COMMANDS } from "../src/games/deep-march/debug/commands";
 import { debugEn } from "../src/games/deep-march/debug/i18n";
 import { SECTIONS, pendingKeys, stepValue, visibleCommands, type DebugCommand, type DebugCtx } from "../src/games/deep-march/debug/registry";
 import type { DebugPort, Pose } from "../src/games/deep-march/debug/types";
+import type { GazeRehearsal } from "../src/games/deep-march/conserve";
 import { DEFAULT_DIVE_PARAMS, diveParams, setDiveParams, type DiveParams } from "../src/games/deep-march/scene/dive/params";
 import { createChecker } from "./lib/checks";
 import { syntheticTeleportChecks, terrainTeleportChecks } from "./lib/debugTeleportChecks";
@@ -22,7 +23,7 @@ syntheticTeleportChecks(c);
 terrainTeleportChecks(c);
 
 /** A port that records what the panel asked of the dive. */
-function fakePort(log: string[]): DebugPort {
+function fakePort(log: string[], rehearsal: GazeRehearsal | null = null): DebugPort {
   let light: "off" | "beam" | "high" = "beam", markers = false, observe = false, stats = false;
   return {
     conserve: true,
@@ -41,6 +42,7 @@ function fakePort(log: string[]): DebugPort {
     stats: () => stats,
     setStats: (on) => void (stats = on),
     fillBattery: () => void log.push("battery"),
+    gaze: () => rehearsal,
   };
 }
 
@@ -66,6 +68,16 @@ c.section("command registry");
   c.check(loading.length > 0 && loading.every((k) => k.restart), "dive still loading: only the restart commands show");
   const free = SECTIONS.flatMap((s) => visibleCommands(DEBUG_COMMANDS, s, ctxOf(fakePort([]), false)));
   c.check(!free.some((k) => k.section === "chaos" || k.section === "tide"), "free dive: no chaos preview, no tide");
+  // 结局演练: the rehearsal choice in any conserve dive, the shortcuts only inside a rehearsal dive
+  const ending = (port: DebugPort) => visibleCommands(DEBUG_COMMANDS, "ending", ctxOf(port, true)).map((k) => k.id);
+  const log: string[] = [];
+  const g: GazeRehearsal = { skip: (s) => void log.push(`skip ${s}`), lightAll: () => void log.push("anchors"), returnParticles: () => void log.push("return"), annihilate: () => void log.push("end"), seal: () => void log.push("seal") };
+  c.check(ending(fakePort([])).join() === "ending.rehearsal", "conserve dive: only the 结局演练 choice (no shortcuts outside a rehearsal)", ending(fakePort([])).join());
+  const inRehearsal = ending(fakePort([], g));
+  c.check(inRehearsal.length === 6 && inRehearsal[0] === "ending.rehearsal", "rehearsal dive: the 5 shortcuts too", inRehearsal.join());
+  const skip = byId("ending.skip");
+  if (skip.kind === "action") skip.apply(ctxOf(fakePort([], g), true));
+  c.check(log.join() === "skip 300", "skip goes through the port's rehearsal (5 min)", log.join());
 }
 
 c.section("restart commands edit the draft only");

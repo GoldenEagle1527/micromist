@@ -127,7 +127,7 @@ if (hasFfmpeg) {
   mkdirSync(empty);
   rmSync(out, { recursive: true, force: true });
   const r = spawnSync(process.execPath, [join(ROOT, "scripts/sfx-sync.mjs")], { env: { ...process.env, MICROMIST_PRIVATE_SFX: empty, SFX_OUT: out }, encoding: "utf8" });
-  check(r.status === 0 && /7 deep-march sound master\(s\) missing/.test(r.stdout + r.stderr) && !existsSync(join(out, "manifest.json")), "no masters → warning, no manifest, exit 0");
+  check(r.status === 0 && new RegExp(`${CLIPS.length} deep-march sound master\\(s\\) missing`).test(r.stdout + r.stderr) && !existsSync(join(out, "manifest.json")), "no masters → warning, no manifest, exit 0");
 }
 // repo guard
 {

@@ -1,8 +1,8 @@
 /**
  * The chaos audio insert (plan M8; scene/chaos/chaosAudio.ts via DiveAudio.chaos /
  * rumble): the identity builds nothing, the wet path connects on first use and
- * disconnects once silent, the rumble's oscillators start on demand and stop once
- * silent, and the parameters are the identity at wetness 0.
+ * disconnects 1.5 s after it falls silent (a timer), the rumble's oscillators start
+ * on demand and stop 1.5 s after silence, and the parameters are the identity at wetness 0.
  */
 import { createDiveAudio } from "../../src/games/deep-march/scene/audio";
 import { CHAOS_LOOK } from "../../src/games/deep-march/scene/chaos/config";
@@ -10,6 +10,10 @@ import { chaosAudioParams } from "../../src/games/deep-march/scene/chaos/effects
 import { FakeAudioContext, flush } from "./fakeAudio";
 
 type Check = (name: string, ok: boolean, info?: string) => void;
+
+/** chaosAudio tears a silent wet path / rumble down on a real 1.5 s timer (so a stage drop with no more calls still cleans up). */
+const IDLE_WAIT_MS = 1700;
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 const quiet = async () => new Response("", { status: 404, headers: { "content-type": "text/plain" } });
 
@@ -44,6 +48,8 @@ export async function chaosAudioChecks(check: Check): Promise<void> {
     ctx.currentTime += 0.1;
     a.chaos(chaosAudioParams(0, t));
   }
+  check("back to wetness 0: still connected right away (teardown is on a 1.5 s timer)", master.targets.length === 2);
+  await sleep(IDLE_WAIT_MS);
   check("back to wetness 0: the wet path is disconnected after a moment", master.targets.length === 1);
   a.chaos(chaosAudioParams(0.5, 3));
   check("… and reconnected (not rebuilt) when needed again", master.targets.length === 2 && ctx.created - before === wetNodes);
@@ -55,6 +61,8 @@ export async function chaosAudioChecks(check: Check): Promise<void> {
     ctx.currentTime += 0.1;
     a.rumble(0);
   }
+  check("rumble just silenced: oscillators still running", oscs.every((o) => o.stopped !== 1));
+  await sleep(IDLE_WAIT_MS);
   check("rumble silent for a while: its oscillators stopped", oscs.every((o) => o.stopped === 1));
   a.dispose();
 

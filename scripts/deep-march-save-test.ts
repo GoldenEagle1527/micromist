@@ -6,6 +6,7 @@
  *     v1 → v2 (M2): generation.allocInput = N − P − B from the stored ledger;
  *     v2 → v3 (M4): nodes all full (harvested "", partial []), no caches; v1 → v4 chained;
  *     v3 → v4 (M5): no base, generation.dives = dives started (lib/baseSaveChecks.ts);
+ *     v5 → v6 → v7: voltite / abyssal join an older world (lib/kindActivationChecks.ts);
  *   - base (M5): shape validation, fitted to pool B on load, saved with the session,
  *     dives counted per departure once the base stands (lib/baseSaveChecks.ts);
  *   - validation: every corrupted field makes the slot unreadable (never guessed);
@@ -42,6 +43,7 @@ import { DEEP_MARCH_GAME } from "../src/games/deep-march/settings";
 import { seedFromString } from "../src/games/deep-march/terrain/noise";
 import { createChecker } from "./lib/checks";
 import { baseSaveChecks } from "./lib/baseSaveChecks";
+import { kindActivationChecks } from "./lib/kindActivationChecks";
 
 const c = createChecker();
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
@@ -82,7 +84,7 @@ c.section("new save");
   c.check(s.seedText === "abyss" && s.seed === seedFromString("abyss") >>> 0, "seed text and terrain seed");
   c.check(s.size.sitesX === 10 && s.size.sitesZ === 10, "10 × 10 sites (D17)");
   c.check(poolsConserve(s.totals, s.ledger) && s.ledger.base[0] === 600 && s.ledger.base[3] === 80, "ledger conserved, lander cargo in the base");
-  c.check(same(s.generation.allocInput, [65400, 0, 17000, 16920, 0, 0, 0]), "generation 1 allocation input R = N − P − B");
+  c.check(same(s.generation.allocInput, [65400, 0, 17000, 16920, 4500, 0, 500]), "generation 1 allocation input R = N − P − B");
   c.check(s.stats.divesStarted === 0 && same(s.flags, {}), "no dives, no flags");
   c.check(saveBytes(s) < 20 * 1024, "JSON < 20 KB", `${saveBytes(s)} B`);
 }
@@ -110,18 +112,20 @@ c.section("migrations");
   const up = migrateSave({ v: 1 }, chain, 3);
   c.check(up.ok && same(up.raw, { v: 3, a: 1, b: 2 }) && up.from === 1, "chained migrations 1 → 2 → 3 run in order");
   c.check(same(migrateSave({ v: 0 }, chain, 3), { ok: false, reason: "missing-migration" }), "gap in the chain refused (missing-migration)");
-  // v1 → v2: a stored M1 save gains generation.allocInput = N − P − B
+  // v1 → v2: a stored M1 save gains generation.allocInput = N − P − B; an M1 world
+  // never had voltite / abyssal, so 5 → 6 → 7 (activateKinds) adds their genesis to W and R
   const v1 = clone(newSave()) as unknown as Record<string, unknown>;
   delete v1.generation;
   v1.v = 1;
   (v1.ledger as Record<string, number[]>).player[2] = 30;
   (v1.ledger as Record<string, number[]>).world[2] -= 30;
+  for (const k of [4, 6]) (v1.totals as number[])[k] = (v1.ledger as Record<string, number[]>).world[k] = 0;
   const backend = createMemoryBackend({ "save/main": v1 });
   const read = readSlot(backend, "main");
-  c.check(SAVE_VERSION === 5 && read.status === "ok" && read.migratedFrom === 1 && read.save.v === 5, "v1 save (M1) migrates (1 → 2 → 3 → 4 → 5) and reads ok");
-  c.check(read.status === "ok" && same(read.save.generation.allocInput, [65400, 0, 16970, 16920, 0, 0, 0]), "v1 → v2: allocInput = N − P − B (lander cargo in B, 30 lumen carried)");
+  c.check(SAVE_VERSION === 7 && read.status === "ok" && read.migratedFrom === 1 && read.save.v === 7, "v1 save (M1) migrates (1 → 2 → … → 7) and reads ok");
+  c.check(read.status === "ok" && same(read.save.generation.allocInput, [65400, 0, 16970, 16920, 4500, 0, 500]) && read.repairs.length === 0, "v1 → v2: allocInput = N − P − B (lander cargo in B, 30 lumen carried); v6 / v7 add voltite / abyssal to R");
   const opened = openConserveSession({ backend, intent: { kind: "continue" }, hashSeed: seedFromString });
-  c.check(opened.ok && (backend.read("save/main") as WorldSave).v === 5, "a migrated save is written back as v5 at once");
+  c.check(opened.ok && (backend.read("save/main") as WorldSave).v === 7, "a migrated save is written back as v7 at once");
   if (opened.ok) opened.session.close();
   // v2 → v3: a stored M2/M3 save gains the node state and an empty cache list
   const v2 = clone(newSave()) as unknown as Record<string, unknown>;
@@ -290,7 +294,7 @@ c.section("sessions");
   if (!opened.ok) throw new Error("new session failed");
   const session = opened.session;
   c.check(session.seedText === "reef" && session.seed === hashSeed("reef") >>> 0 && session.gen === 1, "session seed / generation");
-  c.check(session.report.totalParticles === 100_000 && session.report.conserved && session.report.poolTotals.base === 680 && session.report.bytes > 0, "report: totals, conserved, base 680, size");
+  c.check(session.report.totalParticles === 105_000 && session.report.conserved && session.report.poolTotals.base === 680 && session.report.bytes > 0, "report: totals, conserved, base 680, size");
   session.recordDiveStart();
   clock.advance(1000);
   c.check((backend.read("save/main") as WorldSave).stats.divesStarted === 0, "dive count written throttled, not at once");
@@ -299,7 +303,7 @@ c.section("sessions");
   const tableBefore = JSON.stringify(session.siteTable);
   c.check(session.siteTable === session.siteTable && session.siteTable.sites.length === 100 && same(session.siteTable.allocInput, session.snapshot().generation.allocInput), "site table: built once, from generation.allocInput");
   session.ledger.transfer("world", "player", "lumen", 25);
-  c.check(JSON.stringify(session.siteTable) === tableBefore && same(session.snapshot().generation.allocInput, [65400, 0, 17000, 16920, 0, 0, 0]), "ledger changes within a generation leave R and the site table unchanged");
+  c.check(JSON.stringify(session.siteTable) === tableBefore && same(session.snapshot().generation.allocInput, [65400, 0, 17000, 16920, 4500, 0, 500]), "ledger changes within a generation leave R and the site table unchanged");
   c.check(session.report.sites.sitesX === 10 && Object.values(session.report.sites.byBiome).reduce((a, b) => a + b, 0) === 100, "report: site summary (10 × 10, 100 sites by biome)");
   session.close();
   const afterClose = backend.read("save/main") as WorldSave;
@@ -356,5 +360,6 @@ c.section("setup peek");
 }
 
 baseSaveChecks(c);
+kindActivationChecks(c);
 
 c.finish();

@@ -12,7 +12,7 @@ import { terrainLayoutOf } from "../../src/games/deep-march/conserve/platform/te
 import { createWorldSave } from "../../src/games/deep-march/conserve/save/createSave";
 import { createMemoryBackend } from "../../src/games/deep-march/conserve/save/saveBackend";
 import { readSlot, writeSlot } from "../../src/games/deep-march/conserve/save/saveRepository";
-import type { WorldSave } from "../../src/games/deep-march/conserve/save/schema";
+import { SAVE_VERSION, type WorldSave } from "../../src/games/deep-march/conserve/save/schema";
 import { openConserveSession } from "../../src/games/deep-march/conserve/session/openSession";
 import { seedFromString } from "../../src/games/deep-march/terrain/noise";
 import { MACRO } from "../../src/games/deep-march/terrain/regions";
@@ -59,7 +59,7 @@ function sessionChecks(c: Checker): void {
 function saveChecks(c: Checker): void {
   c.section("save v5: chaos");
   const save = createWorldSave({ id: "main", seedText: "x", seed: 5, now: 0 });
-  c.check(save.v === 5 && same(save.chaos, genesisChaos(save.generation.allocInput, save.totals)) && save.chaos.stage === 0 && save.chaos.wallThickness === 160, "genesis save: stage 0, T 160 m, no cracks");
+  c.check(save.v === SAVE_VERSION && same(save.chaos, genesisChaos(save.generation.allocInput, save.totals)) && save.chaos.stage === 0 && save.chaos.wallThickness === 160, "genesis save: stage 0, T 160 m, no cracks");
   const v4 = structuredClone(save) as unknown as Record<string, unknown>;
   delete v4.chaos;
   v4.v = 4;
