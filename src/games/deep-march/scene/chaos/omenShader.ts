@@ -2,7 +2,7 @@
  * GLSL of the omen silhouette (omenMesh.ts), free of three imports so test:shaders
  * compiles it and runs the Mali budget. Only the long sonar pulses (sonarLong.ts)
  * draw it — the same front / trail as the far wall ring (wallRingShader.ts) —
- * additive and depth-tested (rock in front hides it), scaled by uOmen = presence ×
+ * additive and not depth-tested (a sonar return through the rock), scaled by uOmen = presence ×
  * sonar strength (0: the mesh is not drawn at all). Limbs sway slowly in the
  * vertex shader; vertices past the far plane are pinned just inside it.
  */

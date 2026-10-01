@@ -3,10 +3,12 @@
  * made of existing clips and plain Web Audio nodes — no new sound files:
  *  - detune: the loops' and one-shots' playback rate (DiveAudio applies `rate`);
  *  - wet path: master → low-pass sweep → short feedback delay → wet gain → out,
- *    built on first use and disconnected again once the wetness is back at 0 (an
- *    identity bypass: stage 0 and the free dive never build it);
+ *    built on first use and disconnected again 1.5 s after the wetness drops to 0
+ *    (an identity bypass: stage 0 and the free dive never build it);
  *  - rumble (the omen): three low oscillators through a low-pass into the master
- *    (so volume and mute apply), started on demand, stopped once silent.
+ *    (so volume and mute apply), started on demand, stopped 1.5 s after silence.
+ * The teardown runs on a timer, so it also happens when the caller stops calling
+ * (the stage dropped at the tide, a preview turned off).
  */
 import { CHAOS_LOOK } from "./config";
 
@@ -34,9 +36,22 @@ type Rumble = { oscs: OscillatorNode[]; filter: BiquadFilterNode; gain: GainNode
 
 export function createChaosAudio(ctx: AudioContext, master: GainNode, out: AudioNode): ChaosAudio {
   let rate = 1, nodes = 0;
-  let wet: Wet | null = null, wetOn = false, wetIdle = 0;
-  let rum: Rumble | null = null, rumIdle = 0;
-  const last = { wet: ctx.currentTime, rumble: ctx.currentTime };
+  let wet: Wet | null = null, wetOn = false, wetLevel = 0;
+  let rum: Rumble | null = null, rumLevel = 0;
+  const timers: { wet: ReturnType<typeof setTimeout> | null; rumble: ReturnType<typeof setTimeout> | null } = { wet: null, rumble: null };
+  /** Level > 0 cancels a pending teardown; level 0 schedules one (once). */
+  const idle = (k: keyof typeof timers, level: number, down: () => void) => {
+    if (level > 0) {
+      if (timers[k]) clearTimeout(timers[k]!);
+      timers[k] = null;
+    } else if (!timers[k]) timers[k] = setTimeout(() => ((timers[k] = null), down()), IDLE_S * 1000);
+  };
+  const dropWet = () => {
+    if (wet && wetOn && wetLevel <= 0) {
+      master.disconnect(wet.filter);
+      wetOn = false;
+    }
+  };
   const set = (p: AudioParam, v: number) => p.setTargetAtTime(v, ctx.currentTime, TC);
 
   const buildWet = (): Wet => {
@@ -75,17 +90,13 @@ export function createChaosAudio(ctx: AudioContext, master: GainNode, out: Audio
     return { oscs, filter, gain };
   };
   const stopRumble = () => {
+    if (!rum) return;
     for (const o of rum!.oscs) {
       o.stop();
       o.disconnect();
     }
     rum!.gain.disconnect();
     rum = null;
-  };
-  const elapsed = (k: keyof typeof last) => {
-    const now = ctx.currentTime, dt = Math.max(0, now - last[k]);
-    last[k] = now;
-    return dt;
   };
 
   return {
@@ -100,7 +111,7 @@ export function createChaosAudio(ctx: AudioContext, master: GainNode, out: Audio
     },
     apply: (p) => {
       rate = p.rate;
-      const dt = elapsed("wet");
+      wetLevel = p.wet;
       if (p.wet > 0 && !wetOn) {
         wet ??= buildWet();
         master.connect(wet.filter);
@@ -111,21 +122,18 @@ export function createChaosAudio(ctx: AudioContext, master: GainNode, out: Audio
       set(wet.filter.frequency, p.cutoff);
       set(wet.feedback.gain, p.feedback);
       wet.delay.delayTime.value = p.delay;
-      wetIdle = p.wet > 0 ? 0 : wetIdle + dt;
-      if (wetIdle > IDLE_S) {
-        master.disconnect(wet.filter);
-        wetOn = false;
-      }
+      idle("wet", p.wet, dropWet);
     },
     rumble: (level) => {
       if (level > 0 && !rum) rum = buildRumble();
       if (!rum) return;
+      rumLevel = level;
       set(rum.gain.gain, level * CHAOS_LOOK.omen.rumble.gain);
-      rumIdle = level > 0 ? 0 : rumIdle + elapsed("rumble");
-      if (rumIdle > IDLE_S) stopRumble();
+      idle("rumble", level, () => rumLevel <= 0 && stopRumble());
     },
     dispose: () => {
-      if (rum) stopRumble();
+      for (const t of Object.values(timers)) if (t) clearTimeout(t);
+      stopRumble();
       if (wet && wetOn) master.disconnect(wet.filter);
       wet?.gain.disconnect();
       wetOn = false;
