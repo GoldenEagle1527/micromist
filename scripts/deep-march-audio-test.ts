@@ -142,9 +142,9 @@ async function main() {
     check("starts loading, not settled", s0.state === "loading" && !s0.settled && s0.total === CLIP_IDS.length);
     await until(() => a.status().settled);
     const s = a.status();
-    check("all clips: ready, settled, webm", s.state === "ready" && s.settled && s.done === 7 && s.failed === 0 && s.format === "webm", JSON.stringify({ state: s.state, done: s.done, format: s.format }));
-    check("byte progress complete", s.totalBytes === 7000 && s.bytes === 7000, `${s.bytes}/${s.totalBytes}`);
-    check("only manifest + 7 webm fetched", hits.length === 8 && hits.every((h) => h.startsWith("/sfx/")) && hits.filter((h) => h.endsWith(".webm")).length === 7);
+    check("all clips: ready, settled, webm", s.state === "ready" && s.settled && s.done === CLIP_IDS.length && s.failed === 0 && s.format === "webm", JSON.stringify({ state: s.state, done: s.done, format: s.format }));
+    check("byte progress complete", s.totalBytes === 1000 * CLIP_IDS.length && s.bytes === 1000 * CLIP_IDS.length, `${s.bytes}/${s.totalBytes}`);
+    check(`only manifest + ${CLIP_IDS.length} webm fetched`, hits.length === CLIP_IDS.length + 1 && hits.every((h) => h.startsWith("/sfx/")) && hits.filter((h) => h.endsWith(".webm")).length === CLIP_IDS.length);
     a.setLoop("ambience", 0.4);
     a.tick(0.016);
     const loops = ctx.sources.filter((x) => x.loop);
@@ -162,7 +162,7 @@ async function main() {
     const a = createDiveAudio(ctx as unknown as AudioContext, { env: null, fetcher, canPlayType: () => "maybe", base: "/sfx/" });
     await until(() => a.status().settled);
     const s = a.status();
-    check("WebM undecodable → AAC fallback for every clip", s.state === "ready" && s.format === "m4a" && hits.filter((h) => h.endsWith(".m4a")).length === 7, `${s.state} ${s.format}`);
+    check("WebM undecodable → AAC fallback for every clip", s.state === "ready" && s.format === "m4a" && hits.filter((h) => h.endsWith(".m4a")).length === CLIP_IDS.length, `${s.state} ${s.format}`);
     a.tick(0.016);
     const amb = ctx.sources.find((x) => x.loop)!;
     const src = 22050 / 22050;
@@ -186,7 +186,7 @@ async function main() {
     const a = createDiveAudio(ctxDecoding() as unknown as AudioContext, { env: null, fetcher, canPlayType: null, base: "/sfx/" });
     await until(() => a.status().settled);
     const s = a.status();
-    check("no manifest → silent, settled, all missing", s.state === "silent" && s.settled && s.failed === 7 && s.missing.length === 7);
+    check("no manifest → silent, settled, all missing", s.state === "silent" && s.settled && s.failed === CLIP_IDS.length && s.missing.length === CLIP_IDS.length);
     check("no manifest → one quiet info line", infos.length - before === 1, `${infos.length - before}`);
     let threw = false;
     try {
@@ -221,7 +221,7 @@ async function main() {
     const a = createDiveAudio(ctxDecoding() as unknown as AudioContext, { env: null, fetcher, canPlayType: null, clipTimeoutMs: 40, base: "/sfx/" });
     await until(() => a.status().settled);
     const s = a.status();
-    check("partial: missing / 404 / timed-out clips given up, rest ready", s.state === "partial" && s.done === 4 && s.failed === 3 && [...s.missing].sort().join() === "bump,mode,warn", `${s.state} ${s.done}/${s.failed} ${s.missing.join()}`);
+    check("partial: missing / 404 / timed-out clips given up, rest ready", s.state === "partial" && s.done === CLIP_IDS.length - 3 && s.failed === 3 && [...s.missing].sort().join() === "bump,mode,warn", `${s.state} ${s.done}/${s.failed} ${s.missing.join()}`);
     check("partial: progress reaches the total (given-up clips count as resolved)", s.bytes === s.totalBytes, `${s.bytes}/${s.totalBytes}`);
     let threw = false;
     try {

@@ -241,8 +241,9 @@ console.log("loading steps + dive gate");
     const snap = snapOf();
     const created = runSteps(steps, snap);
     const ws = created.evals.get("worldSave")!;
-    check(created.model.status.worldSave === "done" && ws.lines[0] === loadingEn.world.created("reef") && ws.lines[1] === loadingEn.world.ledger("100,000"), "new world: done, seed + conserved ledger lines");
-    check((ws.diag ?? []).some((e) => e.value === "save/main") && (ws.diag ?? []).some((e) => e.value === "99,320 · 0 · 680 · 0 · 0"), "diagnostics: slot key, pool totals W · P · B · S · L");
+    // genesis N = 66,000 lithic + 17,000 lumen + 17,000 ferro + 4,500 voltite (伏晶) + 500 abyssal (渊核); B holds the 680 lander cargo
+    check(created.model.status.worldSave === "done" && ws.lines[0] === loadingEn.world.created("reef") && ws.lines[1] === loadingEn.world.ledger("105,000"), "new world: done, seed + conserved ledger lines");
+    check((ws.diag ?? []).some((e) => e.value === "save/main") && (ws.diag ?? []).some((e) => e.value === "104,320 · 0 · 680 · 0 · 0"), "diagnostics: slot key, pool totals W · P · B · S · L");
     check(ws.lines[2] === loadingEn.world.sites(10, 10, Object.values(opened.session.report.sites.byBiome).filter((n) => n > 0).length), "new world: site-table line (10 × 10, biome count)");
     check(ws.lines[3] === loadingEn.world.wall(160, "stable") && opened.session.report.wall.thickness === opened.session.wall.thickness && (ws.diag ?? []).some((e) => e.label === loadingEn.world.diag.wall && e.value.endsWith("160.0 m")), "new world: ring-wall line (160 m, stable) = the session's wall");
     check((ws.diag ?? []).some((e) => e.label === loadingEn.world.diag.biomes && e.value.startsWith("sand ")) && (ws.diag ?? []).some((e) => e.label === loadingEn.world.diag.bias && e.value.includes("…")), "diagnostics: sites per biome, δ range");

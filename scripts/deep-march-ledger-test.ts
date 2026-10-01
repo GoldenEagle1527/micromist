@@ -57,8 +57,8 @@ c.section("genesis");
   const ledger = createGenesisLedger();
   const totals = vectorFromCounts(GENESIS.totals);
   const cargo = vectorFromCounts(GENESIS.landerCargo);
-  c.check(ledger.grandTotal() === 100_000, "N = 100,000 (MVP)", `${ledger.grandTotal()}`);
-  c.check(ledger.total("lithic") === 66_000 && ledger.total("lumen") === 17_000 && ledger.total("ferro") === 17_000 && ledger.total("abyssal") === 0, "MVP kinds: lithic 66k, lumen 17k, ferro 17k, others 0");
+  c.check(ledger.grandTotal() === 105_000, "N = 105,000 (MVP 100k + voltite 4.5k (save v6) + abyssal 500 (save v7))", `${ledger.grandTotal()}`);
+  c.check(ledger.total("lithic") === 66_000 && ledger.total("lumen") === 17_000 && ledger.total("ferro") === 17_000 && ledger.total("voltite") === 4_500 && ledger.total("abyssal") === 500 && ledger.total("silica") === 0 && ledger.total("resonite") === 0, "active kinds: lithic 66k, lumen 17k, ferro 17k, voltite 4.5k, abyssal 500, others 0");
   c.check(same(ledger.pool("base"), cargo) && same(ledger.pool("world"), totals.map((n, i) => n - cargo[i])), "lander cargo (600 lithic, 80 ferro) in the base, the rest in the world");
   c.check(ledger.poolTotal("player") + ledger.poolTotal("suspended") + ledger.poolTotal("lost") === 0 && ledger.isConserved(), "other pools empty, conserved");
   c.check(refusal(() => ParticleLedger.genesis([1, 2, 3])) === "bad-vector", "genesis refuses a malformed totals vector");
@@ -114,7 +114,7 @@ c.section("100,000 random operations");
   }
   c.check(brokeInvariant === 0, "Σ pools = N_k after every operation", `${applied} applied, ${refused} refused`);
   c.check(negative === 0, "every pool stays a non-negative integer vector");
-  c.check(ledger.grandTotal() === 100_000, "grand total unchanged");
+  c.check(ledger.grandTotal() === 105_000, "grand total unchanged");
 }
 
 c.section("saved state");

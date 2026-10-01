@@ -114,10 +114,11 @@ function omenChecks(c: Checker): void {
   c.check(g.triangles > 800 && g.triangles < 1600 && g.positions.length / 3 < 65536 && g.sway.every((s) => s >= 0 && s <= 1.4), "silhouette ≈ 1.2k triangles, 16-bit indices", `${g.triangles} triangles`);
 }
 
-type Calls = { chaos: number; rumble: number; play: number };
+type Calls = { chaos: number; rumble: number; play: number; loop: number; loops: Record<string, number> };
 function fakeParts() {
-  const calls: Calls = { chaos: 0, rumble: 0, play: 0 };
-  const audio = { chaos: () => void calls.chaos++, rumble: () => void calls.rumble++, play: () => void calls.play++ } as unknown as DiveAudio;
+  const calls: Calls = { chaos: 0, rumble: 0, play: 0, loop: 0, loops: {} };
+  const setLoop = (id: string, level: number) => void (calls.loop++, (calls.loops[id] = level));
+  const audio = { chaos: () => void calls.chaos++, rumble: () => void calls.rumble++, play: () => void calls.play++, setLoop } as unknown as DiveAudio;
   const rig = { spot: { intensity: 26 }, beam: { uBeamGain: { value: 1.5 } } } as unknown as LampRig;
   const pulses = new SonarPulses(5);
   const d = { uniforms: createChaosUniforms(), fog: createFogUniforms(), rig, audio, pulses, sonar: createSonarUniforms(pulses), long: createLongPulses(), scene: new THREE.Scene(), calm: false, seed: 7 };
@@ -132,7 +133,7 @@ function directorChecks(c: Checker): void {
     dir0.frame({ dt: 0.016, time: i * 0.016, camera: new THREE.Vector3(0, 0, 0), suppressed: false });
     dir0.sonar({ dt: 0.016, pulseTime: i * 0.016, time: i * 0.016, pings: i % 10 === 0 ? 1 : 0, sonar: 1, diver: new THREE.Vector3(), blocked: false });
   }
-  c.check(z.rig.spot.intensity === 26 && z.d.fog.uFogColor.value.equals(fog0) && z.calls.chaos + z.calls.rumble + z.calls.play === 0 && z.d.uniforms.uChaos.value.lengthSq() === 0 && z.d.pulses.count === 0 && z.d.scene.children.length === 0, "stage 0: nothing touched, nothing built (zero cost)");
+  c.check(z.rig.spot.intensity === 26 && z.d.fog.uFogColor.value.equals(fog0) && z.calls.chaos + z.calls.rumble + z.calls.play + z.calls.loop === 0 && z.d.uniforms.uChaos.value.lengthSq() === 0 && z.d.pulses.count === 0 && z.d.scene.children.length === 0, "stage 0: nothing touched, nothing built (zero cost)");
   const p = fakeParts(), v2 = viewAt(2), k = v2.cracks[0], dir = new ChaosDirector(p.d, v2);
   const at = new THREE.Vector3(k.x - k.nx * 60, 0, k.z - k.nz * 60);
   let minLamp = 1;
@@ -150,7 +151,7 @@ function directorChecks(c: Checker): void {
   const s = fakeParts(), dirS = new ChaosDirector(s.d, viewAt(1, 1, true));
   c.check(s.d.uniforms.uChaos.value.z === 1 && s.d.uniforms.uScar.value[0].x !== 1e6 && s.d.uniforms.uScar.value[1].x === 1e6, "a healed crack: its scar slot is set (the wall darkens along it)");
   dirS.setView(viewAt(0));
-  c.check(s.d.uniforms.uChaos.value.lengthSq() === 0 && s.d.uniforms.uScar.value[0].x === 1e6, "the tide's switch to a calm generation clears everything");
+  c.check(s.d.uniforms.uChaos.value.lengthSq() === 0 && s.d.uniforms.uScar.value[0].x === 1e6 && (s.calls.loops.dread ?? 0) === 0, "the tide's switch to a calm generation clears everything (the dread loop silent)");
   dir.dispose();
 }
 

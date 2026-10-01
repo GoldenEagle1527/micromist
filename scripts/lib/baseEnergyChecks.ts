@@ -16,7 +16,7 @@ export function energyChecks(c: Checker): void {
   {
     const { base } = foundedRig();
     const v = base.view();
-    c.check(v.energy === STRUCTURES.core.energyCap && v.energyCap === 100 && Math.abs(v.energyRate - 0.25) < 1e-9, "core alone: starts full (100), +0.25 / s");
+    c.check(v.energy === STRUCTURES.core.energyCap && v.energyCap === 100 && v.energyRate === 0, "core alone: starts full (100); the rate reads 0 while full (no standby flicker; +0.25 / s below full, checked at the brown-out)", `${v.energyRate}`);
     base.tick(100);
     c.check(base.view().energy === 100, "energy never exceeds the capacity");
   }
