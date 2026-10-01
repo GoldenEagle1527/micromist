@@ -15,6 +15,7 @@ export function observationOf(exp: ExpeditionTelemetry, base: BaseTelemetry | nu
   return {
     tank: exp.tank.value,
     founded: base?.view.founded ?? false,
+    reactor: base?.view.buildings.some((b) => b.kind === "reactor") ?? false,
     deposited,
     released,
     gen: tide?.gen ?? 1,

@@ -1,6 +1,6 @@
 /**
  * Build mode bar (plan M5): the building cards (the core until it stands,
- * then lighthouse / energy tower / storage) with their costs (have / need),
+ * then lighthouse / energy tower / storage / volt reactor) with their costs (have / need),
  * the live placement verdict, PLACE and LEAVE. Keys: E / click place, T next, G leave.
  */
 import type { StructureInfo } from "../../conserve";

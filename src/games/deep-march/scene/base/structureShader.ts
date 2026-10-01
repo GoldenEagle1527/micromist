@@ -8,7 +8,8 @@
  *           edges and a fine grain (a normal-map look without a texture fetch),
  *           faded out with distance; grooves darken the albedo;
  *   emissive: deep-blue light strips (1) and lantern (2), breathing slowly,
- *           dimmed to uGlowIdle while the building is not working;
+ *           dimmed to uGlowIdle while the building is not working; 3 = the
+ *           reactor's volt crystal: lantern strength in amber (uVoltTint);
  *   lights: the diver's high beam and the lighthouse light (baseLightShader.ts);
  *   opaque: the terrain's water chain and a sonar echo (glowing parts brighter).
  */
@@ -50,6 +51,7 @@ uniform float uTime;
 uniform vec3 uAbsorb;
 uniform vec2 uSeam;
 uniform vec3 uGlowTint;
+uniform vec3 uVoltTint;
 uniform vec3 uGlowParams;
 varying vec3 vWPos;
 varying vec3 vWNrm;
@@ -79,8 +81,9 @@ export const STRUCT_NORMAL = /* glsl */ `
 /** Replaces <emissivemap_fragment>: declares dmHullGlow (uGlowParams: gain, idle, pulse rad/s). */
 export const STRUCT_EMISSIVE = /* glsl */ `#include <emissivemap_fragment>
   diffuseColor.rgb *= dmSeamShade;
-  float dmHullGlow = vGlow.x * mix(uGlowParams.y, 1.0, vGlow.y) * (0.78 + 0.22 * sin(uTime * uGlowParams.z + vWPos.y * 0.12));
-  totalEmissiveRadiance += uGlowTint * (dmHullGlow * uGlowParams.x);`;
+  float dmVolt = step(2.5, vGlow.x);
+  float dmHullGlow = (vGlow.x - dmVolt) * mix(uGlowParams.y, 1.0, vGlow.y) * (0.78 + 0.22 * sin(uTime * uGlowParams.z + vWPos.y * 0.12));
+  totalEmissiveRadiance += mix(uGlowTint, uVoltTint, dmVolt) * (dmHullGlow * uGlowParams.x);`;
 
 /** Replaces <opaque_fragment>. */
 export const STRUCT_OPAQUE = /* glsl */ `{

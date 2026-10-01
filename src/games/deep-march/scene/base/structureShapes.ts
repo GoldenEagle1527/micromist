@@ -1,12 +1,14 @@
 /**
- * The four buildings (plan M5), y = 0 at the ground point, a 6 m skirt below
+ * The buildings (plan M5; the volt reactor: decision 1A), y = 0 at the ground point, a 6 m skirt below
  * it (it fits the building to uneven ground, groundProbe.ts `sink`). Massive,
  * faceted, slightly twisted forms — basalt monoliths grown over with light
  * strips — sized to the footprints of conserve/config.ts STRUCTURES:
  *   core        28 m octagonal ziggurat, four buttresses, a glowing belt and crown;
  *   lighthouse  48 m hexagonal spiral shaft, gallery, lantern (glow 2), spire;
  *   energy      24 m three stacked capacitor cells with glowing coils;
- *   storage     13 m wide octagonal bunker under a faceted dome.
+ *   storage     13 m wide octagonal bunker under a faceted dome;
+ *   reactor     18 m squat hexagonal containment ring, three pylons leaning over
+ *               a volt crystal (glow 3: the voltite nodes' amber).
  * Pure arrays (shapes.ts); structureGeometry.ts turns them into BufferGeometry.
  */
 import type { StructureKind } from "../../conserve";
@@ -84,7 +86,21 @@ function storage(b: ShapeBuilder): void {
   for (let i = 0; i < 4; i++) b.slab((i / 4) * TAU, 8.9, SKIRT, 7.2, 9, 1.4, 2.2, 0.5);
 }
 
-const BUILD: Readonly<Record<StructureKind, (b: ShapeBuilder) => void>> = { core, lighthouse, energy, storage };
+function reactor(b: ShapeBuilder): void {
+  const t = TAU / 12;
+  b.band(6, SKIRT, 6.2, 0, 6, 0, t);
+  b.band(6, 0, 6, 2.6, 5.6, 0, t);
+  b.band(6, 2.6, 5.45, 3.2, 5.45, 1, t);
+  b.band(6, 3.2, 5.6, 4.4, 4.6, 0, t, t + 0.15);
+  b.cap(6, 4.4, 4.6, 2.4, 0, t + 0.15);
+  b.band(6, 4.4, 2.4, 5.6, 2.0, 1, t + 0.15);
+  // the crystal: a tall faceted bipyramid floating in the cage
+  b.band(6, 5.8, 0.05, 9.5, 1.9, 3, t + 0.5);
+  b.cone(6, 9.5, 1.9, 14.6, 3, t + 0.5);
+  for (let i = 0; i < 3; i++) b.slab((i / 3) * TAU + t, 5.9, SKIRT, 2.6, 18, 1.1, 1.8, 0.45);
+}
+
+const BUILD: Readonly<Record<StructureKind, (b: ShapeBuilder) => void>> = { core, lighthouse, energy, storage, reactor };
 
 export function structureShape(kind: StructureKind): ShapeArrays & { triangles: number } {
   const b = new ShapeBuilder();

@@ -2,7 +2,7 @@
  * Building material: MeshPhongMaterial patched with structureShader.ts, sharing
  * the terrain's water, fog, sonar, high-beam and lighthouse-light uniforms, so
  * the buildings stand in the same murk and light. No textures, one program
- * for all four kinds (customProgramCacheKey).
+ * for every kind (customProgramCacheKey).
  */
 import * as THREE from "three";
 import { BEAM_DECLS, BEAM_LIGHT, type BeamUniforms } from "../highBeam";
@@ -43,6 +43,7 @@ export function createStructureMaterial(opts: StructureMaterialOptions): Structu
     uGrowIn: { value: GROW_IN },
     uSeam: { value: new THREE.Vector2(L.seam, L.seamDepth) },
     uGlowTint: { value: new THREE.Color(...L.glow) },
+    uVoltTint: { value: new THREE.Color(...L.volt) },
     uGlowParams: { value: new THREE.Vector3(L.glowGain, L.glowIdle, L.pulseHz * Math.PI * 2) },
   };
   const material = new THREE.MeshPhongMaterial({ color: new THREE.Color(...L.hull), specular: new THREE.Color().setScalar(L.specular), shininess: L.shininess });
