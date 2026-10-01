@@ -7,7 +7,7 @@
  * help sheet (also ?).
  */
 import { useCallback, useEffect, useRef, useState } from "react";
-import { takeTip, type TipId } from "../settings";
+import { useOnce } from "./useOnce";
 import type { DeepMarchHandle } from "../scene/world";
 import { ActionFan, type FanPressId, type FanToggleId } from "./ActionFan";
 import { IconBase, IconMenu } from "./icons";
@@ -75,22 +75,6 @@ type Props = {
   debugOpen: boolean;
   labels: PanelLabels;
 };
-
-/** A one-off explanation: shown the first time `when` turns true (ever, per player), gone after its 2 s fade. */
-function useOnce(id: TipId, when: boolean): boolean {
-  const [shown, setShown] = useState(false);
-  useEffect(() => {
-    if (!when) {
-      setShown(false);
-      return;
-    }
-    if (!takeTip(id)) return;
-    setShown(true);
-    const t = window.setTimeout(() => setShown(false), 2700);
-    return () => window.clearTimeout(t);
-  }, [id, when]);
-  return shown;
-}
 
 export function ControlPanel({ game, panelOn, onTogglePanel, onExit, onFlip, sound, fullscreen, seed, onDebug, debugOpen, labels }: Props) {
   const tel = useTelemetry(game);

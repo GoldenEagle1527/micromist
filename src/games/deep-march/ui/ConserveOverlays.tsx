@@ -16,6 +16,7 @@ import { BuildBar } from "./base/BuildBar";
 import { HomeMark } from "./base/HomeMark";
 import { HintCard } from "./hints/HintCard";
 import type { HintState } from "./hints/useHints";
+import { useOnce } from "./useOnce";
 import { TideHud } from "./tide/TideHud";
 
 type Props = {
@@ -30,6 +31,8 @@ type Props = {
 };
 
 export function ConserveOverlays({ game, exp, base, tide, panelOn, hints, labels }: Props) {
+  // each new-player step teaches once: its card shows 2 s and fades; the step itself stays until done (progression unchanged)
+  const hintShown = useOnce(`hint:${hints.step ?? ""}`, hints.step !== null);
   if (!exp) return null;
   const building = base?.build.active ?? false;
   return (
@@ -37,7 +40,7 @@ export function ConserveOverlays({ game, exp, base, tide, panelOn, hints, labels
       <CacheMarks exp={exp} title={labels.expedition.cacheMark} />
       {tide ? <TideHud tide={tide} labels={labels.tide} biomes={labels.regions} /> : null}
       {base ? <HomeMark base={base} title={labels.base.homeMark} /> : null}
-      <HintCard hints={hints} touch={panelOn} labels={labels.hints} />
+      {hintShown ? <HintCard hints={hints} touch={panelOn} labels={labels.hints} /> : null}
       {!building ? <AbsorbPrompt exp={exp} touch={panelOn} labels={labels.expedition} /> : null}
       {base && game ? (
         <>

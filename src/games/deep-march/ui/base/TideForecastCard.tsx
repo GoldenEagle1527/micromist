@@ -3,6 +3,7 @@
  * tide called now would bring — m, wall thickness and chaos stage after the
  * tide beside this generation's, and the cracks that would open or heal.
  */
+import { OnceNote } from "../useOnce";
 import type { TideForecast } from "../../conserve";
 import type { ForecastDict } from "./forecastI18n";
 
@@ -42,7 +43,9 @@ export function TideForecastCard({ forecast: f, labels: l }: Props) {
           </tr>
         </tbody>
       </table>
-      <p className="dm-base-note dim">{l.note}</p>
+      <OnceNote id="forecastNote" className="dm-base-note dim">
+        {l.note}
+      </OnceNote>
     </div>
   );
 }
