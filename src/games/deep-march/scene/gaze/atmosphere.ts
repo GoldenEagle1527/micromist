@@ -1,8 +1,9 @@
 /**
  * The world's state of mind under the gaze, applied each frame (design doc
  * §7.3): the plankton's current toward the base, the lighthouse light clouded
- * from ② on, the sound floor (the growl loop over the sub rumble), the groan
- * of a squeeze starting and of a building giving way — and after 湮灭 the
+ * from ② on, the sound floor (the growl loop over the sub rumble), the slow
+ * metal creak of a squeeze starting and, deeper, of a building giving way
+ * (over the squeeze's rumble bed) — and after 湮灭 the
  * veil closing over everything. Telegraphed and slow; no stingers.
  */
 import type { GazeView } from "../../conserve";
@@ -46,7 +47,7 @@ export class GazeAtmosphere {
     chaos.floor.rumble = Math.max(L.audio.rumble[ph], sq && sq.stage !== "collapse" ? L.audio.squeeze * (sq.stage === "telegraph" ? sq.u : 1) : 0);
     this.growl(L.audio.growl[ph]);
     const key = sq ? `${sq.id}:${sq.stage}` : null;
-    if (key !== this.stage && sq && sq.stage !== "telegraph") this.d.audio.play("bump", { gain: 0.6, rate: sq.stage === "crush" ? 0.32 : 0.25, lowpass: 420 });
+    if (key !== this.stage && sq && sq.stage !== "telegraph") this.d.audio.play("creak", L.audio.creak[sq.stage]);
     this.stage = key;
   }
 

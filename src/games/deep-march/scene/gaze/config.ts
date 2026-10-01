@@ -52,9 +52,16 @@ export const GAZE_LOOK = {
   flow: [0.25, 0.4, 0.55, 0.75] as const,
   /**
    * Sound floors per phase (0 … 1): the growl (the hostile drone loop, lower and muffled:
-   * scene/audioLoops.ts) from ① on, the synthesized sub rumble under it; a squeeze's groan.
+   * scene/audioLoops.ts) from ① on, the synthesized sub rumble under it; a squeeze's groan (rumble bed).
+   * creak: the heavy metal creak, slowed and muffled, as a building starts to buckle (crush)
+   * and, deeper and slower still, as it gives way (collapse) — its 0.8 s swell stretched, never a hit.
    */
-  audio: { growl: [0.2, 0.28, 0.36, 0.46] as const, rumble: [0.06, 0.1, 0.16, 0.3] as const, squeeze: 0.7 },
+  audio: {
+    growl: [0.2, 0.28, 0.36, 0.46] as const,
+    rumble: [0.06, 0.1, 0.16, 0.3] as const,
+    squeeze: 0.7,
+    creak: { crush: { gain: 0.36, rate: 0.68, lowpass: 900 }, collapse: { gain: 0.42, rate: 0.52, lowpass: 650 } },
+  },
   /** ② on: the lighthouse light's reach × this (the swarm clouds it). */
   lighthouse: 0.5,
   /** 湮灭: the veil closes over this long (s), how dark, the visibility left (m). */
