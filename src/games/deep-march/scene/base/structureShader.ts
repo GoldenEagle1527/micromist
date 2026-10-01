@@ -4,17 +4,26 @@
  * lamp, sun and ambient light it like the terrain):
  *   vertex: per instance aState (x working, y birth time, z 直视's crush): a new building rises
  *           out of the ground over uGrowIn s (no popping), a squeezed one sinks and splays; aGlow per vertex;
- *   normal: flat facets + horizontal panel seams every uSeam.x m with bevelled
+ *   normal: flat facets + horizontal panel seams every STRUCTURE_LOOK.seam m with bevelled
  *           edges and a fine grain (a normal-map look without a texture fetch),
  *           faded out with distance; grooves darken the albedo;
  *   emissive: deep-blue light strips (1) and lantern (2), breathing slowly,
- *           dimmed to uGlowIdle while the building is not working; 3 = the
- *           reactor's volt crystal: lantern strength in amber (uVoltTint);
+ *           dimmed to the idle level while the building is not working; 3 = the
+ *           reactor's volt crystal: lantern strength in amber (dmVoltTint);
  *   lights: the diver's high beam and the lighthouse light (baseLightShader.ts);
  *   opaque: the terrain's water chain and a sonar echo (glowing parts brighter).
+ * The static look (STRUCTURE_LOOK: seams, glow tints, glow gain / idle / pulse) is
+ * baked in as constants, not uniforms: with the shared water / fog / sonar / beam /
+ * lighthouse uniforms the highp program fills Mali-G57's 128 fast uniform registers,
+ * and every uniform past them is a load/store cycle on each fragment.
  */
 import { BEAM_OPAQUE } from "../highBeam";
 import { FOG_OPAQUE } from "../fog";
+import { STRUCTURE_LOOK as L } from "./config";
+
+/** A GLSL float literal of this number (shortest round-trip digits, always with a decimal point). */
+const f = (n: number) => (/[.eE]/.test(String(n)) ? String(n) : `${n}.0`);
+const v = (xs: readonly number[]) => `vec${xs.length}(${xs.map(f).join(", ")})`;
 
 export const STRUCT_VERT_DECLS = /* glsl */ `
 attribute float aGlow;
@@ -50,10 +59,11 @@ export const STRUCT_FRAG_DECLS = /* glsl */ `
 #endif
 uniform float uTime;
 uniform vec3 uAbsorb;
-uniform vec2 uSeam;
-uniform vec3 uGlowTint;
-uniform vec3 uVoltTint;
-uniform vec3 uGlowParams;
+// seam spacing (m), depth; strip and volt-crystal tints; glow gain, idle, pulse (rad/s)
+const vec2 dmSeam = ${v([L.seam, L.seamDepth])};
+const vec3 dmGlowTint = ${v(L.glow)};
+const vec3 dmVoltTint = ${v(L.volt)};
+const vec3 dmGlowParams = ${v([L.glowGain, L.glowIdle, L.pulseHz * Math.PI * 2])};
 varying vec3 vWPos;
 varying vec3 vWNrm;
 varying vec3 vObj;
@@ -68,23 +78,23 @@ export const STRUCT_NORMAL = /* glsl */ `
   float dmSeamShade = 1.0;
   {
     float fade = 1.0 - smoothstep(24.0, 80.0, distance(vWPos, cameraPosition));
-    float s = fract(vObj.y / uSeam.x);
+    float s = fract(vObj.y / dmSeam.x);
     float flat0 = smoothstep(0.0, 0.07, s) * smoothstep(0.0, 0.07, 1.0 - s);
     float bevel = (s < 0.5 ? -1.0 : 1.0) * (1.0 - flat0);
     vec3 t = vec3(0.0, 1.0, 0.0) - dmWorldNormal * dmWorldNormal.y;
     vec3 q = vWPos * 1.7;
     vec3 w = vec3(sin(q.y * 1.3 + q.x * 0.7), sin(q.z * 1.9 - q.y * 0.5), sin(q.x * 1.1 + q.z * 1.6));
-    dmWorldNormal = normalize(dmWorldNormal + fade * (uSeam.y * bevel * t + 0.07 * (w - dmWorldNormal * dot(w, dmWorldNormal))));
+    dmWorldNormal = normalize(dmWorldNormal + fade * (dmSeam.y * bevel * t + 0.07 * (w - dmWorldNormal * dot(w, dmWorldNormal))));
     dmSeamShade = mix(1.0, mix(0.5, 1.0, flat0), fade);
   }
   normal = normalize((viewMatrix * vec4(dmWorldNormal, 0.0)).xyz);`;
 
-/** Replaces <emissivemap_fragment>: declares dmHullGlow (uGlowParams: gain, idle, pulse rad/s). */
+/** Replaces <emissivemap_fragment>: declares dmHullGlow (dmGlowParams: gain, idle, pulse rad/s). */
 export const STRUCT_EMISSIVE = /* glsl */ `#include <emissivemap_fragment>
   diffuseColor.rgb *= dmSeamShade;
   float dmVolt = step(2.5, vGlow.x);
-  float dmHullGlow = (vGlow.x - dmVolt) * mix(uGlowParams.y, 1.0, vGlow.y) * (0.78 + 0.22 * sin(uTime * uGlowParams.z + vWPos.y * 0.12));
-  totalEmissiveRadiance += mix(uGlowTint, uVoltTint, dmVolt) * (dmHullGlow * uGlowParams.x);`;
+  float dmHullGlow = (vGlow.x - dmVolt) * mix(dmGlowParams.y, 1.0, vGlow.y) * (0.78 + 0.22 * sin(uTime * dmGlowParams.z + vWPos.y * 0.12));
+  totalEmissiveRadiance += mix(dmGlowTint, dmVoltTint, dmVolt) * (dmHullGlow * dmGlowParams.x);`;
 
 /** Replaces <opaque_fragment>. */
 export const STRUCT_OPAQUE = /* glsl */ `{
