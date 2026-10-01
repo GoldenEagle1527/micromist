@@ -153,31 +153,6 @@
   opacity: 0.85;
 }
 
-.dm-playing {
-  width: min(100%, 960px);
-  margin: 0 auto 1.25rem;
-  gap: 0.55rem;
-}
-
-.dm-play-bar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.5rem 0.8rem;
-}
-
-.dm-seed-tag {
-  font-size: 0.82rem;
-  opacity: 0.75;
-  font-variant-numeric: tabular-nums;
-}
-
-.dm-play-hint {
-  margin: 0;
-  flex: 1 1 14rem;
-  font-size: 0.82rem;
-}
-
 .dm-stage {
   container: dm-stage / inline-size;
   --dm-sl: env(safe-area-inset-left, 0px);
@@ -214,7 +189,9 @@
   display: block;
 }
 
+/* the fps / streaming line: only when the staging debug panel turns it on */
 .dm-stats {
+  display: none;
   position: absolute;
   bottom: 0.35rem;
   left: 50%;
@@ -224,6 +201,9 @@
   font-size: 0.62rem;
   opacity: 0.55;
   font-variant-numeric: tabular-nums;
+}
+.dm-stats.on {
+  display: block;
 }
 
 .dm-spawn-legend {
@@ -335,12 +315,6 @@
   display: block;
 }
 
-@media (max-width: 560px) {
-  .dm-play-hint {
-    display: none;
-  }
-}
-
 @container dm-stage (max-width: 560px) {
   .dm-stats {
     top: 48px;
@@ -350,19 +324,6 @@
     transform: none;
     max-width: 42%;
     text-align: right;
-  }
-}
-
-/* Short landscape phones: keep the play bar compact. */
-@media (max-height: 500px) {
-  .dm-playing {
-    gap: 0.3rem;
-  }
-  .dm-play-bar .ghost {
-    padding-block: 0.2rem;
-  }
-  .dm-play-hint {
-    display: none;
   }
 }
 
@@ -382,16 +343,10 @@
   opacity: 0.7;
 }
 
-/* ---- Immersive mobile play: fixed full-viewport layer above the platform header ---- */
+/* ---- Play: the platform's full-window layer (.game-viewport, styles/play.css) ---- */
 .dm-immersive {
-  position: fixed;
-  inset: 0;
-  z-index: 1000;
   display: block;
   background: #001631;
-  overflow: hidden;
-  overscroll-behavior: none;
-  touch-action: none;
 }
 
 .dm-rotor {
@@ -404,11 +359,6 @@
 }
 
 .dm-immersive .dm-stage {
-  width: 100%;
-  height: 100%;
-  aspect-ratio: auto;
-  max-height: none;
-  border-radius: 0;
   --dm-sl: env(safe-area-inset-left, 0px);
   --dm-sr: env(safe-area-inset-right, 0px);
   --dm-st: env(safe-area-inset-top, 0px);
@@ -428,10 +378,4 @@
   --dm-sr: env(safe-area-inset-top, 0px);
   --dm-st: env(safe-area-inset-left, 0px);
   --dm-sb: env(safe-area-inset-right, 0px);
-}
-
-html.dm-immersive-on,
-html.dm-immersive-on body {
-  overflow: hidden;
-  overscroll-behavior: none;
 }

@@ -1,7 +1,8 @@
 /**
- * Active sonar strip under the battery (survival HUD): ready / recharging bar for
- * the ping (key 3 or the fan's PING sector), why a ping would be refused, and the
- * observation-mode toggle (key N) — plus the banner shown while observing.
+ * Sonar on the HUD, only when it says something: a small recharge chip under the
+ * battery while a ping can't go out (keyboard play; on touch the PING button's
+ * ring shows it), and the banner while observing the scan record — with the
+ * surveyed area and how to get back (N / hold PING).
  */
 import type { Telemetry } from "../scene/world";
 import "./sonar.css";
@@ -11,53 +12,44 @@ export type SonarHudLabels = {
   ready: string;
   cooling: string;
   noBattery: string;
-  /** Observation toggle button. */
+  /** Observation (scan record view) name, as in the help. */
   observe: string;
   /** Banner while observing: title and what the player is looking at. */
   observeOn: string;
   observeHint: string;
+  /** How to leave the view: keyboard / touch. */
+  exitKey: string;
+  exitTouch: string;
   /** Surveyed seabed (followed by km²). */
   recorded: string;
 };
 
-/** Surveyed seabed, m² → km² for the strip. */
-const km2 = (m2: number) => (m2 <= 0 ? "0" : m2 < 10_000 ? "<0.01" : (m2 / 1e6).toFixed(2));
+/** Surveyed seabed, m² → km². */
+export const km2 = (m2: number) => (m2 <= 0 ? "0" : m2 < 10_000 ? "<0.01" : (m2 / 1e6).toFixed(2));
 
-export function SonarGauge({ tel, labels, onObserve }: { tel: Telemetry; labels: SonarHudLabels; onObserve?: () => void }) {
+/** Recharge / no-battery chip (nothing while the ping is ready). */
+export function SonarChip({ tel, labels }: { tel: Telemetry; labels: SonarHudLabels }) {
   const s = tel.sonar;
-  if (!s.available) return null;
-  const state = s.ready ? "ready" : s.cooldown > 0 ? "cooling" : "battery";
-  const text = state === "ready" ? labels.ready : state === "cooling" ? `${labels.cooling} ${s.cooldown.toFixed(1)}s` : labels.noBattery;
-  const on = tel.scan.observe;
+  if (!s.available || s.ready) return null;
+  const cooling = s.cooldown > 0;
   return (
-    <div className="dm-sonar" data-state={state} data-observe={on ? "on" : "off"} title={`${labels.title} (3)`}>
-      <div className="dm-sonar-head">
-        <small>{labels.title}</small>
-        <span>{text}</span>
-      </div>
-      <div className="dm-sonar-bar" aria-hidden="true">
-        <i style={{ width: `${Math.round(s.charge * 100)}%` }} />
-      </div>
-      <div className="dm-sonar-foot">
-        <small>
-          {labels.recorded} {km2(tel.scan.area)} km²
-        </small>
-        {onObserve ? (
-          <button type="button" className={`dm-sonar-observe${on ? " on" : ""}`} onClick={onObserve} aria-pressed={on} title={`${labels.observeOn} (N)`}>
-            {labels.observe}
-          </button>
-        ) : null}
-      </div>
+    <div className="dm-sonar-chip" data-state={cooling ? "cooling" : "battery"} title={`${labels.title} (3)`}>
+      <small>{labels.title}</small>
+      <span>{cooling ? `${labels.cooling} ${s.cooldown.toFixed(1)}s` : labels.noBattery}</span>
+      <i style={{ width: `${Math.round(s.charge * 100)}%` }} aria-hidden="true" />
     </div>
   );
 }
 
 /** Top-centre banner while the view shows the scan record instead of the live world. */
-export function ObserveBanner({ labels }: { labels: SonarHudLabels }) {
+export function ObserveBanner({ labels, area, touch }: { labels: SonarHudLabels; area: number; touch: boolean }) {
   return (
     <div className="dm-observe-banner" role="status">
       <b>{labels.observeOn}</b>
       <small>{labels.observeHint}</small>
+      <small>
+        {labels.recorded} {km2(area)} km² · {touch ? labels.exitTouch : labels.exitKey}
+      </small>
     </div>
   );
 }

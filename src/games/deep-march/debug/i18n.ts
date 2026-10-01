@@ -38,6 +38,7 @@ export type DebugDict = {
     forgetScans: string;
     fillBattery: string;
     markers: string;
+    stats: string;
     chaosStage: string;
     chaosCracks: string;
     chaosScar: string;
@@ -87,6 +88,7 @@ export const debugZh: DebugDict = {
     forgetScans: "清空声呐记录（存档里的也清空）",
     fillBattery: "电池充满（不存档）",
     markers: "出生点与区域标记（B 键）",
+    stats: "性能信息行（帧率 / 区块 / 三角形）",
     chaosStage: "混沌阶段（仅本次预览）",
     chaosCracks: "裂缝数",
     chaosScar: "加一道愈合的伤疤",
@@ -140,6 +142,7 @@ export const debugEn: DebugDict = {
     forgetScans: "Forget the sonar scan record (the saved one too)",
     fillBattery: "Fill battery (not saved)",
     markers: "Spawn and region markers (B)",
+    stats: "Performance line (fps / chunks / triangles)",
     chaosStage: "Chaos stage (preview only)",
     chaosCracks: "Cracks",
     chaosScar: "Add a healed scar",

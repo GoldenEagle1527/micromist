@@ -23,9 +23,6 @@ export type ExpeditionDict = {
   cacheMark: (n: number, m: number) => string;
   /** Loading map legend: lost caches. */
   mapCache: string;
-  /** Play-bar hint suffix. */
-  hint: string;
-  hintPanel: string;
 };
 
 export const expeditionEn: ExpeditionDict = {
@@ -49,8 +46,6 @@ export const expeditionEn: ExpeditionDict = {
   deposited: (n) => `Recalled inside the base — ${n} particles went into storage, nothing lost`,
   cacheMark: (n, m) => `Cache · ${n} · ${m} m`,
   mapCache: "Lost cache",
-  hint: " · E absorb · X recall",
-  hintPanel: " · ABSORB button · hold ⟲ to recall",
 };
 
 export const expeditionZh: ExpeditionDict = {
@@ -74,6 +69,4 @@ export const expeditionZh: ExpeditionDict = {
   deposited: (n) => `在基地范围内召回 · ${n} 颗粒子已存入仓储，没有损失`,
   cacheMark: (n, m) => `粒子包 · ${n} · ${m} 米`,
   mapCache: "遗失粒子包",
-  hint: " · E 吸取 · X 召回",
-  hintPanel: " · 「吸取」按钮 · 按住 ⟲ 召回",
 };

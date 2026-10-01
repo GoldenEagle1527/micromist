@@ -1,82 +1,41 @@
-/* Active sonar strip under the battery (SonarGauge.tsx) */
-.dm-sonar {
-  margin-top: 4px;
-  padding: 3px 10px 4px 8px;
-  width: 132px;
-  border-left: 2px solid #6ff3ff;
-  background: linear-gradient(90deg, rgb(0 40 60 / 0.55), rgb(0 40 60 / 0.08));
-  font-variant-numeric: tabular-nums;
-}
-.dm-sonar-head {
+/* Sonar recharge chip under the battery (keyboard play) and the observation banner (SonarGauge.tsx) */
+.dm-sonar-chip {
+  position: relative;
   display: flex;
   align-items: baseline;
   gap: 6px;
+  margin-top: 4px;
+  padding: 2px 8px 4px 6px;
+  width: max-content;
+  min-width: 96px;
+  border-left: 2px solid #6ff3ff;
+  background: linear-gradient(90deg, rgb(0 40 60 / 0.5), rgb(0 40 60 / 0.06));
   font-size: 9.5px;
   white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
-.dm-sonar-head small {
+.dm-sonar-chip small {
   font-size: 9px;
   letter-spacing: 0.14em;
   opacity: 0.65;
 }
-.dm-sonar-head span {
-  margin-left: auto;
-  letter-spacing: 0.08em;
-  opacity: 0.8;
+.dm-sonar-chip span {
+  letter-spacing: 0.06em;
+  opacity: 0.85;
 }
-.dm-sonar[data-state="ready"] .dm-sonar-head span {
-  color: #6ff3ff;
-  opacity: 1;
-  text-shadow: 0 0 6px rgb(90 230 255 / 0.8);
-}
-.dm-sonar[data-state="battery"] {
-  border-left-color: var(--hud-warn);
-}
-.dm-sonar[data-state="battery"] .dm-sonar-head span {
-  color: var(--hud-warn);
-}
-.dm-sonar-bar {
-  margin-top: 3px;
-  height: 3px;
-  background: rgb(98 243 255 / 0.12);
-}
-.dm-sonar-bar i {
-  display: block;
-  height: 100%;
+.dm-sonar-chip i {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 2px;
   background: #6ff3ff;
   box-shadow: 0 0 4px rgb(90 230 255 / 0.7);
 }
-.dm-sonar-foot {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-top: 3px;
-  font-size: 9px;
-  white-space: nowrap;
+.dm-sonar-chip[data-state="battery"] {
+  border-left-color: var(--hud-warn);
 }
-.dm-sonar-foot small {
-  opacity: 0.6;
-  letter-spacing: 0.06em;
-}
-.dm-sonar-observe {
-  margin-left: auto;
-  padding: 3px 8px;
-  min-height: 24px;
-  border: 1px solid rgb(111 243 255 / 0.5);
-  border-radius: 3px;
-  background: rgb(0 30 50 / 0.6);
-  color: #6ff3ff;
-  font: inherit;
-  font-size: 10px;
-  letter-spacing: 0.1em;
-  pointer-events: auto;
-  cursor: pointer;
-  touch-action: manipulation;
-}
-.dm-sonar-observe.on {
-  background: rgb(90 230 255 / 0.25);
-  border-color: #6ff3ff;
-  box-shadow: 0 0 8px rgb(90 230 255 / 0.6);
+.dm-sonar-chip[data-state="battery"] span {
+  color: var(--hud-warn);
 }
 .dm-observe-banner {
   position: absolute;

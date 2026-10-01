@@ -4,7 +4,8 @@ import "./deep-march.css";
 import { useLocale } from "../../i18n";
 import { seedFromString } from "./terrain/noise";
 import { createDeepMarch, type DeepMarchHandle } from "./scene/world";
-import { isTouchDevice, loadSettings, panelEnabled, saveSettings, type SoundSettings } from "./settings";
+import { fullscreenEnabled, isTouchDevice, loadSettings, panelEnabled, saveSettings, type SoundSettings } from "./settings";
+import { enterFullscreen, exitFullscreen, fullscreenSupported, isFullscreen, onFullscreenChange } from "../../lib/fullscreen";
 import { ControlPanel } from "./ui/ControlPanel";
 import { acquireAudioContext, closeAudioContext, releaseAudioContext } from "./scene/audioContext";
 import { diveParams } from "./scene/dive/params";
@@ -31,6 +32,11 @@ export function DeepMarchGame() {
   const [calmLights, setCalmLights] = useState(() => loadSettings().calmLights);
   const [panelOn, setPanelOn] = useState(() => panelEnabled(loadSettings()));
   const [sound, setSound] = useState<SoundSettings>(() => loadSettings().sound);
+  /** Go true fullscreen when a dive starts (the dive fills the window either way). */
+  const [fullscreen, setFullscreen] = useState(() => fullscreenEnabled(loadSettings()));
+  /** True fullscreen is on right now (Esc / the browser can leave it any time). */
+  const [fsActive, setFsActive] = useState(isFullscreen);
+  useEffect(() => onFullscreenChange(setFsActive), []);
   /** This dive has an audio context (false: sound off in the debug panel, or no Web Audio) → no mute button. */
   const [audioOn, setAudioOn] = useState(false);
   const [game, setGame] = useState<DeepMarchHandle | null>(null);
@@ -55,7 +61,7 @@ export function DeepMarchGame() {
   const keepAudioRef = useRef(false);
 
   const persist = useCallback(
-    (patch: Partial<{ mode: GameMode; seed: string; panel: boolean; sensitivity: number; invertY: boolean; calmLights: boolean; sound: SoundSettings }>) => {
+    (patch: Partial<{ mode: GameMode; seed: string; panel: boolean; sensitivity: number; invertY: boolean; calmLights: boolean; sound: SoundSettings; fullscreen: boolean }>) => {
       const cur = loadSettings();
       saveSettings({ ...cur, ...patch });
     },
@@ -154,22 +160,24 @@ export function DeepMarchGame() {
     game?.setLabels(hudLabels(dm));
   }, [game, dm]);
 
-  // Immersive landscape play on touch devices; portrait falls back to a CSS-rotated play area.
-  const immersive = touch && screen === "playing";
-  const { rot, rotorStyle, flip } = useImmersive(immersive);
+  // Every dive fills the browser window (web fullscreen); touch portrait falls back to a CSS-rotated play area.
+  const playing = screen === "playing";
+  const { rot, rotorStyle, flip } = useImmersive(playing, touch);
 
   const start = useCallback((conserveIntent: OpenIntent | null) => {
     const s = seed.trim() || "1";
     setSeed(s);
     setIntent(conserveIntent);
-    persist({ mode, seed: s, sensitivity, invertY, calmLights, panel: panelOn, sound });
-    if (touch) void enterLandscape();
+    persist({ mode, seed: s, sensitivity, invertY, calmLights, panel: panelOn, sound, fullscreen });
+    // inside the click: true fullscreen needs the gesture
+    if (touch) void enterLandscape(fullscreen);
+    else if (fullscreen) void enterFullscreen();
     setLoadingOn(true);
     // inside the click: acquire (or reuse) the shared context and resume it; never throws
     audioCtxRef.current = diveParams().noAudio ? null : acquireAudioContext();
     setAudioOn(audioCtxRef.current !== null);
     setScreen("playing");
-  }, [mode, seed, sensitivity, invertY, calmLights, panelOn, sound, persist, touch]);
+  }, [mode, seed, sensitivity, invertY, calmLights, panelOn, sound, fullscreen, persist, touch]);
   // debug panel: rebuild the dive with its new overrides (inside the click: the audio context may resume)
   const restartDive = useCallback(() => {
     if (diveParams().noAudio) releaseAudioContext();
@@ -187,7 +195,7 @@ export function DeepMarchGame() {
     setSlotRefresh((n) => n + 1);
   }, []);
 
-  const setupValues: SetupValues = { mode, seed, sensitivity, invertY, calmLights, panelOn, sound };
+  const setupValues: SetupValues = { mode, seed, sensitivity, invertY, calmLights, panelOn, sound, fullscreen };
   const changeSetup = useCallback(
     (patch: Partial<SetupValues>) => {
       if (patch.mode !== undefined) {
@@ -202,6 +210,10 @@ export function DeepMarchGame() {
         persist({ calmLights: patch.calmLights });
       }
       if (patch.panelOn !== undefined) setPanelOn(patch.panelOn);
+      if (patch.fullscreen !== undefined) {
+        setFullscreen(patch.fullscreen);
+        persist({ fullscreen: patch.fullscreen });
+      }
       if (patch.sound !== undefined) changeSound(patch.sound);
     },
     [persist, changeSound],
@@ -215,7 +227,12 @@ export function DeepMarchGame() {
     loadingOn && diveSteps !== null ? (
       <LoadingScreen game={game} seedText={diveSeed ?? ""} seed={seedFromString(diveSeed ?? "")} labels={loadingLabels(dm)} steps={diveSteps} onDone={loadingDone} />
     ) : null;
-  const debugPanel = debugMod ? <debugMod.DebugPanel game={game} touch={touch} conserve={conservePlay} onRestart={restartDive} /> : null;
+  // staging: the debug panel, opened from the ≡ menu (or ` on desktop)
+  const [debugSignal, setDebugSignal] = useState(0);
+  const [debugOpen, setDebugOpen] = useState(false);
+  const debugPanel = debugMod ? (
+    <debugMod.DebugPanel game={game} conserve={conservePlay} onRestart={restartDive} openSignal={debugSignal} onOpenChange={setDebugOpen} />
+  ) : null;
   const conserveFailed = conservePlay && conserveDive.status === "failed" ? <div className="dm-mode-failed">{dm.setup.moduleFailed}</div> : null;
 
   const togglePanel = useCallback(() => {
@@ -238,61 +255,54 @@ export function DeepMarchGame() {
     });
   }, [game, persist]);
 
+  // the ≡ menu's switch (a click: entering is allowed); Esc leaving it only updates the switch
+  const toggleFullscreen = useCallback(() => {
+    const next = !isFullscreen();
+    if (next) {
+      if (touch) void enterLandscape(true);
+      else void enterFullscreen();
+    } else exitFullscreen();
+    setFullscreen(next);
+    persist({ fullscreen: next });
+  }, [touch, persist]);
+  const menuSound = useCallback(
+    (next: SoundSettings) => {
+      soundRef.current = next;
+      // inside the click / drag: unmuting resumes the context
+      game?.setSound(next);
+      changeSound(next);
+    },
+    [game, changeSound],
+  );
+
   if (screen === "setup") {
     return <SetupScreen dm={dm} values={setupValues} onChange={changeSetup} slotRefresh={slotRefresh} onStart={start} />;
   }
 
-  if (immersive) {
-    return createPortal(
-      <div className="deep-march dm-immersive">
-        <div className="dm-rotor" data-rot={rot} style={rotorStyle}>
-          <div ref={hostRef} className="game-stage dm-stage" aria-label={dm.stageAria}>
-            {loadingScreen}
-            {conserveFailed}
-            {debugPanel}
-            <ControlPanel
-              game={game}
-              panelOn={panelOn}
-              onTogglePanel={togglePanel}
-              onExit={back}
-              onFlip={rot !== 0 ? flip : undefined}
-              muted={audioOn ? sound.muted : undefined}
-              onToggleMute={toggleMute}
-              labels={panelLabels(dm)}
-            />
-          </div>
+  // Layer 2 (styles/play.css): the platform's full-window layer; the stage inside is the render container.
+  return createPortal(
+    <div className="deep-march dm-immersive game-viewport">
+      <div className="dm-rotor" data-rot={rot} style={rotorStyle}>
+        <div ref={hostRef} className="game-stage dm-stage" aria-label={dm.stageAria}>
+          {loadingScreen}
+          {conserveFailed}
+          {debugPanel}
+          <ControlPanel
+            game={game}
+            panelOn={panelOn}
+            onTogglePanel={togglePanel}
+            onExit={back}
+            onFlip={rot !== 0 ? flip : undefined}
+            sound={audioOn ? { ...sound, onChange: menuSound } : undefined}
+            fullscreen={fullscreenSupported() ? { on: fsActive, toggle: toggleFullscreen } : undefined}
+            seed={diveSeed ?? seed}
+            onDebug={debugMod ? () => setDebugSignal((n) => n + 1) : undefined}
+            debugOpen={debugOpen}
+            labels={panelLabels(dm)}
+          />
         </div>
-      </div>,
-      document.body,
-    );
-  }
-
-  return (
-    <div className="deep-march dm-playing">
-      <div className="dm-play-bar">
-        <button type="button" className="ghost" onClick={back}>
-          {dm.backSetup}
-        </button>
-        <span className="dm-seed-tag">{dm.seedNow(diveSeed ?? seed)}</span>
-        <p className="hint dm-play-hint">
-          {panelOn ? dm.hintPanel : dm.hint}
-          {diveExpedition ? (panelOn ? dm.expedition.hintPanel : dm.expedition.hint) : null}
-          {diveBase ? (panelOn ? dm.base.hintPanel : dm.base.hint) : null}
-        </p>
       </div>
-      <div ref={hostRef} className="game-stage dm-stage" aria-label={dm.stageAria}>
-        {loadingScreen}
-        {conserveFailed}
-        {debugPanel}
-        <ControlPanel
-          game={game}
-          panelOn={panelOn}
-          onTogglePanel={togglePanel}
-          muted={audioOn ? sound.muted : undefined}
-          onToggleMute={toggleMute}
-          labels={panelLabels(dm)}
-        />
-      </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

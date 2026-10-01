@@ -1,24 +1,24 @@
 /* Conserve expedition HUD (plan M4): tank gauge, aim prompt, cache marks, recall. */
 
-/* ---- tank (readout block, under the battery) ---- */
+/* ---- tank (readout block, under the battery): thin bar + count ---- */
 .dm-tank {
-  margin-top: 4px;
-  padding: 3px 10px 4px 8px;
-  width: 132px;
+  margin-top: 3px;
+  padding: 1px 8px 3px 6px;
+  width: 112px;
   border-left: 2px solid #7fb4ff;
-  background: linear-gradient(90deg, rgb(0 30 70 / 0.55), rgb(0 30 70 / 0.08));
+  background: linear-gradient(90deg, rgb(0 30 70 / 0.45), rgb(0 30 70 / 0.04));
   font-variant-numeric: tabular-nums;
 }
 .dm-tank-head {
   display: flex;
   align-items: baseline;
   gap: 6px;
-  font-size: 11px;
+  font-size: 10px;
   white-space: nowrap;
 }
 .dm-tank-head small {
   font-size: 9px;
-  letter-spacing: 0.14em;
+  letter-spacing: 0.12em;
   opacity: 0.65;
 }
 .dm-tank-head b {
@@ -31,21 +31,17 @@
   opacity: 0.6;
 }
 .dm-tank-bar {
-  display: flex;
-  gap: 2px;
-  margin-top: 3px;
-  height: 6px;
+  margin-top: 2px;
+  height: 3px;
+  background: rgb(98 160 255 / 0.14);
 }
 .dm-tank-bar i {
-  flex: 1;
-  background: rgb(98 160 255 / 0.12);
-  box-shadow: inset 0 0 0 1px rgb(98 160 255 / 0.2);
-}
-.dm-tank-bar i.on {
+  display: block;
+  height: 100%;
   background: #6fa8ff;
   box-shadow: 0 0 5px rgb(90 150 255 / 0.85);
 }
-.dm-tank[data-state="filling"] .dm-tank-bar i.on {
+.dm-tank[data-state="filling"] .dm-tank-bar i {
   animation: dm-pulse 0.8s ease-in-out infinite;
 }
 .dm-tank[data-state="full"] {

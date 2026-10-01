@@ -1,21 +1,17 @@
 /**
- * Immersive landscape play on touch devices: fullscreen + landscape lock where
- * the browser allows it; portrait falls back to a CSS-rotated play area (the
- * rotation is shared with the input code through viewRotation).
+ * The dive's play layer: every dive fills the browser window ("web fullscreen",
+ * the platform's .game-viewport layer). True fullscreen is the player's choice
+ * (settings / the in-game menu) and needs the start click. On touch devices the
+ * landscape is locked where the browser allows it; portrait falls back to a
+ * CSS-rotated play area (the rotation is shared with the input code through viewRotation).
  */
 import { useLayoutEffect, useEffect, useState, type CSSProperties } from "react";
+import { enterFullscreen, exitFullscreen } from "../../lib/fullscreen";
 import { viewRotation, type Rotation } from "./viewRotation";
 
-/** Best effort: fullscreen + landscape lock (Android Chrome). Rejections are expected elsewhere (iOS). */
-export async function enterLandscape(): Promise<void> {
-  try {
-    const el = document.documentElement;
-    if (!document.fullscreenElement && typeof el.requestFullscreen === "function") {
-      await el.requestFullscreen({ navigationUI: "hide" });
-    }
-  } catch {
-    /* not allowed / unsupported */
-  }
+/** Touch: true fullscreen if wanted, then the landscape lock (Android Chrome needs fullscreen for it; rejections are expected elsewhere, e.g. iOS). */
+export async function enterLandscape(fullscreen: boolean): Promise<void> {
+  if (fullscreen) await enterFullscreen();
   try {
     const o = screen.orientation as ScreenOrientation & { lock?: (o: string) => Promise<void> };
     await o?.lock?.("landscape");
@@ -30,7 +26,7 @@ export function leaveLandscape(): void {
   } catch {
     /* ignore */
   }
-  if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+  exitFullscreen();
 }
 
 function viewportSize() {
@@ -38,33 +34,35 @@ function viewportSize() {
 }
 
 export type Immersive = {
-  /** Play-area rotation (portrait → ±90°). */
+  /** Play-area rotation (touch portrait → ±90°; always 0 on desktop). */
   rot: Rotation;
   rotorStyle: CSSProperties | undefined;
   /** Turn the rotated play area the other way round. */
   flip: () => void;
 };
 
-export function useImmersive(immersive: boolean): Immersive {
+/** `playing`: the full-window layer is up; `touch`: rotate a portrait phone's play area. */
+export function useImmersive(playing: boolean, touch: boolean): Immersive {
   const [vp, setVp] = useState(viewportSize);
   const [flip, setFlip] = useState(false);
   useEffect(() => {
-    if (!immersive) return;
+    if (!playing) return;
     const onResize = () => setVp(viewportSize());
     onResize();
     window.addEventListener("resize", onResize);
     window.addEventListener("orientationchange", onResize);
     window.visualViewport?.addEventListener("resize", onResize);
-    document.documentElement.classList.add("dm-immersive-on");
+    const root = document.documentElement;
+    root.classList.add("game-viewport-on");
     return () => {
       window.removeEventListener("resize", onResize);
       window.removeEventListener("orientationchange", onResize);
       window.visualViewport?.removeEventListener("resize", onResize);
-      document.documentElement.classList.remove("dm-immersive-on");
+      root.classList.remove("game-viewport-on");
       leaveLandscape();
     };
-  }, [immersive]);
-  const rot: Rotation = immersive && vp.h > vp.w ? (flip ? -90 : 90) : 0;
+  }, [playing]);
+  const rot: Rotation = playing && touch && vp.h > vp.w ? (flip ? -90 : 90) : 0;
   useLayoutEffect(() => {
     viewRotation.deg = rot;
     viewRotation.w = vp.w;

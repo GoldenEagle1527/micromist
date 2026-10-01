@@ -1,36 +1,25 @@
-/** Compact holographic readout: heading compass arc (top centre) + depth/state block (top left). */
-import { memo, type ReactNode } from "react";
+/**
+ * Minimal holographic readout: the heading compass (top centre), depth + thin
+ * battery bar (top left) with whatever needs saying right now under it (low
+ * battery, the mode's gauges, contact), and the toast lane under the compass
+ * (a new region for 3 s; keyboard play: the light switching).
+ */
+import { memo, useEffect, useRef, useState, type ReactNode } from "react";
 import type { Telemetry } from "../scene/world";
-import type { EnvironmentKind } from "../terrain/terrainInfo";
 import { REGION_COLORS, REGION_KEYS, type RegionKey } from "../terrain/regions";
 import { arcPath, polar } from "./geom";
 import { BatteryGauge, type BatteryLabels } from "./BatteryGauge";
 
 export type ReadoutLabels = BatteryLabels & {
   depth: string;
-  speed: string;
-  heading: string;
   stateSwim: string;
-  stateHover: string;
   contactFloor: string;
   contactCeiling: string;
   contactWall: string;
-  terrainTitle: string;
-  terrain: Record<EnvironmentKind, string>;
   regionTitle: string;
+  /** Toast on entering a region (followed by its name). */
+  regionEnter: string;
   regions: Record<RegionKey, string>;
-};
-
-/** 16×10 line glyphs per terrain kind (diver = the dot where relevant). */
-const TERRAIN_GLYPH: Record<EnvironmentKind, string> = {
-  open: "M 1 4 Q 4.5 1 8 4 T 15 4 M 1 8 Q 4.5 5 8 8 T 15 8",
-  flat: "M 1 8.5 L 15 8.5 M 3 6.5 L 4 6.5 M 8 6.5 L 9 6.5 M 12 6.5 L 13 6.5",
-  slope: "M 1 9 L 15 2 M 1 9 L 15 9",
-  cliff: "M 4 1 L 4 9 L 15 9 M 4 1 L 1 1",
-  cave: "M 1 9 L 1 5 Q 1 1 8 1 Q 15 1 15 5 L 15 9 Z",
-  overhang: "M 1 1.5 L 15 1.5 L 15 9 M 9 9 L 15 9 M 1 1.5 L 1 3.5",
-  canyon: "M 2 1 L 5 9 L 11 9 L 14 1",
-  ridge: "M 1 9 L 8 1.5 L 15 9",
 };
 
 const CARDINAL: Record<number, string> = { 0: "N", 45: "NE", 90: "E", 135: "SE", 180: "S", 225: "SW", 270: "W", 315: "NW" };
@@ -90,10 +79,34 @@ const Compass = memo(function Compass({ heading }: { heading: number }) {
   );
 });
 
-/** `extra`: mode gauges under the battery (conserve: the particle tank). */
-export function Readout({ tel, labels, extra }: { tel: Telemetry | null; labels: ReadoutLabels; extra?: ReactNode }) {
+/** Shows `key` for `ms` after it changes (not for the first value when `skipFirst`). */
+function useFlash<T>(key: T | null, ms: number, skipFirst: boolean): T | null {
+  const [shown, setShown] = useState<T | null>(null);
+  const first = useRef(true);
+  const timer = useRef(0);
+  useEffect(() => {
+    if (key === null) return;
+    if (first.current) {
+      first.current = false;
+      if (skipFirst) return;
+    }
+    setShown(key);
+    window.clearTimeout(timer.current);
+    timer.current = window.setTimeout(() => setShown(null), ms);
+  }, [key, ms, skipFirst]);
+  useEffect(() => () => window.clearTimeout(timer.current), []);
+  return shown;
+}
+
+/**
+ * `extra`: what sits under the battery (sonar recharge chip, conserve: tank, base energy);
+ * `lightToast`: keyboard play shows the light switching under the compass (touch: the LAMP button shows it).
+ */
+export function Readout({ tel, labels, extra, lightToast }: { tel: Telemetry | null; labels: ReadoutLabels; extra?: ReactNode; lightToast: boolean }) {
+  const region = useFlash(tel?.ready ? tel.region : null, 3000, false);
+  const lightKey = tel ? (tel.light.on ? tel.light.mode : "off") : null;
+  const light = useFlash(lightToast && tel?.ready ? lightKey : null, 1400, true);
   if (!tel) return null;
-  const swim = tel.state === "swim";
   const contact =
     tel.contact === "floor"
       ? labels.contactFloor
@@ -102,49 +115,44 @@ export function Readout({ tel, labels, extra }: { tel: Telemetry | null; labels:
         : tel.contact === "wall"
           ? labels.contactWall
           : "";
-  // pitch ladder: −90…90 → bar
-  const pitchPct = 50 - (tel.pitch / 90) * 50;
+  const observing = tel.scan.observe;
   return (
     <>
       <Compass heading={Math.round(tel.heading * 2) / 2} />
-      <div className="dm-readout" data-state={tel.state} data-y={tel.y.toFixed(3)} data-x={tel.x.toFixed(3)} data-z={tel.z.toFixed(3)} data-ticks={tel.ticks}>
+      {!observing && (region || light) ? (
+        <div className="dm-toasts" role="status">
+          {region ? (
+            <div className="dm-toast dm-region-toast" data-region={region} key={`r${region}`}>
+              <i style={{ background: REGION_COLORS[REGION_KEYS.indexOf(region)] }} />
+              <small>{labels.regionEnter}</small>
+              <span>{labels.regions[region]}</span>
+            </div>
+          ) : null}
+          {light ? (
+            <div className="dm-toast dm-light-toast" data-mode={light} key={`l${light}`}>
+              {light === "off" ? labels.lightOff : labels.lightModes[light]}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+      <div
+        className="dm-readout"
+        data-state={tel.state}
+        data-region={tel.region ?? undefined}
+        data-y={tel.y.toFixed(3)}
+        data-x={tel.x.toFixed(3)}
+        data-z={tel.z.toFixed(3)}
+        data-ticks={tel.ticks}
+      >
         <div className="dm-readout-frame">
           <div className="dm-readout-label">{labels.depth}</div>
           <div className="dm-readout-depth">
             {tel.depth.toFixed(1)}
             <small>m</small>
           </div>
-          <div className="dm-readout-row">
-            <span className={`dm-state-chip${swim ? " on" : ""}`}>
-              <i />
-              {swim ? labels.stateSwim : labels.stateHover}
-            </span>
-            <span className="dm-readout-speed">
-              {tel.speed.toFixed(1)}
-              <small>m/s</small>
-            </span>
-          </div>
-          <div className="dm-pitch" aria-hidden="true">
-            <span style={{ top: `${pitchPct}%` }} />
-          </div>
+          <BatteryGauge tel={tel} labels={labels} />
         </div>
-        <BatteryGauge tel={tel} labels={labels} />
         {extra}
-        {tel.region ? (
-          <div className="dm-region" data-region={tel.region} title={labels.regionTitle}>
-            <i style={{ background: REGION_COLORS[REGION_KEYS.indexOf(tel.region)] }} />
-            <small>{labels.regionTitle}</small>
-            <span>{labels.regions[tel.region]}</span>
-          </div>
-        ) : null}
-        {tel.terrain ? (
-          <div className="dm-terrain" data-kind={tel.terrain} title={labels.terrainTitle}>
-            <svg viewBox="0 0 16 10" aria-hidden="true">
-              <path d={TERRAIN_GLYPH[tel.terrain]} />
-            </svg>
-            <span>{labels.terrain[tel.terrain]}</span>
-          </div>
-        ) : null}
         {contact ? <div className="dm-readout-warn">⚠ {contact}</div> : null}
       </div>
     </>

@@ -1,7 +1,7 @@
 /**
  * The hint card's state for the dive (conserve mode only): the progress from the
  * game-store, completed by each telemetry poll, saved when it changes; H (or the
- * card's 「知道了」) dismisses the current hint, 「不再提示」 turns them all off.
+ * card's 「知道了」) dismisses the current hint; the ≡ menu's 「新手提示」 turns them all off / on.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { BaseTelemetry } from "../../scene/base/telemetry";
@@ -11,7 +11,13 @@ import { currentHint, dismissHint, observe, setHintsOn, type HintProgress, type 
 import { observationOf } from "./hintObservation";
 import { loadHints, saveHints } from "./hintStore";
 
-export type HintState = { step: HintStep | null; dismiss: () => void; hideAll: () => void };
+export type HintState = {
+  step: HintStep | null;
+  dismiss: () => void;
+  /** The tips are on (the in-game menu's 「新手提示」 switch; switching on starts them over). */
+  on: boolean;
+  setOn: (on: boolean) => void;
+};
 
 export function useHints(exp: ExpeditionTelemetry | null, base: BaseTelemetry | null, tide: TideTelemetry | null, diving: boolean, observing = false): HintState {
   const [progress, setProgress] = useState<HintProgress>(loadHints);
@@ -29,7 +35,7 @@ export function useHints(exp: ExpeditionTelemetry | null, base: BaseTelemetry | 
   const dismiss = useCallback(() => {
     if (step) update(dismissHint(progress, step));
   }, [step, progress, update]);
-  const hideAll = useCallback(() => update(setHintsOn(progress, false)), [progress, update]);
+  const setOn = useCallback((on: boolean) => update(setHintsOn(progress, on)), [progress, update]);
   const dismissRef = useRef(dismiss);
   dismissRef.current = dismiss;
   useEffect(() => {
@@ -40,5 +46,5 @@ export function useHints(exp: ExpeditionTelemetry | null, base: BaseTelemetry | 
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
-  return { step, dismiss, hideAll };
+  return { step, dismiss, on: !progress.off, setOn };
 }

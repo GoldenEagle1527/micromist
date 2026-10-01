@@ -1,0 +1,154 @@
+/* In-game ≡ menu and help sheet (ui/menu): a dim scrim over the dive, a narrow HUD-styled sheet. */
+.dm-menu-scrim {
+  position: absolute;
+  inset: 0;
+  z-index: 6; /* above the HUD buttons, hint card, fan and dial */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: calc(8px + var(--dm-st, 0px)) calc(8px + var(--dm-sr, 0px)) calc(8px + var(--dm-sb, 0px)) calc(8px + var(--dm-sl, 0px));
+  background: rgb(0 8 16 / 0.55);
+  pointer-events: auto;
+  touch-action: manipulation;
+}
+.dm-menu {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: min(100%, 340px);
+  max-height: 100%;
+  overflow-y: auto;
+  padding: 10px 12px 12px;
+  border: 1px solid var(--hud-dim);
+  border-left: 2px solid var(--hud);
+  background: rgb(0 22 36 / 0.92);
+  color: #d8f6ff;
+  font-size: 13px;
+  box-shadow: 0 0 24px rgb(0 0 0 / 0.5);
+}
+.dm-menu-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+.dm-menu-head strong {
+  color: var(--hud);
+  letter-spacing: 0.2em;
+  font-size: 13px;
+}
+.dm-menu-head small {
+  margin-left: auto;
+  font-size: 10px;
+  opacity: 0.65;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+.dm-menu-main,
+.dm-menu-row,
+.dm-menu-close {
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.dm-menu-main {
+  min-height: 40px;
+  border: 1px solid var(--hud);
+  border-radius: 3px;
+  background: rgb(98 243 255 / 0.16);
+  color: #eafffb;
+  letter-spacing: 0.14em;
+}
+.dm-menu-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 40px;
+  padding: 4px 8px;
+  border: 0;
+  border-bottom: 1px solid var(--hud-faint);
+  background: transparent;
+  text-align: left;
+}
+.dm-menu-row:hover {
+  background: rgb(98 243 255 / 0.06);
+}
+.dm-menu-row > span {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+.dm-menu-row small {
+  font-size: 10px;
+  opacity: 0.6;
+}
+.dm-menu-row b {
+  min-width: 2.6em;
+  padding: 1px 6px;
+  border: 1px solid var(--hud-dim);
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 500;
+  text-align: center;
+  opacity: 0.7;
+}
+.dm-menu-row b.on {
+  border-color: var(--hud-2);
+  background: rgb(45 224 196 / 0.22);
+  color: #eafffb;
+  opacity: 1;
+}
+.dm-menu-row kbd {
+  padding: 0 4px;
+  border: 1px solid var(--hud-dim);
+  border-radius: 2px;
+  font-size: 10px;
+  opacity: 0.7;
+}
+.dm-menu-sound .dm-menu-row {
+  border-bottom: 0;
+}
+.dm-menu-slider {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 0 8px 6px;
+  border-bottom: 1px solid var(--hud-faint);
+  font-size: 11px;
+}
+.dm-menu-slider span {
+  opacity: 0.7;
+}
+.dm-menu-slider input {
+  width: 100%;
+  accent-color: var(--hud);
+}
+.dm-menu-debug {
+  color: #ffd79a;
+}
+.dm-menu-exit {
+  margin-top: 4px;
+  color: var(--hud-warn);
+  border-bottom: 0;
+}
+.dm-menu-close {
+  margin-left: auto;
+  padding: 4px 10px;
+  border: 1px solid var(--hud-dim);
+  border-radius: 3px;
+  background: transparent;
+  font-size: 12px;
+}
+.dm-help {
+  width: min(100%, 560px);
+}
+.dm-help ul {
+  margin: 0;
+  padding-left: 1.1rem;
+  font-size: 12px;
+  line-height: 1.55;
+}
+.dm-help li + li {
+  margin-top: 3px;
+}

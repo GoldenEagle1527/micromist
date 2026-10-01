@@ -151,7 +151,8 @@ export function startDiveLoop(p: DiveParts): { stop: () => void } {
     const d = p.diver;
     p.hud.frame(rawDt, dt, d.position.x, d.position.y, d.position.z, (fps) => {
       p.spawnDebug.updateDiver(d.position.x, d.position.z, -d.yaw);
-      p.stats.textContent = statsLine(fps, p.pacer.ratio, p.chunks.stats(), p.labels(), p.occlusion);
+      // the stats line is a staging debug-panel switch (hidden otherwise: not even built)
+      if (p.stats.classList.contains("on")) p.stats.textContent = statsLine(fps, p.pacer.ratio, p.chunks.stats(), p.labels(), p.occlusion);
     });
   };
   raf = requestAnimationFrame(frame);

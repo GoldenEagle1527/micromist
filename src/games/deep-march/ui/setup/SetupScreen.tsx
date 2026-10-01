@@ -1,6 +1,6 @@
 /**
  * Setup screen: mode (conserved world / free dive), the conserve save slot, seed,
- * controls, the conserve mode's new-player hints (M9) and sound. Starting hands the parent an OpenIntent in conserve mode
+ * controls, true fullscreen, the conserve mode's new-player hints (M9) and sound. Starting hands the parent an OpenIntent in conserve mode
  * (continue / new world) or null for the free dive.
  */
 import { useState } from "react";
@@ -9,12 +9,23 @@ import type { DeepMarchDict } from "../../i18n";
 import type { GameMode } from "../../modes/gameMode";
 import { useConserveSlot } from "../../modes/useConserveSlot";
 import { randomSeed, type SoundSettings } from "../../settings";
+import { fullscreenSupported } from "../../../../lib/fullscreen";
 import { useHintSetting } from "../hints/useHintSetting";
 import { ConserveSlotCard } from "./ConserveSlotCard";
 import { conserveStart } from "./conserveStart";
 import { ModePicker } from "./ModePicker";
 
-export type SetupValues = { mode: GameMode; seed: string; sensitivity: number; invertY: boolean; calmLights: boolean; panelOn: boolean; sound: SoundSettings };
+export type SetupValues = {
+  mode: GameMode;
+  seed: string;
+  sensitivity: number;
+  invertY: boolean;
+  calmLights: boolean;
+  panelOn: boolean;
+  sound: SoundSettings;
+  /** True fullscreen when the dive starts (the dive fills the window either way). */
+  fullscreen: boolean;
+};
 
 type Props = {
   dm: DeepMarchDict;
@@ -26,7 +37,8 @@ type Props = {
 };
 
 export function SetupScreen({ dm, values, onChange, slotRefresh, onStart }: Props) {
-  const { mode, seed, sensitivity, invertY, calmLights, panelOn, sound } = values;
+  const { mode, seed, sensitivity, invertY, calmLights, panelOn, sound, fullscreen } = values;
+  const canFullscreen = fullscreenSupported();
   const conserve = mode === "conserve";
   const slot = useConserveSlot(conserve, slotRefresh);
   const [newWorld, setNewWorld] = useState(false);
@@ -101,6 +113,15 @@ export function SetupScreen({ dm, values, onChange, slotRefresh, onStart }: Prop
             <small className="dm-check-hint">{dm.panelToggleHint}</small>
           </span>
         </label>
+        {canFullscreen && (
+          <label className="dm-check">
+            <input type="checkbox" checked={fullscreen} onChange={(e) => onChange({ fullscreen: e.target.checked })} />
+            <span>
+              {dm.fullscreenSetting}
+              <small className="dm-check-hint">{dm.fullscreenSettingHint}</small>
+            </span>
+          </label>
+        )}
         <label className="dm-check">
           <input type="checkbox" checked={!sound.muted} onChange={(e) => onChange({ sound: { ...sound, muted: !e.target.checked } })} />
           <span>{dm.soundToggle}</span>

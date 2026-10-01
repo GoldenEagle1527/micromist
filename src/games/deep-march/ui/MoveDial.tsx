@@ -1,6 +1,7 @@
 /**
  * Bottom-left movement dial. Drag the thumb for analog move (like WASD);
  * push it out through the forward fan sector past the ring → swim zone.
+ * Double-tap the dial: keep swimming (the swim latch) / stop.
  */
 import { useRef, useState, type PointerEvent as RPointerEvent } from "react";
 import type { PanelInput } from "../scene/input";
@@ -13,19 +14,24 @@ const R = 56; // full analog deflection
 const R_MAX = 84; // thumb travel
 const SWIM_R = 66; // past this inside the sector → swim
 const SWIM_HALF = 35; // sector half-angle (cos 35° ≈ 0.82 ≥ MC's 0.8 sprint threshold)
+const DOUBLE_TAP_MS = 320;
 
 export function MoveDial({
   input,
   swimming,
   label,
   swimLabel,
+  onDoubleTap,
 }: {
   input: PanelInput;
   swimming: boolean;
   label: string;
   swimLabel: string;
+  /** Double tap on the dial (toggles the swim latch). */
+  onDoubleTap?: () => void;
 }) {
   const svgRef = useRef<SVGSVGElement | null>(null);
+  const lastDown = useRef(0);
   const pid = useRef<number | null>(null);
   const [thumb, setThumb] = useState<[number, number]>([0, 0]);
   const [zone, setZone] = useState(false);
@@ -75,6 +81,11 @@ export function MoveDial({
     if (Math.hypot(x - CX, y - CY) > R_MAX + 14) return; // outside the dial: let it fall through
     e.preventDefault();
     e.stopPropagation();
+    const now = performance.now();
+    if (now - lastDown.current < DOUBLE_TAP_MS) {
+      lastDown.current = 0;
+      onDoubleTap?.();
+    } else lastDown.current = now;
     pid.current = e.pointerId;
     svg.setPointerCapture(e.pointerId);
     apply(e.clientX, e.clientY);

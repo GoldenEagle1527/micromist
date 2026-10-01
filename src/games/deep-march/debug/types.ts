@@ -43,6 +43,8 @@ export type DebugParts = {
   forgetScans: () => void;
   /** The spawn-candidate / region overlay (the B key). */
   markers: { readonly visible: boolean; setVisible(on: boolean): void };
+  /** The fps / streaming stats line on the view (hidden unless turned on here). */
+  stats: { readonly visible: boolean; setVisible(on: boolean): void };
   /** Battery to full (the dive's own resource: not in any save). */
   fillBattery: () => void;
   conserve: boolean;
@@ -71,5 +73,7 @@ export type DebugPort = {
   forgetScans(): void;
   markers(): boolean;
   setMarkers(on: boolean): void;
+  stats(): boolean;
+  setStats(on: boolean): void;
   fillBattery(): void;
 };
