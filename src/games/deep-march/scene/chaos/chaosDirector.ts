@@ -88,8 +88,8 @@ export class ChaosDirector {
   private late: LateChaos | null = null;
   /** The rumble was driven last frame (so it is brought back to 0). */
   private rumbling = false;
-  /** The gaze's floor under the rumble and the dread loop (scene/gaze/, stage 5), 0 … 1. */
-  readonly floor = { rumble: 0, dread: 0 };
+  /** The gaze's floor under the rumble (scene/gaze/, stage 5; its growl loop is the gaze's own), 0 … 1. */
+  readonly floor = { rumble: 0 };
 
   constructor(d: ChaosDirectorDeps, view: ChaosView | null) {
     this.d = d;
@@ -158,7 +158,7 @@ export class ChaosDirector {
     this.lag.set = true;
     const chiL = i.suppressed ? 0 : localChaos(v.cracks, i.camera.x, i.camera.z);
     const f = chaosFrame(this.levels, chiL, i.time, d.calm);
-    const deep = (this.deepOut = this.deep!.frame({ ...i, chiL, watch: (c) => followFactor(c, this.lag.x, this.lag.z), dread: this.floor.dread }));
+    const deep = (this.deepOut = this.deep!.frame({ ...i, chiL, watch: (c) => followFactor(c, this.lag.x, this.lag.z) }));
     const glow = f.glow * deep.glow;
     d.uniforms.uChaos.value.set(f.veins, v.cracks.length ? glow : 0, v.scars.length ? 1 : 0, 0);
     if (v.cracks.length) {

@@ -1,7 +1,7 @@
 /**
  * The world's state of mind under the gaze, applied each frame (design doc
  * §7.3): the plankton's current toward the base, the lighthouse light clouded
- * from ② on, the sound floors under the rumble and the dread loop, the groan
+ * from ② on, the sound floor (the growl loop over the sub rumble), the groan
  * of a squeeze starting and of a building giving way — and after 湮灭 the
  * veil closing over everything. Telegraphed and slow; no stingers.
  */
@@ -19,6 +19,8 @@ export class GazeAtmosphere {
   private readonly d: AtmosphereDeps;
   private stage: string | null = null;
   private veiled = false;
+  /** The growl was driven (so it is brought back to 0 once). */
+  private growling = false;
 
   constructor(d: AtmosphereDeps) {
     this.d = d;
@@ -29,7 +31,8 @@ export class GazeAtmosphere {
     const { chaos, snow } = this.d, on = !!g?.active && !tide;
     if (!on || !g) {
       snow.setFlow(0, 0, 0);
-      chaos.floor.rumble = chaos.floor.dread = 0;
+      chaos.floor.rumble = 0;
+      this.growl(0);
       this.stage = null;
       return;
     }
@@ -41,7 +44,7 @@ export class GazeAtmosphere {
     if (ph >= 1) for (let i = 0; i < this.d.baseLight.uBLCount.value; i++) this.d.baseLight.uBL.value[i].w *= L.lighthouse;
     const sq = g.squeeze;
     chaos.floor.rumble = Math.max(L.audio.rumble[ph], sq && sq.stage !== "collapse" ? L.audio.squeeze * (sq.stage === "telegraph" ? sq.u : 1) : 0);
-    chaos.floor.dread = L.audio.dread[ph];
+    this.growl(L.audio.growl[ph]);
     const key = sq ? `${sq.id}:${sq.stage}` : null;
     if (key !== this.stage && sq && sq.stage !== "telegraph") this.d.audio.play("bump", { gain: 0.6, rate: sq.stage === "crush" ? 0.32 : 0.25, lowpass: 420 });
     this.stage = key;
@@ -53,11 +56,18 @@ export class GazeAtmosphere {
     this.veiled = true;
     this.d.look.setVeil({ dark: Math.min(1, t / E.veilS) * E.veilDark, clear: 0, darkVis: E.vis, clearVis: 0 });
     chaos.floor.rumble = t < 14 ? Math.min(1, t / 6) : Math.max(0, 1 - (t - 14) / 12);
-    chaos.floor.dread = Math.max(0, 0.6 - t / 40);
+    this.growl(t < 8 ? 0.46 + (0.6 - 0.46) * (t / 8) : Math.max(0, 0.6 * (1 - (t - 8) / 24)));
     this.d.snow.setFlow(0, 0, 0);
   }
 
+  private growl(level: number): void {
+    if (level <= 0 && !this.growling) return;
+    this.d.audio.setLoop("growl", level);
+    this.growling = level > 0;
+  }
+
   dispose(): void {
+    this.growl(0);
     if (this.veiled) this.d.look.setVeil(null);
     this.d.snow.setFlow(0, 0, 0);
   }

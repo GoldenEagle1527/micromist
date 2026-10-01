@@ -7,6 +7,12 @@
  *   mode     — UI_SCI-FI_Tone_Bright_Dry_08
  *   bump     — IMPACT_Concrete_Slab_on_Concrete_Slab_Deep (low-passed)
  *   warn     — NOTIFICATION_Digital_05
+ *   flow     — the absorb inflow (loop)
+ *   dread    — SPACECRAFT_Deep_03_Dark_Smooth_Hostile_loop (loop: the chaos surge;
+ *              also the 直视 growl, lower and muffled, audioLoops.ts)
+ *   reactor  — SPACECRAFT_Deep_30_Subtle_Smooth_loop (loop: the volt reactor's hum)
+ *   creak    — CREAK_Metal_Heavy (the groan before a lighthouse dims)
+ *   farping  — SUBMARINE_Sonar_Ping_02_Deep (mono, trimmed: the base's ghost echo)
  *
  * The clips are a purchased, licensed pack and are NOT in the open-source repo
  * (public/deep-march/sfx/ is generated and git-ignored by scripts/sfx-sync.mjs; see
@@ -26,11 +32,11 @@
  */
 import { AudioLifecycle, type HoldReason, type LifecycleEnv } from "./audioLifecycle";
 import { createChaosAudio, type ChaosAudio, type ChaosAudioParams } from "./chaos/chaosAudio";
+import { LOOPS, LOOP_IDS, silentTargets, type LoopId, type LoopSpec } from "./audioLoops";
 import { CLIP_IDS, formatOrder, loopPoints, parseManifest, type ClipId, type SfxClip, type SfxFile, type SfxFormat, type SfxManifest } from "./audioManifest";
 
-/** ambience / swim always run; flow (absorbing) and dread (the chaos surge) start on first use. */
-export type LoopId = "ambience" | "swim" | "flow" | "dread";
-export type ShotId = "sonar" | "switch" | "mode" | "bump" | "warn";
+export type { LoopId };
+export type ShotId = "sonar" | "switch" | "mode" | "bump" | "warn" | "creak" | "farping";
 
 export type ShotOpts = { gain?: number; rate?: number; lowpass?: number };
 
@@ -137,9 +143,10 @@ export function createDiveAudio(ctx: AudioContext | null, opts: DiveAudioOptions
   lifecycle?.hold("muted", sound.muted);
 
   const buffers = new Map<ClipId, Loaded>();
-  const targets: Record<LoopId, number> = { ambience: 0, swim: 0, flow: 0, dread: 0 };
+  const targets = silentTargets();
   const loops = new Map<LoopId, GainNode>();
-  const loopSources: AudioBufferSourceNode[] = [];
+  /** Running loop sources with their own rate (before the chaos detune). */
+  const loopSources: { src: AudioBufferSourceNode; rate: number }[] = [];
   let chaosAudio: ChaosAudio | null = null;
   let chaosRate = 1;
   const sources: AudioBufferSourceNode[] = [];
@@ -212,22 +219,32 @@ export function createDiveAudio(ctx: AudioContext | null, opts: DiveAudioOptions
 
   // ---- mixer ----
   const startLoop = (id: LoopId) => {
-    const clip = buffers.get(id);
+    const spec: LoopSpec = LOOPS[id];
+    const clip = buffers.get(spec.clip);
     if (!clip || loops.has(id) || !alive) return;
     const gain = ctx.createGain();
     gain.gain.value = 0;
     gain.connect(master);
+    let out: AudioNode = gain;
+    if (spec.lowpass) {
+      const filter = ctx.createBiquadFilter();
+      filter.type = "lowpass";
+      filter.frequency.value = spec.lowpass;
+      filter.connect(gain);
+      out = filter;
+    }
+    const rate = spec.rate ?? 1;
     const src = ctx.createBufferSource();
     src.buffer = clip.buf;
     src.loop = true;
     // gapless: exactly the source length, after any codec priming the decoder kept
     src.loopStart = clip.start;
     src.loopEnd = clip.end;
-    src.connect(gain);
+    src.connect(out);
     src.start(0, clip.start);
-    src.playbackRate.value = chaosRate;
+    src.playbackRate.value = rate * chaosRate;
     sources.push(src);
-    loopSources.push(src);
+    loopSources.push({ src, rate });
     loops.set(id, gain);
   };
 
@@ -237,11 +254,8 @@ export function createDiveAudio(ctx: AudioContext | null, opts: DiveAudioOptions
       targets[id] = gain;
     },
     tick: (dt) => {
-      if (loops.size < 4) {
-        startLoop("ambience");
-        startLoop("swim");
-        if (targets.flow > 0) startLoop("flow");
-        if (targets.dread > 0) startLoop("dread");
+      if (loops.size < LOOP_IDS.length) {
+        for (const id of LOOP_IDS) if (!loops.has(id) && (targets[id] > 0 || (LOOPS[id] as LoopSpec).always)) startLoop(id);
       }
       const k = 1 - Math.exp(-dt * 4);
       for (const [id, node] of loops) {
@@ -292,7 +306,7 @@ export function createDiveAudio(ctx: AudioContext | null, opts: DiveAudioOptions
       chaosAudio.apply(p);
       if (p.rate === chaosRate) return;
       chaosRate = p.rate;
-      for (const src of loopSources) src.playbackRate.setTargetAtTime(p.rate, ctx.currentTime, 0.12);
+      for (const l of loopSources) l.src.playbackRate.setTargetAtTime(l.rate * p.rate, ctx.currentTime, 0.12);
     },
     rumble: (level) => {
       if (!chaosAudio && level <= 0) return;

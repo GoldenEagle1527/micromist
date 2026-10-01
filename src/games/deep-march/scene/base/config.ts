@@ -60,3 +60,10 @@ export const DOCK = { range: 18, charge: 5 } as const;
 
 /** Buildings drawn per kind (conserve BASE.maxStructures is 40 in all). */
 export const MAX_PER_KIND = 40;
+
+/**
+ * The volt reactor's hum (reactorHum.ts): full `gain` within `near` m of a working
+ * reactor's crystal (`crystalY` above its ground point), fading to silence at `far` m;
+ * it swells / dies over `easeS` when the reactor starts or goes to 待机 / 停机.
+ */
+export const REACTOR_HUM = { gain: 0.16, near: 10, far: 85, crystalY: 9, easeS: 1.2 } as const;

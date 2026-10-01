@@ -4,10 +4,10 @@
  * numbers in CHAOS_LOOK.late. All slow, all telegraphed, none a jump scare:
  *  - 声呐假读数 (stage 3+, near cracks): phantom contacts in the pings' returns
  *    (phantoms.ts) and the depth / heading readouts jumping (readingGlitch.ts);
- *  - 基地灯塔偶尔变暗 (stage 4+, near a lit lighthouse): a low groan, then the
+ *  - 基地灯塔偶尔变暗 (stage 4+, near a lit lighthouse): a low metal creak and groan, then the
  *    lighthouse light eases down and back (lighthouseDim.ts; 「减弱灯光起伏」 aware);
- *  - 基地的幽灵回波 (stage 4+, away from the base): a ping answered from a
- *    phantom base in the wrong direction (homeGhost.ts).
+ *  - 基地的幽灵回波 (stage 4+, away from the base): a ping answered (the deep far
+ *    ping) from a phantom base in the wrong direction (homeGhost.ts).
  * (异常地形 is baked into the terrain at the tide: terrain/anomaly.ts.) The debug
  * panel's previews force each one on at any stage, first event within seconds.
  * During the tide (blocked / suppressed) nothing new starts and the light is whole.
@@ -88,6 +88,7 @@ export class LateChaos {
     const lit = !!bl && bl.uBLCount.value > 0;
     const dim = this.dim.update(i.time, lit, i.suppressed);
     this.rumble = dim.rumble;
+    if (dim.creak) this.d.audio.play("creak", CHAOS_LOOK.late.dim.creak);
     if (bl && (dim.gain < 1 || this.dimmed)) {
       bl.uBLGain.value = BASE_LIGHT.gain * dim.gain;
       this.dimmed = dim.gain < 1;
@@ -110,7 +111,7 @@ export class LateChaos {
     for (const e of this.homes.due(i.pulseTime)) {
       this.d.pulses.echo(i.pulseTime, e.x, e.y + 20, e.z, H.gain);
       this.contacts.add(homeShape(e), i.pulseTime, 10);
-      this.d.audio.play("sonar", H.sound);
+      this.d.audio.play("farping", H.sound);
     }
     this.mesh.update(this.contacts.list, this.d.pulses);
   }

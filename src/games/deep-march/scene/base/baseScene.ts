@@ -3,7 +3,8 @@
  * mode hands it a BasePort (the free dive never builds it): the buildings
  * (structureInstances.ts), the lighthouse light and beams (baseLight.ts,
  * beamColumn.ts), build mode and its hologram (buildMode.ts, hologram.ts),
- * energy ticks, departures, docking, and the HUD telemetry / commands.
+ * energy ticks, departures, docking, the reactor's hum (reactorHum.ts) and the
+ * HUD telemetry / commands.
  */
 import * as THREE from "three";
 import type { BasePort, BaseView, StructureInfo } from "../../conserve";
@@ -20,6 +21,7 @@ import { BASE_LIGHT, DOCK, MAX_PER_KIND } from "./config";
 import { DepartureWatch, docked } from "./dock";
 import { Hologram } from "./hologram";
 import { homeSpawn, type HomeSpot } from "./home";
+import { ReactorHum } from "./reactorHum";
 import { wallInnerRect } from "./innerRect";
 import { createStructureMaterial, type StructureMaterial, type StructureMaterialOptions } from "./structureMaterial";
 import { StructureInstances } from "./structureInstances";
@@ -63,6 +65,7 @@ export class BaseScene {
   private readonly beams: BeamColumns;
   private readonly build: BuildMode;
   private readonly depart = new DepartureWatch();
+  private readonly hum: ReactorHum;
   private readonly births = new Map<number, number>();
   private readonly warm = new THREE.Group();
   private readonly structures: readonly StructureInfo[];
@@ -83,6 +86,7 @@ export class BaseScene {
     this.instances = new StructureInstances(this.mat.material, port.kinds, MAX_PER_KIND);
     this.hologram = new Hologram(this.instances.geometries);
     this.beams = new BeamColumns(MAX_PER_KIND, deps.far);
+    this.hum = new ReactorHum(deps.audio);
     this.build = new BuildMode(port, deps.field, deps.layout, wallInnerRect(deps.rect ?? BIG_RECT));
     this.group.add(this.instances.group, this.hologram.group, this.beams.mesh);
     this.group.name = "deep-march-base";
@@ -133,6 +137,7 @@ export class BaseScene {
     }
     const v = (this.view = port.view());
     this.refresh(v, f.time);
+    this.hum.update(f.dt, v.buildings, f.eye);
     const c = v.center;
     const dist = c ? Math.hypot(f.diver.x - c[0], f.diver.z - c[2]) : Infinity;
     this.atBase = dist <= v.radius;
@@ -197,6 +202,7 @@ export class BaseScene {
   }
 
   dispose(): void {
+    this.hum.dispose();
     this.instances.dispose();
     this.hologram.dispose();
     this.beams.dispose();

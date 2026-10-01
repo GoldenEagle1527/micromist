@@ -173,10 +173,13 @@ export const CHAOS_LOOK = {
     },
     /** Readings jump (pure UI): every 18 … 45 s near a crack, for 0.7 … 1.6 s. */
     glitch: { every: [18, 45] as const, hold: [0.7, 1.6] as const, depth: [9, 38] as const, heading: [25, 110] as const },
-    /** 基地灯塔变暗: within `near` m of the base, every 120 … 240 s (first after `firstS`): a low groan (`leadS`), the light eases down, holds, recovers. */
-    dim: { near: 420, firstS: 75, every: [120, 240] as const, leadS: 2.5, downS: 2.5, holdS: [4, 7] as const, upS: 3.5, floor: 0.2, rumble: 0.42, calm: { floor: 0.6, slow: 1.6 } },
-    /** 幽灵回波: ≥ `minHome` m from the base core; the phantom base 120 … 240 m away, turned 70 … 180° from the true bearing, 0.6 … 1.4 s after the ping. */
-    homeGhost: { minHome: 160, distance: [120, 240] as const, turn: [70, 180] as const, delay: [0.6, 1.4] as const, gain: 0.6, sound: { gain: 0.26, rate: 0.62, lowpass: 900 } },
+    /**
+     * 基地灯塔变暗: within `near` m of the base, every 120 … 240 s (first after `firstS`): a low groan (`leadS`: the heavy
+     * metal creak, slowed and muffled, over a softer rumble), the light eases down, holds, recovers.
+     */
+    dim: { near: 420, firstS: 75, every: [120, 240] as const, leadS: 2.5, downS: 2.5, holdS: [4, 7] as const, upS: 3.5, floor: 0.2, rumble: 0.3, creak: { gain: 0.34, rate: 0.8, lowpass: 1300 }, calm: { floor: 0.6, slow: 1.6 } },
+    /** 幽灵回波: ≥ `minHome` m from the base core; the phantom base 120 … 240 m away, turned 70 … 180° from the true bearing, 0.6 … 1.4 s after the ping (the deep far ping, a little low and muffled). */
+    homeGhost: { minHome: 160, distance: [120, 240] as const, turn: [70, 180] as const, delay: [0.6, 1.4] as const, gain: 0.6, sound: { gain: 0.24, rate: 0.92, lowpass: 1300 } },
     /** A debug-panel preview runs its first event this soon (s). */
     previewS: 8,
   },
