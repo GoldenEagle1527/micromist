@@ -1,7 +1,7 @@
 /**
  * The per-frame loop, in a fixed order: look and move (or the loading gate),
  * camera, survival, conserve layer, lamp rig, terrain streaming and occlusion,
- * the tide (conserve), marine snow, lighting, chaos (conserve), sonar (pings, the scan
+ * the tide (conserve), marine snow, lighting, chaos and the gaze (conserve), sonar (pings, the scan
  * record), sounds, render (the live world, or the record in observation mode), pacing, the 4 Hz HUD.
  * Game time is the dive's GameClock (scene/gameClock.ts): while it is paused (≡ menu,
  * hidden tab) nothing runs — no simulation, streaming, timers or sounds — and the last
@@ -33,6 +33,7 @@ import type { WaterLook } from "./waterLook";
 import type { TideDirector } from "../tide/tideDirector";
 import type { ChaosDirector } from "../chaos/chaosDirector";
 import type { GameClock } from "../gameClock";
+import type { GazeDirector } from "../gaze/gazeDirector";
 
 /** No movement (the recall's black screen). */
 const STILL = { forward: 0, strafe: 0, up: false, down: false, sprint: false };
@@ -52,6 +53,8 @@ export type DiveParts = {
   tide: TideDirector | null;
   /** Conserve (M8): the chaos presentation, after the water look and the sonar; null in the free dive. */
   chaos: ChaosDirector | null;
+  /** Conserve, stage 5: the gaze (after the chaos frame: its sound floors feed the chaos sonar); null in the free dive. */
+  gaze: GazeDirector | null;
   rig: LampRig;
   chunks: ChunkManager;
   occlusion: TerrainOcclusion;
@@ -124,6 +127,7 @@ export function startDiveLoop(p: DiveParts): { stop: () => void } {
     p.seabed.update(now / 1000);
     p.look.update(camera.position.y, p.worldScale, rig, p.seabed, p.snow);
     p.chaos?.frame({ dt, time, camera: camera.position, suppressed: p.tide?.active() ?? false });
+    p.gaze?.frame({ dt, time, ready, camera: camera.position, diver: diver.position });
   };
 
   const sonarAndSound = (now: number, dt: number) => {

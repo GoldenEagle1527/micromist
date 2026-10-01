@@ -10,6 +10,7 @@ import type { SonarUniforms } from "../sonar";
 import type { SonarScanner } from "../sonarScan/sonarScanner";
 import type { ConserveLayer } from "./conserveLayer";
 import type { TideDirector } from "../tide/tideDirector";
+import type { GazeDirector } from "../gaze/gazeDirector";
 import type { GpuHealth } from "./gpuHealth";
 import type { HudChips } from "./hudChips";
 import type { LoadingGate } from "./loadingGate";
@@ -24,6 +25,7 @@ export type HandleParts = {
   chunks: ChunkManager;
   conserve: ConserveLayer | null;
   tide: TideDirector | null;
+  gaze: GazeDirector | null;
   materials: MaterialLibrary;
   gate: LoadingGate;
   health: GpuHealth;
@@ -146,6 +148,7 @@ export function createHandle(p: HandleParts): DeepMarchHandle {
     base: () => p.conserve?.base?.telemetry() ?? null,
     baseCommand: (cmd) => p.conserve?.base?.command(cmd),
     tide: () => p.tide?.telemetry() ?? null,
+    gaze: () => p.gaze?.telemetry() ?? null,
     debug: p.debug,
     destroy: p.destroy,
   };

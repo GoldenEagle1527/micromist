@@ -2,7 +2,7 @@
  * The dive's public surface (scene/world.ts): options, HUD labels, telemetry,
  * the loading snapshot and the handle the page drives. Types only.
  */
-import type { BasePort, ChaosView, ExpeditionPort, TidePort } from "../../conserve";
+import type { BasePort, ChaosView, ExpeditionPort, GazePort, TidePort } from "../../conserve";
 import type { LightMode, LightState, SonarState } from "../../survival";
 import type { RegionField, RegionKey } from "../../terrain/regions";
 import type { SiteLayout, WorldRect } from "../../terrain/siteLayout";
@@ -10,6 +10,7 @@ import type { EnvironmentKind, SurfaceType } from "../../terrain/terrainInfo";
 import type { AudioStatus } from "../audio";
 import type { BaseCommand, BaseTelemetry } from "../base/telemetry";
 import type { TideTelemetry } from "../tide/telemetry";
+import type { GazeTelemetry } from "../gaze/telemetry";
 import type { DiverState } from "../diver";
 import type { ExpeditionTelemetry } from "../expedition/telemetry";
 import type { GpuInfo } from "../gpuDiagnostics";
@@ -59,6 +60,8 @@ export type DeepMarchOptions = {
   tide?: TidePort | null;
   /** Conserve mode (M8): this generation's chaos as the scene presents it (conserve/chaos/view.ts). */
   chaos?: ChaosView | null;
+  /** Conserve mode, stage 5 (直视): the session's gaze (conserve/gaze/); idle without one. */
+  gaze?: GazePort | null;
   /** 「减弱灯光起伏」 (settings.ts): shallower, slower light changes near cracks. */
   calmLights?: boolean;
   /** Where the sonar scan record lives: conserve passes the save's store; omitted = this session (free dive). */
@@ -170,6 +173,8 @@ export type DeepMarchHandle = {
   baseCommand: (cmd: BaseCommand) => void;
   /** The tide: countdown, phase, dome, summary (null in the free dive). */
   tide: () => TideTelemetry | null;
+  /** Stage 5 (直视): phase, time left, 封界 progress, the endings (null without a gaze). */
+  gaze: () => GazeTelemetry | null;
   /** Staging debug panel's runtime port (teleport, light, overlay, battery); null without `opts.debug`. */
   debug: DebugPort | null;
 };

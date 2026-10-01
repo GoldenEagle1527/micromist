@@ -61,7 +61,7 @@ function baseScenes(pulses: number) {
     absorb: new THREE.Vector3(0.06, 0.024, 0.014),
   });
   const inst = new StructureInstances(mat.material, KINDS, 4);
-  inst.set(KINDS.map((kind, i) => ({ id: i + 1, kind, pos: [i * 30, 0, 0] as const, yaw: 0, working: true, birth: 0 })));
+  inst.set(KINDS.map((kind, i) => ({ id: i + 1, kind, pos: [i * 30, 0, 0] as const, yaw: 0, working: true, on: true, damage: 0, birth: 0 })));
   const beams = new BeamColumns(4, 500);
   beams.set([{ x: 0, y: 41, z: 0 }], 0, 0);
   const holo = new Hologram(inst.geometries);

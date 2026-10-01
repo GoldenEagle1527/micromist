@@ -4,7 +4,7 @@
  * 「重新开始下潜」. Session-only, in memory: no URL, no storage, never saved.
  * Production builds have no panel, so every dive there uses DEFAULT_DIVE_PARAMS.
  */
-import type { ChaosPreviewSpec } from "../../conserve";
+import type { ChaosPreviewSpec, GazePhase } from "../../conserve";
 import { terrainForDevice, type TerrainSettings } from "../../terrain/config";
 
 /** Conserve previews of the stage 3–4 omens (debug panel 混沌预览): on at any stage, first event within seconds, never saved. */
@@ -44,6 +44,11 @@ export type DiveParams = {
   chaos: ChaosPreviewSpec | null;
   /** Conserve: the stage 3–4 omen previews. */
   omens: Readonly<OmenPreview>;
+  /**
+   * Conserve: 结局演练 — this dive plays a sandboxed stage-5 copy of the save with the gaze at this
+   * phase (0 ① … 3 ④; conserve/session/rehearsal.ts); null = the real save.
+   */
+  rehearsal: GazePhase | null;
   /** Material textures as WebP instead of KTX2 (materialLibrary.ts). */
   webp: boolean;
   /** No audio context at all (the dive runs silent, no mute button). */
@@ -62,6 +67,7 @@ export const DEFAULT_DIVE_PARAMS: Readonly<DiveParams> = Object.freeze({
   tideSimple: false,
   chaos: null,
   omens: NO_OMEN_PREVIEW,
+  rehearsal: null,
   webp: false,
   noAudio: false,
 });

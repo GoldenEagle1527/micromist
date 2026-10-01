@@ -88,6 +88,8 @@ export class ChaosDirector {
   private late: LateChaos | null = null;
   /** The rumble was driven last frame (so it is brought back to 0). */
   private rumbling = false;
+  /** The gaze's floor under the rumble and the dread loop (scene/gaze/, stage 5), 0 … 1. */
+  readonly floor = { rumble: 0, dread: 0 };
 
   constructor(d: ChaosDirectorDeps, view: ChaosView | null) {
     this.d = d;
@@ -156,7 +158,7 @@ export class ChaosDirector {
     this.lag.set = true;
     const chiL = i.suppressed ? 0 : localChaos(v.cracks, i.camera.x, i.camera.z);
     const f = chaosFrame(this.levels, chiL, i.time, d.calm);
-    const deep = (this.deepOut = this.deep!.frame({ ...i, chiL, watch: (c) => followFactor(c, this.lag.x, this.lag.z) }));
+    const deep = (this.deepOut = this.deep!.frame({ ...i, chiL, watch: (c) => followFactor(c, this.lag.x, this.lag.z), dread: this.floor.dread }));
     const glow = f.glow * deep.glow;
     d.uniforms.uChaos.value.set(f.veins, v.cracks.length ? glow : 0, v.scars.length ? 1 : 0, 0);
     if (v.cracks.length) {
@@ -179,7 +181,7 @@ export class ChaosDirector {
   sonar(i: ChaosSonarInput): void {
     this.clock = i.time;
     this.late?.sonar({ ...i, crack: this.nearestCrack(i.diver.x, i.diver.z) });
-    let rumble = this.late?.rumble ?? 0;
+    let rumble = Math.max(this.late?.rumble ?? 0, this.floor.rumble);
     if (this.active) rumble = Math.max(rumble, this.omenSonar(i));
     if (rumble > 0 || this.rumbling) this.d.audio.rumble(rumble);
     this.rumbling = rumble > 0;

@@ -149,7 +149,7 @@ export class BaseScene {
 
   /** Re-upload the instances when a building or its working state changed. */
   private refresh(v: BaseView, time: number): void {
-    const key = v.buildings.map((b) => `${b.id}${b.working || b.standby ? "+" : "-"}`).join(",");
+    const key = v.buildings.map((b) => `${b.id}${b.working || b.standby ? "+" : "-"}${Math.round(b.damage * 50)}`).join(",");
     if (key === this.key) return;
     this.key = key;
     for (const b of v.buildings) if (!this.births.has(b.id)) this.births.set(b.id, time);

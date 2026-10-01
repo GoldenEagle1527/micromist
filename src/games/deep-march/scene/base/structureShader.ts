@@ -2,8 +2,8 @@
  * GLSL of the building material (structureMaterial.ts), free of three imports
  * so test:shaders can compile it. Patches three's MeshPhongMaterial (the head
  * lamp, sun and ambient light it like the terrain):
- *   vertex: per instance aState (x working, y birth time): a new building rises
- *           out of the ground over uGrowIn s (no popping); aGlow per vertex;
+ *   vertex: per instance aState (x working, y birth time, z 直视's crush): a new building rises
+ *           out of the ground over uGrowIn s (no popping), a squeezed one sinks and splays; aGlow per vertex;
  *   normal: flat facets + horizontal panel seams every uSeam.x m with bevelled
  *           edges and a fine grain (a normal-map look without a texture fetch),
  *           faded out with distance; grooves darken the albedo;
@@ -30,7 +30,8 @@ varying vec2 vGlow;
 
 /** After <begin_vertex>. */
 export const STRUCT_VERT_BEGIN = /* glsl */ `
-  transformed.y *= max(smoothstep(aState.y, aState.y + uGrowIn, uTime), 0.002);`;
+  transformed.y *= max(smoothstep(aState.y, aState.y + uGrowIn, uTime), 0.002) * (1.0 - 0.97 * aState.z);
+  transformed.xz *= 1.0 + 0.35 * aState.z;`;
 
 /** After <project_vertex>. */
 export const STRUCT_VERT_MAIN = /* glsl */ `

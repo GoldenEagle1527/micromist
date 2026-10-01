@@ -1,7 +1,7 @@
 /**
  * The base's buildings: one InstancedMesh per kind (4 draws for any number of
  * buildings, all one program), per instance a matrix (ground point, yaw) and
- * aState (working, birth time). No LOD: the meshes are low-poly enough to draw
+ * aState (working, birth time, 直视's crush 0 … 1). No LOD: the meshes are low-poly enough to draw
  * whole at any distance (test:placement counts draws and triangles).
  */
 import * as THREE from "three";
@@ -54,7 +54,7 @@ export class StructureInstances {
       this.q.setFromAxisAngle(this.up, b.yaw);
       this.m.compose(this.v.set(b.pos[0], b.pos[1], b.pos[2]), this.q, this.one);
       mesh.setMatrixAt(i, this.m);
-      this.state.get(b.kind)!.setXYZW(i, b.working || b.standby ? 1 : 0, b.birth, 0, 0);
+      this.state.get(b.kind)!.setXYZW(i, b.working || b.standby ? 1 : 0, b.birth, b.damage, 0);
     }
     for (const [kind, mesh] of this.meshes) {
       mesh.count = counts.get(kind) ?? 0;
