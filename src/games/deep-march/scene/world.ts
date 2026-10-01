@@ -213,8 +213,20 @@ export function createDeepMarch(host: HTMLElement, opts: DeepMarchOptions): Deep
   });
   input.panelMode = opts.panel;
   const coarse = typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches;
+  // the click-to-look prompt teaches once ever: 2 s, then it fades (CSS transition)
+  let lockTaught = false;
+  let lockTimer = 0;
   const updatePrompt = () => {
-    overlay.lockPrompt.classList.toggle("on", gate.ready && !input.panelMode && !input.locked && !coarse);
+    const want = gate.ready && !input.panelMode && !input.locked && !coarse;
+    if (!want) {
+      overlay.lockPrompt.classList.remove("on");
+      return;
+    }
+    if (lockTaught || !(opts.firstTime?.("lock") ?? true)) return;
+    lockTaught = true;
+    overlay.lockPrompt.classList.add("on");
+    window.clearTimeout(lockTimer);
+    lockTimer = window.setTimeout(() => overlay.lockPrompt.classList.remove("on"), 2000);
   };
 
   const sizing = watchResize(host, renderer, camera);

@@ -27,10 +27,15 @@ export type DeepMarchSettings = {
   seenTips: TipId[];
 };
 
-/** One-off explanatory banners / chips (shown the first time only). */
-export type TipId = "observe" | "keys";
-const TIP_IDS: readonly TipId[] = ["observe", "keys"];
-const parseTips = (raw: unknown): TipId[] => (Array.isArray(raw) ? TIP_IDS.filter((t) => raw.includes(t)) : []);
+/**
+ * One-off explanations (ui/useOnce.ts), shown the first time only: the sonar
+ * observation banner, the desktop key chip, the click-to-look prompt, how to
+ * absorb, the build-mode keys, the base panel's teaching notes, and each
+ * new-player hint step (`hint:<step>`).
+ */
+export type TipId = "observe" | "keys" | "lock" | "absorbHow" | "buildHow" | "baseIntro" | "releaseNote" | "forecastNote" | `hint:${string}`;
+const parseTips = (raw: unknown): TipId[] =>
+  Array.isArray(raw) ? (raw.filter((t) => typeof t === "string" && t.length <= 32) as TipId[]).slice(0, 64) : [];
 
 export type SoundSettings = {
   muted: boolean;
@@ -101,4 +106,11 @@ export function takeTip(id: TipId): boolean {
   if (s.seenTips.includes(id)) return false;
   saveSettings({ ...s, seenTips: [...s.seenTips, id] });
   return true;
+}
+
+/** Forget the seen tips starting with `prefix` (the new-player hints switched back on start over). */
+export function forgetTips(prefix: string): void {
+  const s = loadSettings();
+  const keep = s.seenTips.filter((t) => !t.startsWith(prefix));
+  if (keep.length !== s.seenTips.length) saveSettings({ ...s, seenTips: keep });
 }

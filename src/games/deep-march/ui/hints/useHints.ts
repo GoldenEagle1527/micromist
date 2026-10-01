@@ -10,6 +10,7 @@ import type { TideTelemetry } from "../../scene/tide/telemetry";
 import { currentHint, dismissHint, observe, setHintsOn, type HintProgress, type HintStep } from "./hintModel";
 import { observationOf } from "./hintObservation";
 import { loadHints, saveHints } from "./hintStore";
+import { forgetTips } from "../../settings";
 
 export type HintState = {
   step: HintStep | null;
@@ -35,7 +36,14 @@ export function useHints(exp: ExpeditionTelemetry | null, base: BaseTelemetry | 
   const dismiss = useCallback(() => {
     if (step) update(dismissHint(progress, step));
   }, [step, progress, update]);
-  const setOn = useCallback((on: boolean) => update(setHintsOn(progress, on)), [progress, update]);
+  const setOn = useCallback(
+    (on: boolean) => {
+      // back on = from the start: each step's card may show (once) again
+      if (on) forgetTips("hint:");
+      update(setHintsOn(progress, on));
+    },
+    [progress, update],
+  );
   const dismissRef = useRef(dismiss);
   dismissRef.current = dismiss;
   useEffect(() => {

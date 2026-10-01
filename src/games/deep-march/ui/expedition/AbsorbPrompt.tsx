@@ -5,10 +5,13 @@
  */
 import type { ExpeditionTelemetry } from "../../scene/expedition/telemetry";
 import type { ExpeditionDict } from "./i18n";
+import { useOnce } from "../useOnce";
 
 export function AbsorbPrompt({ exp, touch, labels }: { exp: ExpeditionTelemetry; touch: boolean; labels: ExpeditionDict }) {
   const t = exp.target;
   const recall = exp.recall.phase;
+  // how to absorb teaches once; blocked reasons and 「正在吸取」 are live state
+  const howTo = useOnce("absorbHow", recall === "idle" && !!t && !exp.blocked && !exp.absorbing);
   if (recall !== "idle") {
     const dark = recall !== "holding";
     return (
@@ -27,7 +30,7 @@ export function AbsorbPrompt({ exp, touch, labels }: { exp: ExpeditionTelemetry;
   if (!t) return notice;
   const name = t.kind === "cache" ? labels.cache : (labels.kinds[t.particle ?? 0] ?? labels.kinds[0]);
   const done = t.amount > 0 ? 1 - t.left / t.amount : 0;
-  const hint = exp.blocked === "full" ? labels.blockedFull : exp.blocked === "battery" ? labels.blockedBattery : exp.absorbing ? labels.absorbing : touch ? labels.holdTouch : labels.holdKey;
+  const hint = exp.blocked === "full" ? labels.blockedFull : exp.blocked === "battery" ? labels.blockedBattery : exp.absorbing ? labels.absorbing : howTo ? (touch ? labels.holdTouch : labels.holdKey) : null;
   return (
     <>
       {notice}
@@ -39,7 +42,7 @@ export function AbsorbPrompt({ exp, touch, labels }: { exp: ExpeditionTelemetry;
         <div className={`dm-absorb-bar${exp.absorbing ? " on" : ""}`}>
           <i style={{ width: `${Math.round(done * 100)}%` }} />
         </div>
-        <div className={`dm-absorb-hint${exp.blocked ? " warn" : ""}`}>{hint}</div>
+        {hint ? <div className={`dm-absorb-hint${exp.blocked ? " warn" : ""}${howTo && !exp.blocked && !exp.absorbing ? " dm-once" : ""}`}>{hint}</div> : null}
       </div>
     </>
   );

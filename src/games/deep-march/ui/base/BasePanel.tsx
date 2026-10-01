@@ -11,6 +11,7 @@ import type { ExpeditionDict } from "../expedition/i18n";
 import type { BaseDict } from "./i18n";
 import { TideForecastCard } from "./TideForecastCard";
 import { adviceText, tideAdvice } from "./tideAdvice";
+import { OnceNote } from "../useOnce";
 
 type Props = { base: BaseTelemetry; labels: BaseDict; kinds: ExpeditionDict["kinds"]; send: (cmd: BaseCommand) => void };
 
@@ -28,7 +29,9 @@ export function BasePanel({ base, labels, kinds, send }: Props) {
         </button>
       </div>
       {!v.founded ? (
-        <p className="dm-base-note">{labels.notFounded}</p>
+        <OnceNote id="baseIntro" className="dm-base-note">
+          {labels.notFounded}
+        </OnceNote>
       ) : (
         <>
           <div className="dm-base-stats">
@@ -124,7 +127,9 @@ function Storage({ base, labels, kinds, send }: Props) {
           })}
         </tbody>
       </table>
-      <p className="dm-base-note">{labels.releaseNote}</p>
+      <OnceNote id="releaseNote" className="dm-base-note">
+        {labels.releaseNote}
+      </OnceNote>
     </div>
   );
 }

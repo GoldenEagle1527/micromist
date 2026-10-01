@@ -4,7 +4,7 @@ import "./deep-march.css";
 import { useLocale } from "../../i18n";
 import { seedFromString } from "./terrain/noise";
 import { createDeepMarch, type DeepMarchHandle } from "./scene/world";
-import { fullscreenEnabled, isTouchDevice, loadSettings, panelEnabled, saveSettings, type SoundSettings } from "./settings";
+import { fullscreenEnabled, isTouchDevice, loadSettings, panelEnabled, saveSettings, takeTip, type SoundSettings } from "./settings";
 import { enterFullscreen, exitFullscreen, fullscreenSupported, isFullscreen, onFullscreenChange } from "../../lib/fullscreen";
 import { ControlPanel } from "./ui/ControlPanel";
 import { acquireAudioContext, closeAudioContext, releaseAudioContext } from "./scene/audioContext";
@@ -115,6 +115,7 @@ export function DeepMarchGame() {
           scans: diveScans,
           calmLights,
           debug: debugRef.current?.createDebugPort ?? null,
+          firstTime: takeTip,
         });
         setGame(g);
       }, 0);

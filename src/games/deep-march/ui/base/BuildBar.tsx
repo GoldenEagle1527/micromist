@@ -8,11 +8,14 @@ import type { BaseTelemetry, BaseCommand } from "../../scene/base/telemetry";
 import type { ExpeditionDict } from "../expedition/i18n";
 import type { BaseDict } from "./i18n";
 import { fundsOf } from "./useBase";
+import { useOnce } from "../useOnce";
 
 type Props = { base: BaseTelemetry; touch: boolean; labels: BaseDict; kinds: ExpeditionDict["kinds"]; send: (cmd: BaseCommand) => void };
 
 export function BuildBar({ base, touch, labels, kinds, send }: Props) {
   const b = base.build;
+  // the keys / touch line teaches once; the cards, costs and the live verdict stay
+  const howTo = useOnce("buildHow", b.active);
   if (!b.active) return null;
   const funds = fundsOf(base);
   const cards = base.structures.filter((s) => (base.view.founded ? s.kind !== "core" : s.kind === "core"));
@@ -21,7 +24,7 @@ export function BuildBar({ base, touch, labels, kinds, send }: Props) {
     <div className="dm-build" role="group" aria-label={labels.buildTitle}>
       <div className="dm-build-head">
         <b>{labels.buildTitle}</b>
-        <small>{touch ? labels.buildTouch : labels.buildKeys}</small>
+        {howTo ? <small className="dm-once">{touch ? labels.buildTouch : labels.buildKeys}</small> : null}
       </div>
       <div className="dm-build-cards">
         {cards.map((s) => (

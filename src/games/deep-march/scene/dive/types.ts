@@ -62,6 +62,8 @@ export type DeepMarchOptions = {
   calmLights?: boolean;
   /** Where the sonar scan record lives: conserve passes the save's store; omitted = this session (free dive). */
   scans?: ScanStore | null;
+  /** One-off explanations (settings.ts takeTip): true the first time ever; the click-to-look prompt asks once. Omitted = always. */
+  firstTime?: (id: "lock") => boolean;
   /** Staging debug panel (debug/port.ts): builds the handle's `debug` port from what the dive lends. Production builds never pass it. */
   debug?: ((parts: DebugParts) => DebugPort) | null;
 };
