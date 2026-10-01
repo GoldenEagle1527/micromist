@@ -5,7 +5,7 @@
  * glow; healed ones are scars. Fixed for the generation (D11): the scene never
  * recomputes chaos from the live ledger. Pure.
  */
-import { CHAOS, RING } from "./config";
+import { BREACH, CHAOS, RING } from "./config";
 import { chaosIntensity, type ChaosStage, type ChaosState } from "./model";
 import { ringOf } from "./ring";
 
@@ -23,6 +23,8 @@ export type ChaosCrackView = {
   width: number;
   depth: number;
   through: boolean;
+  /** The main breach (stage 5: the eye is beyond it). */
+  breach: boolean;
 };
 
 export type ChaosView = {
@@ -60,7 +62,7 @@ export function chaosViewOf(c: ChaosState, size: { sitesX: number; sitesZ: numbe
     const p = ring.point(k.s), a = ring.point(k.s - H), b = ring.point(k.s + H);
     const l = Math.hypot(b.x - a.x, b.z - a.z) || 1;
     const tx = (b.x - a.x) / l, tz = (b.z - a.z) / l;
-    return { j: k.j, x: p.x, z: p.z, tx, tz, nx: tz, nz: -tx, width: k.width, depth: k.depth, through: k.through };
+    return { j: k.j, x: p.x, z: p.z, tx, tz, nx: tz, nz: -tx, width: k.width, depth: k.depth, through: k.through, breach: k.j === BREACH.j };
   };
   return {
     stage: c.stage,

@@ -30,6 +30,8 @@ export type GenerationSummary = {
   newCracks: number;
   healed: number;
   open: number;
+  /** 封界潮: this tide ended a gaze (chaos.gaze set before it: the only tide a gaze allows). */
+  sealed: boolean;
 };
 
 export type TidePlan = {
@@ -63,6 +65,6 @@ export function planTide(save: WorldSave, siteHarvest: readonly number[]): TideP
     allocInput,
     chaos: c,
     table,
-    summary: { gen, biomes, stage: c.stage, m: c.m, wallThickness: c.wallThickness, newCracks: f.opening, healed: f.healing, open: f.open },
+    summary: { gen, biomes, stage: c.stage, m: c.m, wallThickness: c.wallThickness, newCracks: f.opening, healed: f.healing, open: f.open, sealed: save.chaos.gaze !== undefined },
   };
 }

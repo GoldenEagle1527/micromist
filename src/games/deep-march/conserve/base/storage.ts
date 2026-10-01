@@ -6,7 +6,8 @@
  *   deposit   P → B, up to the free capacity;
  *   withdraw  B → P, up to the tank's room;
  *   release   B → S (放流), any amount, no cooldown;
- *   refund    a demolished building's cost back into storage (stays in B).
+ *   refund    a demolished building's cost back into storage (stays in B);
+ *   scatter   a crushed building's cost out of the base (直视 ③: B → S).
  */
 import { TANK } from "../config";
 import type { ParticleLedger } from "../ledger/particleLedger";
@@ -32,6 +33,10 @@ export function pay(ledger: ParticleLedger, storage: ParticleVector, cost: Reado
 
 export function refund(storage: ParticleVector, cost: ReadonlyParticleVector): void {
   cost.forEach((n, k) => (storage[k] += n));
+}
+
+export function scatter(ledger: ParticleLedger, cost: ReadonlyParticleVector): void {
+  cost.forEach((n, k) => n > 0 && ledger.transfer("base", "suspended", PARTICLE_TYPES[k], n));
 }
 
 export function deposit(ledger: ParticleLedger, storage: ParticleVector, capacity: number, kind: number | null): number {

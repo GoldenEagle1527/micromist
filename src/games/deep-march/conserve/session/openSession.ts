@@ -30,6 +30,8 @@ export type OpenOptions = {
   slotId?: string;
   clock?: WriterClock;
   throttleMs?: number;
+  /** The debug panel's 结局演练: `backend` is the sandbox's (session/rehearsal.ts). */
+  rehearsal?: boolean;
 };
 
 export type OpenOutcome = { ok: true; session: ConserveSession } | { ok: false; report: BlockedReport };

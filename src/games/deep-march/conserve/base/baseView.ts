@@ -5,7 +5,8 @@ import { isFull, isWorking, netRate, onStandby } from "./energy";
 import type { BaseView } from "./port";
 
 /** storage: the free part of B (before founding: the lander cargo); tank: P. */
-export function viewOf(s: BaseSave | null, storage: ParticleVector, tank: ParticleVector, dives: number): BaseView {
+/** `damage`: the gaze's crush per building id (none: 0). */
+export function viewOf(s: BaseSave | null, storage: ParticleVector, tank: ParticleVector, dives: number, damage?: (id: number) => number): BaseView {
   const structures = s?.structures ?? [];
   const brownout = s?.brownout ?? false;
   const energy = s?.energy ?? 0, energyCap = energyCapacity(structures);
@@ -17,7 +18,7 @@ export function viewOf(s: BaseSave | null, storage: ParticleVector, tank: Partic
     founded: s !== null,
     center: s ? s.center : null,
     radius: protectionRadius(structures),
-    buildings: structures.map((b) => ({ id: b.id, kind: b.kind, pos: b.pos, yaw: b.yaw, working: isWorking(b, brownout, storage, full), on: b.on, standby: onStandby(b, full) })),
+    buildings: structures.map((b) => ({ id: b.id, kind: b.kind, pos: b.pos, yaw: b.yaw, working: isWorking(b, brownout, storage, full), on: b.on, standby: onStandby(b, full), damage: damage?.(b.id) ?? 0 })),
     storage: storage.slice(),
     stored: vectorTotal(storage),
     tank: tank.slice(),

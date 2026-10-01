@@ -3,12 +3,16 @@
  * and the ledger at the moment of the tide, the next generation's m, stage,
  * wall thickness and cracks. The tide itself (M7) and the forecast (forecast.ts)
  * both call chaosAtTide, so the forecast is exactly what the tide will do.
+ * Stage 5 (直视): the tide that turns the eye starts the gaze; while it lasts the
+ * only tide there is is the sealing one (封界潮, gaze/), which ignores the
+ * abyssal lock — the breach heals, the gaze ends.
  */
 import type { LedgerState } from "../ledger/particleLedger";
 import { particleIndex } from "../particles/particleTypes";
 import type { ReadonlyParticleVector } from "../particles/particleVector";
 import { allocationInput } from "../world/allocInput";
 import { evolveCracks, type CrackContext } from "./cracks";
+import { freshGaze } from "../gaze/model";
 import { chaosStage, type ChaosState } from "./model";
 import { ringOf } from "./ring";
 import { externalShare, wallThickness } from "./wallModel";
@@ -45,8 +49,11 @@ export function tideChaosInput(w: TideWorld): TideChaosInput {
 
 export function chaosAtTide(now: ChaosState, input: TideChaosInput): ChaosState {
   const { m } = input;
-  const stage = chaosStage(m, input.abyssalLocked);
+  const sealing = now.gaze !== undefined;
+  const stage = chaosStage(m, sealing ? 0 : input.abyssalLocked);
   const thickness = wallThickness(m);
   const cracks = evolveCracks(now.cracks, { ...input, thickness, gaze: stage === 5 });
-  return { m, stage, wallThickness: thickness, cracks };
+  const next: ChaosState = { m, stage, wallThickness: thickness, cracks };
+  if (stage === 5) next.gaze = freshGaze();
+  return next;
 }

@@ -7,6 +7,7 @@
  *   the call (it waits for the next tide), P and B unchanged.
  * The generation state starts fresh (no harvest, no departures, no caches); the
  * base keeps everything (all of it stands inside the dome) and pays the energy.
+ * A sealing tide (封界潮) marks the save: flags.endingA = "sealed" (play goes on).
  */
 import { BASE } from "../config";
 import { cloneBase } from "../base/baseState";
@@ -43,6 +44,7 @@ export function commitTide(ledger: ParticleLedger, save: WorldSave, plan: TidePl
       caches: [],
       chaos: cloneChaos(plan.chaos),
       base,
+      flags: plan.summary.sealed ? { ...save.flags, endingA: "sealed" } : save.flags,
     },
     ledger,
   );

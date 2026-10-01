@@ -10,6 +10,7 @@
 import { CHAOS } from "./config";
 import { externalShare, wallThickness } from "./wallModel";
 import type { ReadonlyParticleVector } from "../particles/particleVector";
+import { cloneGaze, type GazeState } from "../gaze/model";
 
 export type ChaosStage = 0 | 1 | 2 | 3 | 4 | 5;
 
@@ -41,6 +42,8 @@ export type ChaosState = {
   wallThickness: number;
   /** Every crack placed so far (open or scar), ascending j. */
   cracks: ChaosCrack[];
+  /** Stage 5: the gaze's sequence (conserve/gaze/), from the tide that turned the eye until a sealing tide. */
+  gaze?: GazeState;
 };
 
 export function chaosStage(m: number, abyssalLocked: number): ChaosStage {
@@ -61,5 +64,7 @@ export function genesisChaos(allocInput: ReadonlyParticleVector, totals: Readonl
 }
 
 export function cloneChaos(c: ChaosState): ChaosState {
-  return { ...c, cracks: c.cracks.map((k) => ({ ...k })) };
+  const out: ChaosState = { ...c, cracks: c.cracks.map((k) => ({ ...k })) };
+  if (c.gaze) out.gaze = cloneGaze(c.gaze);
+  return out;
 }

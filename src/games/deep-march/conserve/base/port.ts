@@ -36,6 +36,8 @@ export type BaseBuilding = {
   on: boolean;
   /** A fuelled producer (reactor) waiting while the energy is full. */
   standby: boolean;
+  /** 直视 ③: how far tentacles have crushed it (0 whole … 1 gone; conserve/gaze/assault.ts). */
+  damage: number;
 };
 
 export type BaseView = {
@@ -58,7 +60,11 @@ export type BaseView = {
   dives: number;
 };
 
-export type TideReadiness = { energy: number; energyNeeded: number; dives: number; divesNeeded: number; ready: boolean };
+/**
+ * `gaze` (stage 5): "watching" — no tide but the sealing one, not yet possible; "seal" — 封界潮 ready
+ * (energy and dives are not needed then).
+ */
+export type TideReadiness = { energy: number; energyNeeded: number; dives: number; divesNeeded: number; ready: boolean; gaze?: "watching" | "seal" };
 
 /**
  * The chaos the next tide would bring if it came now (m = Σ R' / Σ N, R' = N − P − B):
