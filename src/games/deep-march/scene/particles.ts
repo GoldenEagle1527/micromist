@@ -2,6 +2,10 @@
  * Glowing plankton: soft, deep-blue fluorescent specks wrapped in a box around the
  * camera. Additive, self-lit, faded by the turbidity (fog.ts), each with its own pulse phase and size;
  * they fade toward the box edge so wrapping never pops.
+ * Chaos (stage 3+, scene/chaos/deepChaos.ts) only sets uniforms: a tint toward the
+ * stage's colour, and a share of distorted specks — the "distorted swarm": they
+ * jerk between held poses (4 per second), hang a little lower and take the
+ * tint fully, with an inverted pulse. Zero uniforms = the calm look exactly.
  */
 import * as THREE from "three";
 import { PARTICLE_LIGHT, type ParticleLightUniforms } from "./particleLight";
@@ -10,21 +14,27 @@ import { PARTICLE_LIGHT, type ParticleLightUniforms } from "./particleLight";
 export const SNOW_VERT = /* glsl */ `
 uniform float uTime; uniform float uHalf; uniform float uPixelRatio;
 uniform float uFogK; uniform float uDim;
+uniform vec2 uWarp;  // x jitter amplitude (m), y share of distorted specks
 attribute vec3 aSeed;
-varying float vAlpha; varying float vHue;
+varying float vAlpha; varying float vHue; varying float vWarp;
 void main() {
-  vec4 mv = modelViewMatrix * vec4(position, 1.0);
+  float warp = step(aSeed.x * 0.159155 + 0.001, uWarp.y);
+  float pose = floor(uTime * 4.0 + aSeed.x);
+  vec3 jerk = vec3(sin(pose * 1.7 + aSeed.x * 3.1), cos(pose * 2.3 + aSeed.z * 5.3) - 0.5, sin(pose * 1.1 + aSeed.y * 4.7));
+  vec4 mv = modelViewMatrix * vec4(position + jerk * (uWarp.x * warp), 1.0);
   float dist = -mv.z;
-  float pulse = 0.55 + 0.45 * sin(uTime * (0.8 + aSeed.z * 1.2) + aSeed.x);
+  float pulse = 0.55 + 0.45 * sin(uTime * (0.8 + aSeed.z * 1.2) + aSeed.x) * (1.0 - 2.0 * warp);
   float edge = 1.0 - smoothstep(uHalf * 0.6, uHalf * 0.98, length(mv.xyz));
   // turbidity (fog.ts) and render-mode dimming (sonar)
   vAlpha = pulse * edge * smoothstep(0.15, 0.6, dist) * exp(-uFogK * length(mv.xyz)) * uDim;
   vHue = aSeed.z;
+  vWarp = warp;
   gl_PointSize = clamp(aSeed.y * 18.0 * uPixelRatio / max(dist, 0.1), 1.5, 26.0);
   gl_Position = projectionMatrix * mv;
 }`;
 export const SNOW_FRAG = /* glsl */ `
-varying float vAlpha; varying float vHue;
+uniform vec4 uTint;  // rgb chaos colour, w share (distorted specks take it fully)
+varying float vAlpha; varying float vHue; varying float vWarp;
 void main() {
   vec2 d = gl_PointCoord - 0.5;
   float r = length(d) * 2.0;
@@ -33,7 +43,7 @@ void main() {
   float halo = exp(-r * r * 2.5) * 0.45;
   vec3 deep = vec3(0.05, 0.35, 1.0);   // deep blue
   vec3 cyan = vec3(0.25, 0.9, 1.0);    // fluorescent cyan
-  vec3 col = mix(deep, cyan, vHue * vHue);
+  vec3 col = mix(mix(deep, cyan, vHue * vHue), uTint.rgb, max(uTint.w, vWarp));
   vec3 c = col * (core + halo) + vec3(0.6, 0.9, 1.0) * core * 0.35;
   gl_FragColor = vec4(c * vAlpha * 1.4, 1.0);
 }`;
@@ -75,6 +85,8 @@ export class MarineSnow {
         uPixelRatio: { value: 1 },
         uFogK: { value: 0 },
         uDim: { value: 1 },
+        uWarp: { value: new THREE.Vector2(0, 0) },
+        uTint: { value: new THREE.Vector4(0, 0, 0, 0) },
       },
       vertexShader: SNOW_VERT,
       fragmentShader: SNOW_FRAG,
@@ -95,6 +107,13 @@ export class MarineSnow {
   setDim(d: number) {
     this.material.uniforms.uDim.value = d;
     this.points.visible = d > 0.001;
+  }
+
+  /** Chaos (stage 3+): tint colour (linear RGB) and share, distorted specks' jitter (m) and share. */
+  setChaos(r: number, g: number, b: number, tint: number, warpAmp: number, warpShare: number) {
+    const u = this.material.uniforms;
+    (u.uTint.value as THREE.Vector4).set(r, g, b, tint);
+    (u.uWarp.value as THREE.Vector2).set(warpAmp, warpShare);
   }
 
   update(center: THREE.Vector3, dt: number) {

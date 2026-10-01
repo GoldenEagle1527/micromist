@@ -121,8 +121,10 @@ export function createDeepMarch(host: HTMLElement, opts: DeepMarchOptions): Deep
     return ring;
   };
   const wallRing = ringFor(field);
+  const snow = new MarineSnow(900, opts.seed);
+  scene.add(snow.points);
   const chaos = chaosUniforms
-    ? new ChaosDirector({ uniforms: chaosUniforms, fog, rig, audio, pulses: sonarPulses, sonar, long: longPulses, scene, calm: opts.calmLights ?? false, seed: opts.seed }, opts.chaos ?? null)
+    ? new ChaosDirector({ uniforms: chaosUniforms, fog, rig, audio, pulses: sonarPulses, sonar, long: longPulses, scene, snow, calm: opts.calmLights ?? false, seed: opts.seed }, opts.chaos ?? null)
     : null;
   let tide: TideDirector | null = null;
   // after a recall / death / the tide: the base core once it stands, else the lander spawn; battery full
@@ -173,7 +175,7 @@ export function createDeepMarch(host: HTMLElement, opts: DeepMarchOptions): Deep
   }
   // the wall ring's program too (drawn only after a ping: no hitch on the first one); conserve: the tide's
   const warmMaterials = [seabedNow.material, seabedNow.fadeMaterial().material, ...(wallRing ? [wallRing.mesh.material as THREE.Material] : [])];
-  if (tide) warmMaterials.push(seabed.tideMaterial().material);
+  if (tide) warmMaterials.push(seabed.tideMaterial(seabedNow.material !== seabed.material).material);
   health.warm(warmMaterials, [...(conserve?.warmObjects() ?? []), ...(tide?.warmObjects ?? [])], camera, scene);
   health.listen();
   const hud = new HudChips(chunks.terrain, field.regions);
@@ -190,8 +192,6 @@ export function createDeepMarch(host: HTMLElement, opts: DeepMarchOptions): Deep
   scene.add(camera);
   const cameraSync = new CameraSync(camera, diver);
   cameraSync.sync(0);
-  const snow = new MarineSnow(900, opts.seed);
-  scene.add(snow.points);
 
   const controls = lightControls(survival, audio, cues);
   const toggleObserve = (): boolean => {
