@@ -25,8 +25,8 @@ import { WALL_SHAPE, type WallShapeTuning } from "./wallConfig";
  * wall (M8); the geometry reads s / width / depth only.
  */
 export type WallCrack = { s: number; width: number; depth: number; through?: boolean; extent?: readonly [number, number] };
-/** The wall of a bounded world (SiteLayout.wall): thickness in metres, cracks. */
-export type WallSpec = { thickness: number; cracks: readonly WallCrack[] };
+/** The wall of a bounded world (SiteLayout.wall): thickness in metres, cracks; anomaly: chaos stage 3+ terrain strength near the cracks (0 … 1, anomaly.ts; absent = 0). */
+export type WallSpec = { thickness: number; cracks: readonly WallCrack[]; anomaly?: number };
 
 /** Metres per base unit of the wall's spec and tunables. */
 export const WALL_UNIT = TERRAIN.worldScale;

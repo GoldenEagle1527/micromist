@@ -96,6 +96,8 @@ export function assertSiteLayout(l: SiteLayout, regionCount: number): void {
   if (l.wall) {
     if (!(l.wall.thickness > 0 && Number.isFinite(l.wall.thickness))) throw new Error("SiteLayout: wall thickness");
     for (const c of l.wall.cracks) if (![c.s, c.width, c.depth].every(Number.isFinite) || c.width <= 0 || c.depth < 0) throw new Error("SiteLayout: wall crack");
+    const a = l.wall.anomaly ?? 0;
+    if (!(a >= 0 && a <= 1)) throw new Error("SiteLayout: wall anomaly");
   }
 }
 

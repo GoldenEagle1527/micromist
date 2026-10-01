@@ -13,6 +13,7 @@
  * it into the wall the terrain draws (SiteLayout.wall: only open cracks).
  */
 import { WALL } from "../config";
+import { CHAOS } from "./config";
 import type { ReadonlyParticleVector } from "../particles/particleVector";
 import { crackExtent } from "./cracks";
 import type { ChaosState } from "./model";
@@ -34,6 +35,8 @@ export type WallState = {
   /** Wall thickness T, metres. */
   thickness: number;
   cracks: WallCrackState[];
+  /** 异常地形 strength near the open cracks (0 … 1, by stage: CHAOS.anomaly); absent = 0. */
+  anomaly?: number;
 };
 
 const sum = (v: ReadonlyParticleVector) => v.reduce((a, b) => a + b, 0);
@@ -62,5 +65,5 @@ export function wallStateOf(allocInput: ReadonlyParticleVector, totals: Readonly
 /** The wall of a generation from its chaos state: T as the tide set it, the open cracks. */
 export function wallStateOfChaos(c: ChaosState, t: WallTuning = WALL): WallState {
   const cracks = c.cracks.filter((k) => k.open).map((k) => ({ s: k.s, width: k.width, depth: k.depth, through: k.through, extent: crackExtent(k) }));
-  return { m: c.m, sigma: wallStability(c.m, t), thickness: c.wallThickness, cracks };
+  return { m: c.m, sigma: wallStability(c.m, t), thickness: c.wallThickness, cracks, anomaly: CHAOS.anomaly[c.stage] ?? 0 };
 }
