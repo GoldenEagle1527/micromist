@@ -8,6 +8,11 @@
  * consumes nor burns fuel — with only the core producing (+0.25 / s), one lit
  * lighthouse (−0.3 / s) would keep the energy from ever reaching the tide's 150.
  *
+ * Fuelled producers (the volt reactor, decision 1A): work while switched on and
+ * fuelled, but stand by while the energy is within BASE.standbyBand of the
+ * capacity — fuel is only burnt for energy the base can store. With a fuelled
+ * reactor (+1.2 / s) a lit lighthouse no longer keeps the tide out of reach.
+ *
  * Brown-out: energy runs dry while the net rate is negative → the consumer
  * kinds of BASE.shutdownOrder switch off (MVP: lighthouses only; sonar and
  * harvesters join the list ahead of them later); they come back when the
@@ -29,9 +34,21 @@ export type EnergyTick = {
   burnt: Map<number, number>;
 };
 
-/** A consumer the player may switch off (MVP: the lighthouse) — to save energy for the tide. */
+/** The player may switch it off: a consumer (lighthouse — saves energy) or anything fuelled (reactor — saves voltite). */
 export function switchable(kind: BaseStructure["kind"]): boolean {
-  return STRUCTURES[kind].energy < 0;
+  const def = STRUCTURES[kind];
+  return def.energy < 0 || !!def.fuel;
+}
+
+/** Energy close enough to the capacity that a fuelled producer waits. */
+export function isFull(energy: number, cap: number): boolean {
+  return cap > 0 && energy >= cap - BASE.standbyBand;
+}
+
+/** A fuelled producer waiting for the energy to drop (switched on, fuel or not). */
+export function onStandby(s: BaseStructure, full: boolean): boolean {
+  const def = STRUCTURES[s.kind];
+  return full && s.on && def.energy > 0 && !!def.fuel;
 }
 
 /** Set a switchable structure's `on` in place; false if `id` is unknown or not switchable. */
@@ -42,21 +59,22 @@ export function switchStructure(structures: readonly BaseStructure[], id: number
   return true;
 }
 
-/** Is `s` working (producing / consuming) with this storage? */
-export function isWorking(s: BaseStructure, brownout: boolean, storage: ReadonlyParticleVector): boolean {
+/** Is `s` working (producing / consuming) with this storage? `full`: the energy is at the capacity (isFull). */
+export function isWorking(s: BaseStructure, brownout: boolean, storage: ReadonlyParticleVector, full = false): boolean {
   const def = STRUCTURES[s.kind];
-  if (!s.on) return false;
+  if (!s.on || onStandby(s, full)) return false;
   if (def.energy < 0 && brownout && BASE.shutdownOrder.includes(s.kind)) return false;
   return !def.fuel || storage[particleIndex(def.fuel.type)] > 0 || s.fuel < def.fuel.every;
 }
 
 /** Net energy per second of the working structures. */
-export function netRate(structures: readonly BaseStructure[], brownout: boolean, storage: ReadonlyParticleVector): number {
-  return structures.reduce((sum, s) => sum + (isWorking(s, brownout, storage) ? STRUCTURES[s.kind].energy : 0), 0);
+export function netRate(structures: readonly BaseStructure[], brownout: boolean, storage: ReadonlyParticleVector, full = false): number {
+  return structures.reduce((sum, s) => sum + (isWorking(s, brownout, storage, full) ? STRUCTURES[s.kind].energy : 0), 0);
 }
 
 export function tickEnergy(state: EnergyState, storage: ReadonlyParticleVector, dt: number): EnergyTick {
   const cap = energyCapacity(state.structures);
+  const full = isFull(state.energy, cap);
   let brownout = state.brownout;
   if (brownout && state.energy > BASE.restartEnergy) brownout = false;
   const left = storage.slice();
@@ -65,7 +83,7 @@ export function tickEnergy(state: EnergyState, storage: ReadonlyParticleVector, 
   let rate = 0;
   for (const s of state.structures) {
     const def = STRUCTURES[s.kind];
-    if (!isWorking(s, brownout, left)) continue;
+    if (!isWorking(s, brownout, left, full)) continue;
     rate += def.energy;
     if (!def.fuel) continue;
     let t = s.fuel + dt;
