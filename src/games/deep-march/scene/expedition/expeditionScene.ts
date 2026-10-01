@@ -86,6 +86,8 @@ export class ExpeditionScene {
     // the inflow is a child of the nodes' draw: hidden with them (the tide's show)
     this.flow = new AbsorbFlow(deps.lowSpec, 0x5eed, deps.audio);
     this.view.mesh.add(this.flow.points);
+    // its program too, in the warm compile (a stand-in sharing geometry and material)
+    this.warm.add(new THREE.Points(this.flow.points.geometry, this.flow.points.material));
   }
 
   /** The one instanced draw (add to the scene). */
