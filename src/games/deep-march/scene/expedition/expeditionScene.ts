@@ -12,6 +12,7 @@ import type { DensityField } from "../../terrain/density";
 import { findOpenWater } from "../../terrain/openWater";
 import type { SiteLayout, WorldRect } from "../../terrain/siteLayout";
 import type { DiveAudio } from "../audio";
+import { AbsorbFlow, type FlowSource } from "./absorbFlow";
 import { CacheBeacon } from "./beacon";
 import { NODE_VIEW, RECALL } from "./config";
 import { AbsorbInteraction, type AbsorbEvent } from "./interaction";
@@ -70,6 +71,7 @@ export class ExpeditionScene {
   private noticeLeft = 0;
   private readonly eye: [number, number, number] = [0, 0, 0];
   private heading = 0;
+  private readonly flow: AbsorbFlow;
 
   constructor(deps: ExpeditionSceneDeps) {
     this.deps = deps;
@@ -81,6 +83,9 @@ export class ExpeditionScene {
     this.blackout.className = "dm-blackout";
     deps.overlay.appendChild(this.blackout);
     this.warm = new THREE.InstancedMesh(this.view.mesh.geometry, this.mat.material, 1);
+    // the inflow is a child of the nodes' draw: hidden with them (the tide's show)
+    this.flow = new AbsorbFlow(deps.lowSpec, 0x5eed, deps.audio);
+    this.view.mesh.add(this.flow.points);
   }
 
   /** The one instanced draw (add to the scene). */
@@ -108,16 +113,29 @@ export class ExpeditionScene {
     const s = this.absorb.current();
     const highlight = s.target ? { key: s.target.key, absorbing: s.absorbing } : null;
     this.view.update(f.eye, f.time, highlight, this.deps.lowSpec ? NODE_VIEW.budgetMsLow : NODE_VIEW.budgetMs);
-    const act = f.ready && !this.recall.busy();
+    // Hidden (the tide's show: gen + 1's nodes wait for the end): no absorbing, no cache beacons.
+    const shown = this.mesh.visible;
+    const act = f.ready && shown && !this.recall.busy();
     const ev = this.absorb.update(f.dt, this.view.visible(), this.eye, [f.dir.x, f.dir.y, f.dir.z], f.absorb, act);
     if (ev) audio.play(CUES[ev][0], { gain: CUES[ev][1], rate: CUES[ev][2] });
+    this.flow.update(f.dt, f.time, this.flowSource(), f.eye, f.dir);
     this.recall.update(f.dt, f.recall, f.ready, () => this.fire(f.diver));
-    if (f.ready) for (const t of this.beacon.update(f.time, port.caches(), this.eye)) audio.play("sonar", { gain: t.gain, rate: t.rate, lowpass: t.lowpass });
+    if (f.ready && shown) for (const t of this.beacon.update(f.time, port.caches(), this.eye)) audio.play("sonar", { gain: t.gain, rate: t.rate, lowpass: t.lowpass });
     const tank = resources.value("tank");
     if (tank !== port.carried()) resources.add("tank", port.carried() - tank);
     this.blackout.style.opacity = this.recall.blackout().toFixed(3);
     this.blackout.classList.toggle("on", this.recall.blackout() > 0);
     if (this.noticeLeft > 0 && (this.noticeLeft -= f.dt) <= 0) this.notice = null;
+  }
+
+  /** The node / cache particles are moving out of right now, or null. */
+  private flowSource(): FlowSource | null {
+    const s = this.absorb.current(), t = s.target;
+    if (!s.absorbing || !t) return null;
+    const c = this.view.visible().find((v) => v.key === t.key);
+    if (!c) return null;
+    const tint = t.kind === "cache" ? NODE_VIEW.cacheTint : (NODE_VIEW.kindTint[t.particle ?? 0] ?? NODE_VIEW.kindTint[0]);
+    return { x: c.x, y: c.y, z: c.z, tint };
   }
 
   private fire(at: THREE.Vector3): void {
@@ -138,7 +156,7 @@ export class ExpeditionScene {
   telemetry(): ExpeditionTelemetry {
     const t = this.deps.resources.view("tank");
     const s = this.absorb.current();
-    const caches = this.deps.port.caches().map((c) => {
+    const caches = (this.mesh.visible ? this.deps.port.caches() : []).map((c) => {
       const dx = c.pos[0] - this.eye[0], dz = c.pos[2] - this.eye[2];
       return {
         id: c.id,
@@ -163,6 +181,8 @@ export class ExpeditionScene {
   }
 
   dispose(): void {
+    this.flow.points.removeFromParent();
+    this.flow.dispose();
     this.absorb.dispose();
     this.view.dispose();
     this.warm.dispose();

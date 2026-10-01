@@ -28,7 +28,8 @@ import { AudioLifecycle, type HoldReason, type LifecycleEnv } from "./audioLifec
 import { createChaosAudio, type ChaosAudio, type ChaosAudioParams } from "./chaos/chaosAudio";
 import { CLIP_IDS, formatOrder, loopPoints, parseManifest, type ClipId, type SfxClip, type SfxFile, type SfxFormat, type SfxManifest } from "./audioManifest";
 
-export type LoopId = "ambience" | "swim";
+/** ambience / swim always run; flow (absorbing) and dread (the chaos surge) start on first use. */
+export type LoopId = "ambience" | "swim" | "flow" | "dread";
 export type ShotId = "sonar" | "switch" | "mode" | "bump" | "warn";
 
 export type ShotOpts = { gain?: number; rate?: number; lowpass?: number };
@@ -136,7 +137,7 @@ export function createDiveAudio(ctx: AudioContext | null, opts: DiveAudioOptions
   lifecycle?.hold("muted", sound.muted);
 
   const buffers = new Map<ClipId, Loaded>();
-  const targets: Record<LoopId, number> = { ambience: 0, swim: 0 };
+  const targets: Record<LoopId, number> = { ambience: 0, swim: 0, flow: 0, dread: 0 };
   const loops = new Map<LoopId, GainNode>();
   const loopSources: AudioBufferSourceNode[] = [];
   let chaosAudio: ChaosAudio | null = null;
@@ -236,9 +237,11 @@ export function createDiveAudio(ctx: AudioContext | null, opts: DiveAudioOptions
       targets[id] = gain;
     },
     tick: (dt) => {
-      if (loops.size < 2) {
+      if (loops.size < 4) {
         startLoop("ambience");
         startLoop("swim");
+        if (targets.flow > 0) startLoop("flow");
+        if (targets.dread > 0) startLoop("dread");
       }
       const k = 1 - Math.exp(-dt * 4);
       for (const [id, node] of loops) {
