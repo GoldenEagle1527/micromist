@@ -113,10 +113,14 @@ export class TideDirector {
     this.nextChaos = this.d.port.nextChaos();
     const chaos = needsChaosProgram(this.nextChaos);
     const variant = seabed.variant(chaos);
-    if (chaos && !this.warmed && variant.material !== seabed.material) {
-      this.warmed = true;
-      this.d.warm([variant.material, variant.fadeMaterial().material]);
-    }
+    // gen + 1's chaos program, and the front's band variant for each generation drawn with chaos
+    const nowChaos = this.d.get().chunks.baseMaterial !== seabed.material;
+    const warm = [
+      ...(chaos && !this.warmed && variant.material !== seabed.material ? [variant.material, variant.fadeMaterial().material] : []),
+      ...(nowChaos || chaos ? [seabed.tideMaterial(true).material] : []),
+    ];
+    if (chaos) this.warmed = true;
+    if (warm.length) this.d.warm(warm);
     this.next = new NextTerrain(scene, router, seed, settings, layout, gen, variant, lowSpec);
   }
 
@@ -152,6 +156,11 @@ export class TideDirector {
     this.next = null;
     this.running = false;
     this.summaryLeft = TIDE_VIEW.summaryS;
+  }
+
+  /** A sonar pulse the base core sends now (P1's, P3's every 2.5 s): the dive loop pings it. */
+  takePulse(): { x: number; y: number; z: number } | null {
+    return this.running ? this.visuals.takePulse() : null;
   }
 
   telemetry(): TideTelemetry {

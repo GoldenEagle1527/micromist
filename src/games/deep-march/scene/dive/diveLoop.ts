@@ -76,6 +76,7 @@ export type DiveParts = {
 
 export function startDiveLoop(p: DiveParts): { stop: () => void } {
   const camForward = new THREE.Vector3();
+  const tidePulseAt = new THREE.Vector3();
   let raf = 0;
   let last = performance.now();
 
@@ -120,6 +121,13 @@ export function startDiveLoop(p: DiveParts): { stop: () => void } {
       p.sonarPulses.ping(t, camera.position);
       p.scanner.ping(t, camera.position, p.chunks.meshGroup);
       if (p.wallRing && longPingDue(p.longPulses, t)) p.longPulses.ping(t, camera.position);
+    }
+    // the tide's pulses from the base core (P1, P3): the near sonar and a long front 2 km out
+    const core = p.tide?.takePulse();
+    if (core) {
+      tidePulseAt.set(core.x, core.y, core.z);
+      p.sonarPulses.ping(t, tidePulseAt);
+      if (p.wallRing) p.longPulses.ping(t, tidePulseAt);
     }
     p.sonarPulses.update(t);
     const longAlive = p.wallRing ? (p.longPulses.update(t), p.longPulses.count > 0 ? 1 : 0) : 0;

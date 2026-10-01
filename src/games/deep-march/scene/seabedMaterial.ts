@@ -106,8 +106,12 @@ export type SeabedMaterial = {
    * −1 fading out). See chunks.ts.
    */
   fadeMaterial: () => LodFadeMaterial;
-  /** The tide's front variant (conserve mode only; built on first use, one program). */
-  tideMaterial: () => TideFrontMaterial;
+  /**
+   * The tide's front variant (conserve mode only; built on first use, one program
+   * each): chaos = for a generation drawn with DM_CHAOS (its veins and crack light
+   * stay in the band). Both share one front / glow.
+   */
+  tideMaterial: (chaos?: boolean) => TideFrontMaterial;
   /**
    * The columns' programs for a generation: chaos = its terrain shows chaos (M8:
    * DM_CHAOS, built on first use); false (and without `opts.chaos`) = `material` /
@@ -185,7 +189,8 @@ export function createSeabedMaterial(opts: SeabedOptions): SeabedMaterial {
   };
   const material = make(null);
   const fades: THREE.MeshStandardMaterial[] = [];
-  let tide: TideFrontMaterial | null = null;
+  const tides: { plain: TideFrontMaterial | null; chaos: TideFrontMaterial | null } = { plain: null, chaos: null };
+  const tideU = { uTideFront: { value: new THREE.Vector4(0, 0, 1e6, 1) }, uTideGlow: { value: new THREE.Color(0, 0, 0) } };
   const fadeOf = (chaos: boolean) => (): LodFadeMaterial => {
     const fade = { value: new THREE.Vector2(0, 1) };
     const m = make(fade, null, chaos);
@@ -200,12 +205,13 @@ export function createSeabedMaterial(opts: SeabedOptions): SeabedMaterial {
     absorb: uniforms.uAbsorb.value,
     envLight: uniforms.uEnvLight,
     fadeMaterial: plain.fadeMaterial,
-    tideMaterial: () => {
-      if (tide) return tide;
-      const u = { uTideFront: { value: new THREE.Vector4(0, 0, 1e6, 1) }, uTideGlow: { value: new THREE.Color(0, 0, 0) } };
-      const m = make(null, u);
+    tideMaterial: (chaos = false) => {
+      const key = chaos && opts.chaos ? "chaos" : "plain";
+      const have = tides[key];
+      if (have) return have;
+      const m = make(null, tideU, key === "chaos");
       fades.push(m);
-      return (tide = { material: m, front: u.uTideFront.value, glow: u.uTideGlow.value });
+      return (tides[key] = { material: m, front: tideU.uTideFront.value, glow: tideU.uTideGlow.value });
     },
     variant: (chaos) => {
       if (!chaos || !opts.chaos) return plain;
