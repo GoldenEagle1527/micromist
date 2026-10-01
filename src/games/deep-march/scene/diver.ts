@@ -23,7 +23,8 @@
 import * as THREE from "three";
 import type { DensityField } from "../terrain/density";
 import { createLatticeSampler, type LatticeSampler, type RemovedPoint } from "../terrain/latticeSampler";
-import { clampInsideRect, type WorldRect } from "../terrain/siteLayout";
+import { clampInsideUnion, edgePassages } from "../terrain/edgePassages";
+import type { WorldRect } from "../terrain/siteLayout";
 
 /** Bounded world: how far inside the world rectangle the diver is held (world units). */
 export const EDGE_MARGIN = 2;
@@ -90,6 +91,8 @@ export class DiverController {
   totalTicks = 0;
   /** Bounded world rectangle (null = endless). */
   edge: WorldRect | null = null;
+  /** Through cracks' passages past the edge (terrain/edgePassages.ts), from the field. */
+  private passages: WorldRect[] = [];
   /**
    * Strongest speed along a contact normal removed by collisions during the last
    * update(), in world units per second (0 = no real impact; grazing is ~0).
@@ -109,12 +112,14 @@ export class DiverController {
   constructor(field: DensityField, isRemovedPoint?: RemovedPoint) {
     this.field = field;
     this.lattice = createLatticeSampler(field, isRemovedPoint);
+    this.passages = edgePassages(field);
   }
 
   /** Collide with another field from now on (the tide's switch to the next generation, scene/tide). */
   setField(field: DensityField, isRemovedPoint?: RemovedPoint): void {
     this.field = field;
     this.lattice = createLatticeSampler(field, isRemovedPoint);
+    this.passages = edgePassages(field);
   }
 
   get state(): DiverState {
@@ -346,9 +351,9 @@ export class DiverController {
     }
   }
 
-  /** Hard world edge: clamp inside the rectangle; an outward hit counts as a wall contact. */
+  /** Hard world edge: clamp inside the rectangle (or a through crack's passage); an outward hit counts as a wall contact. */
   private keepInsideEdge(edge: WorldRect) {
-    const vn = clampInsideRect(edge, EDGE_MARGIN, this.position, this.velocity);
+    const vn = clampInsideUnion(this.passages.length ? [edge, ...this.passages] : [edge], EDGE_MARGIN, this.position, this.velocity);
     if (vn <= 0) return;
     const hit = vn * DIVER.blockSize * DIVER.speedScale * DIVER.tickRate;
     if (hit > this.impact) this.impact = hit;
