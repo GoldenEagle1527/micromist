@@ -30,3 +30,36 @@
   color: var(--md-sys-color-on-surface);
   white-space: pre-wrap;
 }
+
+/*
+ * Web fullscreen: a game that opts in renders its play area in a fixed layer
+ * over the whole browser viewport (above the shell header, no margins); the
+ * .game-stage inside fills it edge to edge. True fullscreen (src/lib/fullscreen.ts)
+ * only hides the browser chrome on top of this.
+ */
+.game-viewport {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  overflow: hidden;
+  overscroll-behavior: none;
+  touch-action: none;
+  background: #000;
+}
+
+.game-viewport .game-stage {
+  width: 100%;
+  height: 100%;
+  max-height: none;
+  aspect-ratio: auto;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+html.game-viewport-on,
+html.game-viewport-on body {
+  overflow: hidden;
+  overscroll-behavior: none;
+}
