@@ -8,6 +8,7 @@
  * Pure data and functions; base.ts owns the live state.
  */
 import { BASE, STRUCTURES, STRUCTURE_KINDS, type StructureKind } from "../config";
+import { particleIndex } from "../particles/particleTypes";
 import { addInto, vectorFromCounts, zeroVector, type ParticleVector } from "../particles/particleVector";
 import type { FrozenSite } from "../world/siteTable";
 import type { StructureInfo } from "./port";
@@ -22,7 +23,7 @@ export type BaseStructure = {
   yaw: number;
   /** The player's switch (consumers only, M9; a brown-out does not clear it). */
   on: boolean;
-  /** Seconds of work since the last fuel particle (lighthouse). */
+  /** Seconds of work since the last fuel particle (lighthouse, reactor). */
   fuel: number;
 };
 
@@ -50,7 +51,8 @@ export function costOf(kind: StructureKind): ParticleVector {
 /** A building's numbers as the scene / UI see them (port.ts). */
 export function structureInfo(kind: StructureKind): StructureInfo {
   const d = STRUCTURES[kind];
-  return { kind, cost: costOf(kind), radius: d.radius, height: d.height, energy: d.energy, storage: d.storage, energyCap: d.energyCap };
+  const fuel = d.fuel ? { kind: particleIndex(d.fuel.type), every: d.fuel.every } : null;
+  return { kind, cost: costOf(kind), radius: d.radius, height: d.height, energy: d.energy, storage: d.storage, energyCap: d.energyCap, switchable: d.energy < 0 || !!fuel, fuel };
 }
 
 /** Σ building costs. */

@@ -9,7 +9,11 @@
  *   3 → 4 (M5): generation.dives from the dives started, no base.
  *   4 → 5 (M6): chaos from generation.allocInput (m, stage, thickness), no
  *               cracks yet (no tide has run before M7).
+ *   5 → 6 (decision 1A): voltite (伏晶) joins the world — every registry kind
+ *               the save lacks gets its genesis total in W and R
+ *               (activateKinds.ts; the next kind activation reuses it).
  */
+import { activateKinds } from "./activateKinds";
 import { genesisChaos } from "../chaos/model";
 import { PARTICLE_TYPE_COUNT } from "../particles/particleTypes";
 import { isCountVector } from "../particles/particleVector";
@@ -45,4 +49,5 @@ export const SAVE_MIGRATIONS: Readonly<Record<number, Migration>> = {
   2: (raw) => ({ ...raw, generation: isRecord(raw.generation) ? { ...raw.generation, harvested: "", partial: [] } : raw.generation, caches: [] }),
   3: (raw) => ({ ...raw, generation: isRecord(raw.generation) ? { ...raw.generation, dives: divesOfRaw(raw) } : raw.generation, base: null }),
   4: (raw) => ({ ...raw, chaos: chaosOfRaw(raw) }),
+  5: activateKinds,
 };

@@ -27,8 +27,19 @@ export const NODE_VIEW = {
   /** Seconds a new instance takes to grow in (placement landing near the diver never pops). */
   growIn: 1.2,
   cacheScale: 1.25,
-  /** Linear emissive tint per particle kind (storage order), and for caches. */
-  kindTint: [lin(0.55, 0.72, 0.95), lin(0.7, 0.86, 1), lin(0.25, 0.9, 1), lin(0.36, 0.46, 1), lin(0.55, 0.75, 1), lin(0.62, 0.45, 1), lin(0.25, 0.35, 0.95)] as readonly THREE.Color[],
+  /**
+   * Linear emissive tint per particle kind (storage order: conserve particleTypes.ts; one row
+   * each), and for caches. Also the absorb inflow's colour (absorbFlow.ts).
+   */
+  kindTint: [
+    lin(0.55, 0.72, 0.95), // lithic
+    lin(0.7, 0.86, 1), // silica
+    lin(0.25, 0.9, 1), // lumen
+    lin(0.36, 0.46, 1), // ferro
+    lin(1, 0.74, 0.3), // voltite: warm amber, the only warm light in the sea (the reactor's crystal glows the same)
+    lin(0.62, 0.45, 1), // resonite
+    lin(0.25, 0.35, 0.95), // abyssal
+  ] as readonly THREE.Color[],
   cacheTint: lin(0.75, 0.97, 1),
   /** Diffuse body (deep blue glass). */
   body: lin(0.08, 0.13, 0.24),

@@ -19,6 +19,10 @@ export type StructureInfo = {
   energy: number;
   storage: number;
   energyCap: number;
+  /** The player can switch it on / off (consumers and fuelled buildings). */
+  switchable: boolean;
+  /** Burns one particle of `kind` (storage index) every `every` s of work (lighthouse, reactor). */
+  fuel: { kind: number; every: number } | null;
 };
 
 export type BaseBuilding = {
@@ -28,8 +32,10 @@ export type BaseBuilding = {
   yaw: number;
   /** Producing / consuming now (a lighthouse: lit). */
   working: boolean;
-  /** The player's switch (only consumers can be switched off: `switchable`, M9). */
+  /** The player's switch (only consumers and fuelled buildings can be switched off: `switchable`, M9). */
   on: boolean;
+  /** A fuelled producer (reactor) waiting while the energy is full. */
+  standby: boolean;
 };
 
 export type BaseView = {
@@ -45,7 +51,7 @@ export type BaseView = {
   capacity: number;
   energy: number;
   energyCap: number;
-  /** Net energy per second. */
+  /** Net energy per second (0 while full and not falling). */
   energyRate: number;
   brownout: boolean;
   /** Departures from the base this generation (the tide needs ≥ 1). */
@@ -84,7 +90,7 @@ export interface BasePort {
   build(kind: StructureKind, pos: readonly [number, number, number], yaw: number, rect: WorldRect): BaseAction;
   /** Take a building down; its cost goes back into storage in full (may exceed the capacity). */
   demolish(id: number): BaseAction;
-  /** Switch a consumer (lighthouse) on / off (M9); refused for producers and unknown ids. */
+  /** Switch a consumer (lighthouse) or a fuelled producer (reactor) on / off (M9); refused for the others and unknown ids. */
   setOn(id: number, on: boolean): BaseAction;
   /** Tank → storage (P → B), up to the free capacity; `kind` null = everything. Returns particles moved. */
   deposit(kind: number | null): number;
