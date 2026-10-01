@@ -1,6 +1,6 @@
 /**
  * One-off explanations (deep-march rule): text that teaches is shown the first
- * time ever, holds 2 s and fades out (.dm-once in panel.css); the "seen" flags
+ * time ever, holds 2 s and fades out (.dm-once in panelNotices.css); the "seen" flags
  * live in the settings game-store (settings.ts takeTip). Live state and
  * warnings never go through here.
  */

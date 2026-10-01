@@ -1,0 +1,196 @@
+/* Loading screen (3/4): diagnostics drawer, map and its markers. */
+/* diagnostics drawer: collapsed unless a step errors (or the player opens it) */
+.dm-load-diag {
+  flex: none;
+  font-size: 0.8em;
+  color: var(--ld-dim);
+}
+.dm-load-diag > summary {
+  cursor: pointer;
+  letter-spacing: 0.14em;
+  list-style: none;
+}
+.dm-load-diag > summary::-webkit-details-marker {
+  display: none;
+}
+.dm-load-diag > summary::before {
+  content: "▸ ";
+}
+.dm-load-diag[open] > summary::before {
+  content: "▾ ";
+}
+.dm-load-diag dl {
+  margin: 0.3em 0 0;
+  max-height: clamp(4.5em, 24cqh, 12em);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  user-select: text;
+  line-height: 1.4;
+}
+.dm-load-diag-row {
+  display: grid;
+  grid-template-columns: minmax(5em, auto) minmax(0, 1fr);
+  gap: 0.2em 0.8em;
+}
+.dm-load-diag dt {
+  color: var(--ld-dim);
+}
+.dm-load-diag dd {
+  margin: 0;
+  color: rgb(98 243 255 / 0.75);
+  overflow-wrap: anywhere;
+}
+
+.dm-load-map {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5em;
+  min-width: 0;
+  min-height: 0;
+  max-height: 100%;
+  overflow: hidden;
+}
+.dm-load-mapbox {
+  position: relative;
+  width: min(100%, 58cqh);
+  aspect-ratio: 1;
+  margin: 0 auto;
+  border: 1px solid var(--ld-dim);
+  background: #000;
+  box-shadow: 0 0 18px rgb(98 243 255 / 0.12) inset;
+}
+.dm-load-mapbox canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.dm-load-scanline {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: var(--ld);
+  box-shadow: 0 0 8px var(--ld);
+}
+.dm-load-spawn,
+.dm-load-key-spawn {
+  border: 1.5px solid #fff;
+  border-radius: 50%;
+  box-shadow: 0 0 6px #fff;
+}
+.dm-load-spawn {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 10px;
+  height: 10px;
+  transform: translate(-50%, -50%);
+  animation: dm-load-ping 1.6s ease-out infinite;
+}
+/* lost caches (conserve, plan M4): pale-cyan diamonds, blinking like their beacon */
+.dm-load-cache,
+.dm-load-key > i.dm-load-key-cache {
+  background: #bff6ff;
+  box-shadow: 0 0 6px #7ff0ff;
+  transform: rotate(45deg);
+}
+.dm-load-cache {
+  position: absolute;
+  width: 7px;
+  height: 7px;
+  margin: -3.5px 0 0 -3.5px;
+  animation: dm-load-beacon 5s ease-out infinite;
+}
+.dm-load-key > i.dm-load-key-cache {
+  width: 0.5em;
+  height: 0.5em;
+  opacity: 1;
+}
+@keyframes dm-load-beacon {
+  0% {
+    opacity: 1;
+  }
+  30%,
+  100% {
+    opacity: 0.45;
+  }
+}
+@keyframes dm-load-ping {
+  0% {
+    box-shadow: 0 0 0 0 rgb(255 255 255 / 0.7);
+  }
+  100% {
+    box-shadow: 0 0 0 12px rgb(255 255 255 / 0);
+  }
+}
+.dm-load-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25em 0.9em;
+  justify-content: center;
+  font-size: clamp(0.66rem, 1.7cqmin, 0.8rem);
+  color: rgb(98 243 255 / 0.8);
+}
+.dm-load-legend-title {
+  width: 100%;
+  text-align: center;
+  color: var(--ld-dim);
+  letter-spacing: 0.15em;
+}
+.dm-load-key {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35em;
+  white-space: nowrap;
+}
+.dm-load-key > i {
+  display: inline-block;
+  width: 0.8em;
+  height: 0.8em;
+  opacity: 0.85;
+}
+.dm-load-key > i.dm-load-key-spawn {
+  width: 0.6em;
+  height: 0.6em;
+  opacity: 1;
+}
+
+.dm-load-foot {
+  display: flex;
+  align-items: center;
+  gap: 0.8em;
+  font-size: clamp(0.72rem, 1.9cqmin, 0.9rem);
+}
+.dm-load-foot .dm-load-bar-main {
+  flex: 1;
+  height: 3px;
+  margin: 0;
+}
+.dm-load-pct {
+  min-width: 3.2em;
+  text-align: right;
+}
+
+.dm-load-begin {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: clamp(1.3rem, 6cqmin, 2.6rem);
+  letter-spacing: 0.4em;
+  text-indent: 0.4em;
+  color: #cffbff;
+  text-shadow: 0 0 14px rgb(98 243 255 / 0.8);
+  background: rgb(1 7 13 / 0.72);
+  animation: dm-load-begin 0.9s ease-out both;
+}
+@keyframes dm-load-begin {
+  from {
+    opacity: 0;
+    letter-spacing: 0.9em;
+  }
+  to {
+    opacity: 1;
+  }
+}

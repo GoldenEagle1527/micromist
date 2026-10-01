@@ -1,0 +1,73 @@
+/* Layer 3 — deep-march HUD (4/4): action fan press / mode states. */
+/* tap-and-hold buttons: a held press glows before its long action fires */
+.dm-fan-btn.pressing .dm-fan-seg {
+  fill: rgb(98 243 255 / 0.24);
+  transition: fill 0.45s ease-in;
+}
+.dm-fan-charge {
+  stroke: #6ff3ff;
+  stroke-width: 2;
+  opacity: 0.8;
+}
+/* sonar observation view on: PING glows violet-cyan (hold again to return) */
+.dm-fan-ping.observe .dm-fan-seg {
+  fill: rgb(150 120 255 / 0.22);
+  stroke: #b9a8ff;
+}
+.dm-fan-ping.observe .dm-fan-edge {
+  stroke: #b9a8ff;
+  opacity: 1;
+}
+.dm-fan-ping.on .dm-fan-seg {
+  fill: rgb(90 230 255 / 0.14);
+  stroke: #6ff3ff;
+}
+.dm-fan-ping.on .dm-fan-icon,
+.dm-fan-ping.on .dm-fan-edge {
+  stroke: #6ff3ff;
+  filter: drop-shadow(0 0 4px rgb(90 230 255 / 0.9));
+}
+.dm-fan-ping.on .dm-fan-label {
+  fill: #6ff3ff;
+}
+.dm-fan-ping:not(.on) {
+  opacity: 0.55;
+}
+.dm-fan-btn.locked .dm-fan-seg {
+  fill: rgb(80 20 0 / 0.35);
+  stroke: var(--hud-warn);
+}
+.dm-fan-btn.locked .dm-fan-icon {
+  stroke: var(--hud-warn);
+  opacity: 0.6;
+}
+
+@keyframes dm-pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+@keyframes dm-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@container dm-stage (max-width: 560px) {
+  .dm-readout {
+    top: calc(52px + var(--dm-st, 0px));
+  }
+  .dm-readout-depth {
+    font-size: 18px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dm-toast,
+  .dm-once,
+  .dm-battery[data-state="low"] .dm-battery-bar,
+  .dm-battery[data-state="empty"] .dm-battery-status,
+  .dm-dial.active .dm-thumb-ring {
+    animation: none;
+  }
+}

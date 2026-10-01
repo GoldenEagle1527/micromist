@@ -1,0 +1,176 @@
+/* Loading screen (2/4): step rows and the focus card (loading.css first). */
+/* step rows: one line each — index, name (ellipsis), mini bar, percent / status */
+.dm-load-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: clamp(2px, 0.7cqmin, 6px);
+  min-height: 2.2em;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--ld-dim) transparent;
+}
+.dm-load-step {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) clamp(3em, 12cqw, 6.5em) 3.6em;
+  align-items: center;
+  gap: 0.7em;
+  width: 100%;
+  padding: 0.12em 0.2em;
+  font: inherit;
+  letter-spacing: inherit;
+  color: inherit;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  border-left: 2px solid transparent;
+  cursor: pointer;
+  transition: opacity 0.3s ease;
+}
+.dm-load-steps li[data-status="pending"] .dm-load-step {
+  opacity: 0.38;
+}
+.dm-load-steps li[data-focus] .dm-load-step {
+  border-left-color: var(--ld-dim);
+  background: rgb(98 243 255 / 0.05);
+}
+.dm-load-step:focus-visible {
+  outline: 1px solid var(--ld-dim);
+  outline-offset: 1px;
+}
+.dm-load-idx {
+  color: var(--ld-dim);
+}
+.dm-load-name {
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.dm-load-st {
+  font-size: 0.72em;
+  letter-spacing: 0.1em;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  padding: 0 0.3em;
+  border: 1px solid var(--ld-faint);
+}
+.dm-load-steps li[data-status="active"] .dm-load-st {
+  border-color: var(--ld-dim);
+  animation: dm-load-blink 1.1s steps(2, jump-none) infinite;
+}
+.dm-load-steps li[data-status="done"] .dm-load-st {
+  color: var(--ld-2);
+  border-color: rgb(45 224 196 / 0.45);
+}
+.dm-load-steps li[data-status="warn"] .dm-load-st {
+  color: var(--ld-warn);
+  border-color: rgb(255 210 122 / 0.5);
+}
+.dm-load-steps li[data-status="error"] .dm-load-st,
+.dm-load-steps li[data-status="error"] .dm-load-name {
+  color: var(--ld-err);
+  border-color: rgb(255 176 138 / 0.5);
+}
+@keyframes dm-load-blink {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.dm-load-bar {
+  position: relative;
+  display: block;
+  height: 2px;
+  background: var(--ld-faint);
+  overflow: hidden;
+}
+.dm-load-bar > i {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: var(--ld);
+  box-shadow: 0 0 6px rgb(98 243 255 / 0.7);
+  transition: width 0.25s linear;
+}
+.dm-load-steps li[data-status="done"] .dm-load-bar > i {
+  background: var(--ld-2);
+  box-shadow: none;
+}
+.dm-load-steps li[data-status="warn"] .dm-load-bar > i {
+  background: var(--ld-warn);
+  box-shadow: none;
+}
+.dm-load-steps li[data-status="error"] .dm-load-bar > i {
+  background: var(--ld-err);
+}
+
+/* focus card: fixed height (3 lines), each line clipped with an ellipsis */
+.dm-load-focus {
+  flex: none;
+  border: 1px solid var(--ld-faint);
+  border-left: 2px solid var(--ld-dim);
+  padding: 0.35em 0.6em;
+  background: rgb(0 20 30 / 0.35);
+}
+.dm-load-focus[data-status="error"] {
+  border-left-color: var(--ld-err);
+  color: var(--ld-err);
+}
+.dm-load-focus[data-status="warn"] {
+  border-left-color: var(--ld-warn);
+}
+.dm-load-focus-head {
+  display: flex;
+  gap: 0.6em;
+  align-items: baseline;
+  min-width: 0;
+}
+.dm-load-focus-tag {
+  font-size: 0.72em;
+  letter-spacing: 0.14em;
+  color: var(--ld-dim);
+}
+.dm-load-focus-name {
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.dm-load-focus-lines {
+  height: calc(3 * 1.4em);
+  overflow: hidden;
+  margin-top: 0.15em;
+  font-size: 0.86em;
+  line-height: 1.4;
+  color: rgb(98 243 255 / 0.75);
+}
+.dm-load-focus[data-status="error"] .dm-load-focus-lines {
+  color: var(--ld-err);
+}
+.dm-load-line {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.dm-load-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5em;
+  margin-top: 0.3em;
+}
+
+.dm-load-retry {
+  font: inherit;
+  color: var(--ld);
+  background: transparent;
+  border: 1px solid var(--ld-dim);
+  padding: 0.15em 0.9em;
+  cursor: pointer;
+}
+.dm-load-retry:hover {
+  background: var(--ld-faint);
+}
