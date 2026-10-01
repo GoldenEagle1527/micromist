@@ -22,7 +22,7 @@ export function terrainLayoutOf(table: SiteTable, wall: WallState | null = null)
     region: new Int8Array(n),
     hash: new Float64Array(n),
     bias: new Float64Array(n),
-    wall: wall ? { thickness: wall.thickness, cracks: wall.cracks.map((c) => ({ ...c, extent: [c.extent[0], c.extent[1]] as const })) } : null,
+    wall: wall ? { thickness: wall.thickness, cracks: wall.cracks.map((c) => ({ ...c, extent: [c.extent[0], c.extent[1]] as const })), anomaly: wall.anomaly ?? 0 } : null,
   };
   for (const s of table.sites) {
     layout.jx[s.i] = s.jx;

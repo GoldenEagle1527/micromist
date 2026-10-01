@@ -45,6 +45,10 @@
  * and is not evaluated). W is monotone in the terrain value, so per-point bounds map
  * through it; masks carry WALL_BIT for columns near the wall, whose row bounds become
  * [min(lo, void floor / roof), cap].
+ *
+ * Anomalous terrain (chaos stage 3+, layout.wall.anomaly; anomaly.ts): near open cracks
+ * the per-(x, z) context scales W, flips the layering and pulls barbs from the ceiling /
+ * floor undulation — each inside the ranges the bounds above already assume.
  */
 import type { TerrainSettings } from "./config";
 import { createSimplex3, mulberry32, simplexTables } from "./noise";
@@ -55,6 +59,7 @@ import { layoutBiasRange, layoutRect, type SiteLayout } from "./siteLayout";
 import { createWallTerm, type WallTerm } from "./wallDensity";
 import { createWallShape } from "./wallGeometry";
 import { createCrackWeight, type CrackWeight } from "./crackWeight";
+import { ANOMALY, createAnomaly } from "./anomaly";
 
 export type DensityField = {
   settings: TerrainSettings;
@@ -294,6 +299,9 @@ export function createDensityField(
   const wallLoc = new Float64Array(2), wallB = new Float64Array(2);
   const wallShape = layout && layout.wall ? createWallShape(layoutRect(layout, MACRO.cell), layout.wall, seed) : null;
   let wall: WallTerm | null = null; // set once the bounds exist (below)
+  // chaos stage 3+ anomalous terrain near open cracks (null: none, the field is untouched)
+  const anomaly = wallShape && layout?.wall ? createAnomaly(wallShape, layout.wall, seed) : null;
+  const cStrata = new Float64Array(CACHE).fill(1);
   // Sand boulders overlapping (x, z) (≤ 2 per slot): horizontal normalised distance²,
   // centre height, vertical radius, size scale.
   const cBN = new Uint8Array(CACHE);
@@ -373,6 +381,9 @@ export function createDensityField(
     }
     const na = snoise(x * fxz + ex[9], ex[10], z * fxz + ex[11]);
     const nb = snoise(x * fxz * 0.7 + ex[12], ex[13], z * fxz * 0.7 + ex[14]);
+    const ak = anomaly ? anomaly.weight(x, z) : 0;
+    const fa = ak > 0 ? anomaly!.floor(x, z, na, ak, NB) : na;
+    const fc = ak > 0 ? anomaly!.ceiling(x, z, nb, ak, NB) : nb;
     let n = 0, warp = 0, layer = 0;
     const o = slot * R6;
     for (let r = 0; r < R6; r++) {
@@ -382,8 +393,8 @@ export function createDensityField(
       cReg[o + n] = r;
       cW[o + n] = w;
       cH[o + n] = hsum[r] / w;
-      cFh[o + n] = p.floorHeight + p.floorUndulation * na;
-      cCh[o + n] = p.ceilingHeight + p.ceilingUndulation * nb;
+      cFh[o + n] = p.floorHeight + p.floorUndulation * fa;
+      cCh[o + n] = p.ceilingHeight + p.ceilingUndulation * fc;
       warp += w * p.warpStrength;
       if (p.layerAmplitude !== 0) layer = 1;
       n++;
@@ -393,8 +404,9 @@ export function createDensityField(
     if (bP && rs.w[REGION.SAND] > 0) boulderCtx(slot, x, z);
     cNa[slot] = na;
     cNb[slot] = nb;
-    cWarp[slot] = warp;
+    cWarp[slot] = ak > 0 ? warp * (1 + ANOMALY.warp * ak) : warp;
     cLayer[slot] = layer;
+    cStrata[slot] = ak > 0 ? anomaly!.strata(ak) : 1;
     cBias[slot] = rs.bias;
     if (wall) {
       wall.shape.locate(x, z, wallLoc);
@@ -484,6 +496,7 @@ export function createDensityField(
       const H = s.layerHeight * (1 + s.layerHeightVariation * cNb[slot]);
       const t = (wy + s.layerPhaseVariation * cNa[slot]) / H;
       layer = Math.sin(TAU * t) + 0.3 * Math.sin(2 * TAU * t + 1.3);
+      if (cStrata[slot] !== 1) layer *= cStrata[slot];
     }
 
     // --- erosion detail: simplex blended toward a ridged variant (angular creases) ---

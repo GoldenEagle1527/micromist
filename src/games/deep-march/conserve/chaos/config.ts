@@ -14,6 +14,8 @@ export const CHAOS = {
   /** χ_g = clamp((chiStart − m) / chiSpan, 0, 1): 0 at stage 0, 1 at m_break. */
   chiStart: 0.92,
   chiSpan: 0.14,
+  /** 异常地形 strength near open cracks per stage 0 … 5 (terrain/anomaly.ts; baked at the tide). */
+  anomaly: [0, 0, 0, 0.7, 1, 1],
 } as const;
 
 export const CRACKS = {
