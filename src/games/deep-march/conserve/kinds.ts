@@ -41,6 +41,7 @@ const NODE_RICH: SiteShares = { terrain: 0, nodes: 0.9, creatures: 0.1 };
  * MVP totals: rock as in the full game (the frozen area locks the same ~6 %),
  * lumen and ferro carry the share of the kinds still missing (§12). Voltite
  * (伏晶, decision 1A: the reactor's fuel) at its design total, on terrace ledges.
+ * Abyssal (渊核, decision 2A: stage 5 直视) at its design 500, trench-sheltered.
  */
 export const KINDS: Readonly<Record<ParticleType, KindDef>> = {
   lithic: { genesis: 66_000, split: { terrain: 0.85, nodes: 0.15, creatures: 0 }, surface: "rock" },
@@ -49,7 +50,7 @@ export const KINDS: Readonly<Record<ParticleType, KindDef>> = {
   ferro: { genesis: 17_000, split: NODE_RICH, surface: "wall" },
   voltite: { genesis: 4_500, split: NODE_RICH, surface: "ledge" },
   resonite: { genesis: 0, split: NODE_RICH, surface: "sheltered" },
-  abyssal: { genesis: 0, split: NODE_RICH, surface: "sheltered" },
+  abyssal: { genesis: 500, split: NODE_RICH, surface: "sheltered" },
 };
 
 /** One field of every kind, keyed by kind (the per-kind tables config.ts exposes). */

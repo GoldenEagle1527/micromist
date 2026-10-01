@@ -12,6 +12,7 @@
  *   5 → 6 (decision 1A): voltite (伏晶) joins the world — every registry kind
  *               the save lacks gets its genesis total in W and R
  *               (activateKinds.ts; the next kind activation reuses it).
+ *   6 → 7 (decision 2A): abyssal (渊核, stage 5) joins the same way.
  */
 import { activateKinds } from "./activateKinds";
 import { genesisChaos } from "../chaos/model";
@@ -50,4 +51,5 @@ export const SAVE_MIGRATIONS: Readonly<Record<number, Migration>> = {
   3: (raw) => ({ ...raw, generation: isRecord(raw.generation) ? { ...raw.generation, dives: divesOfRaw(raw) } : raw.generation, base: null }),
   4: (raw) => ({ ...raw, chaos: chaosOfRaw(raw) }),
   5: activateKinds,
+  6: activateKinds,
 };
