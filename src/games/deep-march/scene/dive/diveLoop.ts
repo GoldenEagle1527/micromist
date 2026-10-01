@@ -2,9 +2,11 @@
  * The per-frame loop, in a fixed order: look and move (or the loading gate),
  * camera, survival, conserve layer, lamp rig, terrain streaming and occlusion,
  * the tide (conserve), marine snow, lighting, chaos (conserve), sonar (pings, the scan
- * record), sounds, render (the live world, or the record in observation mode), pacing, the 4 Hz HUD. Paused
- * while the tab is hidden (rAF mostly stops anyway; this also halts terrain
- * streaming and resets the pacing history on return).
+ * record), sounds, render (the live world, or the record in observation mode), pacing, the 4 Hz HUD.
+ * Game time is the dive's GameClock (scene/gameClock.ts): while it is paused (≡ menu,
+ * hidden tab) nothing runs — no simulation, streaming, timers or sounds — and the last
+ * frame stays on screen (re-drawn only when the canvas is resized); on resume the
+ * clock continues where it stopped and the pacing history restarts.
  */
 import * as THREE from "three";
 import type { ChunkManager } from "../../terrain/chunks";
@@ -30,6 +32,7 @@ import type { SeabedMaterial } from "../seabedMaterial";
 import type { WaterLook } from "./waterLook";
 import type { TideDirector } from "../tide/tideDirector";
 import type { ChaosDirector } from "../chaos/chaosDirector";
+import type { GameClock } from "../gameClock";
 
 /** No movement (the recall's black screen). */
 const STILL = { forward: 0, strafe: 0, up: false, down: false, sprint: false };
@@ -72,13 +75,24 @@ export type DiveParts = {
   onDiveStart: () => void;
   resize: () => void;
   bornAt: number;
+  /** The dive's game clock: the loop's time, frozen while paused. */
+  clock: GameClock;
 };
 
 export function startDiveLoop(p: DiveParts): { stop: () => void } {
   const camForward = new THREE.Vector3();
   const tidePulseAt = new THREE.Vector3();
   let raf = 0;
-  let last = performance.now();
+  let last = p.clock.now();
+  // what the last frame drew and at which canvas size (a paused dive re-draws it after a resize)
+  let shown: THREE.Object3D = p.scene;
+  let drawnAt = "";
+  const canvasKey = () => `${p.renderer.domElement.width}x${p.renderer.domElement.height}`;
+  const still = () => {
+    if (canvasKey() === drawnAt) return;
+    p.renderer.render(shown, p.camera);
+    drawnAt = canvasKey();
+  };
 
   const step = (dt: number) => {
     const { input, diver, gate } = p;
@@ -139,19 +153,23 @@ export function startDiveLoop(p: DiveParts): { stop: () => void } {
     p.sonar.uSonar.value = p.sonarPulses.count > 0 ? 1 : 0;
   };
 
-  const frame = (now: number) => {
+  const frame = (raw: number) => {
     raf = requestAnimationFrame(frame);
+    if (p.clock.paused) return still();
     // 60 fps cap (120/144 Hz displays would otherwise render 2–2.4× the frames)
-    if (!p.pacer.shouldRender(now)) return;
-    const rawDt = (now - last) / 1000;
+    if (!p.pacer.shouldRender(raw)) return;
+    const now = p.clock.now();
+    const rawDt = Math.max(0, now - last) / 1000;
     const dt = Math.min(0.05, rawDt);
     last = now;
     step(dt);
     world(now, dt, rawDt * 1000);
     sonarAndSound(now, dt);
     // observation mode draws the scan record instead of the live world
-    const observed = p.scanner.frame({ time: now / 1000, nowMs: now, camera: p.camera, allowed: p.gate.ready && !(p.tide?.active() ?? false) });
-    p.renderer.render(observed ?? p.scene, p.camera);
+    const observed = p.scanner.frame({ time: now / 1000, nowMs: raw, camera: p.camera, allowed: p.gate.ready && !(p.tide?.active() ?? false) });
+    shown = observed ?? p.scene;
+    p.renderer.render(shown, p.camera);
+    drawnAt = canvasKey();
     if (p.pacer.frameDone(performance.now())) {
       p.renderer.setPixelRatio(p.pacer.ratio);
       p.resize();
@@ -165,18 +183,19 @@ export function startDiveLoop(p: DiveParts): { stop: () => void } {
   };
   raf = requestAnimationFrame(frame);
 
-  const onVisibility = () => {
-    // (audio follows visibility on its own: audioLifecycle.ts)
-    cancelAnimationFrame(raf);
-    if (document.hidden) return;
-    last = performance.now();
-    p.pacer.reset(last);
-    raf = requestAnimationFrame(frame);
-  };
+  // (audio follows visibility on its own: audioLifecycle.ts)
+  const onVisibility = () => p.clock.hold("hidden", document.hidden);
+  const unsubscribe = p.clock.subscribe((paused) => {
+    if (paused) return;
+    last = p.clock.now();
+    p.pacer.reset(performance.now());
+  });
   document.addEventListener("visibilitychange", onVisibility);
+  onVisibility();
   return {
     stop: () => {
       cancelAnimationFrame(raf);
+      unsubscribe();
       document.removeEventListener("visibilitychange", onVisibility);
     },
   };

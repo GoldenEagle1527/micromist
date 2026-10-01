@@ -3,7 +3,9 @@
  * §7.3) in one table, so tuning after the visual check changes numbers only.
  * Stage 0 is all zeros (nothing is built or run). Stages 3–5 add the deep effects
  * (deepChaos.ts): global fog shift, plankton tint and distorted swarms, the global
- * audio wobble, the surge, the eye's blink and the shell beyond through cracks.
+ * audio wobble, the surge, the eye's blink and the shell beyond through cracks;
+ * `late` the stage 3–4 omens (lateChaos.ts): false sonar readings, the lighthouse
+ * dimming, the base's ghost echo (the anomalous terrain is baked: terrain/anomaly.ts).
  * Colours are linear RGB.
  */
 export type ChaosStageLook = {
@@ -31,14 +33,23 @@ export type ChaosStageLook = {
   audioGlobal: number;
   /** Stage 4+: the surge and the eye's blink / pupil run. */
   events: boolean;
+  /** Stage 3+: chance that a ping near a crack returns phantom contacts (声呐假读数). */
+  phantom: number;
+  /** Stage 3+: depth / heading readouts jump now and then near cracks. */
+  glitch: boolean;
+  /** Stage 4+: the base's lighthouses dim now and then (基地灯塔偶尔变暗). */
+  dim: boolean;
+  /** Stage 4+: chance that a ping away from the base is answered by the base's ghost echo from elsewhere. */
+  homeGhost: number;
 };
 
-const DEEP_OFF = { fogGlobal: 0, plankton: 0, warp: 0, audioGlobal: 0, events: false };
+const LATE_OFF = { phantom: 0, glitch: false, dim: false, homeGhost: 0 };
+const DEEP_OFF = { fogGlobal: 0, plankton: 0, warp: 0, audioGlobal: 0, events: false, ...LATE_OFF };
 const CALM: ChaosStageLook = { veins: 0, glow: 0, fog: 0, flicker: 0, detune: 0, ghost: 0, omen: false, ...DEEP_OFF };
 const ECHOES: ChaosStageLook = { veins: 0.55, glow: 0, fog: 0, flicker: 0, detune: 0, ghost: 0.25, omen: false, ...DEEP_OFF };
 const FIRST_CRACKS: ChaosStageLook = { veins: 0.8, glow: 1, fog: 0.6, flicker: 0.32, detune: 1, ghost: 0.35, omen: true, ...DEEP_OFF };
-const SEEPING: ChaosStageLook = { veins: 0.9, glow: 1.15, fog: 0.7, flicker: 0.34, detune: 1, ghost: 0.45, omen: true, fogGlobal: 0.1, plankton: 0.4, warp: 0.25, audioGlobal: 0, events: false };
-const EROSION: ChaosStageLook = { veins: 1, glow: 1.3, fog: 0.8, flicker: 0.36, detune: 1, ghost: 0.55, omen: true, fogGlobal: 0.16, plankton: 0.7, warp: 0.5, audioGlobal: 0.3, events: true };
+const SEEPING: ChaosStageLook = { veins: 0.9, glow: 1.15, fog: 0.7, flicker: 0.34, detune: 1, ghost: 0.45, omen: true, fogGlobal: 0.1, plankton: 0.4, warp: 0.25, audioGlobal: 0, events: false, phantom: 0.4, glitch: true, dim: false, homeGhost: 0 };
+const EROSION: ChaosStageLook = { veins: 1, glow: 1.3, fog: 0.8, flicker: 0.36, detune: 1, ghost: 0.55, omen: true, fogGlobal: 0.16, plankton: 0.7, warp: 0.5, audioGlobal: 0.3, events: true, phantom: 0.5, glitch: true, dim: true, homeGhost: 0.3 };
 const GAZE: ChaosStageLook = { ...EROSION, glow: 1.45, fogGlobal: 0.22, plankton: 0.85, warp: 0.65, audioGlobal: 0.4 };
 
 export const CHAOS_LOOK = {
@@ -139,6 +150,35 @@ export const CHAOS_LOOK = {
     blink: { firstS: 60, every: [150, 300] as const, leadS: 2, offS: 1.5, ease: 0.35, rumble: 0.35 },
     /** The pupil, a dark vertical bar sweeping across a through crack's shell: every 40 … 90 s, over 7 s. */
     pupil: { every: [40, 90] as const, sweepS: 7, width: 0.12, dark: 0.85 },
+  },
+  late: {
+    /** 声呐假读数: within `reach` m of an open crack (anywhere when forced), ≤ `max` contacts at once. */
+    phantom: {
+      reach: 400,
+      max: 3,
+      /** Placed this far from the diver (m), up to this much above / below, leaning toward the crack. */
+      distance: [70, 190] as const,
+      height: 25,
+      /** Kinds: a node-like cluster of 3 small returns, or one large body of 7 along a 26 … 48 m curve. */
+      node: { blips: 3, spread: 4, size: 5 },
+      mass: { chance: 0.35, blips: 7, length: [26, 48] as const, size: 11 },
+      /** It fades out once the diver comes this close (m) over `fadeS`; gone at the next ping or after `lifeS`. */
+      vanish: 55,
+      fadeS: 1.6,
+      lifeS: 30,
+      /** Sonar look: front / trail gain of a return (the sonar colour), point size cap (px). */
+      front: 1.1,
+      trail: 0.7,
+      maxPx: 160,
+    },
+    /** Readings jump (pure UI): every 18 … 45 s near a crack, for 0.7 … 1.6 s. */
+    glitch: { every: [18, 45] as const, hold: [0.7, 1.6] as const, depth: [9, 38] as const, heading: [25, 110] as const },
+    /** 基地灯塔变暗: within `near` m of the base, every 120 … 240 s (first after `firstS`): a low groan (`leadS`), the light eases down, holds, recovers. */
+    dim: { near: 420, firstS: 75, every: [120, 240] as const, leadS: 2.5, downS: 2.5, holdS: [4, 7] as const, upS: 3.5, floor: 0.2, rumble: 0.42, calm: { floor: 0.6, slow: 1.6 } },
+    /** 幽灵回波: ≥ `minHome` m from the base core; the phantom base 120 … 240 m away, turned 70 … 180° from the true bearing, 0.6 … 1.4 s after the ping. */
+    homeGhost: { minHome: 160, distance: [120, 240] as const, turn: [70, 180] as const, delay: [0.6, 1.4] as const, gain: 0.6, sound: { gain: 0.26, rate: 0.62, lowpass: 900 } },
+    /** A debug-panel preview runs its first event this soon (s). */
+    previewS: 8,
   },
   shell: {
     /** Radius of the shell patch around a through crack's outer mouth (m), its half angle (rad), segments. */

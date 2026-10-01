@@ -108,6 +108,12 @@ export class BaseScene {
     return this.deps.port.inside(at.x, at.z) ? this.deps.port.depositOnDeath() : null;
   }
 
+  /** The base core's centre (null before the founding); cheap, for the chaos' ghost echo. */
+  center(): { x: number; y: number; z: number } | null {
+    const c = this.view.center;
+    return c ? { x: c[0], y: c[1], z: c[2] } : null;
+  }
+
   /** Build mode is on (E / click places instead of absorbing). */
   building(): boolean {
     return this.build.current().active;
@@ -137,7 +143,7 @@ export class BaseScene {
     this.showHologram(v, f.time);
     const lit = v.buildings.filter((b) => b.kind === "lighthouse" && b.working).map((b) => ({ x: b.pos[0], y: b.pos[1] + BASE_LIGHT.lanternY, z: b.pos[2] }));
     updateBaseLight(this.deps.baseLight, lit, f.eye, f.time, this.deps.far);
-    this.beams.set(lit, sweepAngle(f.time), f.time);
+    this.beams.set(lit, sweepAngle(f.time), f.time, this.deps.baseLight.uBLGain.value / BASE_LIGHT.gain);
     if (this.noticeLeft > 0 && (this.noticeLeft -= f.dt) <= 0) this.notice = null;
   }
 

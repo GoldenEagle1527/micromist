@@ -79,8 +79,8 @@ export class BeamColumns {
     this.mesh.name = "deep-march-lighthouse-beams";
   }
 
-  /** Lanterns of the lit lighthouses; `angle`: sweep (rad, baseLight.ts). */
-  set(lanterns: readonly { x: number; y: number; z: number }[], angle: number, time: number): void {
+  /** Lanterns of the lit lighthouses; `angle`: sweep (rad, baseLight.ts); `gain`: the light's share (chaos dimming, 1 = full). */
+  set(lanterns: readonly { x: number; y: number; z: number }[], angle: number, time: number, gain = 1): void {
     const n = Math.min(lanterns.length, this.mesh.instanceMatrix.count);
     this.q.setFromAxisAngle(this.up, -angle);
     for (let i = 0; i < n; i++) {
@@ -91,6 +91,7 @@ export class BeamColumns {
     this.mesh.count = n;
     this.mesh.instanceMatrix.needsUpdate = true;
     this.time.value = time;
+    (this.mesh.material as THREE.ShaderMaterial).uniforms.uBeamParams.value.x = BASE_LIGHT.columnAlpha * gain;
   }
 
   dispose(): void {

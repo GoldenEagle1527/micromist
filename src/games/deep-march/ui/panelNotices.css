@@ -118,6 +118,10 @@
 .dm-once {
   animation: dm-once 2.7s ease-out both;
 }
+/* the ≡ menu paused the dive: the fade waits too (useOnce keeps the note up meanwhile) */
+.dm-paused .dm-once {
+  animation-play-state: paused;
+}
 @keyframes dm-once {
   0% {
     opacity: 0;

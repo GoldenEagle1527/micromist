@@ -10,7 +10,9 @@
  *  sonar() — after the pulses: ghost echoes from the wall, the omen (rumble, then
  *    a far sonar silhouette).
  * Stage 3+ adds the deep layer (deepChaos.ts: global fog / audio, plankton, the
- * surge, the blink, the shell beyond through cracks).
+ * surge, the blink, the shell beyond through cracks) and the late omens
+ * (lateChaos.ts: false sonar readings, the lighthouse dimming, the base's ghost
+ * echo — these also run in a calm generation when the debug panel forces them).
  * During the tide (suppressed) the lamp / fog / audio return to normal, no ghost or
  * omen starts, and a running omen withdraws.
  */
@@ -28,6 +30,9 @@ import { GhostEchoes, ghostOrigin, wallToward, type WallToward } from "./ghostEc
 import { OmenChain } from "./omen";
 import { createOmenMesh, type OmenMesh } from "./omenMesh";
 import { CHAOS_CRACK_N, CHAOS_SCAR_N, type ChaosUniforms } from "./seabedChaos";
+import type { BaseLightUniforms } from "../base/baseLight";
+import { LateChaos, NO_FORCE, type LateForce } from "./lateChaos";
+import { NO_GLITCH, type GlitchOffsets } from "./readingGlitch";
 
 export type ChaosDirectorDeps = {
   uniforms: ChaosUniforms;
@@ -43,6 +48,11 @@ export type ChaosDirectorDeps = {
   /** 「减弱灯光起伏」 (settings): shallower, slower light changes. */
   calm: boolean;
   seed: number;
+  /** The lighthouse light (dimming) and the base core (its ghost echo); absent in node tests. */
+  baseLight?: BaseLightUniforms | null;
+  home?: () => { x: number; y: number; z: number } | null;
+  /** Debug-panel previews of the late omens. */
+  force?: LateForce;
 };
 
 export type ChaosFrameInput = { dt: number; time: number; camera: THREE.Vector3; suppressed: boolean };
@@ -75,6 +85,9 @@ export class ChaosDirector {
   private clock = 0;
   private deep: DeepChaos | null = null;
   private deepOut: DeepFrame | null = null;
+  private late: LateChaos | null = null;
+  /** The rumble was driven last frame (so it is brought back to 0). */
+  private rumbling = false;
 
   constructor(d: ChaosDirectorDeps, view: ChaosView | null) {
     this.d = d;
@@ -111,8 +124,21 @@ export class ChaosDirector {
     const { scene, fog, snow = null } = this.d;
     this.deep = new DeepChaos({ scene, fog, audio, snow, seed }, view, this.levels, this.clock);
     this.deepOut = null;
+    this.late?.dispose();
+    const { sonar, baseLight = null, home = () => null, force = NO_FORCE, calm } = this.d;
+    this.late = new LateChaos({ scene, pulses: this.d.pulses, color: sonar.uSonarColor.value, audio, baseLight, home, calm, seed, force }, this.levels, this.clock);
     if (was && this.levels.detune <= 0) audio.chaos(chaosAudioParams(0, 0));
-    if (was) audio.rumble(0);
+    if (was || this.rumbling) audio.rumble(0);
+    this.rumbling = false;
+  }
+
+  /** Depth / heading offsets the HUD shows now (stage 3+ false readings). */
+  glitch(): GlitchOffsets {
+    return this.late?.glitch() ?? NO_GLITCH;
+  }
+
+  private nearestCrack(x: number, z: number) {
+    return this.view ? (nearest(this.view.cracks, x, z, 1)[0] ?? null) : null;
   }
 
   get stage(): number {
@@ -121,6 +147,7 @@ export class ChaosDirector {
 
   /** Per frame, after the water look and the lamp rig (both rewrite what this scales). */
   frame(i: ChaosFrameInput): void {
+    this.late?.frame({ ...i, crack: this.nearestCrack(i.camera.x, i.camera.z) });
     if (!this.active) return;
     const v = this.view!, d = this.d, L = CHAOS_LOOK;
     const k = this.lag.set ? 1 - Math.exp(-i.dt / L.glow.followLagS) : 1;
@@ -151,7 +178,15 @@ export class ChaosDirector {
   /** Per frame, after the sonar pulses: ghost echoes and the omen. */
   sonar(i: ChaosSonarInput): void {
     this.clock = i.time;
-    if (!this.active) return;
+    this.late?.sonar({ ...i, crack: this.nearestCrack(i.diver.x, i.diver.z) });
+    let rumble = this.late?.rumble ?? 0;
+    if (this.active) rumble = Math.max(rumble, this.omenSonar(i));
+    if (rumble > 0 || this.rumbling) this.d.audio.rumble(rumble);
+    this.rumbling = rumble > 0;
+  }
+
+  /** Ghost echoes and the omen; returns the omen / blink rumble. */
+  private omenSonar(i: ChaosSonarInput): number {
     const d = this.d, G = CHAOS_LOOK.ghost;
     if (i.blocked) this.ghosts.clear();
     else if (i.pings > 0 && this.toward) this.ghosts.ping(i.pulseTime, i.diver.x, i.diver.y, i.diver.z, this.toward);
@@ -160,14 +195,17 @@ export class ChaosDirector {
       d.pulses.echo(i.pulseTime, g.x, g.y, g.z, G.gain);
       d.audio.play("sonar", G.sound);
     }
-    if (!this.omenMesh || !this.levels.omen) return;
-    const crack = nearest(this.view!.cracks, i.diver.x, i.diver.z, 1)[0] ?? null;
+    const deep = this.deepOut?.rumble ?? 0;
+    if (!this.omenMesh || !this.levels.omen) return deep;
+    const crack = this.nearestCrack(i.diver.x, i.diver.z);
     const f = this.omen.update({ dt: i.dt, time: i.time, diver: i.diver, crack, blocked: i.blocked });
     this.omenMesh.update(f, i.sonar, i.time);
-    d.audio.rumble(Math.max(f.rumble, this.deepOut?.rumble ?? 0));
+    return Math.max(f.rumble, deep);
   }
 
   dispose(): void {
+    this.late?.dispose();
+    this.late = null;
     this.deep?.dispose();
     this.deep = null;
     this.omenMesh?.mesh.removeFromParent();

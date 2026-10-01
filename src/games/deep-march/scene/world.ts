@@ -47,6 +47,7 @@ import { createChaosUniforms } from "./chaos/seabedChaos";
 import type { TideDirector } from "./tide/tideDirector";
 import type { DeepMarchHandle, DeepMarchOptions } from "./dive/types";
 import { WaterLook } from "./dive/waterLook";
+import { GameClock } from "./gameClock";
 
 export type { DeepMarchHandle, DeepMarchOptions, HudLabels, LoadingSnapshot, Telemetry } from "./dive/types";
 export { AUDIO_GRACE_MS } from "./dive/loadingGate";
@@ -69,7 +70,10 @@ export function createDeepMarch(host: HTMLElement, opts: DeepMarchOptions): Deep
   // Survival layer (battery, gear, light modes) and the scene side of the lights.
   const survival = createSurvival();
   const audio = createDiveAudio(opts.audioContext ?? null, { sound: opts.sound });
-  const cues = new DiveCues(survival, audio);
+  // one game clock for every timer of the dive; the ≡ menu pause also suspends the sound
+  const clock = new GameClock();
+  clock.subscribe(() => audio.hold("paused", clock.held("menu")));
+  const cues = new DiveCues(survival, audio, clock);
   const rig = new LampRig(camera, fogVis);
   // active sonar: pings (survival/sonarPing.ts) → pulses + seabed-shader uniforms (sonar.ts)
   const sonarPulses = new SonarPulses(lowSpec ? SONAR_TUNING.maxPulsesLow : SONAR_TUNING.maxPulses);
@@ -124,7 +128,14 @@ export function createDeepMarch(host: HTMLElement, opts: DeepMarchOptions): Deep
   const snow = new MarineSnow(900, opts.seed);
   scene.add(snow.points);
   const chaos = chaosUniforms
-    ? new ChaosDirector({ uniforms: chaosUniforms, fog, rig, audio, pulses: sonarPulses, sonar, long: longPulses, scene, snow, calm: opts.calmLights ?? false, seed: opts.seed }, opts.chaos ?? null)
+    ? new ChaosDirector(
+        {
+          uniforms: chaosUniforms, fog, rig, audio, pulses: sonarPulses, sonar, long: longPulses, scene, snow, calm: opts.calmLights ?? false, seed: opts.seed,
+          // the late omens: the lighthouse light, the base core (a forced preview without a base answers from the lander spawn)
+          baseLight, home: () => parts?.loop.conserve?.base?.center() ?? (params.omens.homeGhost ? spawnAt : null), force: params.omens,
+        },
+        opts.chaos ?? null,
+      )
     : null;
   let tide: TideDirector | null = null;
   // after a recall / death / the tide: the base core once it stands, else the lander spawn; battery full
@@ -157,7 +168,7 @@ export function createDeepMarch(host: HTMLElement, opts: DeepMarchOptions): Deep
       tide: { call: () => tide?.call() ?? false, active: () => tide?.active() ?? false },
     });
   const conserve = conserveWorld ? layerFor({ expedition: opts.expedition!, base: opts.base }, field) : null;
-  const bornAt = performance.now();
+  const bornAt = clock.now();
   // GPU occlusion culling of terrain columns (the panel can switch it off)
   const occlusion = new TerrainOcclusion(renderer, scene, params.occlusion);
   const health = new GpuHealth(renderer, audio, overlay.alert, () => labels);
@@ -266,6 +277,7 @@ export function createDeepMarch(host: HTMLElement, opts: DeepMarchOptions): Deep
     onDiveStart: () => updatePrompt(),
     resize: sizing.resize,
     bornAt,
+    clock,
   };
   const loop = startDiveLoop(loopParts);
 
@@ -298,8 +310,11 @@ export function createDeepMarch(host: HTMLElement, opts: DeepMarchOptions): Deep
       handleParts.hud.refreshSoon();
     },
     debug: null,
+    clock,
+    glitch: () => chaos?.glitch() ?? { depth: 0, heading: 0 },
     destroy: () => {
       loop.stop();
+      clock.dispose();
       scanner.dispose();
       audio.dispose();
       sizing.dispose();

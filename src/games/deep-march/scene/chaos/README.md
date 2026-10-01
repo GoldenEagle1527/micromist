@@ -17,6 +17,12 @@ The rules (m, stage, χ_g, cracks, healing, the wall's thickness) are `conserve/
 | `omenGeometry.ts`, `omenShader.ts`, `omenMesh.ts` | The silhouette: 1228 triangles of tubes, limbs swaying in the vertex shader, drawn additively only by the long sonar pulses — a sonar return, so rock between does not hide it (no depth test): the rumble is the cue to ping |
 | `chaosAudio.ts` | Web Audio insert on the mixer: wet path (low-pass sweep → short feedback delay) built on first use, disconnected 1.5 s after it falls silent (a timer: also when the stage drops and nobody calls any more); the rumble (41 / 55 / 110 Hz → 180 Hz low-pass), stopped the same way. Detune = loops' / shots' playback rate |
 | `rng.ts` | Seeded stream for ghosts and omens |
+| `lateChaos.ts` | Stage 3–4 omens owned by the director (`CHAOS_LOOK.late`): runs even in a calm generation when the debug panel forces one |
+| `phantoms.ts`, `phantomContacts.ts` | Pure, 声呐假读数: within 400 m of an open crack a ping is sometimes answered by a phantom contact 70 … 190 m out (a node-like cluster or one 26 … 48 m body); the next ping decides afresh (the old one fades), coming within 55 m dissolves it. Shapes incl. the base's (column over core) |
+| `phantomMesh.ts` | One additive `THREE.Points` draw (≤ 24 soft world-sized sprites, no texture, no depth test), lit on the CPU by the near pulses with the seabed's own front / afterglow curves: a return shows only where a ping or ghost echo passes |
+| `readingGlitch.ts` | Pure, 读数跳变: near a crack every 18 … 45 s the depth / heading readouts are wrong for 0.7 … 1.6 s (handle telemetry) |
+| `lighthouseDim.ts` | Pure, 基地灯塔变暗: near a lit lighthouse every 2–4 min a 2.5 s low groan (the rumble), then the lighthouse light (terrain light + beam columns) eases to 20 % over 2.5 s, holds 4 … 7 s, recovers over 3.5 s; 「减弱灯光起伏」: 60 %, 1.6× slower |
+| `homeGhost.ts` | Pure, 基地的幽灵回波: ≥ 160 m from the base a ping is sometimes answered 0.6 … 1.4 s later by a pulse from a phantom base 120 … 240 m away, 70 … 180° off the true bearing, its silhouette in the returns, a lower muffled ping |
 
 ## Stages
 
@@ -25,6 +31,8 @@ The rules (m, stage, χ_g, cracks, healing, the wall's thickness) are `conserve/
 - **2**: + 1–2 open cracks (not passable: depth < T) with pale light in them and the water in front, fog tinted near them, the lamp slowly dimming / recovering (≤ 40 %, ≤ 3 Hz), sounds detuned and wavering near them, the omen. Healed cracks leave darker scars.
 - **3**: stronger rows; the fog tinted 10 % everywhere; the plankton turning sickly green-white, a quarter of it swimming distorted (jerky held poses, more violent near cracks); more ghost echoes.
 - **4**: the plankton red-violet, half of it distorted; the sound wavers everywhere; the surge, the blink and the pupil; the first through (passable) crack — beyond it the shell. The diver may swim through to one column past the outer face (`terrain/edgePassages.ts`).
+  Stage 3 also: phantom sonar contacts and jumping depth / heading readouts near cracks; the anomalous terrain around the cracks (baked at the tide: `terrain/anomaly.ts` — W × (1 + 2k), inverted strata, barbs from the rock ceiling and spikes from the floor within 300 m).
+  Stage 4 also: the lighthouse dimming now and then, the base's ghost echo.
 - **5**: stage 4's look, stronger (unreachable without abyss particles; see the plan's backlog).
 
 「减弱灯光起伏」 (settings): the lamp keeps only the slowest component at a quarter of the depth, the glows stop breathing.
@@ -34,3 +42,5 @@ Budgets (`test:shaders`, `test:chaos`): the chaos seabed variant within the seab
 ## Preview on staging
 
 The staging debug panel (`debug/`, 混沌预览) shows this dive at stage 0 | 1 | 2 | 3 | 4 (1–2 cracks at stage 2, 3 at stage 3, 5 at stage 4 with crack 0 through; optional scar; never saved; the forecast and the next tide keep the real chaos), and its 传送 puts the diver in front of any open crack (`debug/teleport.ts`). The surge comes 90 s and the first blink 60 s into the dive.
+
+The four stage 3–4 omens have their own switches there (预览·声呐假读数 / 异常地形 / 基地灯塔变暗 / 基地的幽灵回波): on at any stage, first event about 8 s in (`late.previewS`), never saved; the anomalous terrain bakes into this dive's wall layout at full strength (with no open crack it previews stage 2 with two).

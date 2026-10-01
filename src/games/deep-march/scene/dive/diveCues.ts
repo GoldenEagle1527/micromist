@@ -7,14 +7,17 @@ import { SURVIVAL_TUNING, type LightMode, type Survival } from "../../survival";
 import type { DiveAudio } from "../audio";
 import { BumpCue, CueLimiter } from "../audioCues";
 import type { DiverController } from "../diver";
+import type { ClockView } from "../gameClock";
 
 export class DiveCues {
   readonly limiter = new CueLimiter();
   private readonly bumpCue = new BumpCue();
   private readonly audio: DiveAudio;
+  private readonly clock: ClockView;
 
-  constructor(survival: Survival, audio: DiveAudio) {
+  constructor(survival: Survival, audio: DiveAudio, clock: ClockView) {
     this.audio = audio;
+    this.clock = clock;
     const lowCut = SURVIVAL_TUNING.battery.lowFraction * SURVIVAL_TUNING.battery.capacity;
     survival.resources.on("changed", "battery", (e) => {
       if (e.prev > lowCut && e.value <= lowCut && this.limiter.allow("warn", this.now())) audio.play("warn", { gain: 0.4, rate: 0.92 });
@@ -24,8 +27,9 @@ export class DiveCues {
     });
   }
 
+  /** Game time (s): the sonar cooldown and the cue limits freeze while the dive is paused. */
   now(): number {
-    return performance.now() / 1000;
+    return this.clock.now() / 1000;
   }
 
   /** After a simulated diver step. */

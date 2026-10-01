@@ -17,6 +17,7 @@ import type { PanelInput } from "../input";
 import type { MaterialStatus } from "../materialLibrary";
 import type { DebugParts, DebugPort } from "../../debug/types";
 import type { ScanStore } from "../sonarScan/scanStore";
+import type { ClockView } from "../gameClock";
 
 export type HudLabels = {
   chunks: string;
@@ -145,6 +146,10 @@ export type DeepMarchHandle = {
   setPanelMode: (on: boolean) => void;
   /** Push new UI strings (language change) to the canvas overlay and debug legend. */
   setLabels: (labels: HudLabels) => void;
+  /** The ≡ menu is open: freeze every game clock (gameClock.ts), mute, ignore the dive keys, free the mouse. */
+  setPaused: (on: boolean) => void;
+  /** The dive's game clock (UI timers that must freeze with it: useOnce). */
+  clock: ClockView;
   addLook: (dxPx: number, dyPx: number, touch: boolean) => void;
   toggleLamp: () => boolean;
   /** Next available light mode (turns the light on). */

@@ -3,7 +3,8 @@
  * to sit on the HUD or the play bar but isn't needed every second — sound,
  * true fullscreen, the touch controls, the portrait flip, beginner tips, help,
  * the staging debug panel, the seed / sonar survey, and leaving the dive.
- * The dive keeps running underneath (nothing is paused).
+ * While it is open the dive is paused (ControlPanel → game.setPaused): every
+ * game clock stops, the sound is suspended, the mouse is free; closing resumes.
  */
 import type { MenuDict } from "./i18n";
 import "./menu.css";

@@ -5,6 +5,7 @@
  * forecast or the tide's own chaos (conserve/platform/diveChaos.ts).
  */
 import type { ChaosPreviewSpec } from "../conserve";
+import type { OmenPreview } from "../scene/dive/params";
 import type { ChoiceOption, DebugCommand, DebugCtx } from "./registry";
 
 const conserve = (c: DebugCtx) => c.conserve;
@@ -28,6 +29,11 @@ function numbers(id: string, label: DebugCommand["label"], key: "dpr" | "lodNear
     get: (c) => (c.draft[key] > 0 ? String(c.draft[key]) : ""),
     set: (c, v) => c.setDraft({ [key]: v ? Number(v) : 0 }),
   };
+}
+
+/** A stage 3–4 omen preview switch (any stage; restart). */
+function omen(key: keyof OmenPreview, label: DebugCommand["label"]): DebugCommand {
+  return { id: `chaos.omen.${key}`, section: "chaos", label, kind: "toggle", restart: true, when: conserve, get: (c) => c.draft.omens[key], set: (c, on) => c.setDraft({ omens: { ...c.draft.omens, [key]: on } }) };
 }
 
 const withChaos = (c: DebugCtx, patch: Partial<ChaosPreviewSpec>) => c.setDraft({ chaos: { ...(c.draft.chaos ?? { stage: 2, cracks: 1, scar: false }), ...patch } });
@@ -65,6 +71,10 @@ export const DIVE_COMMANDS: readonly DebugCommand[] = [
     get: (c) => c.draft.chaos?.scar ?? false,
     set: (c, on) => withChaos(c, { scar: on }),
   },
+  omen("phantoms", "omenPhantoms"),
+  omen("anomaly", "omenAnomaly"),
+  omen("dimming", "omenDimming"),
+  omen("homeGhost", "omenHomeGhost"),
   flag("tide.simple", "tide", "tideSimple", "tideSimple", false, conserve),
   flag("render.ktx2", "render", "ktx2", "webp", true),
   numbers("render.dpr", "dpr", "dpr", [0.5, 0.75, 1, 1.5, 2], "×"),
