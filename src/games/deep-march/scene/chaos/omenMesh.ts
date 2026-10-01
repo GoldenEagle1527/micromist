@@ -1,7 +1,9 @@
 /**
- * Renders the omen (omen.ts OmenChain) as a sonar-only silhouette: one additive,
- * depth-tested draw of ≈ 1.2k triangles (omenGeometry.ts), lit by the long sonar
- * pulses (sonarLong.ts). Not drawn unless the omen is present and a long pulse is alive.
+ * Renders the omen (omen.ts OmenChain) as a sonar-only silhouette: one additive
+ * draw of ≈ 1.2k triangles (omenGeometry.ts), lit by the long sonar pulses
+ * (sonarLong.ts). A sonar return, not a sight: rock between does not hide it (no
+ * depth test) — the active sonar is how the player "sees" it, so the rumble asks
+ * for a ping. Not drawn unless the omen is present and a long pulse is alive.
  */
 import * as THREE from "three";
 import type { SonarPulses, SonarUniforms } from "../sonar";
@@ -46,6 +48,7 @@ export function createOmenMesh(opts: { sonar: SonarUniforms; long: SonarPulses }
     transparent: true,
     blending: THREE.AdditiveBlending,
     depthWrite: false,
+    depthTest: false,
   });
   const mesh = new THREE.Mesh(geo, material);
   mesh.frustumCulled = false;
