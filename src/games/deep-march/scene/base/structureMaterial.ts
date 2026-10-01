@@ -41,10 +41,6 @@ export function createStructureMaterial(opts: StructureMaterialOptions): Structu
     uAbsorb: { value: opts.absorb },
     uTime: time,
     uGrowIn: { value: GROW_IN },
-    uSeam: { value: new THREE.Vector2(L.seam, L.seamDepth) },
-    uGlowTint: { value: new THREE.Color(...L.glow) },
-    uVoltTint: { value: new THREE.Color(...L.volt) },
-    uGlowParams: { value: new THREE.Vector3(L.glowGain, L.glowIdle, L.pulseHz * Math.PI * 2) },
   };
   const material = new THREE.MeshPhongMaterial({ color: new THREE.Color(...L.hull), specular: new THREE.Color().setScalar(L.specular), shininess: L.shininess });
   material.fog = false;

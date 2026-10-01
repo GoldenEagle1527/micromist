@@ -30,8 +30,10 @@ import { capturePrograms, type CapturedProgram } from "./three-capture";
 export type Budget = MaliBudget & { longestArith: number };
 /**
  * Buildings: Phong + seams + sonar / beam / 2 lighthouse lights; no textures.
- * Measured Sep 2026 (longest A / LS / T): desktop highp 18 / 13 / 0, phone
- * highp 17 / 10 / 0, mediump 16 / 0 / 0 (the seabed: ~100 / ≤ 150 / ≤ 40).
+ * Measured Oct 2026 (longest A / LS / T): desktop highp 17.9 / 11 / 0, phone
+ * highp 17 / 9 / 0, mediump 16.1 / 0 / 0 (the seabed: ~100 / ≤ 150 / ≤ 40). The
+ * highp program fills all 128 fast uniform registers, so each extra uniform
+ * costs load/store (the reactor's tint took it to 15): the static look is constants.
  */
 export const STRUCTURE_MALI_BUDGET: Budget = { stack: 0, longestLS: 14, longestTex: 0, longestArith: 24 };
 /** Beam columns, hologram, rings: additive, a few ALU ops (measured ≤ 2.1 / 0 / 0). */
