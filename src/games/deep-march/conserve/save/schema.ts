@@ -10,7 +10,7 @@ import type { ChaosState } from "../chaos/model";
 
 export type { BaseSave, ChaosState };
 
-export const SAVE_VERSION = 6;
+export const SAVE_VERSION = 7;
 
 /** Ending A outcome: sealed = survived the gaze; annihilated = the save is over for good (D14). */
 export type EndingA = "sealed" | "annihilated";
@@ -74,7 +74,10 @@ export type WorldSaveV5 = Omit<WorldSaveV4, "v"> & { v: 5; chaos: ChaosState };
 /** v6 (decision 1A): same shape; voltite's genesis total added to an older world (save/activateKinds.ts). */
 export type WorldSaveV6 = Omit<WorldSaveV5, "v"> & { v: 6 };
 
-export type WorldSave = WorldSaveV6;
+/** v7 (decision 2A): same shape (+ optional chaos.gaze at stage 5); abyssal's genesis total added (activateKinds.ts). */
+export type WorldSaveV7 = Omit<WorldSaveV6, "v"> & { v: 7 };
+
+export type WorldSave = WorldSaveV7;
 
 /** An annihilated world can only be looked back on, never entered again (D14). */
 export function isReadOnlySave(save: WorldSave): boolean {
