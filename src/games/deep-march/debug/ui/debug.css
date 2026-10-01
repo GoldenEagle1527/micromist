@@ -7,20 +7,6 @@
   font: 12px/1.35 ui-monospace, "SF Mono", Menlo, Consolas, "PingFang SC", monospace;
   color: #d9f6ff;
 }
-.dm-dbg-open {
-  position: absolute;
-  left: calc(4px + var(--dm-sl, 0px));
-  top: 42%;
-  padding: 3px 6px;
-  font-size: 10px;
-  border: 1px solid rgb(255 200 120 / 0.45);
-  border-radius: 6px;
-  background: rgb(20 20 30 / 0.45);
-  color: #ffd79a;
-  opacity: 0.7;
-  pointer-events: auto;
-  touch-action: manipulation;
-}
 .dm-dbg-sheet {
   position: absolute;
   top: 6px;
