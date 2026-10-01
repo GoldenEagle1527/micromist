@@ -1,6 +1,7 @@
-/** Base HUD strings (conserve mode, plans M5–M9): build mode, the base panel, storage, energy, the lighthouse switch, 唤潮, its forecast and advice. */
+/** Base HUD strings (conserve mode, plans M5–M9, the volt reactor): build mode, the base panel, storage, energy, the switches, 唤潮, its forecast and advice. */
 import type { StructureKind } from "../../conserve";
 import type { BuildReason } from "../../scene/base/buildMode";
+import { adviceEn, adviceZh, type AdviceDict } from "./adviceI18n";
 import { forecastEn, forecastZh, type ForecastDict } from "./forecastI18n";
 import { reasonsEn, reasonsZh } from "./reasonsI18n";
 
@@ -35,6 +36,10 @@ export type BaseDict = {
   buildings: string;
   working: string;
   idle: string;
+  /** A reactor waiting while the energy is full. */
+  standby: string;
+  /** Reactor fuel in storage: crystals, and minutes of full output for the reactors switched on. */
+  fuel: (kind: string, n: number, minutes: number | null) => string;
   demolish: string;
   /** The lighthouse switch (M9). */
   switchOn: string;
@@ -54,7 +59,7 @@ export type BaseDict = {
   tideNotReady: string;
   tideRunning: string;
   /** Why the tide can't be called yet, and what to do (ui/base/tideAdvice.ts, M9). */
-  advice: { cap: string; drain: string; charging: (minutes: number) => string; dive: string };
+  advice: AdviceDict;
   homeMark: (m: number) => string;
   built: (name: string) => string;
   refused: (name: string, reason: string) => string;
@@ -63,12 +68,13 @@ export type BaseDict = {
 };
 
 export const baseEn: BaseDict = {
-  structures: { core: "Base core", lighthouse: "Lighthouse", energy: "Energy tower", storage: "Storage" },
+  structures: { core: "Base core", lighthouse: "Lighthouse", energy: "Energy tower", storage: "Storage", reactor: "Volt reactor" },
   notes: {
     core: "Founds the base: freezes the 3 × 3 sites around it; +energy",
     lighthouse: "Lights 80 m around it; burns lumen; widens the base",
     energy: "Stores energy; dock here to charge the battery",
     storage: "+1000 storage; widens the base",
+    reactor: "Burns voltite from storage: +1.2 energy/s, 1 crystal per 30 s; waits while energy is full",
   },
   reasons: reasonsEn,
   btnBuild: "BUILD",
@@ -97,6 +103,8 @@ export const baseEn: BaseDict = {
   buildings: "Buildings",
   working: "on",
   idle: "off",
+  standby: "standby",
+  fuel: (k, n, min) => `${k} fuel ${n}${min === null ? "" : ` · about ${min} min at full output`}`,
   demolish: "Demolish",
   switchOn: "Switch on",
   switchOff: "Switch off",
@@ -112,12 +120,7 @@ export const baseEn: BaseDict = {
   tideAway: "Call the tide from inside the base",
   tideNotReady: "The tide can't be called yet",
   tideRunning: "A tide is running",
-  advice: {
-    cap: "Energy capacity is below 150 — build an energy tower",
-    drain: "Energy is falling — switch the lighthouses off to save up for the tide",
-    charging: (min) => `Enough energy in about ${min} min`,
-    dive: "Make one dive first: leave the base and come back",
-  },
+  advice: adviceEn,
   homeMark: (m) => `Base · ${m} m`,
   built: (n) => `${n} built`,
   refused: (n, r) => `Can't build the ${n}: ${r}`,
@@ -126,12 +129,13 @@ export const baseEn: BaseDict = {
 };
 
 export const baseZh: BaseDict = {
-  structures: { core: "基地核心", lighthouse: "灯塔", energy: "储能塔", storage: "仓储" },
+  structures: { core: "基地核心", lighthouse: "灯塔", energy: "储能塔", storage: "仓储", reactor: "伏晶反应堆" },
   notes: {
     core: "建立基地：冻结周围 3×3 地块；产能",
     lighthouse: "照亮周围 80 米；消耗灵光粒；扩大基地",
     energy: "储存能量；停靠可为电池充电",
     storage: "仓储 +1000；扩大基地",
+    reactor: "燃烧仓储里的伏晶：能量 +1.2/秒，每 30 秒 1 颗；能量满时待机",
   },
   reasons: reasonsZh,
   btnBuild: "建造",
@@ -160,6 +164,8 @@ export const baseZh: BaseDict = {
   buildings: "建筑",
   working: "运行",
   idle: "停机",
+  standby: "待机",
+  fuel: (k, n, min) => `${k}燃料 ${n} 颗${min === null ? "" : ` · 满负荷约 ${min} 分钟`}`,
   demolish: "拆除",
   switchOn: "开启",
   switchOff: "关闭",
@@ -175,12 +181,7 @@ export const baseZh: BaseDict = {
   tideAway: "请在基地保护范围内唤潮",
   tideNotReady: "现在还不能唤潮",
   tideRunning: "潮汐进行中",
-  advice: {
-    cap: "能量上限不足 150 · 先建一座储能塔",
-    drain: "能量在下降 · 关闭灯塔来为唤潮攒能量",
-    charging: (min) => `约 ${min} 分钟后能量足够`,
-    dive: "先出航一次：离开基地再回来",
-  },
+  advice: adviceZh,
   homeMark: (m) => `基地 · ${m} 米`,
   built: (n) => `${n}已建成`,
   refused: (n, r) => `无法建造${n}：${r}`,

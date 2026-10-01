@@ -26,6 +26,8 @@ export const STRUCTURE_LOOK = {
   seamDepth: 0.55,
   /** Emissive strips: deep cyan-blue; unpowered strips keep this fraction. */
   glow: [0.25, 0.75, 1.0] as const,
+  /** The reactor's volt crystal (glow weight 3): amber, as the voltite nodes. */
+  volt: [1.0, 0.62, 0.2] as const,
   glowGain: 1.6,
   glowIdle: 0.12,
   /** Slow breathing of the glow, Hz. */

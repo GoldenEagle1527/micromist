@@ -27,6 +27,10 @@ export const hintsEn: HintDict = {
       key: "Back inside the base, press Q for the base panel and “Deposit all” to empty the tank into storage.",
       touch: "Back inside the base, tap the Base button and “Deposit all” to empty the tank into storage.",
     },
+    reactor: {
+      key: "Energy for the tide comes from voltite: amber crystals on terrace ledges (some in canyons). Build a volt reactor (G; ferro 100, voltite 30) and keep voltite in storage — it burns one crystal every 30 s for +1.2 energy/s, and waits while the energy is full.",
+      touch: "Energy for the tide comes from voltite: amber crystals on terrace ledges (some in canyons). Build a volt reactor (BUILD; ferro 100, voltite 30) and keep voltite in storage — it burns one crystal every 30 s for +1.2 energy/s, and waits while the energy is full.",
+    },
     tide: {
       key: "With 150 energy and one dive this generation, press “Call the tide” in the base panel. 60 s later the tide remakes the world — stay inside the dome.",
       touch: "With 150 energy and one dive this generation, tap “Call the tide” in the base panel. 60 s later the tide remakes the world — stay inside the dome.",
@@ -60,6 +64,10 @@ export const hintsZh: HintDict = {
     deposit: {
       key: "回到基地范围内，按 Q 打开基地面板，点「全部存入」把粒子罐存进仓储。",
       touch: "回到基地范围内，点「基地」按钮打开面板，点「全部存入」把粒子罐存进仓储。",
+    },
+    reactor: {
+      key: "唤潮的能量来自伏晶：崖台边缘（峡谷里也有一些）发出琥珀色光的晶簇。按 G 建一座伏晶反应堆（铁锰 100、伏晶 30），再把伏晶存进仓储——它每 30 秒烧 1 颗、能量 +1.2/秒，能量满时自动待机。",
+      touch: "唤潮的能量来自伏晶：崖台边缘（峡谷里也有一些）发出琥珀色光的晶簇。点「建造」建一座伏晶反应堆（铁锰 100、伏晶 30），再把伏晶存进仓储——它每 30 秒烧 1 颗、能量 +1.2/秒，能量满时自动待机。",
     },
     tide: {
       key: "能量达到 150、本代出航过一次后，在基地面板点「唤潮」。60 秒后潮汐会重塑世界——请留在穹顶内。",

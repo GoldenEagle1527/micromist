@@ -1,14 +1,14 @@
 /**
  * The base panel (plan M5; Q or the HUD 「基地」 button): energy, storage vs
  * tank per particle kind with deposit / withdraw / 放流 (release, unlimited),
- * the buildings with the lighthouse switch (M9) and demolish (full refund,
- * confirmed), and 唤潮 — its requirements, what to do before it (tideAdvice.ts)
- * and the forecast (TideForecastCard).
+ * the buildings (BuildingList: switches, the reactor's fuel, demolish), and
+ * 唤潮 — its requirements, what to do before it (tideAdvice.ts) and the
+ * forecast (TideForecastCard).
  */
-import { useState } from "react";
 import type { BaseCommand, BaseTelemetry } from "../../scene/base/telemetry";
 import type { ExpeditionDict } from "../expedition/i18n";
 import type { BaseDict } from "./i18n";
+import { BuildingList } from "./BuildingList";
 import { TideForecastCard } from "./TideForecastCard";
 import { adviceText, tideAdvice } from "./tideAdvice";
 import { OnceNote } from "../useOnce";
@@ -16,7 +16,6 @@ import { OnceNote } from "../useOnce";
 type Props = { base: BaseTelemetry; labels: BaseDict; kinds: ExpeditionDict["kinds"]; send: (cmd: BaseCommand) => void };
 
 export function BasePanel({ base, labels, kinds, send }: Props) {
-  const [confirm, setConfirm] = useState<number | null>(null);
   if (!base.panel) return null;
   const v = base.view;
   const close = () => send({ type: "panel", open: false });
@@ -43,38 +42,7 @@ export function BasePanel({ base, labels, kinds, send }: Props) {
             </span>
           </div>
           <Storage base={base} labels={labels} kinds={kinds} send={send} />
-          <div className="dm-base-section">
-            <b>{labels.buildings}</b>
-            <ul className="dm-base-list">
-              {v.buildings.map((b) => (
-                <li key={b.id}>
-                  <span>
-                    {labels.structures[b.kind]} <small className={b.working ? "on" : "off"}>{b.working ? labels.working : labels.idle}</small>
-                  </span>
-                  {(base.structures.find((x) => x.kind === b.kind)?.energy ?? 0) < 0 && confirm !== b.id ? (
-                    <button type="button" className="dm-base-btn" aria-pressed={!b.on} onClick={() => send({ type: "switch", id: b.id, on: !b.on })}>
-                      {b.on ? labels.switchOff : labels.switchOn}
-                    </button>
-                  ) : null}
-                  {b.kind === "core" ? null : confirm === b.id ? (
-                    <span className="dm-base-confirm">
-                      <small>{labels.confirmDemolish(labels.structures[b.kind])}</small>
-                      <button type="button" className="dm-base-btn warn" onClick={() => (send({ type: "demolish", id: b.id }), setConfirm(null))}>
-                        {labels.yes}
-                      </button>
-                      <button type="button" className="dm-base-btn" onClick={() => setConfirm(null)}>
-                        {labels.no}
-                      </button>
-                    </span>
-                  ) : (
-                    <button type="button" className="dm-base-btn" onClick={() => setConfirm(b.id)}>
-                      {labels.demolish}
-                    </button>
-                  )}
-                </li>
-              ))}
-            </ul>
-          </div>
+          <BuildingList base={base} labels={labels} kinds={kinds} send={send} />
         </>
       )}
       <Tide base={base} labels={labels} send={send} />
@@ -136,7 +104,7 @@ function Storage({ base, labels, kinds, send }: Props) {
 
 function Tide({ base, labels, send }: { base: BaseTelemetry; labels: BaseDict; send: (cmd: BaseCommand) => void }) {
   const t = base.tide, f = base.forecast;
-  const advice = tideAdvice(base.view, t, base.tideActive);
+  const advice = tideAdvice(base.view, t, base.tideActive, base.structures);
   return (
     <div className="dm-base-section dm-base-tide">
       <div className="dm-base-row-head">

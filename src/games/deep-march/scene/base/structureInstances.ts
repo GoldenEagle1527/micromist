@@ -54,7 +54,7 @@ export class StructureInstances {
       this.q.setFromAxisAngle(this.up, b.yaw);
       this.m.compose(this.v.set(b.pos[0], b.pos[1], b.pos[2]), this.q, this.one);
       mesh.setMatrixAt(i, this.m);
-      this.state.get(b.kind)!.setXYZW(i, b.working ? 1 : 0, b.birth, 0, 0);
+      this.state.get(b.kind)!.setXYZW(i, b.working || b.standby ? 1 : 0, b.birth, 0, 0);
     }
     for (const [kind, mesh] of this.meshes) {
       mesh.count = counts.get(kind) ?? 0;
