@@ -30,12 +30,13 @@ export class TideVisuals {
   private readonly cues: TideCues;
   private burstAt: number | null = null;
   private edge = 0;
+  private core: { x: number; y: number; z: number } | null = null;
 
   constructor(d: VisualsDeps) {
     this.d = d;
     const { starts, lengths } = d.timeline;
     this.particles = new TideParticles(d.lowSpec, d.seed, { stripStart: starts.strip, stripLen: lengths.strip, gatherStart: starts.gather, gatherLen: lengths.gather });
-    this.front = new TerrainFront(d.seabed.tideMaterial());
+    this.front = new TerrainFront((base) => d.seabed.tideMaterial(base !== d.seabed.material));
     this.cues = new TideCues(d.audio);
     d.scene.add(this.dome.mesh, this.particles.points);
   }
@@ -47,6 +48,7 @@ export class TideVisuals {
 
   frame(v: TideView, chunks: ChunkManager, diver: THREE.Vector3, time: number, dt: number, pxPerM: number): void {
     const dome = v.dome;
+    if (dome) this.core = dome;
     const reach = dome ? frontReach(dome.radius, this.d.viewDistance, TIDE_VIEW.front.width) : 0;
     const r = dome ? frontRadius(v, dome.radius, reach) : null;
     this.front.apply(chunks, chunks.baseMaterial, dome?.x ?? 0, dome?.z ?? 0, r);
@@ -61,6 +63,13 @@ export class TideVisuals {
     this.particles.update(t, v.state === "show", dome, reach, pxPerM);
     this.d.look.setVeil(this.veil(v));
     this.cues.frame(v, dt);
+  }
+
+  /** A sonar pulse due from the base core (P1, P3 every 2.5 s), or null. */
+  takePulse(): { x: number; y: number; z: number } | null {
+    if (this.cues.pulses <= 0 || !this.core) return null;
+    this.cues.pulses = 0;
+    return this.core;
   }
 
   private glow(v: TideView): number {
