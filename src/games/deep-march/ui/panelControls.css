@@ -1,0 +1,155 @@
+/* Layer 3 — deep-march HUD (3/4): look pad, move dial, action fan. */
+/* ---- look pad ---- */
+.dm-lookpad {
+  position: absolute;
+  inset: 0;
+  pointer-events: auto;
+  touch-action: none;
+}
+
+/* ---- move dial (bottom left) ---- */
+.dm-dial {
+  position: absolute;
+  left: calc(2px + var(--dm-sl, 0px));
+  bottom: calc(2px + var(--dm-sb, 0px));
+  width: clamp(150px, 36vmin, 220px);
+  height: auto;
+  aspect-ratio: 1;
+  pointer-events: none;
+  touch-action: none;
+}
+.dm-dial .dm-hit {
+  pointer-events: all;
+}
+.dm-swim-wedge {
+  fill: rgb(45 224 196 / 0.06);
+  transition: fill 0.2s;
+}
+.dm-swim-band {
+  fill: rgb(45 224 196 / 0.1);
+  stroke: rgb(45 224 196 / 0.55);
+  stroke-width: 1;
+  transition: fill 0.2s, stroke 0.2s;
+}
+.dm-swim-ticks {
+  stroke: rgb(45 224 196 / 0.45);
+  stroke-width: 1;
+}
+.dm-dial-swim-label {
+  fill: rgb(45 224 196 / 0.8);
+  font-size: 9px;
+  letter-spacing: 0.3em;
+}
+.dm-dial.lit .dm-swim-wedge {
+  fill: rgb(45 224 196 / 0.16);
+}
+.dm-dial.lit .dm-swim-band {
+  fill: rgb(45 224 196 / 0.42);
+  stroke: #9ffff0;
+  filter: drop-shadow(0 0 6px rgb(45 224 196 / 0.9));
+}
+.dm-dial.lit .dm-swim-ticks {
+  stroke: #eafffb;
+}
+.dm-dial.lit .dm-dial-swim-label {
+  fill: #eafffb;
+  filter: drop-shadow(0 0 4px rgb(45 224 196 / 0.9));
+}
+.dm-thumb-ring {
+  fill: none;
+  stroke: var(--hud);
+  stroke-width: 1.2;
+  stroke-dasharray: 20 6.7;
+  filter: var(--hud-glow);
+}
+.dm-thumb-core {
+  fill: rgb(98 243 255 / 0.14);
+  stroke: var(--hud-dim);
+}
+.dm-dial.active .dm-thumb-core {
+  fill: rgb(98 243 255 / 0.3);
+}
+.dm-dial.active .dm-thumb-ring {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: dm-spin 3s linear infinite;
+}
+
+/* ---- action fan (bottom right) ---- */
+.dm-fan {
+  position: absolute;
+  right: calc(0px + var(--dm-sr, 0px));
+  bottom: calc(0px + var(--dm-sb, 0px));
+  width: clamp(160px, 38vmin, 240px);
+  height: auto;
+  aspect-ratio: 1;
+  pointer-events: none;
+  touch-action: none;
+}
+.dm-fan-core {
+  fill: rgb(0 30 50 / 0.45);
+  stroke: var(--hud-dim);
+  stroke-width: 1;
+}
+.dm-fan-btn {
+  pointer-events: all;
+  cursor: pointer;
+  touch-action: none;
+}
+.dm-fan-seg {
+  fill: rgb(0 40 60 / 0.42);
+  stroke: var(--hud-dim);
+  stroke-width: 1;
+  transition: fill 0.12s, stroke 0.12s;
+}
+.dm-fan-edge {
+  stroke: var(--hud);
+  stroke-width: 2;
+  opacity: 0.35;
+  transition: opacity 0.12s;
+}
+.dm-fan-icon {
+  fill: none;
+  stroke: var(--hud);
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.dm-fan-label {
+  font-size: 8.5px;
+  fill: rgb(98 243 255 / 0.75);
+}
+.dm-fan-btn:hover .dm-fan-seg {
+  fill: rgb(0 60 80 / 0.5);
+}
+.dm-fan-btn.on .dm-fan-seg {
+  fill: rgb(45 224 196 / 0.3);
+  stroke: #9ffff0;
+}
+.dm-fan-btn.on .dm-fan-edge {
+  opacity: 1;
+  filter: drop-shadow(0 0 5px rgb(98 243 255 / 0.9));
+}
+.dm-fan-btn.on .dm-fan-icon {
+  stroke: #eafffb;
+  filter: drop-shadow(0 0 4px rgb(98 243 255 / 0.9));
+}
+.dm-fan-btn.on .dm-fan-label {
+  fill: #eafffb;
+}
+.dm-fan-lamp.on .dm-fan-seg {
+  fill: rgb(255 210 120 / 0.2);
+  stroke: var(--hud-lamp);
+}
+.dm-fan-lamp.on .dm-fan-icon,
+.dm-fan-lamp.on .dm-fan-edge {
+  stroke: var(--hud-lamp);
+  filter: drop-shadow(0 0 4px rgb(255 210 120 / 0.9));
+}
+.dm-fan-lamp.on .dm-fan-label {
+  fill: var(--hud-lamp);
+}
+
+.dm-fan-lamp[data-mode="high"].on .dm-fan-seg {
+  fill: rgb(255 226 160 / 0.3);
+}

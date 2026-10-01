@@ -1,0 +1,133 @@
+/* Layer 3 — deep-march (3/3): short stages, the play viewport, rotated fallback. */
+/* short (mobile landscape) stages: two-column, smaller legend */
+@media (max-height: 520px), (max-width: 520px) {
+  .dm-spawn-legend {
+    top: 3.1rem;
+    display: grid;
+    grid-template-columns: auto auto;
+    column-gap: 0.6rem;
+    row-gap: 1px;
+    padding: 0.3rem 0.45rem;
+    font-size: 0.58rem;
+  }
+  .dm-spawn-legend b,
+  .dm-spawn-legend .dm-region-debug {
+    grid-column: 1 / -1;
+  }
+  .dm-region-map {
+    width: 60px;
+    height: 60px;
+  }
+  .dm-region-keys {
+    grid-template-columns: auto auto auto;
+  }
+}
+.dm-spawn-legend i {
+  width: 8px;
+  height: 8px;
+  transform: rotate(45deg);
+}
+
+.dm-lock-prompt {
+  position: absolute;
+  left: 50%;
+  top: 58%;
+  transform: translateX(-50%);
+  padding: 0.35rem 0.9rem;
+  border: 1px solid rgb(98 243 255 / 0.35);
+  background: rgb(0 30 50 / 0.55);
+  color: #bff9ff;
+  font-size: 0.78rem;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity 0.7s ease-out;
+}
+
+.dm-lock-prompt.on {
+  opacity: 1;
+}
+
+.dm-alert {
+  position: absolute;
+  left: 50%;
+  top: 40%;
+  transform: translateX(-50%);
+  max-width: min(90%, 36rem);
+  padding: 0.5rem 1rem;
+  border: 1px solid rgb(255 110 90 / 0.6);
+  background: rgb(40 8 8 / 0.8);
+  color: #ffd2c8;
+  font-size: 0.82rem;
+  text-align: center;
+  display: none;
+}
+
+.dm-alert.on {
+  display: block;
+}
+
+@container dm-stage (max-width: 560px) {
+  .dm-stats {
+    top: 48px;
+    bottom: auto;
+    left: auto;
+    right: 8px;
+    transform: none;
+    max-width: 42%;
+    text-align: right;
+  }
+}
+
+.dm-field input[type="range"] {
+  width: 100%;
+  accent-color: var(--md-sys-color-primary);
+}
+
+.dm-sens-val {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.dm-check-hint {
+  display: block;
+  font-size: 0.75rem;
+  opacity: 0.7;
+}
+
+/* ---- Play: the platform's full-window layer (.game-viewport, styles/play.css) ---- */
+.dm-immersive {
+  display: block;
+  background: #001631;
+}
+
+.dm-rotor {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  transform-origin: 0 0;
+}
+
+.dm-immersive .dm-stage {
+  --dm-sl: env(safe-area-inset-left, 0px);
+  --dm-sr: env(safe-area-inset-right, 0px);
+  --dm-st: env(safe-area-inset-top, 0px);
+  --dm-sb: env(safe-area-inset-bottom, 0px);
+}
+
+/* Rotated portrait fallback: map the physical insets onto the rotated sides. */
+.dm-rotor[data-rot="90"] .dm-stage {
+  --dm-sl: env(safe-area-inset-top, 0px);
+  --dm-sr: env(safe-area-inset-bottom, 0px);
+  --dm-st: env(safe-area-inset-right, 0px);
+  --dm-sb: env(safe-area-inset-left, 0px);
+}
+
+.dm-rotor[data-rot="-90"] .dm-stage {
+  --dm-sl: env(safe-area-inset-bottom, 0px);
+  --dm-sr: env(safe-area-inset-top, 0px);
+  --dm-st: env(safe-area-inset-left, 0px);
+  --dm-sb: env(safe-area-inset-right, 0px);
+}

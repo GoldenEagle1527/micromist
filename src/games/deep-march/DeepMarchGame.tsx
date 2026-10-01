@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import "./deep-march.css";
+import "./deep-march-dive.css";
+import "./deep-march-stage.css";
 import { useLocale } from "../../i18n";
 import { seedFromString } from "./terrain/noise";
 import { createDeepMarch, type DeepMarchHandle } from "./scene/world";

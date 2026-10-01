@@ -9,6 +9,9 @@
  */
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import "./loading.css";
+import "./loadingSteps.css";
+import "./loadingDetails.css";
+import "./loadingLayout.css";
 import type { DeepMarchHandle, LoadingSnapshot } from "../../scene/world";
 import { REGION_COLORS, REGION_KEYS } from "../../terrain/regions";
 import { applyStep, canBeginDive } from "./loadingGate";
