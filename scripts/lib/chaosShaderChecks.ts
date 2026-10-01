@@ -9,7 +9,7 @@
  *    constructors, glslang ES, WebGL2 minimums, the seabed Mali-G57 budget, the
  *    fade variant still discarding first; its longest-path arithmetic over the M7
  *    base is reported (the veins run only on wall pixels, behind uniform branches);
- *  - aChaos is bound by chunks.ts; array lint on every injected block;
+ *  - aChaos is bound by the chunk upload (terrain/chunkUpload.ts); array lint on every injected block;
  *  - the omen silhouette (one additive program, no textures, OMEN_MALI_BUDGET).
  */
 import { createHash } from "node:crypto";
@@ -122,8 +122,8 @@ export function chaosPrograms(check: Check, compile: Compile): void {
     const issues = arrayPrecisionIssues(src);
     check(issues.length === 0, `array types carry explicit precision, no array constructors: ${name}`, issues.join(" | ") || "clean");
   }
-  const chunks = readFileSync("src/games/deep-march/terrain/chunks.ts", "utf8");
-  check(chunks.includes(`setAttribute("aChaos"`), "chaos attribute aChaos bound by chunks.ts", "");
+  const chunks = readFileSync("src/games/deep-march/terrain/chunkUpload.ts", "utf8");
+  check(chunks.includes(`setAttribute("aChaos"`), "chaos attribute aChaos bound by chunkUpload.ts", "");
   const bin = findMalioc();
   for (const lowSpec of [false, true]) for (const highp of [true, false]) chaosSeabed(check, compile, bin, lowSpec, highp);
   const pulses = new SonarPulses(5);
