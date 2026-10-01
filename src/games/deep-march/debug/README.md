@@ -9,9 +9,10 @@ Replaces every URL debug switch (`?chaos= &cracks= &scar= ?at= ?light= ?tide=sim
 | Section | Commands | Takes effect |
 |---|---|---|
 | 传送 | spawn, base, crack N, the 4 edges and 4 corners of a bounded world, a custom x / y / z (steppers ±10 / ±100, "use current position") | at once; every destination is made safe (`teleport.ts`: eye height above the seabed, lifted out of rock, walked in from a rounded wall corner) |
-| 混沌预览 | stage (this generation / 0 / 1 / 2 / 3 / 4), cracks 1–2 at stage 2 (3 at stage 3, 5 at stage 4 with the first through), a healed scar | restart; conserve only; never saved, the forecast and the tide keep the real chaos |
+| 混沌预览 | stage (this generation / 0 / 1 / 2 / 3 / 4 / 5), cracks 1–2 at stage 2 (3 at stage 3, 5 at stage 4 with the first through, at stage 5 six and the main breach with the eye beyond it — teleport 「裂缝 7」), a healed scar | restart; conserve only; never saved, the forecast and the tide keep the real chaos; stage 5 is the look only (no gaze sequence) |
 | 灯光/声呐 | off / beam / high (the gear's modes); a free sonar ping (no battery, no cooldown); sonar observation mode (same as N); forget the scan record | at once; forgetting also clears the conserve world's saved record |
 | 潮汐 | simple tide (the 浊潮 murk instead of the show) | restart; conserve only |
+| 结局演练 | 直视 sandbox off / ① / ② / ③ / ④: the next dive plays a stage-5 copy of the save (main breach, gaze at that phase, base stocked to m ≈ 0.79 plus the four anchors' price) held in memory only (`conserve/session/rehearsal.ts`); in such a dive: gaze time +5 min, light every anchor, release to forecast m ≥ 0.84, seal now (both conditions + the 封界潮 where the diver is), annihilate now (the ending; only the sandbox ends) | the choice: restart; the shortcuts: at once, rehearsal dives only. The real slot and the real scan record are never written while it is on |
 | 资源 | fill the battery | at once; the battery is the dive's own, not in the save |
 | 渲染 | KTX2 (off = WebP), pixel ratio, full-detail radius, turbidity, noise engine JS / WASM, coarse pre-pass, sparse bricks, detail normals, occlusion culling | restart |
 | 声音 | sound off (no audio context at all) | restart |

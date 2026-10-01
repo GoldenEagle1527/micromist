@@ -27,6 +27,8 @@ import type { BaseDict } from "./base/i18n";
 import { useBase } from "./base/useBase";
 import type { TideDict } from "./tide/i18n";
 import { useTide } from "./tide/useTide";
+import { useGaze } from "./gaze/useGaze";
+import type { GazeDict } from "./gaze/i18n";
 import type { HintDict } from "./hints/i18n";
 import { useHints } from "./hints/useHints";
 import { GameMenu, HelpSheet, type MenuSound } from "./menu/GameMenu";
@@ -57,6 +59,7 @@ export type PanelLabels = ReadoutLabels & {
   expedition: ExpeditionDict;
   base: BaseDict;
   tide: TideDict;
+  gaze: GazeDict;
   hints: HintDict;
 };
 
@@ -89,6 +92,7 @@ export function ControlPanel({ game, panelOn, onTogglePanel, onExit, onFlip, sou
   const base = useBase(game);
   // conserve with a tide (M7): countdown, phase, dome warning, summary
   const tide = useTide(game);
+  const gaze = useGaze(game);
   const hints = useHints(exp, base, tide, tel?.ready ?? false, tel?.scan.observe ?? false);
   const building = base?.build.active ?? false;
   const [, force] = useState(0);
@@ -179,7 +183,7 @@ export function ControlPanel({ game, panelOn, onTogglePanel, onExit, onFlip, sou
         }
       />
       {tel?.scan.observe && observeTip ? <ObserveBanner labels={labels.sonar} area={tel.scan.area} touch={panelOn} /> : null}
-      <ConserveOverlays game={game} exp={exp} base={base} tide={tide} panelOn={panelOn} hints={hints} labels={labels} />
+      <ConserveOverlays game={game} exp={exp} base={base} tide={tide} gaze={gaze} panelOn={panelOn} hints={hints} labels={labels} onExit={onExit} />
       <div className="dm-hud-buttons">
         {showBase && base && game ? (
           <button
@@ -220,7 +224,7 @@ export function ControlPanel({ game, panelOn, onTogglePanel, onExit, onFlip, sou
             onToggle={onToggle}
             onPress={onPress}
             ping={tel?.sonar.available ? { label: labels.btnPing, ready: tel.sonar.ready, charge: tel.sonar.charge, observe: tel.scan.observe } : undefined}
-            absorb={exp && !building ? { label: labels.expedition.btnAbsorb, active: exp.absorbing, target: exp.target !== null } : undefined}
+            absorb={exp && !building ? { label: labels.expedition.btnAbsorb, active: exp.absorbing, target: exp.target !== null || (gaze?.reach ?? -1) >= 0 } : undefined}
             place={building ? { label: labels.base.btnPlace, ok: base?.build.ok ?? false } : undefined}
             build={canBuild ? { label: labels.base.btnBuild, active: false } : undefined}
             contextSlot={!!exp}

@@ -46,7 +46,7 @@ export const DIVE_COMMANDS: readonly DebugCommand[] = [
     kind: "choice",
     restart: true,
     when: conserve,
-    options: () => [{ value: "", label: "chaosOwn" }, text("0", "0"), text("1", "1"), text("2", "2"), text("3", "3"), text("4", "4")],
+    options: () => [{ value: "", label: "chaosOwn" }, text("0", "0"), text("1", "1"), text("2", "2"), text("3", "3"), text("4", "4"), text("5", "5")],
     get: (c) => (c.draft.chaos ? String(c.draft.chaos.stage) : ""),
     set: (c, v) => (v === "" ? c.setDraft({ chaos: null }) : withChaos(c, { stage: Number(v) as ChaosPreviewSpec["stage"] })),
   },

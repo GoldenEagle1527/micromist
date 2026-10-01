@@ -23,7 +23,7 @@ const CJK = /[\u3400-\u9fff\uff00-\uffef\u3000-\u303f]/;
 /** Chinese entries / functions that are legitimately without CJK (key names, units, counters). */
 const ZH_LATIN = new Set<string>(["hints.gotItKey", "loading.diag.gpu", "loading.materialCount", "loading.world.diag.formatValue"]);
 
-const summary: GenerationSummary = { gen: 3, biomes: [{ biome: "reef", sites: 12 }, { biome: "sand", sites: 7 }], stage: 2, m: 0.012, wallThickness: 820.4, newCracks: 1, healed: 1, open: 2 };
+const summary: GenerationSummary = { gen: 3, biomes: [{ biome: "reef", sites: 12 }, { biome: "sand", sites: 7 }], stage: 2, m: 0.012, wallThickness: 820.4, newCracks: 1, healed: 1, open: 2, sealed: false };
 const fixtures: Record<string, (d: typeof deepMarchEn) => unknown[][]> = {
   "setup.slot.ready": () => [["abc", 3, 1], ["abc", 1, 4]],
   "setup.slot.ended": () => [["abc"]],

@@ -5,6 +5,7 @@ import { loadingEn, loadingZh, type LoadingDict } from "./ui/loading/i18n";
 import { setupEn, setupZh, type SetupDict } from "./ui/setup/i18n";
 import { expeditionEn, expeditionZh, type ExpeditionDict } from "./ui/expedition/i18n";
 import { tideEn, tideZh, type TideDict } from "./ui/tide/i18n";
+import { gazeEn, gazeZh, type GazeDict } from "./ui/gaze/i18n";
 import { baseEn, baseZh, type BaseDict } from "./ui/base/i18n";
 import { hintsEn, hintsZh, type HintDict } from "./ui/hints/i18n";
 import type { SonarHudLabels } from "./ui/SonarGauge";
@@ -58,6 +59,8 @@ export type DeepMarchDict = {
   /** Conserve base HUD (ui/base, M5). */
   base: BaseDict;
   tide: TideDict;
+  /** Conserve, stage 5 (直视): the gaze HUD and the endings (ui/gaze). */
+  gaze: GazeDict;
   /** Conserve new-player hints (ui/hints, M9). */
   hints: HintDict;
   hudGrounded: string;
@@ -151,6 +154,7 @@ export const deepMarchEn: DeepMarchDict = {
   expedition: expeditionEn,
   base: baseEn,
   tide: tideEn,
+  gaze: gazeEn,
   hints: hintsEn,
   hudGrounded: "Touching bottom",
   hudCeiling: "Touching ceiling",
@@ -249,6 +253,7 @@ export const deepMarchZh: DeepMarchDict = {
   expedition: expeditionZh,
   base: baseZh,
   tide: tideZh,
+  gaze: gazeZh,
   hints: hintsZh,
   hudGrounded: "触底",
   hudCeiling: "触顶",

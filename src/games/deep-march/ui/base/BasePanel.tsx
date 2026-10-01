@@ -104,7 +104,7 @@ function Storage({ base, labels, kinds, send }: Props) {
 
 function Tide({ base, labels, send }: { base: BaseTelemetry; labels: BaseDict; send: (cmd: BaseCommand) => void }) {
   const t = base.tide, f = base.forecast;
-  const advice = tideAdvice(base.view, t, base.tideActive, base.structures);
+  const advice = t.gaze ? null : tideAdvice(base.view, t, base.tideActive, base.structures);
   return (
     <div className="dm-base-section dm-base-tide">
       <div className="dm-base-row-head">
@@ -113,7 +113,7 @@ function Tide({ base, labels, send }: { base: BaseTelemetry; labels: BaseDict; s
           {labels.tideBtn}
         </button>
       </div>
-      <p className="dm-base-note">{labels.tideNeeds(t.energy, t.energyNeeded, t.dives, t.divesNeeded)}</p>
+      <p className={`dm-base-note${t.gaze === "watching" ? " warn" : ""}`}>{t.gaze ? labels.tideGaze[t.gaze] : labels.tideNeeds(t.energy, t.energyNeeded, t.dives, t.divesNeeded)}</p>
       {advice ? <p className="dm-base-note warn">{adviceText(advice, labels.advice)}</p> : null}
       {f ? <TideForecastCard forecast={f} labels={labels.forecast} /> : null}
       {base.tideActive ? <p className="dm-base-note">{labels.tideRunning}</p> : !base.atBase ? <p className="dm-base-note dim">{labels.tideAway}</p> : null}
