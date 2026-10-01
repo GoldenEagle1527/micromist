@@ -10,7 +10,6 @@ type Corner = "ne" | "nw" | "se" | "sw";
 export type DebugDict = {
   title: string;
   /** The touch button and the desktop key hint. */
-  open: string;
   close: string;
   keyHint: string;
   /** The dive is still loading: runtime commands appear once it runs. */
@@ -62,7 +61,6 @@ const r = Math.round;
 
 export const debugZh: DebugDict = {
   title: "调试面板（仅测试站）",
-  open: "调试",
   close: "关闭",
   keyHint: "按 ` 键开关",
   loading: "下潜载入中：传送、灯光等即时功能稍后出现",
@@ -116,7 +114,6 @@ export const debugZh: DebugDict = {
 
 export const debugEn: DebugDict = {
   title: "Debug panel (staging only)",
-  open: "Debug",
   close: "Close",
   keyHint: "Press ` to toggle",
   loading: "The dive is loading: teleport, lights and other live tools appear shortly",

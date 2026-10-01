@@ -1,4 +1,4 @@
-import type { EnvironmentKind, SurfaceType } from "./terrain/terrainInfo";
+import type { SurfaceType } from "./terrain/terrainInfo";
 import type { RegionKey } from "./terrain/regions";
 import type { LightMode } from "./survival";
 import { loadingEn, loadingZh, type LoadingDict } from "./ui/loading/i18n";
@@ -34,8 +34,6 @@ export type DeepMarchDict = {
   /** Region toast on entering a new region (followed by its name). */
   regionEnter: string;
   hudDepth: string;
-  hudSpeed: string;
-  hudHeading: string;
   hudChunks: string;
   /** Debug stat-line words (numbers stay as they are). */
   hudFloaters: string;
@@ -65,8 +63,6 @@ export type DeepMarchDict = {
   hudGrounded: string;
   hudCeiling: string;
   hudScrape: string;
-  hudTerrain: string;
-  terrainKinds: Record<EnvironmentKind, string>;
   lockPrompt: string;
   gpuLost: string;
   shaderFailed: string;
@@ -123,8 +119,6 @@ export const deepMarchEn: DeepMarchDict = {
   menu: menuEn,
   regionEnter: "Entering",
   hudDepth: "Depth",
-  hudSpeed: "Speed",
-  hudHeading: "Heading",
   hudChunks: "chunks",
   hudFloaters: "float",
   hudTris: "tri",
@@ -161,17 +155,6 @@ export const deepMarchEn: DeepMarchDict = {
   hudGrounded: "Touching bottom",
   hudCeiling: "Touching ceiling",
   hudScrape: "Brushing rock",
-  hudTerrain: "Terrain",
-  terrainKinds: {
-    open: "Open water",
-    flat: "Flat seabed",
-    slope: "Slope",
-    cliff: "Cliff",
-    cave: "Cave",
-    overhang: "Overhang",
-    canyon: "Canyon",
-    ridge: "Ridge / peak",
-  },
   lockPrompt: "Click to look around · Esc releases the mouse",
   gpuLost: "Graphics context lost (GPU reset) — reload the page",
   shaderFailed: "Graphics shader failed",
@@ -234,8 +217,6 @@ export const deepMarchZh: DeepMarchDict = {
   menu: menuZh,
   regionEnter: "进入",
   hudDepth: "深度",
-  hudSpeed: "速度",
-  hudHeading: "航向",
   hudChunks: "区块",
   hudFloaters: "浮岩",
   hudTris: "三角",
@@ -272,17 +253,6 @@ export const deepMarchZh: DeepMarchDict = {
   hudGrounded: "触底",
   hudCeiling: "触顶",
   hudScrape: "擦碰岩壁",
-  hudTerrain: "地形",
-  terrainKinds: {
-    open: "开阔水域",
-    flat: "海床平地",
-    slope: "斜坡",
-    cliff: "峭壁",
-    cave: "洞穴",
-    overhang: "岩檐/拱下",
-    canyon: "峡谷/沟槽",
-    ridge: "山脊/峰顶",
-  },
   lockPrompt: "点击画面转动视角 · Esc 释放鼠标",
   gpuLost: "图形上下文丢失（GPU 重置）— 请刷新页面",
   shaderFailed: "图形着色器出错",

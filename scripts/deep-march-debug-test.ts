@@ -23,7 +23,7 @@ terrainTeleportChecks(c);
 
 /** A port that records what the panel asked of the dive. */
 function fakePort(log: string[]): DebugPort {
-  let light: "off" | "beam" | "high" = "beam", markers = false, observe = false;
+  let light: "off" | "beam" | "high" = "beam", markers = false, observe = false, stats = false;
   return {
     conserve: true,
     targets: () => [{ kind: "crack", key: "1", pose: () => ({ x: 1, y: 2, z: 3, yaw: 0, pitch: 0 }) }],
@@ -38,6 +38,8 @@ function fakePort(log: string[]): DebugPort {
     forgetScans: () => void log.push("forget"),
     markers: () => markers,
     setMarkers: (on) => void (markers = on),
+    stats: () => stats,
+    setStats: (on) => void (stats = on),
     fillBattery: () => void log.push("battery"),
   };
 }

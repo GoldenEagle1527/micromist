@@ -7,7 +7,6 @@ export type HintDict = {
   gotIt: string;
   /** Keyboard shortcut shown on the 「知道了」 button (desktop). */
   gotItKey: string;
-  hideAll: string;
   /** Setup screen switch (conserve mode). */
   setting: string;
   settingHint: string;
@@ -43,7 +42,6 @@ export const hintsEn: HintDict = {
   },
   gotIt: "Got it",
   gotItKey: "H",
-  hideAll: "No more tips",
   setting: "Beginner tips",
   settingHint: "A few short tips in the conservation mode; switching them back on starts them over.",
 };
@@ -78,7 +76,6 @@ export const hintsZh: HintDict = {
   },
   gotIt: "知道了",
   gotItKey: "H",
-  hideAll: "不再提示",
   setting: "新手提示",
   settingHint: "守恒模式里的几条简短提示；关掉后重新打开会从头显示。",
 };
