@@ -264,7 +264,22 @@
   letter-spacing: 0.08em;
   color: rgb(98 243 255 / 0.75);
   white-space: nowrap;
-  animation: dm-toast 9s ease-out both;
+}
+/* one-off explanations (observation banner, key chip): 2 s, then a smooth fade */
+.dm-once {
+  animation: dm-once 2.7s ease-out both;
+}
+@keyframes dm-once {
+  0% {
+    opacity: 0;
+  }
+  8%,
+  74% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
 }
 
 /* ---- look pad ---- */
@@ -486,7 +501,7 @@
 
 @media (prefers-reduced-motion: reduce) {
   .dm-toast,
-  .dm-key-chip,
+  .dm-once,
   .dm-battery[data-state="low"] .dm-battery-bar,
   .dm-battery[data-state="empty"] .dm-battery-status,
   .dm-dial.active .dm-thumb-ring {

@@ -41,10 +41,10 @@ export function SonarChip({ tel, labels }: { tel: Telemetry; labels: SonarHudLab
   );
 }
 
-/** Top-centre banner while the view shows the scan record instead of the live world. */
+/** Top-centre banner the first time ever the view shows the scan record (ControlPanel: once, 2 s, then fades). */
 export function ObserveBanner({ labels, area, touch }: { labels: SonarHudLabels; area: number; touch: boolean }) {
   return (
-    <div className="dm-observe-banner" role="status">
+    <div className="dm-observe-banner dm-once" role="status">
       <b>{labels.observeOn}</b>
       <small>{labels.observeHint}</small>
       <small>

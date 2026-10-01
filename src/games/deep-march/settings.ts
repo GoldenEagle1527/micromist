@@ -23,7 +23,14 @@ export type DeepMarchSettings = {
    * (on for touch devices). The dive always fills the browser window either way.
    */
   fullscreen: boolean | null;
+  /** One-off explanations already shown once (observation banner, desktop key chip): never again. */
+  seenTips: TipId[];
 };
+
+/** One-off explanatory banners / chips (shown the first time only). */
+export type TipId = "observe" | "keys";
+const TIP_IDS: readonly TipId[] = ["observe", "keys"];
+const parseTips = (raw: unknown): TipId[] => (Array.isArray(raw) ? TIP_IDS.filter((t) => raw.includes(t)) : []);
 
 export type SoundSettings = {
   muted: boolean;
@@ -70,6 +77,7 @@ export function loadSettings(): DeepMarchSettings {
     calmLights: raw?.calmLights === true,
     sound: parseSound(raw?.sound),
     fullscreen: typeof raw?.fullscreen === "boolean" ? raw.fullscreen : null,
+    seenTips: parseTips(raw?.seenTips),
   };
 }
 
@@ -83,5 +91,14 @@ export function saveSettings(s: DeepMarchSettings): void {
     calmLights: s.calmLights === true,
     sound: parseSound(s.sound),
     fullscreen: typeof s.fullscreen === "boolean" ? s.fullscreen : null,
+    seenTips: parseTips(s.seenTips),
   });
+}
+
+/** First time for this tip: true once, and it is remembered (the settings in the game-store). */
+export function takeTip(id: TipId): boolean {
+  const s = loadSettings();
+  if (s.seenTips.includes(id)) return false;
+  saveSettings({ ...s, seenTips: [...s.seenTips, id] });
+  return true;
 }

@@ -7,6 +7,7 @@
  * help sheet (also ?).
  */
 import { useCallback, useEffect, useRef, useState } from "react";
+import { takeTip, type TipId } from "../settings";
 import type { DeepMarchHandle } from "../scene/world";
 import { ActionFan, type FanPressId, type FanToggleId } from "./ActionFan";
 import { IconBase, IconMenu } from "./icons";
@@ -75,6 +76,22 @@ type Props = {
   labels: PanelLabels;
 };
 
+/** A one-off explanation: shown the first time `when` turns true (ever, per player), gone after its 2 s fade. */
+function useOnce(id: TipId, when: boolean): boolean {
+  const [shown, setShown] = useState(false);
+  useEffect(() => {
+    if (!when) {
+      setShown(false);
+      return;
+    }
+    if (!takeTip(id)) return;
+    setShown(true);
+    const t = window.setTimeout(() => setShown(false), 2700);
+    return () => window.clearTimeout(t);
+  }, [id, when]);
+  return shown;
+}
+
 export function ControlPanel({ game, panelOn, onTogglePanel, onExit, onFlip, sound, fullscreen, seed, onDebug, debugOpen, labels }: Props) {
   const tel = useTelemetry(game);
   // conserve mode only: tank, aim prompt, cache markers, recall (null in the free dive)
@@ -89,6 +106,8 @@ export function ControlPanel({ game, panelOn, onTogglePanel, onExit, onFlip, sou
   const [menu, setMenu] = useState(false);
   const [help, setHelp] = useState(false);
   const swimming = tel?.state === "swim";
+  const observeTip = useOnce("observe", tel?.scan.observe ?? false);
+  const keysTip = useOnce("keys", (tel?.ready ?? false) && !panelOn);
 
   // Esc: the menu (once the mouse is free; the debug panel keeps its own Esc); ? / F1: help
   const keys = useRef({ menu, help, debugOpen });
@@ -162,7 +181,7 @@ export function ControlPanel({ game, panelOn, onTogglePanel, onExit, onFlip, sou
           </>
         }
       />
-      {tel?.scan.observe ? <ObserveBanner labels={labels.sonar} area={tel.scan.area} touch={panelOn} /> : null}
+      {tel?.scan.observe && observeTip ? <ObserveBanner labels={labels.sonar} area={tel.scan.area} touch={panelOn} /> : null}
       <ConserveOverlays game={game} exp={exp} base={base} tide={tide} panelOn={panelOn} hints={hints} labels={labels} />
       <div className="dm-hud-buttons">
         {showBase && base && game ? (
@@ -189,7 +208,7 @@ export function ControlPanel({ game, panelOn, onTogglePanel, onExit, onFlip, sou
           <IconMenu />
         </button>
       </div>
-      {tel?.ready && !panelOn ? <div className="dm-key-chip">{labels.menu.keyChip}</div> : null}
+      {keysTip ? <div className="dm-key-chip dm-once">{labels.menu.keyChip}</div> : null}
       {panelOn && game ? (
         <>
           <LookPad onLook={game.addLook} />
