@@ -50,8 +50,11 @@ export const GAZE_LOOK = {
   },
   /** The plankton's current toward the base per phase (m/s). */
   flow: [0.25, 0.4, 0.55, 0.75] as const,
-  /** Sound floors per phase (0 … 1): rumble, dread loop; a squeeze's groan. */
-  audio: { rumble: [0.16, 0.26, 0.36, 0.55] as const, dread: [0, 0.22, 0.36, 0.5] as const, squeeze: 0.7 },
+  /**
+   * Sound floors per phase (0 … 1): the growl (the hostile drone loop, lower and muffled:
+   * scene/audioLoops.ts) from ① on, the synthesized sub rumble under it; a squeeze's groan.
+   */
+  audio: { growl: [0.2, 0.28, 0.36, 0.46] as const, rumble: [0.06, 0.1, 0.16, 0.3] as const, squeeze: 0.7 },
   /** ② on: the lighthouse light's reach × this (the swarm clouds it). */
   lighthouse: 0.5,
   /** 湮灭: the veil closes over this long (s), how dark, the visibility left (m). */

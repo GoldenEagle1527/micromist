@@ -9,6 +9,7 @@ Buildings, the lighthouse light, build mode and the base's HUD data. `world.ts` 
 | `innerRect.ts` | The ring wall's inner face as the base rules' rectangle (rounded corners) | no |
 | `dock.ts` | Departure detection (radius + 6 m hysteresis), docking at an energy tower | no |
 | `home.ts` | Where recall / death wakes the diver once the core stands | no |
+| `reactorHum.ts` | The volt reactor's hum: the `reactor` loop while one is 运行 (silent on 待机 / 停机), full within 10 m of its crystal, gone by 85 m (`REACTOR_HUM`), eased over 1.2 s | no |
 | `commands.ts` | Keys / HUD buttons → port and build mode, cues, notices; M9: `switch` (a lighthouse on / off, from anywhere) | no |
 | `telemetry.ts` | HUD data and command types | no |
 | `shapes.ts`, `structureShapes.ts`, `structureGeometry.ts` | Low-poly flat-shaded forms (≈ 180–240 triangles each, 6 m skirt into the ground), glow strips as a vertex attribute (0 hull, 1 strip, 2 lantern, 3 the volt reactor's amber crystal) | geometry only |
@@ -17,7 +18,7 @@ Buildings, the lighthouse light, build mode and the base's HUD data. `world.ts` 
 | `baseLightShader.ts`, `baseLight.ts` | The lighthouse light on terrain and buildings: nearest 2 lit lanterns, (1 − d²/r²)² falloff, sweeping beam | yes |
 | `beamShader.ts`, `beamColumn.ts` | Visible column + sweep cones, one instanced additive draw | yes |
 | `hologramShader.ts`, `hologram.ts` | Placement preview (green / red) + footprint and base-radius rings | yes |
-| `baseScene.ts` | Composition: energy tick, departures, docking, light and beams, hologram, telemetry, warm compile | yes |
+| `baseScene.ts` | Composition: energy tick, departures, docking, light and beams, the reactor hum, hologram, telemetry, warm compile | yes |
 
 Controls: G build mode, T next building, E / left click place (absorbing is off while building), Q base panel (lighthouse / reactor 「开启 / 关闭」 from anywhere, M9; 唤潮 at the base, M7: `commands.ts` → the tide director; off while a tide runs, and build mode / recall are off during its show); touch: 「建造」 / 「放置」 in the action fan, the 「基地」 HUD button, the build bar's cards and buttons.
 

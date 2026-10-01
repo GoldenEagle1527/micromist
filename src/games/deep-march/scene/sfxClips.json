@@ -9,6 +9,9 @@
     "bump": { "loop": false },
     "warn": { "loop": false },
     "flow": { "loop": true },
-    "dread": { "loop": true }
+    "dread": { "loop": true },
+    "reactor": { "loop": true },
+    "creak": { "loop": false },
+    "farping": { "loop": false }
   }
 }

@@ -9,7 +9,7 @@ huge, slow and announced (heard, then on the sonar); nothing appears at once, no
 | `eyeShader.ts`, `eyeMesh.ts` | The eye: a 48-triangle curtain round the breach's outer mouth carrying a per-pixel traced sphere (sclera, flowing iris fibres, vertical slit pupil); an analytic aperture keeps it to the breach's opening; additive, depth-tested, far-plane pinned, drawn within 760 m of the breach |
 | `anchorMesh.ts` | The four 封界 anchors: one instanced draw of solid octahedra (32 triangles), dim → lit, fogged |
 | `berserk.ts` | The berserk swarm: 10 omen silhouettes in one instanced draw (the omen shader with `USE_INSTANCING`), closing in 900 → 110 m over the phases, one coiled round the squeezed building, the echo giant over the dome from ③; long-sonar only |
-| `atmosphere.ts` | Plankton current toward the base, lighthouse light halved from ②, rumble / dread floors (into `ChaosDirector.floor`), a squeeze's groan; after 湮灭 the veil closes |
+| `atmosphere.ts` | Plankton current toward the base, lighthouse light halved from ②, the sound floor: the `growl` loop (the dread clip, lower and muffled, from ①) over a softer sub rumble (into `ChaosDirector.floor`), a squeeze's groan; after 湮灭 the veil closes |
 | `gazeDirector.ts` | Per frame after the chaos frame: ticks the port (interact = E / left mouse / the touch hold button near an anchor), calls the 封界潮 when both conditions hold and the diver is under the dome, draws the eye (preview: visual only), locks the layer after 湮灭; `telemetry()` for the HUD (`ui/gaze/`) |
 | `telemetry.ts` | What the HUD reads |
 
