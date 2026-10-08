@@ -18,16 +18,20 @@
  * the density gradient (sub-stepped so fast swims can't tunnel). In a bounded
  * world the ring wall is rock of the same density field, so it stops the diver
  * like any cliff; `edge` (the world rectangle) is only a backstop behind it: the
- * diver is held EDGE_MARGIN inside it (reached only without a wall).
+ * diver is held EDGE_MARGIN inside it (reached only without a wall). A crack's
+ * slit is cut water behind its face: a pane across it (terrain/slitBarrier.ts)
+ * holds the diver SLIT_MARGIN in front — a crack is never swum into.
  */
 import * as THREE from "three";
 import type { DensityField } from "../terrain/density";
 import { createLatticeSampler, type LatticeSampler, type RemovedPoint } from "../terrain/latticeSampler";
-import { clampInsideUnion, edgePassages } from "../terrain/edgePassages";
-import type { WorldRect } from "../terrain/siteLayout";
+import { createSlitBarrier, type SlitBarrier } from "../terrain/slitBarrier";
+import { clampInsideRect, type WorldRect } from "../terrain/siteLayout";
 
 /** Bounded world: how far inside the world rectangle the diver is held (world units). */
 export const EDGE_MARGIN = 2;
+/** The diver stays this far (m) in front of a crack's slit (it cannot be swum into). */
+export const SLIT_MARGIN = 1.2;
 
 export const DIVER = {
   /** World units per Minecraft block. */
@@ -91,8 +95,8 @@ export class DiverController {
   totalTicks = 0;
   /** Bounded world rectangle (null = endless). */
   edge: WorldRect | null = null;
-  /** Through cracks' passages past the edge (terrain/edgePassages.ts), from the field. */
-  private passages: WorldRect[] = [];
+  /** The pane across the cracks' slits (terrain/slitBarrier.ts), from the field. */
+  private barrier: SlitBarrier | null = null;
   /**
    * Strongest speed along a contact normal removed by collisions during the last
    * update(), in world units per second (0 = no real impact; grazing is ~0).
@@ -112,14 +116,14 @@ export class DiverController {
   constructor(field: DensityField, isRemovedPoint?: RemovedPoint) {
     this.field = field;
     this.lattice = createLatticeSampler(field, isRemovedPoint);
-    this.passages = edgePassages(field);
+    this.barrier = createSlitBarrier(field, SLIT_MARGIN);
   }
 
   /** Collide with another field from now on (the tide's switch to the next generation, scene/tide). */
   setField(field: DensityField, isRemovedPoint?: RemovedPoint): void {
     this.field = field;
     this.lattice = createLatticeSampler(field, isRemovedPoint);
-    this.passages = edgePassages(field);
+    this.barrier = createSlitBarrier(field, SLIT_MARGIN);
   }
 
   get state(): DiverState {
@@ -351,9 +355,9 @@ export class DiverController {
     }
   }
 
-  /** Hard world edge: clamp inside the rectangle (or a through crack's passage); an outward hit counts as a wall contact. */
+  /** Hard world edge: clamp inside the rectangle and in front of every crack's slit; an outward hit counts as a wall contact. */
   private keepInsideEdge(edge: WorldRect) {
-    const vn = clampInsideUnion(this.passages.length ? [edge, ...this.passages] : [edge], EDGE_MARGIN, this.position, this.velocity);
+    const vn = Math.max(clampInsideRect(edge, EDGE_MARGIN, this.position, this.velocity), this.barrier?.(this.position, this.velocity) ?? 0);
     if (vn <= 0) return;
     const hit = vn * DIVER.blockSize * DIVER.speedScale * DIVER.tickRate;
     if (hit > this.impact) this.impact = hit;

@@ -30,7 +30,7 @@ export function columnGeometry(r: MesherResponse, lod: number, wall: boolean): T
   const reg = new THREE.InterleavedBuffer(r.region, REGION_STRIDE);
   geo.setAttribute("aRegA", new THREE.InterleavedBufferAttribute(reg, 4, 0, true));
   geo.setAttribute("aRegB", new THREE.InterleavedBufferAttribute(reg, 3, 4, true));
-  // ring wall (conserve): the chaos byte → aChaos (crack glow, read by the chaos program only)
+  // ring wall (conserve): the chaos byte → aChaos (crack darkness, read by the chaos program only)
   if (wall) geo.setAttribute("aChaos", new THREE.InterleavedBufferAttribute(reg, 1, 7, true));
   geo.setIndex(new THREE.BufferAttribute(r.indices, 1));
   // the sonar scan (scene/sonarScan) reads the surface vertices (skirts excluded) straight from here

@@ -10,19 +10,21 @@
  *  - face(s, y): how far the inner face stands inside the outline (the face is
  *    sd = −face). Piecewise linear on a staggered lattice in (s, y): planar
  *    triangular facets, node offsets inset + relief·(quantised hash) + swell
- *    (periodic low-frequency octave) — minus the crack notches (M6);
+ *    (periodic low-frequency octave), flattened near the cracks (wallSlit.ts);
+ *  - the cracks: slits through a thin shell (wallSlit.ts; the density cuts them);
  *  - the outer face is sd = thickness: the inner face never moves, the wall thins
  *    outward (§4.1).
  */
 import { TERRAIN } from "./config";
 import type { WorldRect } from "./siteLayout";
 import { WALL_SHAPE, type WallShapeTuning } from "./wallConfig";
+import { createWallSlits, wallHash01 as hash01, type WallSlits } from "./wallSlit";
 
 /**
- * A crack (M6): centre arc length, opening width and depth into the wall, metres.
- * The conserve chaos also passes `through` (the notch runs past the outer face:
- * passable) and `extent` (the opening's arc range, m) for streaming beyond the
- * wall (M8); the geometry reads s / width / depth only.
+ * A crack (M6): centre arc length and opening width, metres. The conserve chaos also
+ * passes its model depth, `through` and `extent` (the opening's arc range, m); the
+ * terrain draws every crack the same way — a slit through the shell, never passable
+ * (wallSlit.ts) — and reads s / width only.
  */
 export type WallCrack = { s: number; width: number; depth: number; through?: boolean; extent?: readonly [number, number] };
 /** The wall of a bounded world (SiteLayout.wall): thickness in metres, cracks; anomaly: chaos stage 3+ terrain strength near the cracks (0 … 1, anomaly.ts; absent = 0). */
@@ -42,11 +44,9 @@ export type WallShape = {
   /** Outline length (period of s). */
   perimeter: number;
   thickness: number;
-  /** Range of face() without cracks: [inset, inset + relief + swell]. */
+  /** Range of face(): [inset, inset + relief + swell] (the cracks only flatten it). */
   faceMin: number;
   faceMax: number;
-  /** Deepest crack (face() ≥ faceMin − crackMax). */
-  crackMax: number;
   /** Facet lattice: nodes along s, rows, spacings. */
   ns: number;
   nr: number;
@@ -57,25 +57,13 @@ export type WallShape = {
   locate: (x: number, z: number, out: Float64Array) => void;
   /** Outline point at arc length s moved `inward` toward the inside: out = [x, z, nx, nz] (outward normal). */
   point: (s: number, inward: number, out: Float64Array) => void;
+  /** How far the inner face stands inside the outline (the face is sd = −face). */
   face: (s: number, y: number) => number;
+  /** The face without the cracks' flattening. */
   facet: (s: number, y: number) => number;
-  crack: (s: number, y: number) => number;
-  /** Open cracks in the spec (M8: the glow weight, terrain/crackWeight.ts). */
-  notches: number;
-  /** Crack i's opening profile at (s, y): 1 on its (jagged) centre line, 0 beyond its half-width. */
-  notch: (i: number, s: number, y: number) => number;
-  /** Crack i's depth into the wall (base units). */
-  notchDepth: (i: number) => number;
+  /** The open cracks' slits (count 0: none). */
+  slits: WallSlits;
 };
-
-function hash01(seed: number, i: number, j: number): number {
-  let h = (seed ^ 0x2545f491) >>> 0;
-  h = Math.imul(h ^ i, 0x85ebca6b) >>> 0;
-  h = Math.imul((h ^ (h >>> 13)) ^ j, 0xc2b2ae35) >>> 0;
-  h ^= h >>> 16;
-  return (h >>> 0) / 4294967296;
-}
-const smooth01 = (t: number) => (t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t));
 
 /** rect: the world rectangle in base units. */
 export function createWallShape(rect: WorldRect, spec: WallSpec, seed: number, t: WallShapeTuning = WALL_SHAPE): WallShape {
@@ -102,8 +90,6 @@ export function createWallShape(rect: WorldRect, spec: WallSpec, seed: number, t
       h[j * ns + i] = inset + relief * q + swell * (0.5 + 0.5 * wave);
     }
   }
-  const cracks = spec.cracks.map((c) => ({ s: c.s / U, half: Math.max(1e-6, c.width / U / 2), depth: c.depth / U, jag: (t.crackJag * c.width) / U, ph: hash01(seed, Math.round(c.s), 3) }));
-  const jagP = t.crackJagPeriod / U;
 
   const locate = (x: number, z: number, out: Float64Array) => {
     const dx = x - cx, dz = z - cz;
@@ -165,28 +151,19 @@ export function createWallShape(rect: WorldRect, spec: WallSpec, seed: number, t
     return fu >= v ? B0 + (B1 - B0) * fu + (T1 - B1) * v : B0 + (T0 - B0) * v + (T1 - T0) * fu;
   };
 
-  const profile = (c: (typeof cracks)[number], s: number, y: number): number => {
-    let ds_ = s - c.s;
-    ds_ -= P * Math.round(ds_ / P);
-    const tri = 2 * Math.abs(2 * ((y / jagP + c.ph) - Math.floor(y / jagP + c.ph + 0.5))) - 1;
-    return smooth01(1 - Math.abs(ds_ + c.jag * tri) / c.half);
-  };
-  const crack = (s: number, y: number): number => {
-    let d = 0;
-    for (const c of cracks) {
-      const p = profile(c, s, y);
-      if (p * c.depth > d) d = p * c.depth;
-    }
-    return d;
-  };
-  const face = cracks.length ? (s: number, y: number) => facet(s, y) - crack(s, y) : facet;
+  const faceMax = inset + relief + swell;
+  const slits = createWallSlits(spec.cracks, seed, P, faceMax, t);
+  const keep = 1 - t.crackRelief;
+  const face = slits.count
+    ? (s: number, y: number) => {
+        const h = facet(s, y), f = slits.flat(s);
+        return f > 0 ? inset + (h - inset) * (1 - f * keep) : h;
+      }
+    : facet;
 
   return {
     cx, cz, a, b, rc, perimeter: P, thickness: spec.thickness / U,
-    faceMin: inset, faceMax: inset + relief + swell, crackMax: cracks.reduce((m, c) => Math.max(m, c.depth), 0),
-    ns, nr, ds, dy, y0, locate, point, face, facet, crack,
-    notches: cracks.length,
-    notch: (i, s, y) => profile(cracks[i], s, y),
-    notchDepth: (i) => cracks[i].depth,
+    faceMin: inset, faceMax,
+    ns, nr, ds, dy, y0, locate, point, face, facet, slits,
   };
 }

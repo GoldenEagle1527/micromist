@@ -1,11 +1,10 @@
 /**
  * Streaming beyond the world rectangle at the cracks (MVP plan follow-up "M3
  * deviation #5", M8). The bounded world streams no column wholly outside its cell
- * rectangle (chunks.ts), but a crack's notch runs outward past the outline: a
- * stage-2 crack 40–70 % of the thickness T deep, a through crack T + margin. Each
- * open crack adds one world rectangle: its opening's arc range (plus the jag, a
- * side) from the outline out to its reach — T for a through crack, else its
- * depth — plus one column of margin. Columns overlapping it are streamed too.
+ * rectangle (chunks.ts), but a crack's cut runs past the outline to WALL_SHAPE.slitBack
+ * (wallSlit.ts). Each open crack adds one world rectangle: its opening's arc range
+ * (plus the jag, a side) from the inner face's deepest inset out to slitBack, plus one
+ * column of margin. Columns overlapping it are streamed too.
  * No cracks → no rectangles: the request sequence is exactly the rectangle-only one.
  */
 import type { WorldRect } from "./siteLayout";
@@ -21,9 +20,9 @@ const SAMPLES = 9;
  */
 export function crackReachRects(shape: WallShape, cracks: readonly WallCrack[], worldScale: number, margin: number): WorldRect[] {
   const out = new Float64Array(4);
+  const reach = WALL_SHAPE.slitBack / WALL_UNIT;
   return cracks.map((c) => {
     const half = (c.width / 2) * (1 + 2 * WALL_SHAPE.crackJag) / WALL_UNIT;
-    const reach = (c.through ? shape.thickness * WALL_UNIT : c.depth) / WALL_UNIT;
     const r = { x0: Infinity, z0: Infinity, x1: -Infinity, z1: -Infinity };
     for (let i = 0; i < SAMPLES; i++) {
       const s = c.s / WALL_UNIT - half + (2 * half * i) / (SAMPLES - 1);
