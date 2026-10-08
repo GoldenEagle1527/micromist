@@ -32,9 +32,29 @@ export const WALL_SHAPE = {
   voidLo: -20,
   voidHi: 44,
   voidGradient: 4,
-  /** Cracks (M6): jag amplitude (× width) and period of the zigzag down the face. */
+  /**
+   * Cracks: slits torn through a thin shell (wallSlit.ts). Near a crack the facet relief
+   * flattens (share kept: crackRelief) up to crackFlat m past its edge, blending back over
+   * crackBlend m, so the face there stands inset … inset + crackRelief · (relief + swell) in.
+   */
+  crackFlat: 30,
+  crackBlend: 50,
+  crackRelief: 0.15,
+  /** Torn edges: jag amplitude (× width, at most crackJagMax m), two incommensurate periods down the face. */
   crackJag: 0.3,
+  crackJagMax: 5,
   crackJagPeriod: 28,
+  crackJagPeriod2: 11,
+  /** The opening: a lens of half height slitHalfH around slitY (m), the opening's width wide. */
+  slitY: 14,
+  slitHalfH: 40,
+  /** The cut ends this far past the outline (m; short of the thinnest wall, 24 m: never through). */
+  slitBack: 16,
+  /** Steepness of the cut's front (it leaves terrain values alone ≥ RAW_CAP / slitFront base units in front of the face). */
+  slitFront: 8,
+  /** Lit rock lip behind the face (m) before the dark, which is full slitDark m further in. */
+  slitShell: 5,
+  slitDark: 3,
   /** Wall material weight: fades out over this distance in front of the face. */
   materialBand: 18,
 } as const;

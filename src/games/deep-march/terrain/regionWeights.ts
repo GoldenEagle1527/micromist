@@ -16,7 +16,7 @@
  * are exactly what they were before the wall existed (a zero weight never wins a
  * remainder).
  *
- * Chaos byte (M8, the former padding): the crack glow weight (density.crackWeight,
+ * Chaos byte (M8, the former padding): the crack darkness weight (density.crackWeight,
  * crackWeight.ts, a pure function of the position) × 255, rounded; 0 without open
  * cracks, so every other byte — and without cracks all eight — is exactly as before.
  */
@@ -28,7 +28,7 @@ export const REGION_GRID = 2;
 export const REGION_STRIDE = 8;
 /** Byte (weight slot) of the ring-wall material. */
 export const WALL_SLOT = REGION_COUNT;
-/** Byte of the crack glow weight (chaos seabed program: aChaos). */
+/** Byte of the crack darkness weight (chaos seabed program: aChaos). */
 export const CHAOS_BYTE = 7;
 const SLOTS = REGION_COUNT + 1;
 

@@ -7,8 +7,7 @@
  *  - the world's cell rectangle (siteLayout.ts layoutRect) grown by the ring wall's
  *    thickness T: the wall's outer face stands T beyond the outline, so its whole
  *    shell is terrain at every LOD level (without a wall: the rectangle itself);
- *  - each open crack's reach rectangle (crackReach.ts): a through notch runs past the
- *    outer face.
+ *  - each open crack's reach rectangle (crackReach.ts): its slit's cut past the outline.
  * A footprint that touches none of them has nothing to draw; the quadtree neither
  * requests it nor waits for it (a column straddling the extent's edge is built
  * whole, and its children outside the extent count as covered).

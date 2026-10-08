@@ -150,7 +150,7 @@ export function createDensityCache(core: DensityCore, baseRegions: RegionField, 
       wall.shape.locate(x, z, wallLoc);
       cWallSd[slot] = wallLoc[0];
       cWallS[slot] = wallLoc[1];
-      cWallTh[slot] = wall.identityFrom(wallLoc[0]);
+      cWallTh[slot] = wall.identityFrom(wallLoc[0], wallLoc[1]);
     }
     cX[slot] = x;
     cZ[slot] = z;

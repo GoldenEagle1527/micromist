@@ -50,7 +50,7 @@ export type DensityField = {
   wallMask: (x0: number, z0: number, x1: number, z1: number) => number;
   /** Wall material weight at a world position (0 … 1); null without a wall. */
   wallWeight: ((x: number, y: number, z: number) => number) | null;
-  /** Crack glow weight at a world position (0 … 1, crackWeight.ts); null without open cracks. */
+  /** Crack darkness weight at a world position (0 … 1: past a slit's lip, crackWeight.ts); null without open cracks. */
   crackWeight: CrackWeight | null;
 };
 

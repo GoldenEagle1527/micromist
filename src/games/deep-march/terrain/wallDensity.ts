@@ -8,6 +8,8 @@
  *   outer = max(iso + g·(T − sd),                    the outer face (thickness T) …
  *               iso + g_v·(voidLo − y), iso + g_v·(y − voidHi))   … and the void's floor / roof
  *   raw   = min(cap, min(smax_k(t, inner), outer))
+ *   cut   = min(raw, iso + g·cavity)                 the cracks' slits (wallSlit.ts): water
+ *                                                    inside each cut, terrain cleared too
  *
  * smax_k is the polynomial smooth max (C1 fillet where the wall meets the seabed,
  * monotone in t, = t exactly once inner ≤ t − k). Beyond the outer face everything is
@@ -16,10 +18,11 @@
  * (WALL_UNIT), so the world field and the base-scale classification field share it.
  *
  * Exactness / cost: with tMin a lower bound of t everywhere, the term is an exact
- * identity at every point with sd ≤ skipSd (inner ≤ tMin − k and outer ≥ cap), so the
+ * identity at every point with sd ≤ skipSd (inner ≤ tMin − k, outer ≥ cap and no cut
+ * reaches below the cap there), so the
  * density evaluates it only in columns reaching past skipSd (per-(x, z) test); nearer,
  * identityFrom(sd) gives the terrain value above which it is still an exact identity
- * at that (x, z) (a compare per sample), and bounds() tells when the wall alone fixes
+ * at that (x, z) (a compare per sample; +∞ where a cut may act), and bounds() tells when the wall alone fixes
  * the value (no terrain noise needed: the solid behind the face, the void beyond).
  */
 import { WALL_SHAPE, type WallShapeTuning } from "./wallConfig";
@@ -31,8 +34,8 @@ export type WallTerm = {
   skipSd: number;
   /** Wall-combined raw value (t = the terrain's raw value at the point). */
   apply: (t: number, sd: number, s: number, y: number) => number;
-  /** At signed distance sd: apply(t, sd, ·, ·) = t exactly for every t ≥ this (+∞: nowhere; −∞ for sd ≤ skipSd). */
-  identityFrom: (sd: number) => number;
+  /** At (sd, s): apply(t, sd, s, ·) = t exactly for every t ≥ this (+∞: nowhere; −∞ for sd ≤ skipSd). */
+  identityFrom: (sd: number, s: number) => number;
   /**
    * Terrain bounds [lo, hi] (lo ≤ cap) mapped through the term at one point: out = [lo', hi'].
    * Returns true if the combined value is the same for every t in [lo, hi] (then
@@ -56,6 +59,9 @@ export function createWallTerm(shape: WallShape, iso: number, capHi: number, tMi
   const band = t.materialBand / U;
   const face = shape.face;
   const voidBound = (y: number) => iso + gV * Math.max(vLo - y, y - vHi);
+  // the slits: a cut acts only where iso + g·cavity < cap, i.e. cavity < capR
+  const slits = shape.slits, cut = slits.count > 0, capR = (capHi - iso) / g;
+  const cutLow = iso - g * (slits.back + shape.faceMax); // cavity ≥ sd − back > −face − back
 
   const innerOf = (u: number) => (u >= -r1 ? iso + g * u : iso - g * r1 + g2 * (u + r1));
   const outerOf = (sd: number, y: number) => {
@@ -74,7 +80,23 @@ export function createWallTerm(shape: WallShape, iso: number, capHi: number, tMi
     if (outer < v) v = outer;
     return v < capHi ? v : capHi;
   };
-  const apply = (tv: number, sd: number, s: number, y: number): number => combine(tv, innerOf(sd + face(s, y)), outerOf(sd, y));
+  const apply = (tv: number, sd: number, s: number, y: number): number => {
+    const u = sd + face(s, y);
+    const v = combine(tv, innerOf(u), outerOf(sd, y));
+    if (!cut || !slits.near(sd, s, capR)) return v;
+    const c = iso + g * slits.cavity(sd, u, s, y);
+    return c < v ? c : v;
+  };
+  /** The cut at a point, out = mapped bounds (exact stays exact; a cut below lo fixes the value). */
+  const cutBounds = (exact: boolean, sd: number, s: number, y: number, out: Float64Array): boolean => {
+    if (!cut || !slits.near(sd, s, capR)) return exact;
+    const c = iso + g * slits.cavity(sd, sd + face(s, y), s, y);
+    if (c >= out[1]) return exact;
+    out[1] = c;
+    if (c > out[0]) return false;
+    out[0] = c;
+    return true;
+  };
 
   const bounds = (lo: number, hi: number, sd: number, s: number, y: number, out: Float64Array): boolean => {
     const inner = innerOf(sd + face(s, y)), outer = outerOf(sd, y);
@@ -82,27 +104,28 @@ export function createWallTerm(shape: WallShape, iso: number, capHi: number, tMi
     // v ≥ max(t, inner) ≥ max(lo, inner) ≥ min(outer, cap): clipped to exactly c
     if ((lo > inner ? lo : inner) >= c) {
       out[0] = out[1] = c;
-      return true;
+      return cutBounds(true, sd, s, y, out);
     }
     // inner − t ≥ inner − hi ≥ k for every t ≤ hi: v = inner, then the same clips
     if (inner - hi >= k) {
       out[0] = out[1] = inner < c ? inner : c;
-      return true;
+      return cutBounds(true, sd, s, y, out);
     }
     out[0] = combine(lo, inner, outer);
     out[1] = combine(hi, inner, outer);
-    return false;
+    return cutBounds(false, sd, s, y, out);
   };
 
   // identity for t with inner − t ≤ −k everywhere at this sd (inner ≤ its value at
   // faceMax) wherever the outer face stays above the cap (the margin covers rounding)
   const innerMax = (sd: number) => innerOf(sd + shape.faceMax);
-  const identityFrom = (sd: number) => (sd <= skipSd ? -Infinity : iso + g * (T - sd) >= capHi ? innerMax(sd) + k + 1e-9 : Infinity);
+  const identityFrom = (sd: number, s: number) =>
+    sd <= skipSd ? -Infinity : cut && slits.near(sd, s, capR) ? Infinity : iso + g * (T - sd) >= capHi ? innerMax(sd) + k + 1e-9 : Infinity;
 
   // largest u with inner(u) ≤ tMin − k, then the outer face ≥ cap
   const L = tMin - k;
   const uLim = L >= iso - g * r1 ? (L - iso) / g : -r1 + (L - (iso - g * r1)) / g2;
-  const skipSd: number = Math.min(uLim - shape.faceMax, T - (capHi - iso) / g) - 1e-9;
+  const skipSd: number = Math.min(uLim - shape.faceMax, T - (capHi - iso) / g, cut ? -shape.faceMax - capR / t.slitFront : Infinity) - 1e-9;
 
   return {
     shape,
@@ -110,7 +133,7 @@ export function createWallTerm(shape: WallShape, iso: number, capHi: number, tMi
     apply,
     identityFrom,
     bounds,
-    lowerAt: (y, lo) => Math.min(lo, voidBound(y)),
+    lowerAt: (y, lo) => Math.min(lo, voidBound(y), cut ? cutLow : Infinity),
     weight: (sd, s, y) => 1 - smooth01(-(sd + face(s, y)) / band),
   };
 }
