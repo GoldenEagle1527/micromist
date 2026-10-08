@@ -21,13 +21,13 @@ export type ForecastDict = {
 const crackEn = ({ opening, healing, open, through }: CrackForecast): string => {
   if (opening === 0 && healing === 0) return open === 0 ? "none" : `${open} open, unchanged`;
   const parts = [opening ? `${opening} would open` : "", healing ? `${healing} would heal` : "", `${open} open after`].filter(Boolean);
-  return parts.join(" · ") + (through ? ` (${through} passable)` : "");
+  return parts.join(" · ") + (through ? ` (${through} torn wide)` : "");
 };
 
 const crackZh = ({ opening, healing, open, through }: CrackForecast): string => {
   if (opening === 0 && healing === 0) return open === 0 ? "无" : `${open} 道张开，不变`;
   const parts = [opening ? `将新开 ${opening} 道` : "", healing ? `将愈合 ${healing} 道` : "", `潮后张开 ${open} 道`].filter(Boolean);
-  return parts.join(" · ") + (through ? `（可穿过 ${through} 道）` : "");
+  return parts.join(" · ") + (through ? `（其中 ${through} 道裂得很宽）` : "");
 };
 
 export const forecastEn: ForecastDict = {

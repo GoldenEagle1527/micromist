@@ -1,34 +1,37 @@
 /**
- * Where the four 封界 anchors stand (design doc §9.1 锁界): on the wall's outer
- * face, in the gap beyond the main breach, spread along it at two heights —
- * within the passage the breach opens (T + one terrain column past the outline).
- * Pure: from the generation's chaos and the world size.
+ * Where the four 封界 anchors stand (design doc §9.1 锁界): in the main slit's mouth,
+ * two by each edge at two heights, at the opening's plane — lit from inside the
+ * world (the slit cannot be swum through; darkness and the eye lie beyond it).
+ * Pure: from the generation's chaos and the world size (the ring outline, metres).
  */
 import { BREACH } from "../chaos/config";
 import type { ChaosState } from "../chaos/model";
-import { chaosViewOf, type ChaosCrackView } from "../chaos/view";
+import { ringOf } from "../chaos/ring";
 import { GAZE } from "./config";
 
 export type AnchorPoint = { x: number; y: number; z: number };
 
-/** The open main breach of a generation, as the scene places it (null when shut). */
-export function breachOf(chaos: ChaosState, size: { sitesX: number; sitesZ: number }): ChaosCrackView | null {
-  return chaosViewOf(chaos, size).cracks.find((c) => c.j === BREACH.j) ?? null;
-}
+/** Half the arc step used for the outline's normal (m). */
+const H = 0.5;
 
-/** The anchors around a breach mouth (thickness: the wall's T, m). */
-export function anchorPointsOf(breach: ChaosCrackView, thickness: number): AnchorPoint[] {
-  const A = GAZE.anchors, out = thickness + A.beyond;
-  return A.along.map((a, i) => ({
-    x: breach.x + breach.nx * out + breach.tx * a * breach.width,
-    y: A.heights[i],
-    z: breach.z + breach.nz * out + breach.tz * a * breach.width,
-  }));
+/** The anchors in the mouth of a slit centred at arc length s, `width` wide. */
+export function anchorPointsAt(s: number, width: number, size: { sitesX: number; sitesZ: number }): AnchorPoint[] {
+  const A = GAZE.anchors, ring = ringOf(size);
+  return A.heights.map((y, i) => {
+    const q = (y - A.slit.y) / A.slit.halfH;
+    const edge = Math.max(0, (width / 2) * Math.sqrt(Math.max(0, 1 - q * q)) - A.edgeIn);
+    const at = s + A.side[i] * edge;
+    const p = ring.point(at), a = ring.point(at - H), b = ring.point(at + H);
+    const l = Math.hypot(b.x - a.x, b.z - a.z) || 1;
+    // outward normal (tz, −tx) of the counter-clockwise tangent; the anchor stands `inward` m in
+    const nx = (b.z - a.z) / l, nz = -(b.x - a.x) / l;
+    return { x: p.x - nx * A.inward, y, z: p.z - nz * A.inward };
+  });
 }
 
 export function anchorPoints(chaos: ChaosState, size: { sitesX: number; sitesZ: number }): AnchorPoint[] {
-  const b = breachOf(chaos, size);
-  return b ? anchorPointsOf(b, chaos.wallThickness) : [];
+  const c = chaos.cracks.find((k) => k.j === BREACH.j && k.open);
+  return c ? anchorPointsAt(c.s, c.width, size) : [];
 }
 
 /** The unlit anchor within reach of the diver (closest), or −1. */

@@ -1,13 +1,12 @@
 /**
- * GLSL of the eye beyond the main breach (eyeMesh.ts), free of three imports.
- * Drawn on a low curtain just past the breach's outer mouth, but what it shows
- * is a sphere kilometres away, traced per pixel: the view ray hits the sphere,
- * the hit's place on it relative to where the eye looks gives sclera, iris
- * (slowly flowing radial fibres) and the vertical slit pupil (an ellipse on the
- * iris, half width uEyeR.z). An aperture mask keeps it to what the breach's
- * opening lets through (the ray must cross the outer face inside the breach and
- * between the void's floor and roof) even where the wall's far terrain is not
- * streamed; depth-tested against what is. Additive; fog-limited with a pierce.
+ * GLSL of the eye beyond the main slit (eyeMesh.ts), free of three imports.
+ * Drawn on a curtain inside the slit's dark cut, but what it shows is a sphere
+ * kilometres away, traced per pixel: the view ray hits the sphere, the hit's
+ * place on it relative to where the eye looks gives sclera, iris (slowly flowing
+ * radial fibres) and the vertical slit pupil (an ellipse on the iris, half width
+ * uEyeR.z). An aperture mask keeps it to the opening (the ray must cross the
+ * curtain's plane within the slit's width and lens band, soft edges); the lip's
+ * rock hides the rest (depth-tested). Additive over the black; fog-limited with a pierce.
  * Vertices past the far plane are pinned just inside it.
  */
 export const EYE_VERT = /* glsl */ `
@@ -22,9 +21,9 @@ export const EYE_FRAG = /* glsl */ `
 uniform vec3 uEyeC;        // sphere centre (world m)
 uniform vec4 uEyeR;        // x radius, y sin(iris angle), z slit half width, w slit height (iris shares)
 uniform vec3 uEyeLook;     // unit: where the eye looks (from its centre)
-uniform vec4 uMouth;       // xy outer-mouth centre (x, z), z half width, w edge (m)
+uniform vec4 uMouth;       // xy curtain centre (x, z), z half width, w edge (m)
 uniform vec4 uMouthN;      // xy outward normal, zw tangent
-uniform vec2 uBand;        // the void's floor / roof (m)
+uniform vec2 uBand;        // the slit's lens: bottom / top (m)
 uniform vec4 uEyeGlow;     // x gain, y fog pierce, z time, w presence
 uniform vec3 uIris;
 uniform vec3 uInner;

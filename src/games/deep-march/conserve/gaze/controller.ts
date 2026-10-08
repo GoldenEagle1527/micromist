@@ -31,7 +31,7 @@ export type GazeHost = {
   readonly ledger: ParticleLedger;
   /** The generation's gaze — the save's own object, changed in place; null when there is none. */
   gaze(): GazeState | null;
-  /** This generation's anchor points (beyond the main breach). */
+  /** This generation's anchor points (in the main slit's mouth). */
   anchors(): readonly AnchorPoint[];
   base(): GazeBase;
   /** The gaze changed: write when the throttle allows / now. */

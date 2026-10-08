@@ -9,7 +9,7 @@ import { GAZE, type GazePhase } from "./config";
 export type GazeState = {
   /** Game seconds of the sequence played (0 … GAZE.duration). */
   elapsed: number;
-  /** The four anchors beyond the breach, lit or not. */
+  /** The four anchors in the main slit's mouth, lit or not. */
   anchors: boolean[];
 };
 

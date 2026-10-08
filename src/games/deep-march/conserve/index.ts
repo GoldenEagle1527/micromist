@@ -15,7 +15,7 @@ export type { TideState, TideEvent, TideFallback, TidePhase } from "./tide/frame
 export type { Biome } from "./config";
 export type { SiteTable, Site } from "./world/siteTable";
 export type { WallState } from "./chaos/wallModel";
-export type { ChaosView, ChaosCrackView } from "./chaos/view";
+export type { ChaosView, ChaosCrackView, RimPoint } from "./chaos/view";
 export type { ChaosStage } from "./chaos/model";
 export { diveChaosOf, type DiveChaos } from "./platform/diveChaos";
 export type { ChaosPreviewSpec } from "./chaos/preview";
