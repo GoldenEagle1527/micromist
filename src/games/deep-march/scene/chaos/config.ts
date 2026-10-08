@@ -3,7 +3,7 @@
  * §7.3) in one table, so tuning after the visual check changes numbers only.
  * Stage 0 is all zeros (nothing is built or run). Stages 3–5 add the deep effects
  * (deepChaos.ts): global fog shift, plankton tint and distorted swarms, the global
- * audio wobble, the surge, the eye's blink and the shell beyond through cracks;
+ * audio wobble, the surge and the eye's blink (beyond a crack's slit: only darkness);
  * `late` the stage 3–4 omens (lateChaos.ts): false sonar readings, the lighthouse
  * dimming, the base's ghost echo (the anomalous terrain is baked: terrain/anomaly.ts).
  * Colours are linear RGB.
@@ -74,9 +74,8 @@ export const CHAOS_LOOK = {
   },
   glow: {
     color: [0.78, 0.86, 0.9] as const,
-    /** Surface glow in the notch (at weight 1) and the water haze in front of it. */
-    surface: 1.6,
-    haze: 0.22,
+    /** The faint water haze in front of a crack (its slit itself is dark: seabedChaos.ts CHAOS_VOID). */
+    haze: 0.12,
     /** Haze radius around the crack's centre line (m) and how far it reaches out of the wall. */
     hazeRadius: 26,
     /** The light carries through the turbidity this much better than lit rock (extinction ×). */
@@ -148,7 +147,7 @@ export const CHAOS_LOOK = {
     surge: { firstS: 90, every: [180, 300] as const, ramp: 5, hold: 20, fog: 0.22, audio: 0.35, plankton: 0.25, warp: 0.25, dread: 0.55, ghostEveryS: 4 },
     /** The eye blinks: every 150 … 300 s, a 2 s low warning, then the crack light dims to 0 for 1.5 s (0.35 s eases). */
     blink: { firstS: 60, every: [150, 300] as const, leadS: 2, offS: 1.5, ease: 0.35, rumble: 0.35 },
-    /** The pupil, a dark vertical bar sweeping across a through crack's shell: every 40 … 90 s, over 7 s. */
+    /** The pupil's sweep timing (chaosEvents.ts; nothing draws it since the slits went dark): every 40 … 90 s, over 7 s. */
     pupil: { every: [40, 90] as const, sweepS: 7, width: 0.12, dark: 0.85 },
   },
   late: {
@@ -182,24 +181,5 @@ export const CHAOS_LOOK = {
     homeGhost: { minHome: 160, distance: [120, 240] as const, turn: [70, 180] as const, delay: [0.6, 1.4] as const, gain: 0.6, sound: { gain: 0.24, rate: 0.92, lowpass: 1300 } },
     /** A debug-panel preview runs its first event this soon (s). */
     previewS: 8,
-  },
-  shell: {
-    /** Radius of the shell patch around a through crack's outer mouth (m), its half angle (rad), segments. */
-    radius: 90,
-    halfAngle: 1.3,
-    segments: 24,
-    /** Height band (m) and its soft edges. */
-    yBot: -60,
-    yTop: 110,
-    edge: 30,
-    /** Drawn while the camera is this close to the crack (m). */
-    near: 520,
-    /** Noise scale (m), drift (m/s), hue cycle (s), emissive gain, fog pierce (extinction ×). */
-    cell: 26,
-    drift: 2.5,
-    hueS: 48,
-    gain: 1.25,
-    pierce: 0.3,
-    colors: [[0.12, 0.75, 0.6], [0.55, 0.18, 0.85], [0.85, 0.2, 0.42]] as const,
   },
 } as const;
