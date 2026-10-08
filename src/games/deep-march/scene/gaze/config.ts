@@ -6,9 +6,13 @@
  */
 export const GAZE_LOOK = {
   eye: {
-    /** The curtain the eye is traced on: beyond the breach's outer mouth (m), half angle (rad), segments, band (m). */
-    curtain: { radius: 70, halfAngle: 1.45, segments: 24, yBot: -40, yTop: 70 },
-    /** The eye itself, a sphere traced in the shader: centre this far beyond the mouth (m), radius (m), height. */
+    /**
+     * The curtain the eye is traced on: inside the main slit's dark cut, `back` m past the
+     * outline (between the lit lip's end, ≤ 4 m, and the cut's end, 16 m: terrain WALL_SHAPE),
+     * following the outline across the opening; its band (m) spans the slit's lens.
+     */
+    curtain: { back: 9, yBot: -28, yTop: 56 },
+    /** The eye itself, a sphere traced in the shader: centre this far beyond the curtain (m), radius (m), height. */
     distance: 2400,
     size: 1500,
     centreY: 10,
@@ -28,11 +32,12 @@ export const GAZE_LOOK = {
     /** Turbidity pierce (extinction ×, of the distance to the curtain) and the draw distance from the breach (m). */
     pierce: 0.12,
     near: 760,
-    /** Fade at the breach's sides / the void's floor and roof (m). */
+    /** Fade at the opening's sides and its lens tips (m); the cut's rock decides the rest (depth-tested). */
     edge: 10,
-    /** The void beyond the wall is open between these heights (terrain/wallConfig.ts voidLo / voidHi). */
-    voidLo: -20,
-    voidHi: 44,
+    /** The slit's lens (terrain WALL_SHAPE.slitY ∓ slitHalfH, m) and how far its torn edge reaches past half the width (crackJagMax). */
+    bandLo: -26,
+    bandHi: 54,
+    jag: 5,
     /** The 封界潮: the pupil closes and the eye dims over this long (s). */
     closeS: 20,
   },

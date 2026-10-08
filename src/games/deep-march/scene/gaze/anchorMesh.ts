@@ -1,7 +1,7 @@
 /**
- * The four 封界 anchors beyond the main breach (design doc §9.1 锁界): solid
- * glowing octahedra (one instanced draw, 32 triangles) on the wall's outer
- * face — dim until lit, then bright and slowly turning. Fogged like the water;
+ * The four 封界 anchors in the main slit's mouth (design doc §9.1 锁界): solid
+ * glowing octahedra (one instanced draw, 32 triangles) hanging against the
+ * darkness by the opening's edges — dim until lit, then bright and slowly turning. Fogged like the water;
  * drawn only near the breach while a gaze is on. No lines, no sprites.
  */
 import * as THREE from "three";

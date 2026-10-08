@@ -1,10 +1,11 @@
 /**
  * The colossal eye (design doc §4.6 stage 5, D7, D12): the only part of the
- * thing beyond the wall that is ever seen, and only through the main breach. A
- * 24-segment curtain (48 triangles, one additive depth-tested draw) bent round
- * the breach's outer mouth carries a per-pixel traced sphere 1.5 km across
- * (eyeShader.ts). Placed once per breach; drawn only within `near` m of it.
- * Its look turns from past the world to the base; its slit opens and closes.
+ * thing beyond the wall that is ever seen, and only through the main slit, in its
+ * darkness. A 12-segment curtain (24 triangles, one additive depth-tested draw)
+ * inside the slit's dark cut, following the outline across the opening, carries a
+ * per-pixel traced sphere 1.5 km across (eyeShader.ts); the lip's rock hides the
+ * rest. Placed once per breach; drawn only within `near` m of it. Its look turns
+ * from past the world to the base; its slit opens and closes.
  */
 import * as THREE from "three";
 import type { ChaosCrackView } from "../../conserve";
@@ -33,12 +34,8 @@ export class EyeCurtain {
   private placed: ChaosCrackView | null = null;
 
   constructor(fog: FogUniforms) {
-    const L = GAZE_LOOK.eye, n = L.curtain.segments, c = L.colors;
+    const L = GAZE_LOOK.eye, c = L.colors;
     const geo = new THREE.BufferGeometry();
-    geo.setAttribute("position", new THREE.BufferAttribute(new Float32Array((n + 1) * 2 * 3), 3));
-    const idx: number[] = [];
-    for (let i = 0; i < n; i++) idx.push(2 * i, 2 * i + 1, 2 * i + 2, 2 * i + 1, 2 * i + 3, 2 * i + 2);
-    geo.setIndex(idx);
     geo.boundingSphere = new THREE.Sphere(new THREE.Vector3(), 1e9);
     this.u = {
       uEyeC: { value: this.centre },
@@ -46,7 +43,7 @@ export class EyeCurtain {
       uEyeLook: { value: this.look },
       uMouth: { value: new THREE.Vector4(0, 0, 1, L.edge) },
       uMouthN: { value: new THREE.Vector4(1, 0, 0, 1) },
-      uBand: { value: new THREE.Vector2(L.voidLo, L.voidHi) },
+      uBand: { value: new THREE.Vector2(L.bandLo, L.bandHi) },
       uEyeGlow: { value: new THREE.Vector4(L.gain, L.pierce, 0, 0) },
       uIris: { value: new THREE.Color(...c.iris) },
       uInner: { value: new THREE.Color(...c.inner) },
@@ -62,31 +59,42 @@ export class EyeCurtain {
     this.mesh.name = "gaze-eye";
   }
 
-  /** Bend the curtain round the breach's outer mouth (the wall's thickness past its outline point). */
-  place(c: ChaosCrackView, thickness: number): void {
-    const L = GAZE_LOOK.eye, C = L.curtain, n = C.segments;
-    const ox = c.x + c.nx * thickness, oz = c.z + c.nz * thickness;
-    const pos = this.mesh.geometry.getAttribute("position") as THREE.BufferAttribute;
-    for (let i = 0; i <= n; i++) {
-      const a = C.halfAngle * ((2 * i) / n - 1);
-      const x = ox + C.radius * (c.nx * Math.cos(a) + c.tx * Math.sin(a));
-      const z = oz + C.radius * (c.nz * Math.cos(a) + c.tz * Math.sin(a));
+  /** Lay the curtain inside the slit's dark cut, `curtain.back` m past the outline across the opening. */
+  place(c: ChaosCrackView): void {
+    const L = GAZE_LOOK.eye, C = L.curtain;
+    const pos = this.strip(c.rim.length);
+    c.rim.forEach((r, i) => {
+      const x = r.x + r.nx * C.back, z = r.z + r.nz * C.back;
       pos.setXYZ(2 * i, x, C.yBot, z);
       pos.setXYZ(2 * i + 1, x, C.yTop, z);
-    }
+    });
     pos.needsUpdate = true;
+    const ox = c.x + c.nx * C.back, oz = c.z + c.nz * C.back;
     this.centre.set(ox + c.nx * L.distance, L.centreY, oz + c.nz * L.distance);
-    (this.u.uMouth.value as THREE.Vector4).set(ox, oz, c.width / 2, L.edge);
+    (this.u.uMouth.value as THREE.Vector4).set(ox, oz, c.width / 2 + L.jag, L.edge);
     (this.u.uMouthN.value as THREE.Vector4).set(c.nx, c.nz, c.tx, c.tz);
     this.placed = c;
   }
 
-  update(c: ChaosCrackView | null, thickness: number, f: EyeFrame): void {
+  /** The curtain's vertex buffer for `samples` outline points (two rows), (re)built on a change. */
+  private strip(samples: number): THREE.BufferAttribute {
+    const geo = this.mesh.geometry;
+    const old = geo.getAttribute("position") as THREE.BufferAttribute | undefined;
+    if (old?.count === samples * 2) return old;
+    const idx: number[] = [];
+    for (let i = 0; i + 1 < samples; i++) idx.push(2 * i, 2 * i + 1, 2 * i + 2, 2 * i + 1, 2 * i + 3, 2 * i + 2);
+    const pos = new THREE.BufferAttribute(new Float32Array(samples * 2 * 3), 3);
+    geo.setAttribute("position", pos);
+    geo.setIndex(idx);
+    return pos;
+  }
+
+  update(c: ChaosCrackView | null, f: EyeFrame): void {
     const L = GAZE_LOOK.eye;
     const near = !!c && Math.hypot(f.camera.x - c.x, f.camera.z - c.z) < L.near;
     this.mesh.visible = near && f.presence > 0.001;
     if (!this.mesh.visible) return;
-    if (this.placed !== c) this.place(c!, thickness);
+    if (this.placed !== c) this.place(c!);
     const t = f.target, k = f.turn * f.turn * (3 - 2 * f.turn);
     const a = (1 - k) * L.turnFrom;
     const dx = t.x - this.centre.x, dz = t.z - this.centre.z;

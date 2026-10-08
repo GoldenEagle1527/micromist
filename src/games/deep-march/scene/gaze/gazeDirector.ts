@@ -105,13 +105,13 @@ export class GazeDirector {
   private drawEye(i: GazeFrameInput, g: GazeView | null, center: { x: number; y: number; z: number }): void {
     const L = GAZE_LOOK.eye, v = this.d.chaos.current();
     const breach: ChaosCrackView | null = v?.stage === 5 ? (v.cracks.find((c) => c.breach) ?? null) : null;
-    if (!breach || !v) return this.eye.update(null, 0, { camera: i.camera, target: center, turn: 0, slit: 0, presence: 0, time: i.time });
+    if (!breach || !v) return this.eye.update(null, { camera: i.camera, target: center, turn: 0, slit: 0, presence: 0, time: i.time });
     const clock = g ? g.elapsed : v.preview ? i.time - L.previewDelay : 0;
     const turn = Math.min(1, Math.max(0, clock / L.turnS));
     const want = this.sealing ? 0 : turn < 1 ? 0.45 : g?.phase === 3 ? 0.95 : this.d.lampOn() ? 0 : 0.55;
     this.slit += (want - this.slit) * (1 - Math.exp(-i.dt / L.pupilS));
     const presence = this.sealing ? Math.max(0, 1 - this.closing / L.closeS) : 1;
-    this.eye.update(breach, v.wallThickness, { camera: i.camera, target: { x: center.x, y: center.y + 20, z: center.z }, turn, slit: this.slit, presence, time: i.time });
+    this.eye.update(breach, { camera: i.camera, target: { x: center.x, y: center.y + 20, z: center.z }, turn, slit: this.slit, presence, time: i.time });
   }
 
   /** 湮灭: nothing more to do in this world — locked, held, the veil closing. */

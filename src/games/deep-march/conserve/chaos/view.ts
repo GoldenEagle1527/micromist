@@ -9,6 +9,9 @@ import { BREACH, CHAOS, RING } from "./config";
 import { chaosIntensity, type ChaosStage, type ChaosState } from "./model";
 import { ringOf } from "./ring";
 
+/** An outline point (world m) with its outward normal. */
+export type RimPoint = { x: number; z: number; nx: number; nz: number };
+
 export type ChaosCrackView = {
   j: number;
   /** Outline point at the crack's arc length (world m). */
@@ -25,6 +28,8 @@ export type ChaosCrackView = {
   through: boolean;
   /** The main breach (stage 5: the eye is beyond it). */
   breach: boolean;
+  /** The outline across the opening (± RIM.pad m past its edges): the eye's curtain follows it. */
+  rim: RimPoint[];
 };
 
 export type ChaosView = {
@@ -46,6 +51,8 @@ export type ChaosView = {
 
 /** Half the arc step used for the tangent (m). */
 const H = 0.5;
+/** Outline samples across an opening, and how far past its edges they reach (m: ≥ the terrain's jag, 5 m). */
+export const RIM = { samples: 13, pad: 12 } as const;
 
 /** Position of m inside its stage's band of m (CHAOS.stages). */
 export function stageWithin(stage: ChaosStage, m: number): number {
@@ -58,11 +65,19 @@ export function stageWithin(stage: ChaosStage, m: number): number {
 
 export function chaosViewOf(c: ChaosState, size: { sitesX: number; sitesZ: number }, preview = false): ChaosView {
   const ring = ringOf(size);
-  const place = (k: ChaosState["cracks"][number]): ChaosCrackView => {
-    const p = ring.point(k.s), a = ring.point(k.s - H), b = ring.point(k.s + H);
+  const at = (s: number): RimPoint & { tx: number; tz: number } => {
+    const p = ring.point(s), a = ring.point(s - H), b = ring.point(s + H);
     const l = Math.hypot(b.x - a.x, b.z - a.z) || 1;
     const tx = (b.x - a.x) / l, tz = (b.z - a.z) / l;
-    return { j: k.j, x: p.x, z: p.z, tx, tz, nx: tz, nz: -tx, width: k.width, depth: k.depth, through: k.through, breach: k.j === BREACH.j };
+    return { x: p.x, z: p.z, tx, tz, nx: tz, nz: -tx };
+  };
+  const place = (k: ChaosState["cracks"][number]): ChaosCrackView => {
+    const half = k.width / 2 + RIM.pad, n = RIM.samples - 1;
+    const rim = Array.from({ length: RIM.samples }, (_, i) => {
+      const { x, z, nx, nz } = at(k.s - half + (2 * half * i) / n);
+      return { x, z, nx, nz };
+    });
+    return { j: k.j, ...at(k.s), width: k.width, depth: k.depth, through: k.through, breach: k.j === BREACH.j, rim };
   };
   return {
     stage: c.stage,

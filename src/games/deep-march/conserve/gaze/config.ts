@@ -1,7 +1,7 @@
 /**
  * 直视 (stage 5) tuning (design doc §7.3, §9.1; G1): the 45-minute sequence of
  * game time, what each phase does to the base, the 封界 conditions and the
- * four anchors in the gap beyond the main breach. Data only.
+ * four anchors in the main slit's mouth. Data only.
  */
 import type { ParticleCounts } from "../particles/particleVector";
 
@@ -24,11 +24,19 @@ export const GAZE = {
      * (as genesis folds the missing kinds into lumen and ferro, §12).
      */
     cost: { abyssal: 50, lumen: 75 } satisfies ParticleCounts,
-    /** Placement on the wall's outer face: share of the breach width along it, height (m). */
-    along: [-0.32, -0.12, 0.12, 0.32] as const,
-    heights: [4, 24, 4, 24] as const,
-    /** Beyond the outer face (m; inside the passage's reach of T + one terrain column). */
-    beyond: 12,
+    /**
+     * Placement in the main slit's mouth (it cannot be swum through: terrain/slitBarrier.ts):
+     * two by each edge (side −1 / +1 along the ring), low and high, `edgeIn` m inside the
+     * opening's (torn, ≤ 5 m) edge at that height, `inward` m in from the outline — the face
+     * there stands 4 … 9.7 m in (terrain/wallSlit.ts), so an anchor hangs at the opening's
+     * plane or just behind it, within reach of a diver held at the plane.
+     */
+    side: [-1, -1, 1, 1] as const,
+    heights: [6, 24, 6, 24] as const,
+    edgeIn: 12,
+    inward: 4,
+    /** The slit's lens (terrain WALL_SHAPE.slitY / slitHalfH, m). */
+    slit: { y: 14, halfH: 40 },
     /** The diver within this distance (m) holds interact for `hold` s to light one. */
     reach: 10,
     hold: 2,
