@@ -11,10 +11,12 @@
  *    pixel footprint (≥ minPx, energy-conserving: thinner than a pixel = dimmer,
  *    never wider), faded out before a noise cell gets small on screen: soft,
  *    anti-aliased, no shimmer; only in patches (a smooth per-vertex mask);
- *  - crack light (stage 2+): the notch's baked glow weight (aChaos, regionWeights
- *    byte 7) lights its deep "membrane", and the water in front of each open crack
- *    glows (closest approach of the view ray to its centre line); both pierce the
- *    turbidity (pale light, the eye's, D7 / D12).
+ *  - crack light (stage 2+): the water in front of each open crack glows faintly
+ *    (closest approach of the view ray to its centre line), piercing the turbidity
+ *    (pale light, the eye's, D7 / D12);
+ *  - crack darkness: past a slit's lit lip every surface is black — no lamps, no
+ *    turbidity, no sonar (the baked weight aChaos, regionWeights byte 7; CHAOS_VOID,
+ *    after the sonar), fading out only toward the far plane: the slit opens onto nothing.
  * Kept free of three imports except the uniform types (node tests compile it).
  */
 import * as THREE from "three";
@@ -35,7 +37,7 @@ varying vec3 vChaos;
 #endif
 `;
 
-/** After vWPos: x = crack glow weight, y = scar weight (along the tangent, with the notch's jag). */
+/** After vWPos: x = crack darkness weight, y = scar weight (along the tangent, with the notch's jag). */
 export const CHAOS_VERT_MAIN = /* glsl */ `
 #ifdef DM_CHAOS
   {
@@ -112,9 +114,15 @@ export const CHAOS_OPAQUE = /* glsl */ `
         float r = c.z * 0.01;
         haze += c.w * exp(-dot(q, q) / (r * r));
       }
-      float lit = uCrackGlow.x * vChaos.x * vChaos.x * uChaos.y + uCrackGlow.y * haze;
-      outgoingLight += uCrackColor * (lit * exp(-uFogK * dist * uCrackGlow.z));
+      outgoingLight += uCrackColor * (uCrackGlow.x * haze * exp(-uFogK * dist * uCrackGlow.y));
     }
+#endif
+`;
+
+/** After the sonar: past a slit's lip, nothing (black, fading to the background near the far plane). */
+export const CHAOS_VOID = /* glsl */ `
+#ifdef DM_CHAOS
+    outgoingLight *= 1.0 - vChaos.x * (1.0 - smoothstep(uFar * 0.7, uFar, dist));
 #endif
 `;
 
@@ -129,7 +137,7 @@ export type ChaosUniforms = {
   uCrackColor: { value: THREE.Color };
   /** Open cracks: x, z (m), haze radius (m), intensity (0 = unused slot). */
   uCrack: { value: THREE.Vector4[] };
-  /** Surface gain, haze gain, fog pierce. */
+  /** Haze gain, fog pierce. */
   uCrackGlow: { value: THREE.Vector4 };
   /** Scar tint (xyz) and darkness (w). */
   uScarLook: { value: THREE.Vector4 };
@@ -157,7 +165,7 @@ export function createChaosUniforms(): ChaosUniforms {
     uVeinColor: { value: new THREE.Color(...L.veins.color) },
     uCrackColor: { value: new THREE.Color(...L.glow.color) },
     uCrack: { value: Array.from({ length: CHAOS_CRACK_N }, () => new THREE.Vector4(0, 0, 1, 0)) },
-    uCrackGlow: { value: new THREE.Vector4(L.glow.surface, L.glow.haze, L.glow.pierce, 0) },
+    uCrackGlow: { value: new THREE.Vector4(L.glow.haze, L.glow.pierce, 0, 0) },
     uScarLook: { value: new THREE.Vector4(...L.scar.tint, L.scar.dark) },
     uScar: { value: scar },
     uScarT: { value: scarT },

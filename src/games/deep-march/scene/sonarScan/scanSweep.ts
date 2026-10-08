@@ -21,6 +21,8 @@ export type ScanSource = {
   surface: number;
   /** World AABB: min xyz, max xyz. */
   box: ArrayLike<number>;
+  /** Per-vertex crack darkness bytes (aChaos: array[i · stride + offset], 0 … 255); a triangle past a slit's lip (> half) is not recorded. */
+  dark?: { array: ArrayLike<number>; stride: number; offset: number };
 };
 
 type Queued = { src: ScanSource; near: number };
@@ -89,14 +91,14 @@ export class ScanSweep {
   /** Bin a source's surface triangles that touch the sphere; returns the triangles looked at. */
   private read(s: ScanSource): number {
     const { x, y, z, r } = this.ping.sphere, r2 = r * r, T = SCAN_GRID.tile;
-    const p = s.positions, n = s.normals, ix = s.index, surf = s.surface;
+    const p = s.positions, n = s.normals, ix = s.index, surf = s.surface, dk = s.dark;
     const tris = ix ? ix.length / 3 : Math.floor(surf / 3);
     const q = [0, 0, 0, 0, 0, 0, 0, 0, 0], v = [0, 0, 0];
     for (let t = 0; t < tris; t++) {
       let skip = false, reach = false;
       for (let k = 0; k < 3; k++) {
         const i = ix ? ix[t * 3 + k] : t * 3 + k;
-        if (i >= surf) skip = true;
+        if (i >= surf || (dk && dk.array[i * dk.stride + dk.offset] > 127)) skip = true;
         v[k] = i;
         const qx = (q[k * 3] = snapXZ(p[i * 3])), qy = (q[k * 3 + 1] = snapY(p[i * 3 + 1])), qz = (q[k * 3 + 2] = snapXZ(p[i * 3 + 2]));
         const dx = qx - x, dy = qy - y, dz = qz - z;

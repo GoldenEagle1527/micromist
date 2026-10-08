@@ -126,6 +126,7 @@ export class SonarScanner {
  * The column meshes' surfaces as drawn now: chunks.ts tags each geometry with its
  * surface vertex count (skirts follow) and a mesh dissolving away in a LOD crossfade
  * with userData.fadeDir < 0 — skipped, its replacement covers the same ground.
+ * Surfaces past a crack's lit lip (dark: the slit opens onto nothing) are not recorded.
  */
 export function sourcesOf(terrain: THREE.Object3D): ScanSource[] {
   const out: ScanSource[] = [];
@@ -135,7 +136,10 @@ export function sourcesOf(terrain: THREE.Object3D): ScanSource[] {
     const pos = g?.getAttribute("position"), nrm = g?.getAttribute("normal"), bb = g?.boundingBox;
     if (!o.visible || (o.userData.fadeDir ?? 0) < 0 || typeof n !== "number" || !pos || !nrm || !bb) continue;
     const index = g!.getIndex()?.array ?? null;
-    out.push({ positions: pos.array, normals: nrm.array, index, surface: n, box: [bb.min.x, bb.min.y, bb.min.z, bb.max.x, bb.max.y, bb.max.z] });
+    // the crack darkness (chunkUpload.ts aChaos): what lies past a slit's lip never echoes
+    const ch = g!.getAttribute("aChaos") as THREE.InterleavedBufferAttribute | undefined;
+    const dark = ch?.isInterleavedBufferAttribute ? { array: ch.data.array as ArrayLike<number>, stride: ch.data.stride, offset: ch.offset } : undefined;
+    out.push({ positions: pos.array, normals: nrm.array, index, surface: n, box: [bb.min.x, bb.min.y, bb.min.z, bb.max.x, bb.max.y, bb.max.z], dark });
   }
   return out;
 }

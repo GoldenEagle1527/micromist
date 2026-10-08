@@ -32,7 +32,7 @@ import { DETAIL_GLSL } from "./detailNormal";
 import { BL_DECLS } from "./base/baseLightShader";
 import { DECLS, EMISSIVE_FRAGMENT, LIGHTS_END_FRAGMENT, MAP_FRAGMENT, OPAQUE_FRAGMENT, WATER_GLSL } from "./seabedShader";
 import { TIDE_FRONT_DECLS, TIDE_FRONT_EMISSIVE, TIDE_FRONT_FRAGMENT } from "./tide/tideFrontShader";
-import { CHAOS_DECLS, CHAOS_EMISSIVE, CHAOS_MAP, CHAOS_OPAQUE, CHAOS_VERT_DECLS, CHAOS_VERT_MAIN } from "./chaos/seabedChaos";
+import { CHAOS_DECLS, CHAOS_EMISSIVE, CHAOS_MAP, CHAOS_OPAQUE, CHAOS_VERT_DECLS, CHAOS_VERT_MAIN, CHAOS_VOID } from "./chaos/seabedChaos";
 import { SONAR_OPAQUE } from "./sonar";
 import type { LodFadeMaterial, SeabedMaterial, SeabedOptions, SeabedVariant, TideFrontMaterial } from "./seabedTypes";
 
@@ -94,7 +94,7 @@ export function createSeabedMaterial(opts: SeabedOptions): SeabedMaterial {
       )
       .replace(
         "#include <opaque_fragment>",
-        chaos ? OPAQUE_FRAGMENT.replace(SONAR_OPAQUE, CHAOS_OPAQUE + SONAR_OPAQUE) : OPAQUE_FRAGMENT,
+        chaos ? OPAQUE_FRAGMENT.replace(SONAR_OPAQUE, CHAOS_OPAQUE + SONAR_OPAQUE + CHAOS_VOID) : OPAQUE_FRAGMENT,
       );
     if (extra.uTideFront) shader.fragmentShader = shader.fragmentShader.replace("#include <common>", "#include <common>" + TIDE_FRONT_DECLS);
     if (extra.uLodFade) shader.fragmentShader = shader.fragmentShader.replace("#include <common>", "#include <common>\nuniform vec2 uLodFade;");
