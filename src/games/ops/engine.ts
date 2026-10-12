@@ -46,7 +46,7 @@ export function createInitialState(): OpsState {
   const plots: Plot[] = [
     {
       id: "plot-a1",
-      host: "farm-a1.local",
+      host: "web-a1.local",
       status: "growing",
       crop: "lettuce",
       growth: 42,
@@ -55,7 +55,7 @@ export function createInitialState(): OpsState {
     },
     {
       id: "plot-a2",
-      host: "farm-a2.local",
+      host: "web-a2.local",
       status: "ready",
       crop: "tomato",
       growth: 100,
@@ -64,7 +64,7 @@ export function createInitialState(): OpsState {
     },
     {
       id: "plot-b1",
-      host: "farm-b1.local",
+      host: "api-b1.local",
       status: "empty",
       crop: null,
       growth: 0,
@@ -73,7 +73,7 @@ export function createInitialState(): OpsState {
     },
     {
       id: "plot-b2",
-      host: "farm-b2.local",
+      host: "api-b2.local",
       status: "growing",
       crop: "potato",
       growth: 18,
@@ -117,7 +117,7 @@ export function createInitialState(): OpsState {
     coins: 120,
     day: 1,
     plots,
-    inventory: [{ id: "inv-seed-pack", crop: "lettuce", qty: 2 }],
+    inventory: [{ id: "inv-backup-pack", crop: "lettuce", qty: 2 }],
     seeds,
     cron,
     logs: [],
@@ -125,8 +125,8 @@ export function createInitialState(): OpsState {
     sidebarCollapsed: false,
   };
 
-  state = pushLog(state, "ok", "panel boot · farm node cluster online");
-  state = pushLog(state, "info", "loaded 6 plots · 3 cron jobs · seed store ready");
+  state = pushLog(state, "ok", "panel boot · node cluster online");
+  state = pushLog(state, "info", "loaded 6 websites · 3 cron jobs · app store ready");
   return state;
 }
 
@@ -160,23 +160,23 @@ export function toggleSidebar(state: OpsState): OpsState {
 export function buySeed(state: OpsState, crop: CropId): OpsState {
   const price = SEED_PRICE[crop];
   if (state.coins < price) {
-    return pushLog(state, "warn", `buy ${crop} seed failed · insufficient coins (${state.coins}/${price})`);
+    return pushLog(state, "warn", `install ${crop} failed · insufficient balance (${state.coins}/${price})`);
   }
   const seeds = { ...state.seeds, [crop]: state.seeds[crop] + 1 };
   return pushLog(
     { ...state, coins: state.coins - price, seeds },
     "ok",
-    `installed package seed/${crop} · −${price} coins`,
+    `installed package app/${crop} · −${price} credits`,
   );
 }
 
 export function plantOnPlot(state: OpsState, plotId: string, crop: CropId): OpsState {
   if (state.seeds[crop] <= 0) {
-    return pushLog(state, "warn", `deploy ${crop} failed · no seed in registry`);
+    return pushLog(state, "warn", `deploy ${crop} failed · package not in registry`);
   }
   const plot = state.plots.find((p) => p.id === plotId);
   if (!plot || plot.status !== "empty") {
-    return pushLog(state, "warn", `deploy aborted · plot ${plotId} not empty`);
+    return pushLog(state, "warn", `deploy aborted · site ${plotId} not idle`);
   }
   const plots = state.plots.map((p) =>
     p.id === plotId
@@ -194,7 +194,7 @@ export function plantOnPlot(state: OpsState, plotId: string, crop: CropId): OpsS
   return pushLog(
     { ...state, plots, seeds },
     "ok",
-    `site ${plot.host} provisioned with ${crop} · growth started`,
+    `site ${plot.host} provisioned with ${crop} · build started`,
   );
 }
 
@@ -230,7 +230,7 @@ export function runCron(state: OpsState, taskId: CronTask["id"]): OpsState {
       }
       return { ...p, moisture: Math.min(100, p.moisture + 10) };
     });
-    next = pushLog({ ...next, plots }, "ok", "cron water-all · irrigated all plots");
+    next = pushLog({ ...next, plots }, "ok", "cron batch-health · refreshed metrics on all sites");
     return next;
   }
 
@@ -263,8 +263,8 @@ export function runCron(state: OpsState, taskId: CronTask["id"]): OpsState {
       next,
       harvested > 0 ? "ok" : "info",
       harvested > 0
-        ? `cron harvest-ready · ${harvested} sites shipped · wallet +loot`
-        : "cron harvest-ready · no ready sites",
+        ? `cron backup-release · ${harvested} sites published · balance updated`
+        : "cron backup-release · no pending sites",
     );
     return next;
   }
@@ -282,7 +282,7 @@ export function runCron(state: OpsState, taskId: CronTask["id"]): OpsState {
   next = pushLog(
     { ...next, plots },
     "info",
-    "cron scan-pests · anomaly scan finished (dry plots may wilt)",
+    "cron security-scan · finished (high-load sites may alert)",
   );
   return next;
 }

@@ -177,7 +177,7 @@ export function ShopPage({ state, t, onBuy }: PageProps) {
           return (
             <article key={crop} className="ops-shop-card">
               <div className="ops-shop-icon" aria-hidden>
-                {crop === "lettuce" ? "🥬" : crop === "tomato" ? "🍅" : crop === "potato" ? "🥔" : "🌶️"}
+                {crop === "lettuce" ? "Ng" : crop === "tomato" ? "My" : crop === "potato" ? "Rd" : "Pg"}
               </div>
               <h3>{t.crop[crop]}</h3>
               <p className="ops-muted">{t.cropBlurb[crop]}</p>

@@ -1,6 +1,6 @@
 import type { OpsPageId } from "./types";
 
-/** Nav order inspired by typical ops panels (home → sites → store → files → cron → terminal). */
+/** Sidebar order aligned with common ops panels (home → sites → store → files → cron → terminal). */
 export const OPS_MENU: { id: OpsPageId; icon: string }[] = [
   { id: "dashboard", icon: "⌂" },
   { id: "plots", icon: "▦" },

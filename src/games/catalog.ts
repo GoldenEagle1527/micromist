@@ -70,10 +70,10 @@ export const games: GameMeta[] = [
     mode: "single",
     title: { zh: "运维", en: "Ops" },
     blurb: {
-      zh: "长得像运维后台的摸鱼种地：网站是地块，应用商店是种子，计划任务负责浇水和收获。",
-      en: "A slacking farm dressed as an ops panel: websites are plots, app store is seeds, cron waters and harvests.",
+      zh: "本机运维面板：仪表盘、网站、应用商店、文件、计划任务与终端。单人本地，进度只存本机。",
+      en: "Local ops panel: Home, Websites, App Store, Files, Cron, and Terminal. Solo local; progress stays on this device.",
     },
-    badge: { zh: "摸鱼", en: "Slack" },
+    badge: { zh: "单机", en: "Offline" },
     audience: "staging",
   },
 ];
