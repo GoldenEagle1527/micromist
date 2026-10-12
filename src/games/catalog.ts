@@ -65,6 +65,17 @@ export const games: GameMeta[] = [
     },
     badge: { zh: "3D", en: "3D" },
   },
+  {
+    slug: "ops",
+    mode: "single",
+    title: { zh: "运维", en: "Ops" },
+    blurb: {
+      zh: "长得像运维后台的摸鱼种地：网站是地块，应用商店是种子，计划任务负责浇水和收获。",
+      en: "A slacking farm dressed as an ops panel: websites are plots, app store is seeds, cron waters and harvests.",
+    },
+    badge: { zh: "摸鱼", en: "Slack" },
+    audience: "staging",
+  },
 ];
 
 function audienceAllows(audience: GameAudience | undefined, kind: SiteKind): boolean {

@@ -4,6 +4,7 @@ import { ExplosiveChessGame } from "../games/explosive-chess/ExplosiveChessGame"
 import { ChromaSlideGame } from "../games/chroma-slide/ChromaSlideGame";
 import { BladeBreakGame } from "../games/blade-break/BladeBreakGame";
 import { DeepMarchGame } from "../games/deep-march/DeepMarchGame";
+import { OpsGame } from "../games/ops/OpsGame";
 import { getGame } from "../games/catalog";
 import { useLocale } from "../i18n";
 
@@ -29,6 +30,7 @@ export function PlayPage() {
       {game.slug === "chroma-slide" ? <ChromaSlideGame /> : null}
       {game.slug === "blade-break" ? <BladeBreakGame /> : null}
       {game.slug === "deep-march" ? <DeepMarchGame /> : null}
+      {game.slug === "ops" ? <OpsGame /> : null}
     </>
   );
 }
