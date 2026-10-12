@@ -54,6 +54,15 @@
   --ops-sidebar-w: 64px;
 }
 
+.ops-shell-collapsed .ops-brand-text,
+.ops-shell-collapsed .ops-nav-label {
+  display: none;
+}
+
+.ops-backdrop {
+  display: none;
+}
+
 .ops-sidebar {
   display: flex;
   flex-direction: column;
@@ -562,41 +571,147 @@
   .ops-shell {
     grid-template-columns: 1fr;
     max-height: none;
-    min-height: 70vh;
+    min-height: min(100dvh, 920px);
+    position: relative;
+    overflow: hidden;
+  }
+
+  /* Desktop collapse must not hide mobile drawer labels. */
+  .ops-shell-collapsed .ops-brand-text,
+  .ops-shell-collapsed .ops-nav-label {
+    display: flex;
+  }
+
+  .ops-backdrop {
+    display: block;
+    position: absolute;
+    inset: 0;
+    z-index: 20;
+    border: 0;
+    padding: 0;
+    margin: 0;
+    background: rgba(8, 12, 20, 0.45);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--md-sys-motion-fast);
+  }
+
+  .ops-shell-mobile-open .ops-backdrop {
+    opacity: 1;
+    pointer-events: auto;
   }
 
   .ops-sidebar {
-    border-right: 0;
-    border-bottom: 1px solid var(--line);
-    flex-direction: row;
-    align-items: stretch;
-    overflow-x: auto;
-    padding: 0.5rem;
+    position: absolute;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: min(80vw, 280px);
+    z-index: 30;
+    border-right: 1px solid var(--line);
+    border-bottom: 0;
+    flex-direction: column;
+    padding: 0.75rem 0.55rem;
+    overflow: auto;
+    -webkit-overflow-scrolling: touch;
+    transform: translateX(-105%);
+    transition: transform var(--md-sys-motion);
+    box-shadow: none;
+    background: color-mix(in srgb, var(--md-sys-color-surface-container-highest) 92%, #0a1220 8%);
+  }
+
+  .ops-shell-mobile-open .ops-sidebar {
+    transform: translateX(0);
+    box-shadow: 8px 0 28px rgba(0, 0, 0, 0.28);
   }
 
   .ops-brand {
-    display: none;
+    display: flex;
   }
 
   .ops-nav {
-    flex-direction: row;
+    flex-direction: column;
     width: 100%;
   }
 
   .ops-nav-item {
     flex: 0 0 auto;
+    min-height: 48px;
+    padding: 0.7rem 0.7rem;
+  }
+
+  .ops-nav-label {
+    display: flex;
   }
 
   .ops-nav-label small {
+    display: block;
+  }
+
+  .ops-icon-btn {
+    width: 2.5rem;
+    height: 2.5rem;
+    min-width: 2.5rem;
+    min-height: 2.5rem;
+  }
+
+  .ops-btn {
+    min-height: 2.5rem;
+  }
+
+  .ops-btn-sm {
+    min-height: 2.25rem;
+    padding: 0.4rem 0.7rem;
+  }
+
+  .ops-topbar {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    gap: 0.45rem;
+  }
+
+  .ops-topbar-right {
+    gap: 0.35rem;
+  }
+
+  .ops-chip-uptime {
     display: none;
   }
 
-  .ops-shell-collapsed {
-    --ops-sidebar-w: 64px;
+  .ops-content {
+    padding: 0.75rem 0.7rem 1.4rem;
+    overflow-x: hidden;
+  }
+
+  .ops-table-wrap {
+    -webkit-overflow-scrolling: touch;
+    max-width: 100%;
+  }
+
+  .ops-table th,
+  .ops-table td {
+    padding: 0.65rem 0.55rem;
+  }
+
+  .ops-inline-pick {
+    max-width: 100%;
+  }
+
+  .ops-shop-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .ops-card-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .ops-log {
     grid-template-columns: 1fr;
     gap: 0.1rem;
+  }
+
+  .ops-terminal {
+    max-height: min(55dvh, 420px);
   }
 }

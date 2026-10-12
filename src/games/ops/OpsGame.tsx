@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import "./ops.css";
 import { useLocale } from "../../i18n";
 import { clearLocalProgress, useLocalGamePersist } from "../local-persist";
@@ -25,6 +25,13 @@ import { SLUG, type CropId, type OpsPageId, type OpsState } from "./types";
 
 type Screen = "setup" | "panel";
 
+const MOBILE_MQ = "(max-width: 820px)";
+
+function isMobileViewport(): boolean {
+  if (typeof window === "undefined" || !window.matchMedia) return false;
+  return window.matchMedia(MOBILE_MQ).matches;
+}
+
 export function OpsGame() {
   const { t } = useLocale();
   const op = t.ops;
@@ -33,6 +40,7 @@ export function OpsGame() {
   const [state, setState] = useState<OpsState>(() => createInitialState());
   const [hasSave, setHasSave] = useState(false);
   const [termCleared, setTermCleared] = useState(false);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   const persistState = screen === "panel" ? state : null;
   const { clear: clearProgress } = useLocalGamePersist<OpsState>(SLUG, persistState, {
@@ -45,6 +53,26 @@ export function OpsGame() {
     },
   });
 
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.matchMedia) return;
+    const mq = window.matchMedia(MOBILE_MQ);
+    const onChange = () => {
+      if (!mq.matches) setMobileNavOpen(false);
+    };
+    onChange();
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, []);
+
+  useEffect(() => {
+    if (!mobileNavOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMobileNavOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [mobileNavOpen]);
+
   const enterFresh = useCallback(() => {
     clearProgress();
     clearLocalProgress(SLUG);
@@ -52,15 +80,18 @@ export function OpsGame() {
     setState(fresh);
     setHasSave(false);
     setTermCleared(false);
+    setMobileNavOpen(false);
     setScreen("panel");
   }, [clearProgress]);
 
   const enterResume = useCallback(() => {
     setTermCleared(false);
+    setMobileNavOpen(false);
     setScreen("panel");
   }, []);
 
   const exitPanel = useCallback(() => {
+    setMobileNavOpen(false);
     setScreen("setup");
     setHasSave(true);
   }, []);
@@ -74,9 +105,18 @@ export function OpsGame() {
     (page: OpsPageId) => {
       patch((s) => setPage(s, page));
       setTermCleared(false);
+      setMobileNavOpen(false);
     },
     [patch],
   );
+
+  const onMenuButton = useCallback(() => {
+    if (isMobileViewport()) {
+      setMobileNavOpen((open) => !open);
+      return;
+    }
+    patch((s) => toggleSidebar(s));
+  }, [patch]);
 
   const pageBody = useMemo(() => {
     const common = {
@@ -135,20 +175,39 @@ export function OpsGame() {
   }
 
   const collapsed = state.sidebarCollapsed;
+  const menuAria = mobileNavOpen
+    ? op.collapseSidebar
+    : collapsed
+      ? op.expandSidebar
+      : op.collapseSidebar;
 
   return (
-    <div className={`ops-shell${collapsed ? " ops-shell-collapsed" : ""}`}>
-      <aside className="ops-sidebar" aria-label={op.brand}>
+    <div
+      className={[
+        "ops-shell",
+        collapsed ? "ops-shell-collapsed" : "",
+        mobileNavOpen ? "ops-shell-mobile-open" : "",
+      ]
+        .filter(Boolean)
+        .join(" ")}
+    >
+      <button
+        type="button"
+        className="ops-backdrop"
+        aria-label={op.collapseSidebar}
+        tabIndex={mobileNavOpen ? 0 : -1}
+        onClick={() => setMobileNavOpen(false)}
+      />
+
+      <aside className="ops-sidebar" aria-label={op.brand} id="ops-sidebar-nav">
         <div className="ops-brand">
           <span className="ops-brand-mark" aria-hidden>
             ◆
           </span>
-          {!collapsed ? (
-            <div className="ops-brand-text">
-              <strong>{op.brand}</strong>
-              <span>{op.brandSub}</span>
-            </div>
-          ) : null}
+          <div className="ops-brand-text">
+            <strong>{op.brand}</strong>
+            <span>{op.brandSub}</span>
+          </div>
         </div>
         <nav className="ops-nav">
           {OPS_MENU.map((item) => {
@@ -165,12 +224,10 @@ export function OpsGame() {
                 <span className="ops-nav-icon" aria-hidden>
                   {item.icon}
                 </span>
-                {!collapsed ? (
-                  <span className="ops-nav-label">
-                    <span>{op.menu[item.id]}</span>
-                    <small>{op.menuHint[item.id]}</small>
-                  </span>
-                ) : null}
+                <span className="ops-nav-label">
+                  <span>{op.menu[item.id]}</span>
+                  <small>{op.menuHint[item.id]}</small>
+                </span>
               </button>
             );
           })}
@@ -183,8 +240,10 @@ export function OpsGame() {
             <button
               type="button"
               className="ops-icon-btn"
-              aria-label={collapsed ? op.expandSidebar : op.collapseSidebar}
-              onClick={() => patch((s) => toggleSidebar(s))}
+              aria-label={menuAria}
+              aria-expanded={mobileNavOpen || !collapsed}
+              aria-controls="ops-sidebar-nav"
+              onClick={onMenuButton}
             >
               ☰
             </button>
@@ -195,7 +254,7 @@ export function OpsGame() {
           </div>
           <div className="ops-topbar-right">
             <span className="ops-chip ops-chip-ok">{op.statusOnline}</span>
-            <span className="ops-chip">{op.statusUptime(state.day)}</span>
+            <span className="ops-chip ops-chip-uptime">{op.statusUptime(state.day)}</span>
             <span className="ops-chip ops-chip-coin">{op.coins(state.coins)}</span>
             <button type="button" className="ops-btn ops-btn-ghost ops-btn-sm" onClick={exitPanel}>
               {op.exitPanel}
