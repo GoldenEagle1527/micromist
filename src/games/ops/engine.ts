@@ -4,10 +4,17 @@ import {
   EXPORT_VALUE,
   HARVEST_VALUE,
   HOST_POOL,
+  MAX_CATCHUP_DAYS,
+  MS_PER_GAME_DAY,
   PACKAGE_FROM_SLUG,
   PACKAGE_SLUG,
   SEED_PRICE,
   SITE_PROVISION_COST,
+  TIER_GROWTH_BONUS,
+  TIER_LOAD_SOFT_CAP,
+  TIER_RELEASE_BONUS,
+  TIER_UPGRADE_COST,
+  nextTier,
   type CropId,
   type CronTask,
   type InventoryItem,
@@ -15,6 +22,7 @@ import {
   type OpsPrefs,
   type OpsState,
   type Plot,
+  type SiteTier,
 } from "./types";
 
 let seq = 0;
@@ -60,6 +68,38 @@ function nextHost(plots: Plot[]): string {
   return `site-${plots.length + 1}.local`;
 }
 
+function normalizeTier(raw: unknown): SiteTier {
+  if (raw === "basic" || raw === "standard" || raw === "premium") return raw;
+  return "standard";
+}
+
+function normalizePlot(raw: Partial<Plot> & { id?: string }, fallbackHost: string): Plot {
+  const now = Date.now();
+  return {
+    id: typeof raw.id === "string" ? raw.id : nid("plot"),
+    host: typeof raw.host === "string" ? raw.host : fallbackHost,
+    status:
+      raw.status === "empty" ||
+      raw.status === "growing" ||
+      raw.status === "ready" ||
+      raw.status === "wilted"
+        ? raw.status
+        : "empty",
+    crop:
+      raw.crop === "lettuce" ||
+      raw.crop === "tomato" ||
+      raw.crop === "potato" ||
+      raw.crop === "chili"
+        ? raw.crop
+        : null,
+    growth: typeof raw.growth === "number" ? Math.max(0, Math.min(100, raw.growth)) : 0,
+    moisture:
+      typeof raw.moisture === "number" ? Math.max(0, Math.min(100, raw.moisture)) : 40,
+    tier: normalizeTier(raw.tier),
+    lastActionAt: typeof raw.lastActionAt === "number" ? raw.lastActionAt : now,
+  };
+}
+
 export function createInitialState(): OpsState {
   const now = Date.now();
   const plots: Plot[] = [
@@ -70,6 +110,7 @@ export function createInitialState(): OpsState {
       crop: "lettuce",
       growth: 42,
       moisture: 58,
+      tier: "standard",
       lastActionAt: now,
     },
     {
@@ -79,6 +120,7 @@ export function createInitialState(): OpsState {
       crop: "tomato",
       growth: 100,
       moisture: 40,
+      tier: "standard",
       lastActionAt: now,
     },
     {
@@ -88,6 +130,7 @@ export function createInitialState(): OpsState {
       crop: null,
       growth: 0,
       moisture: 35,
+      tier: "basic",
       lastActionAt: now,
     },
     {
@@ -97,6 +140,7 @@ export function createInitialState(): OpsState {
       crop: "potato",
       growth: 18,
       moisture: 22,
+      tier: "basic",
       lastActionAt: now,
     },
     {
@@ -106,6 +150,7 @@ export function createInitialState(): OpsState {
       crop: null,
       growth: 0,
       moisture: 50,
+      tier: "basic",
       lastActionAt: now,
     },
     {
@@ -115,6 +160,7 @@ export function createInitialState(): OpsState {
       crop: "chili",
       growth: 55,
       moisture: 8,
+      tier: "premium",
       lastActionAt: now,
     },
   ];
@@ -135,6 +181,7 @@ export function createInitialState(): OpsState {
   let state: OpsState = {
     coins: 120,
     day: 1,
+    lastTickAt: now,
     plots,
     inventory: [{ id: "inv-backup-pack", crop: "lettuce", qty: 2 }],
     seeds,
@@ -150,7 +197,7 @@ export function createInitialState(): OpsState {
   state = pushLog(
     state,
     "info",
-    "hint · install apps → deploy on idle sites → health-check → backup-release · handle alerts",
+    "hint · install → deploy → health-check → release · wall-clock ticks while panel is open",
   );
   return state;
 }
@@ -161,10 +208,14 @@ export function normalizeState(raw: unknown): OpsState | null {
   if (!Array.isArray(s.plots) || typeof s.coins !== "number") return null;
   const base = createInitialState();
   const prefsIn = (s as { prefs?: Partial<OpsPrefs> }).prefs;
+  const now = Date.now();
+  const plots = (s.plots as Partial<Plot>[]).map((p, i) =>
+    normalizePlot(p ?? {}, HOST_POOL[i] ?? `site-${i + 1}.local`),
+  );
   return {
     ...base,
     ...s,
-    plots: s.plots as Plot[],
+    plots,
     inventory: Array.isArray(s.inventory) ? (s.inventory as InventoryItem[]) : base.inventory,
     seeds: { ...base.seeds, ...(s.seeds ?? {}) },
     cron: Array.isArray(s.cron) ? (s.cron as CronTask[]) : base.cron,
@@ -172,6 +223,8 @@ export function normalizeState(raw: unknown): OpsState | null {
     page: s.page ?? "dashboard",
     sidebarCollapsed: Boolean(s.sidebarCollapsed),
     day: typeof s.day === "number" ? s.day : 1,
+    // Old saves without lastTickAt: start clock now (avoid huge catch-up).
+    lastTickAt: typeof s.lastTickAt === "number" ? s.lastTickAt : now,
     prefs: {
       ...DEFAULT_PREFS,
       ...(prefsIn && typeof prefsIn === "object" ? prefsIn : {}),
@@ -240,7 +293,7 @@ export function plantOnPlot(state: OpsState, plotId: string, crop: CropId): OpsS
   return pushLog(
     { ...state, plots, seeds },
     "ok",
-    `site ${plot.host} provisioned with ${name} · build started`,
+    `site ${plot.host} (${plot.tier}) provisioned with ${name} · build started`,
   );
 }
 
@@ -269,6 +322,8 @@ export function healthCheckPlot(state: OpsState, plotId: string): OpsState {
     );
   }
 
+  const bonus = TIER_GROWTH_BONUS[plot.tier];
+  const soft = TIER_LOAD_SOFT_CAP[plot.tier];
   const plots = state.plots.map((p) => {
     if (p.id !== plotId) return p;
     if (p.status === "wilted") {
@@ -276,12 +331,14 @@ export function healthCheckPlot(state: OpsState, plotId: string): OpsState {
         ...p,
         status: "growing" as const,
         moisture: 55,
-        growth: Math.min(99, p.growth + 12),
+        growth: Math.min(99, p.growth + 12 + bonus),
         lastActionAt: now,
       };
     }
-    const moisture = Math.min(100, p.moisture + 28);
-    const growth = Math.min(100, p.growth + 22 + Math.floor(moisture / 25));
+    const overCap = p.moisture > soft;
+    const moisture = Math.min(100, p.moisture + (overCap ? 12 : 28));
+    const growthGain = (overCap ? 12 : 22) + Math.floor(moisture / 25) + bonus;
+    const growth = Math.min(100, p.growth + growthGain);
     return {
       ...p,
       moisture,
@@ -291,28 +348,155 @@ export function healthCheckPlot(state: OpsState, plotId: string): OpsState {
     };
   });
   const after = plots.find((p) => p.id === plotId)!;
+  const overNote =
+    plot.moisture > soft ? ` · over soft-cap ${soft}% (${plot.tier})` : "";
   return pushLog(
     { ...state, plots },
     "ok",
     after.status === "ready"
       ? `health-check ${plot.host} · build complete · pending release`
-      : `health-check ${plot.host} · load ${after.moisture}% · build ${after.growth}%`,
+      : `health-check ${plot.host} · load ${after.moisture}% · build ${after.growth}%${overNote}`,
+  );
+}
+
+/** Upgrade site plan tier (basic → standard → premium). */
+export function upgradePlotTier(state: OpsState, plotId: string): OpsState {
+  const plot = state.plots.find((p) => p.id === plotId);
+  if (!plot) {
+    return pushLog(state, "warn", `upgrade failed · unknown site ${plotId}`);
+  }
+  const to = nextTier(plot.tier);
+  const cost = TIER_UPGRADE_COST[plot.tier];
+  if (!to || cost == null) {
+    return pushLog(state, "info", `upgrade ${plot.host} · already on premium`);
+  }
+  if (state.coins < cost) {
+    return pushLog(
+      state,
+      "warn",
+      `upgrade ${plot.host} failed · insufficient balance (${state.coins}/${cost})`,
+    );
+  }
+  const plots = state.plots.map((p) =>
+    p.id === plotId ? { ...p, tier: to, lastActionAt: Date.now() } : p,
+  );
+  return pushLog(
+    { ...state, coins: state.coins - cost, plots },
+    "ok",
+    `upgraded ${plot.host} · ${plot.tier} → ${to} · −${cost} credits`,
+  );
+}
+
+export function upgradeCostFor(plot: Plot): number | null {
+  return TIER_UPGRADE_COST[plot.tier];
+}
+
+/** Small readable event pool — fires at most once per overnight/tick day. */
+function maybeFireEvent(state: OpsState): OpsState {
+  const roll = Math.random();
+  // ~40% quiet (no event)
+  if (roll < 0.4) return state;
+
+  const running = state.plots.filter(
+    (p) => p.status === "growing" || p.status === "ready" || p.status === "wilted",
+  );
+  const pick =
+    running.length > 0
+      ? running[Math.floor(Math.random() * running.length)]!
+      : state.plots[Math.floor(Math.random() * state.plots.length)];
+
+  if (roll < 0.55) {
+    // traffic spike
+    const plots = state.plots.map((p) => {
+      if (p.status !== "growing" && p.status !== "ready") return p;
+      const bump = p.tier === "premium" ? 6 : p.tier === "standard" ? 10 : 14;
+      return { ...p, moisture: Math.min(100, p.moisture + bump) };
+    });
+    return pushLog(
+      { ...state, plots },
+      "warn",
+      "event · traffic spike · load rose on running sites",
+    );
+  }
+
+  if (roll < 0.68) {
+    // cert warning (log only, recoverable awareness)
+    const host = pick?.host ?? "unknown";
+    return pushLog(
+      state,
+      "warn",
+      `event · TLS cert on ${host} expires soon · schedule renew / health-check`,
+    );
+  }
+
+  if (roll < 0.82) {
+    // security finding → alert on one growing site
+    const target = state.plots.find((p) => p.status === "growing");
+    if (!target) {
+      return pushLog(state, "info", "event · security notice · no running target");
+    }
+    const plots = state.plots.map((p) =>
+      p.id === target.id
+        ? { ...p, status: "wilted" as const, moisture: Math.min(p.moisture, 18) }
+        : p,
+    );
+    return pushLog(
+      { ...state, plots },
+      "warn",
+      `event · CVE scan hit ${target.host} · site entered alert (health-check to recover)`,
+    );
+  }
+
+  if (roll < 0.92) {
+    // disk pressure — soft warn, slight load on idle/backup sense
+    const plots = state.plots.map((p) => ({
+      ...p,
+      moisture: Math.min(100, p.moisture + (p.status === "empty" ? 2 : 4)),
+    }));
+    return pushLog(
+      { ...state, plots },
+      "warn",
+      "event · disk pressure · clean exports or free files before next release",
+    );
+  }
+
+  // quiet / good night
+  const plots = state.plots.map((p) => {
+    if (p.status === "empty") return p;
+    return { ...p, moisture: Math.max(0, p.moisture - 3) };
+  });
+  return pushLog(
+    { ...state, plots },
+    "ok",
+    "event · quiet night · slight load cooldown across the cluster",
   );
 }
 
 /**
  * Overnight pass after a day advances: load drift, worsen ignored alerts,
- * then run every enabled cron once (no further day bump from auto harvest).
+ * tier soft-cap stress, then run every enabled cron once, then maybe an event.
  */
 export function applyOvernight(state: OpsState): OpsState {
   const now = Date.now();
   let crashed = 0;
   let drifted = 0;
+  let stressed = 0;
   const plots = state.plots.map((p) => {
+    const soft = TIER_LOAD_SOFT_CAP[p.tier];
     if (p.status === "growing") {
       drifted += 1;
-      const moisture = Math.max(0, p.moisture - 4);
-      return { ...p, moisture, lastActionAt: now };
+      const over = p.moisture > soft;
+      const drop = over ? 8 : 4;
+      const moisture = Math.max(0, p.moisture - drop);
+      let status: Plot["status"] = "growing";
+      // Over soft-cap on basic/standard: chance to enter alert
+      if (over && p.tier !== "premium" && moisture < soft - 10) {
+        if (Math.random() < (p.tier === "basic" ? 0.35 : 0.18)) {
+          status = "wilted";
+          stressed += 1;
+        }
+      }
+      return { ...p, moisture, status, lastActionAt: now };
     }
     if (p.status === "wilted") {
       if (p.moisture <= 5) {
@@ -333,7 +517,8 @@ export function applyOvernight(state: OpsState): OpsState {
       };
     }
     if (p.status === "ready") {
-      return { ...p, moisture: Math.max(0, p.moisture - 2) };
+      const drop = p.moisture > soft ? 4 : 2;
+      return { ...p, moisture: Math.max(0, p.moisture - drop) };
     }
     return p;
   });
@@ -341,6 +526,13 @@ export function applyOvernight(state: OpsState): OpsState {
   let next: OpsState = { ...state, plots };
   if (drifted > 0) {
     next = pushLog(next, "info", `overnight · load drift on ${drifted} running site(s)`);
+  }
+  if (stressed > 0) {
+    next = pushLog(
+      next,
+      "warn",
+      `overnight · ${stressed} site(s) breached soft-cap · entered alert`,
+    );
   }
   if (crashed > 0) {
     next = pushLog(
@@ -361,11 +553,48 @@ export function applyOvernight(state: OpsState): OpsState {
       `overnight automation · ${enabled.length} enabled cron job(s)`,
     );
   }
+
+  next = maybeFireEvent(next);
   return next;
 }
 
 function bumpDay(state: OpsState): OpsState {
   return applyOvernight({ ...state, day: state.day + 1 });
+}
+
+/**
+ * Advance in-game days from real elapsed time since lastTickAt.
+ * Caps catch-up so returning after a long absence stays playable.
+ * Call on panel open and on a short interval while the panel is open.
+ */
+export function advanceWallClock(
+  state: OpsState,
+  now: number = Date.now(),
+): OpsState {
+  const last = typeof state.lastTickAt === "number" ? state.lastTickAt : now;
+  const due = Math.floor((now - last) / MS_PER_GAME_DAY);
+  const days = Math.min(Math.max(0, due), MAX_CATCHUP_DAYS);
+  if (days <= 0) return state;
+
+  let next: OpsState = state;
+  for (let i = 0; i < days; i++) {
+    next = bumpDay(next);
+  }
+  // Drop excess beyond cap so we don't keep owing days forever.
+  next = {
+    ...next,
+    lastTickAt: now,
+  };
+  if (days >= 2) {
+    next = pushLog(
+      next,
+      "info",
+      `wall-clock catch-up · advanced ${days} day(s) (cap ${MAX_CATCHUP_DAYS})`,
+    );
+  } else {
+    next = pushLog(next, "info", `wall-clock · day advanced · uptime day ${next.day}`);
+  }
+  return next;
 }
 
 /** Single-site backup & release. */
@@ -379,7 +608,7 @@ export function releasePlot(state: OpsState, plotId: string): OpsState {
     return pushLog(state, "warn", `release aborted · ${plot.host} not pending`);
   }
   const crop = plot.crop;
-  const gain = HARVEST_VALUE[crop];
+  const gain = HARVEST_VALUE[crop] + TIER_RELEASE_BONUS[plot.tier];
   const plots = state.plots.map((p) =>
     p.id === plotId
       ? {
@@ -398,10 +627,14 @@ export function releasePlot(state: OpsState, plotId: string): OpsState {
     inventory: bumpInventory(state.inventory, crop, 1),
     plots,
   };
+  const bonusNote =
+    TIER_RELEASE_BONUS[plot.tier] > 0
+      ? ` (+${TIER_RELEASE_BONUS[plot.tier]} ${plot.tier})`
+      : "";
   next = pushLog(
     next,
     "ok",
-    `backup-release ${plot.host} · ${pkg(crop)} published · +${gain} credits`,
+    `backup-release ${plot.host} · ${pkg(crop)} published · +${gain} credits${bonusNote}`,
   );
   return bumpDay(next);
 }
@@ -432,7 +665,7 @@ export function exportArtifact(state: OpsState, crop: CropId, qty = 1): OpsState
   );
 }
 
-/** Provision an extra idle website. */
+/** Provision an extra idle website (starts on basic tier). */
 export function provisionSite(state: OpsState): OpsState {
   if (state.plots.length >= HOST_POOL.length) {
     return pushLog(state, "warn", "provision failed · site quota reached");
@@ -453,6 +686,7 @@ export function provisionSite(state: OpsState): OpsState {
     crop: null,
     growth: 0,
     moisture: 45,
+    tier: "basic",
     lastActionAt: Date.now(),
   };
   return pushLog(
@@ -462,7 +696,7 @@ export function provisionSite(state: OpsState): OpsState {
       plots: [...state.plots, plot],
     },
     "ok",
-    `provisioned website ${host} · −${cost} credits`,
+    `provisioned website ${host} (basic) · −${cost} credits`,
   );
 }
 
@@ -482,19 +716,25 @@ export function runCron(
 
   if (taskId === "water-all") {
     const plots = next.plots.map((p) => {
+      const bonus = TIER_GROWTH_BONUS[p.tier];
       if (p.status === "empty") return { ...p, moisture: Math.min(100, p.moisture + 8) };
       if (p.status === "wilted") {
         return {
           ...p,
           status: "growing" as const,
           moisture: 55,
-          growth: Math.min(99, p.growth + 10),
+          growth: Math.min(99, p.growth + 10 + bonus),
           lastActionAt: now,
         };
       }
       if (p.status === "growing") {
-        const moisture = Math.min(100, p.moisture + 25);
-        const growth = Math.min(100, p.growth + 18 + Math.floor(moisture / 20));
+        const soft = TIER_LOAD_SOFT_CAP[p.tier];
+        const overCap = p.moisture > soft;
+        const moisture = Math.min(100, p.moisture + (overCap ? 12 : 25));
+        const growth = Math.min(
+          100,
+          p.growth + (overCap ? 10 : 18) + Math.floor(moisture / 20) + bonus,
+        );
         return {
           ...p,
           moisture,
@@ -521,7 +761,7 @@ export function runCron(
     let harvested = 0;
     const plots = next.plots.map((p) => {
       if (p.status !== "ready" || !p.crop) return p;
-      coins += HARVEST_VALUE[p.crop];
+      coins += HARVEST_VALUE[p.crop] + TIER_RELEASE_BONUS[p.tier];
       inventory = bumpInventory(inventory, p.crop, 1);
       harvested += 1;
       return {
@@ -555,7 +795,8 @@ export function runCron(
   // scan-pests
   let alerts = 0;
   const plots = next.plots.map((p) => {
-    if (p.status === "growing" && p.moisture < 15) {
+    const soft = TIER_LOAD_SOFT_CAP[p.tier];
+    if (p.status === "growing" && (p.moisture < 15 || p.moisture > soft + 8)) {
       alerts += 1;
       return { ...p, status: "wilted" as const };
     }
@@ -594,11 +835,19 @@ export function dashboardStats(state: OpsState) {
     state.plots.reduce((a, p) => a + p.moisture, 0) / Math.max(1, state.plots.length),
   );
   const seedStock = CROP_ORDER.reduce((a, c) => a + state.seeds[c], 0);
-  return { growing, ready, empty, wilted, avgMoisture, seedStock };
+  const premium = state.plots.filter((p) => p.tier === "premium").length;
+  return { growing, ready, empty, wilted, avgMoisture, seedStock, premium };
 }
 
 export function listAlerts(state: OpsState): Plot[] {
   return state.plots.filter((p) => p.status === "wilted");
+}
+
+export function msUntilNextDay(state: OpsState, now: number = Date.now()): number {
+  const last = typeof state.lastTickAt === "number" ? state.lastTickAt : now;
+  const elapsed = now - last;
+  const rem = MS_PER_GAME_DAY - (elapsed % MS_PER_GAME_DAY);
+  return rem <= 0 ? MS_PER_GAME_DAY : rem;
 }
 
 export type TermResult = { state: OpsState; echo: string[] };
@@ -612,6 +861,7 @@ const TERM_HELP = [
   "  deploy <host> <pkg>          deploy package on idle site",
   "  health [host]                health-check one site or batch-health",
   "  release [host]               backup-release one site or all pending",
+  "  upgrade <host>               upgrade site plan (basic→standard→premium)",
   "  scan                         run security-scan",
   "  export <pkg> [qty]           export files for credits",
   "  provision                    add an idle website",
@@ -657,7 +907,7 @@ export function runTerminalCommand(state: OpsState, raw: string): TermResult {
     echo.push(
       `uptime day ${state.day} · balance ${state.coins}`,
       `sites ${state.plots.length} · running ${s.growing} · pending ${s.ready} · idle ${s.empty} · alert ${s.wilted}`,
-      `avg load ${s.avgMoisture}% · apps ready ${s.seedStock}`,
+      `avg load ${s.avgMoisture}% · apps ready ${s.seedStock} · premium ${s.premium}`,
     );
     return { state: pushLog(state, "info", "terminal status · queried"), echo };
   }
@@ -666,7 +916,7 @@ export function runTerminalCommand(state: OpsState, raw: string): TermResult {
     for (const p of state.plots) {
       const app = p.crop ? pkg(p.crop) : "-";
       echo.push(
-        `${p.host.padEnd(16)} ${p.status.padEnd(8)} ${app.padEnd(10)} build=${p.growth}% load=${p.moisture}%`,
+        `${p.host.padEnd(16)} ${p.status.padEnd(8)} ${p.tier.padEnd(9)} ${app.padEnd(10)} build=${p.growth}% load=${p.moisture}%`,
       );
     }
     return { state, echo };
@@ -731,6 +981,21 @@ export function runTerminalCommand(state: OpsState, raw: string): TermResult {
       return { state: next, echo };
     }
     const next = runCron(state, "harvest-ready");
+    echo.push(next.logs[0]?.text ?? "done");
+    return { state: next, echo };
+  }
+
+  if (cmd === "upgrade") {
+    if (!parts[1]) {
+      echo.push("usage: upgrade <host>");
+      return { state, echo };
+    }
+    const plot = findPlot(state, parts[1]);
+    if (!plot) {
+      echo.push(`unknown host: ${parts[1]}`);
+      return { state, echo };
+    }
+    const next = upgradePlotTier(state, plot.id);
     echo.push(next.logs[0]?.text ?? "done");
     return { state: next, echo };
   }

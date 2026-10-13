@@ -3,6 +3,7 @@ import "./ops.css";
 import { useLocale } from "../../i18n";
 import { clearLocalProgress, useLocalGamePersist } from "../local-persist";
 import {
+  advanceWallClock,
   buildSaveFile,
   buySeed,
   createInitialState,
@@ -19,6 +20,7 @@ import {
   setPref,
   toggleCron,
   toggleSidebar,
+  upgradePlotTier,
 } from "./engine";
 import { OPS_MENU } from "./menu";
 import {
@@ -89,6 +91,20 @@ export function OpsGame() {
     const id = window.setTimeout(() => setSettingsFlash(null), 2800);
     return () => window.clearTimeout(id);
   }, [settingsFlash]);
+
+  // Wall-clock tick: catch up on open + periodically while panel is open.
+  useEffect(() => {
+    if (screen !== "panel") return;
+    const apply = () => {
+      setState((s) => {
+        const next = advanceWallClock(s);
+        return next === s ? s : next;
+      });
+    };
+    apply();
+    const id = window.setInterval(apply, 12_000);
+    return () => window.clearInterval(id);
+  }, [screen]);
 
   const enterFresh = useCallback(() => {
     clearProgress();
@@ -223,6 +239,7 @@ export function OpsGame() {
             onPlant={(plotId, crop) => patch((s) => plantOnPlot(s, plotId, crop))}
             onHealthCheck={onHealthCheck}
             onRelease={(plotId) => patch((s) => releasePlot(s, plotId))}
+            onUpgrade={(plotId) => patch((s) => upgradePlotTier(s, plotId))}
             onProvision={() => patch((s) => provisionSite(s))}
           />
         );

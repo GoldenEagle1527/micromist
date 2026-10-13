@@ -1,12 +1,20 @@
 import { useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import type { OpsDict } from "./i18n";
-import { dashboardStats, listAlerts, nextProvisionCost } from "./engine";
+import {
+  dashboardStats,
+  listAlerts,
+  msUntilNextDay,
+  nextProvisionCost,
+  upgradeCostFor,
+} from "./engine";
 import {
   CROP_ORDER,
   EXPORT_VALUE,
   HOST_POOL,
   PANEL_VERSION,
   SEED_PRICE,
+  TIER_LOAD_SOFT_CAP,
+  nextTier,
   type CropId,
   type OpsState,
 } from "./types";
@@ -18,6 +26,7 @@ type PageProps = {
   onPlant: (plotId: string, crop: CropId) => void;
   onHealthCheck: (plotId: string) => void;
   onRelease: (plotId: string) => void;
+  onUpgrade: (plotId: string) => void;
   onExport: (crop: CropId, qty?: number) => void;
   onProvision: () => void;
   onRunCron: (id: OpsState["cron"][number]["id"]) => void;
@@ -60,6 +69,7 @@ export function DashboardPage({
 }: Pick<PageProps, "state" | "t" | "onRunCron" | "onHealthCheck">) {
   const stats = useMemo(() => dashboardStats(state), [state]);
   const alerts = useMemo(() => listAlerts(state), [state]);
+  const secsToDay = Math.max(1, Math.ceil(msUntilNextDay(state) / 1000));
   const cards = [
     { label: t.cardGrowing, value: String(stats.growing) },
     { label: t.cardReady, value: String(stats.ready) },
@@ -69,13 +79,16 @@ export function DashboardPage({
     { label: t.cardSeeds, value: String(stats.seedStock) },
     { label: t.cardCoins, value: String(state.coins) },
     { label: t.cardDay, value: String(state.day) },
+    { label: t.cardPremium, value: String(stats.premium) },
   ];
 
   return (
     <div className="ops-page">
       <header className="ops-page-head">
         <h2>{t.dashboardTitle}</h2>
-        <p className="ops-page-sub">{t.menuHint.dashboard}</p>
+        <p className="ops-page-sub">
+          {t.menuHint.dashboard} · {t.tickHint(secsToDay)}
+        </p>
       </header>
       <div className="ops-card-grid">
         {cards.map((c) => (
@@ -144,8 +157,12 @@ export function PlotsPage({
   onPlant,
   onHealthCheck,
   onRelease,
+  onUpgrade,
   onProvision,
-}: Pick<PageProps, "state" | "t" | "onPlant" | "onHealthCheck" | "onRelease" | "onProvision">) {
+}: Pick<
+  PageProps,
+  "state" | "t" | "onPlant" | "onHealthCheck" | "onRelease" | "onUpgrade" | "onProvision"
+>) {
   const [picking, setPicking] = useState<string | null>(null);
   const available = CROP_ORDER.filter((c) => state.seeds[c] > 0);
   const cost = nextProvisionCost(state);
@@ -176,6 +193,7 @@ export function PlotsPage({
             <tr>
               <th>{t.plotsColHost}</th>
               <th>{t.plotsColStatus}</th>
+              <th>{t.plotsColTier}</th>
               <th>{t.plotsColCrop}</th>
               <th>{t.plotsColGrowth}</th>
               <th>{t.plotsColMoisture}</th>
@@ -193,6 +211,12 @@ export function PlotsPage({
                 </td>
                 <td>
                   <StatusPill status={plot.status} label={t.status[plot.status]} />
+                </td>
+                <td>
+                  <span className={`ops-tier ops-tier-${plot.tier}`}>{t.tier[plot.tier]}</span>
+                  <div className="ops-muted ops-tier-cap">
+                    ≤{TIER_LOAD_SOFT_CAP[plot.tier]}%
+                  </div>
                 </td>
                 <td>{plot.crop ? t.app[plot.crop] : "—"}</td>
                 <td>
@@ -232,13 +256,30 @@ export function PlotsPage({
                         </button>
                       </div>
                     ) : (
-                      <button
-                        type="button"
-                        className="ops-btn ops-btn-sm"
-                        onClick={() => setPicking(plot.id)}
-                      >
-                        {t.plant}
-                      </button>
+                      <div className="ops-inline-pick">
+                        <button
+                          type="button"
+                          className="ops-btn ops-btn-sm"
+                          onClick={() => setPicking(plot.id)}
+                        >
+                          {t.plant}
+                        </button>
+                        {nextTier(plot.tier) ? (
+                          <button
+                            type="button"
+                            className="ops-btn ops-btn-sm ops-btn-ghost"
+                            disabled={(upgradeCostFor(plot) ?? 0) > state.coins}
+                            title={
+                              upgradeCostFor(plot) != null
+                                ? t.upgradeTierCost(upgradeCostFor(plot)!)
+                                : t.upgradeTierMax
+                            }
+                            onClick={() => onUpgrade(plot.id)}
+                          >
+                            {t.upgradeTier}
+                          </button>
+                        ) : null}
+                      </div>
                     )
                   ) : (
                     <div className="ops-inline-pick">
@@ -260,6 +301,24 @@ export function PlotsPage({
                           onClick={() => onRelease(plot.id)}
                         >
                           {t.releaseSite}
+                        </button>
+                      ) : null}
+                      {nextTier(plot.tier) ? (
+                        <button
+                          type="button"
+                          className="ops-btn ops-btn-sm ops-btn-ghost"
+                          disabled={(upgradeCostFor(plot) ?? 0) > state.coins}
+                          title={
+                            upgradeCostFor(plot) != null
+                              ? t.upgradeTierCost(upgradeCostFor(plot)!)
+                              : t.upgradeTierMax
+                          }
+                          onClick={() => onUpgrade(plot.id)}
+                        >
+                          {t.upgradeTier}
+                          {upgradeCostFor(plot) != null
+                            ? ` · ${t.upgradeTierCost(upgradeCostFor(plot)!)}`
+                            : ""}
                         </button>
                       ) : null}
                     </div>
@@ -427,6 +486,8 @@ export function TerminalPage({
 }: Pick<PageProps, "state" | "t" | "termCleared" | "onTermClear" | "onTermCommand">) {
   const [input, setInput] = useState("");
   const [extra, setExtra] = useState<string[]>([]);
+  const [history, setHistory] = useState<string[]>([]);
+  const [histIdx, setHistIdx] = useState<number | null>(null);
 
   const logLines = termCleared ? [] : state.logs;
   const body =
@@ -445,6 +506,8 @@ export function TerminalPage({
     const line = input.trim();
     if (!line) return;
     setInput("");
+    setHistory((h) => [line, ...h.filter((x) => x !== line)].slice(0, 50));
+    setHistIdx(null);
     const echo = onTermCommand(line);
     if (echo.includes("__CLEAR__")) {
       onTermClear();
@@ -457,7 +520,30 @@ export function TerminalPage({
   };
 
   const onKey = (e: KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Enter") submit();
+    if (e.key === "Enter") {
+      submit();
+      return;
+    }
+    if (e.key === "ArrowUp") {
+      e.preventDefault();
+      if (history.length === 0) return;
+      const next = histIdx == null ? 0 : Math.min(history.length - 1, histIdx + 1);
+      setHistIdx(next);
+      setInput(history[next] ?? "");
+      return;
+    }
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      if (histIdx == null) return;
+      if (histIdx <= 0) {
+        setHistIdx(null);
+        setInput("");
+        return;
+      }
+      const next = histIdx - 1;
+      setHistIdx(next);
+      setInput(history[next] ?? "");
+    }
   };
 
   return (

@@ -1,4 +1,4 @@
-import type { CropId, CronTaskId, OpsPageId, PlotStatus } from "./types";
+import type { CropId, CronTaskId, OpsPageId, PlotStatus, SiteTier } from "./types";
 
 export type OpsDict = {
   setupTitle: string;
@@ -98,6 +98,13 @@ export type OpsDict = {
   settingsImportOk: string;
   settingsImportFail: string;
   settingsExportOk: string;
+  plotsColTier: string;
+  tier: Record<SiteTier, string>;
+  upgradeTier: string;
+  upgradeTierCost: (n: number) => string;
+  upgradeTierMax: string;
+  cardPremium: string;
+  tickHint: (secs: number) => string;
 };
 
 export const opsZh: OpsDict = {
@@ -201,9 +208,9 @@ export const opsZh: OpsDict = {
     "scan-pests": "安全扫描",
   },
   cronBlurb: {
-    "water-all": "巡检全部站点并刷新资源指标；启用后跨日自动跑",
-    "harvest-ready": "对「待发布」站点执行备份与发布；启用后跨日自动跑",
-    "scan-pests": "扫描异常；高负载站点可能进入告警；启用后跨日自动跑",
+    "water-all": "巡检全部站点并刷新资源指标；启用后随墙钟跨日自动跑",
+    "harvest-ready": "对「待发布」站点执行备份与发布；启用后随墙钟跨日自动跑",
+    "scan-pests": "扫描异常；超规格软上限的站点可能进入告警；启用后随墙钟跨日自动跑",
   },
   toastNeedCoins: "余额不足",
   healthCheck: "巡检",
@@ -235,10 +242,21 @@ export const opsZh: OpsDict = {
   settingsDebugHint: "在网站表额外显示站点 id",
   settingsAboutTitle: "关于",
   settingsAboutBody: (version) =>
-    `运维面板 ${version} · micromist 单机玩法。装应用、部署、巡检、发布——养成你的微型机房。数据只存本机。`,
+    `运维面板 ${version} · micromist 单机玩法。装应用、部署、巡检、发布、升配——养成你的微型机房。墙钟会推进天数与计划任务。数据只存本机。`,
   settingsImportOk: "存档已导入",
   settingsImportFail: "导入失败：文件无效",
   settingsExportOk: "存档已下载",
+  plotsColTier: "规格",
+  tier: {
+    basic: "基础",
+    standard: "标准",
+    premium: "高配",
+  },
+  upgradeTier: "升配",
+  upgradeTierCost: (n) => `${n} 额度`,
+  upgradeTierMax: "已是高配",
+  cardPremium: "高配站点",
+  tickHint: (secs) => `约 ${secs}s 后跨日`,
 };
 
 export const opsEn: OpsDict = {
@@ -342,9 +360,9 @@ export const opsEn: OpsDict = {
     "scan-pests": "Security scan",
   },
   cronBlurb: {
-    "water-all": "Inspect all sites and refresh metrics; runs overnight when enabled",
-    "harvest-ready": "Backup and release pending sites; runs overnight when enabled",
-    "scan-pests": "Scan anomalies; high-load sites may alert; runs overnight when enabled",
+    "water-all": "Inspect all sites and refresh metrics; runs on wall-clock day ticks when enabled",
+    "harvest-ready": "Backup and release pending sites; runs on wall-clock day ticks when enabled",
+    "scan-pests": "Scan anomalies; sites over plan soft-cap may alert; runs on wall-clock day ticks when enabled",
   },
   toastNeedCoins: "Insufficient balance",
   healthCheck: "Health check",
@@ -376,8 +394,19 @@ export const opsEn: OpsDict = {
   settingsDebugHint: "Show site ids on the Websites table",
   settingsAboutTitle: "About",
   settingsAboutBody: (version) =>
-    `Ops panel ${version} · micromist solo. Install, deploy, health-check, release — grow your mini datacenter. Data stays on this device.`,
+    `Ops panel ${version} · micromist solo. Install, deploy, health-check, release, upgrade — grow your mini datacenter. Wall-clock advances days and enabled cron. Data stays on this device.`,
   settingsImportOk: "Save imported",
   settingsImportFail: "Import failed: invalid file",
   settingsExportOk: "Save downloaded",
+  plotsColTier: "Plan",
+  tier: {
+    basic: "Basic",
+    standard: "Standard",
+    premium: "Premium",
+  },
+  upgradeTier: "Upgrade",
+  upgradeTierCost: (n) => `${n} credits`,
+  upgradeTierMax: "Already premium",
+  cardPremium: "Premium sites",
+  tickHint: (secs) => `~${secs}s to next day`,
 };

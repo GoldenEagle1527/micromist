@@ -877,3 +877,30 @@
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 0.85rem;
 }
+
+
+/* Site plan tiers */
+.ops-tier {
+  display: inline-block;
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 0.12rem 0.4rem;
+  border-radius: 4px;
+  letter-spacing: 0.02em;
+}
+.ops-tier-basic {
+  background: rgba(148, 163, 184, 0.18);
+  color: #94a3b8;
+}
+.ops-tier-standard {
+  background: rgba(56, 189, 248, 0.16);
+  color: #7dd3fc;
+}
+.ops-tier-premium {
+  background: rgba(251, 191, 36, 0.16);
+  color: #fbbf24;
+}
+.ops-tier-cap {
+  font-size: 0.7rem;
+  margin-top: 0.15rem;
+}
