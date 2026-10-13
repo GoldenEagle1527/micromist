@@ -759,3 +759,40 @@
 .ops-map-table td:nth-child(3) {
   min-width: 8rem;
 }
+
+/* Quick actions on dashboard */
+.ops-quick-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+}
+
+/* Terminal command line */
+.ops-term-form {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin-top: 0.65rem;
+  padding: 0.45rem 0.55rem;
+  border-radius: var(--md-sys-shape-corner-sm);
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, #0b1220 88%, var(--md-sys-color-surface) 12%);
+}
+
+.ops-term-prompt {
+  flex: 0 0 auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.8rem;
+  color: #7dd3a7;
+}
+
+.ops-term-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: inherit;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.85rem;
+}

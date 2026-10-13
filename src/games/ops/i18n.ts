@@ -62,6 +62,21 @@ export type OpsDict = {
   cronName: Record<CronTaskId, string>;
   cronBlurb: Record<CronTaskId, string>;
   toastNeedCoins: string;
+  healthCheck: string;
+  releaseSite: string;
+  warehouseColAction: string;
+  warehouseExport: string;
+  warehouseExportValue: (n: number) => string;
+  provisionSite: string;
+  provisionCost: (n: number) => string;
+  provisionFull: string;
+  dashQuickTitle: string;
+  dashQuickHealth: string;
+  dashQuickRelease: string;
+  dashQuickScan: string;
+  terminalPrompt: string;
+  terminalRun: string;
+  terminalPlaceholder: string;
   settingsTitle: string;
   settingsNote: string;
   settingsColOps: string;
@@ -142,7 +157,7 @@ export const opsZh: OpsDict = {
   cronEnabled: "启用",
   cronDisabled: "停用",
   terminalTitle: "终端",
-  terminalHint: "只读日志流 · tail -f",
+  terminalHint: "可交互终端 · 输入 help 查看命令",
   terminalClear: "清屏",
   crop: {
     lettuce: "Nginx",
@@ -172,7 +187,22 @@ export const opsZh: OpsDict = {
     "harvest-ready": "对「待发布」站点执行备份与发布",
     "scan-pests": "扫描异常；高负载站点可能进入告警",
   },
-    toastNeedCoins: "余额不足",
+  toastNeedCoins: "余额不足",
+  healthCheck: "巡检",
+  releaseSite: "发布",
+  warehouseColAction: "操作",
+  warehouseExport: "导出",
+  warehouseExportValue: (n) => `+${n} 额度`,
+  provisionSite: "开通站点",
+  provisionCost: (n) => `${n} 额度`,
+  provisionFull: "站点配额已满",
+  dashQuickTitle: "快捷操作",
+  dashQuickHealth: "批量健康检查",
+  dashQuickRelease: "备份并发布",
+  dashQuickScan: "安全扫描",
+  terminalPrompt: "root@ops",
+  terminalRun: "执行",
+  terminalPlaceholder: "输入命令，help 查看",
   settingsTitle: "设置",
   settingsNote: "本面板的底层玩法映射（仅设置页可见）。其它页面一律使用运维用语。",
   settingsColOps: "运维术语",
@@ -184,7 +214,7 @@ export const opsZh: OpsDict = {
     { ops: "应用商店 / 安装", farm: "种子商店 / 买种子", hint: "用余额兑换可部署的应用包" },
     { ops: "文件", farm: "仓库", hint: "收获后的产物存放处" },
     { ops: "计划任务", farm: "定时农活", hint: "浇水、收获、查虫等自动化" },
-    { ops: "终端", farm: "农场日志", hint: "只读事件流" },
+    { ops: "终端", farm: "农场日志", hint: "可执行命令的事件流" },
     { ops: "部署", farm: "播种", hint: "空闲站点种下应用" },
     { ops: "余额 / 额度", farm: "金币", hint: "买种子与收获结算" },
     { ops: "运行中", farm: "生长中", hint: "作物尚未成熟" },
@@ -203,6 +233,10 @@ export const opsZh: OpsDict = {
     { ops: "安全扫描", farm: "查害虫", hint: "高负载风险可能告警" },
     { ops: "待装应用", farm: "种子库存", hint: "已安装尚未部署的数量" },
     { ops: "运行天数", farm: "天数", hint: "面板开局以来的日计数" },
+    { ops: "巡检", farm: "浇水（单块）", hint: "对单个站点刷新负载并推进构建" },
+    { ops: "发布", farm: "收获（单块）", hint: "对单个待发布站点备份入库" },
+    { ops: "导出", farm: "卖出产物", hint: "文件换额度" },
+    { ops: "开通站点", farm: "开垦新地", hint: "花额度增加空闲网站" },
   ],
 };
 
@@ -277,7 +311,7 @@ export const opsEn: OpsDict = {
   cronEnabled: "Enabled",
   cronDisabled: "Disabled",
   terminalTitle: "Terminal",
-  terminalHint: "Read-only log stream · tail -f",
+  terminalHint: "Interactive shell · type help for commands",
   terminalClear: "Clear",
   crop: {
     lettuce: "Nginx",
@@ -307,7 +341,22 @@ export const opsEn: OpsDict = {
     "harvest-ready": "Backup and release sites marked pending",
     "scan-pests": "Scan anomalies; high-load sites may alert",
   },
-    toastNeedCoins: "Insufficient balance",
+  toastNeedCoins: "Insufficient balance",
+  healthCheck: "Health check",
+  releaseSite: "Release",
+  warehouseColAction: "Actions",
+  warehouseExport: "Export",
+  warehouseExportValue: (n) => `+${n} credits`,
+  provisionSite: "Provision site",
+  provisionCost: (n) => `${n} credits`,
+  provisionFull: "Site quota full",
+  dashQuickTitle: "Quick actions",
+  dashQuickHealth: "Batch health check",
+  dashQuickRelease: "Backup & release",
+  dashQuickScan: "Security scan",
+  terminalPrompt: "root@ops",
+  terminalRun: "Run",
+  terminalPlaceholder: "Type a command — help for list",
   settingsTitle: "Settings",
   settingsNote:
     "Underlying farm↔ops mapping (visible on this Settings page only). All other pages stay in ops language.",
@@ -320,7 +369,7 @@ export const opsEn: OpsDict = {
     { ops: "App Store / Install", farm: "Seed shop / buy seeds", hint: "Spend balance for deployable packages" },
     { ops: "Files", farm: "Warehouse", hint: "Harvested goods land here" },
     { ops: "Cron", farm: "Scheduled farm jobs", hint: "Water, harvest, pest scan, etc." },
-    { ops: "Terminal", farm: "Farm log", hint: "Read-only event stream" },
+    { ops: "Terminal", farm: "Farm log", hint: "Event stream with runnable commands" },
     { ops: "Deploy", farm: "Plant", hint: "Sow an app on an idle site" },
     { ops: "Balance / credits", farm: "Coins", hint: "Buy seeds and settle harvests" },
     { ops: "Running", farm: "Growing", hint: "Crop not ready yet" },
@@ -339,5 +388,9 @@ export const opsEn: OpsDict = {
     { ops: "Security scan", farm: "Pest scan", hint: "High-load sites may alert" },
     { ops: "Apps ready", farm: "Seed stock", hint: "Installed but not yet deployed" },
     { ops: "Uptime days", farm: "Day count", hint: "Days since panel start" },
+    { ops: "Health check", farm: "Water (single plot)", hint: "Refresh one site load and push build" },
+    { ops: "Release", farm: "Harvest (single plot)", hint: "Backup one pending site into Files" },
+    { ops: "Export", farm: "Sell goods", hint: "Trade files for credits" },
+    { ops: "Provision site", farm: "Clear new field", hint: "Spend credits for another idle website" },
   ],
 };

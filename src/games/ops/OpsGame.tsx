@@ -1,13 +1,18 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import "./ops.css";
 import { useLocale } from "../../i18n";
 import { clearLocalProgress, useLocalGamePersist } from "../local-persist";
 import {
   buySeed,
   createInitialState,
+  exportArtifact,
+  healthCheckPlot,
   normalizeState,
   plantOnPlot,
+  provisionSite,
+  releasePlot,
   runCron,
+  runTerminalCommand,
   setPage,
   toggleCron,
   toggleSidebar,
@@ -43,7 +48,8 @@ export function OpsGame() {
   const [termCleared, setTermCleared] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
-  const persistState = screen === "panel" ? state : null;
+  // Keep save while on setup after a session exists; never pass null once hydrated save is present.
+  const persistState = screen === "panel" || hasSave ? state : null;
   const { clear: clearProgress } = useLocalGamePersist<OpsState>(SLUG, persistState, {
     shouldSave: () => true,
     onHydrate: (saved) => {
@@ -79,7 +85,7 @@ export function OpsGame() {
     clearLocalProgress(SLUG);
     const fresh = createInitialState();
     setState(fresh);
-    setHasSave(false);
+    setHasSave(true);
     setTermCleared(false);
     setMobileNavOpen(false);
     setScreen("panel");
@@ -89,6 +95,7 @@ export function OpsGame() {
     setTermCleared(false);
     setMobileNavOpen(false);
     setScreen("panel");
+    setHasSave(true);
   }, []);
 
   const exitPanel = useCallback(() => {
@@ -119,33 +126,68 @@ export function OpsGame() {
     patch((s) => toggleSidebar(s));
   }, [patch]);
 
+  const stateRef = useRef(state);
+  stateRef.current = state;
+
+  const onTermCommand = useCallback((line: string): string[] => {
+    const result = runTerminalCommand(stateRef.current, line);
+    stateRef.current = result.state;
+    setState(result.state);
+    setTermCleared(false);
+    return result.echo;
+  }, []);
+
   const pageBody = useMemo(() => {
     const common = {
       state,
       t: op,
       onBuy: (crop: CropId) => patch((s) => buySeed(s, crop)),
       onPlant: (plotId: string, crop: CropId) => patch((s) => plantOnPlot(s, plotId, crop)),
+      onHealthCheck: (plotId: string) => patch((s) => healthCheckPlot(s, plotId)),
+      onRelease: (plotId: string) => patch((s) => releasePlot(s, plotId)),
+      onExport: (crop: CropId, qty?: number) => patch((s) => exportArtifact(s, crop, qty)),
+      onProvision: () => patch((s) => provisionSite(s)),
       onRunCron: (id: OpsState["cron"][number]["id"]) => patch((s) => runCron(s, id)),
       onToggleCron: (id: OpsState["cron"][number]["id"]) => patch((s) => toggleCron(s, id)),
+      onTermCommand,
+      termCleared,
+      onTermClear: () => setTermCleared(true),
     };
     switch (state.page) {
       case "dashboard":
-        return <DashboardPage state={state} t={op} />;
+        return <DashboardPage state={state} t={op} onRunCron={common.onRunCron} />;
       case "plots":
-        return <PlotsPage {...common} />;
+        return (
+          <PlotsPage
+            state={state}
+            t={op}
+            onPlant={common.onPlant}
+            onHealthCheck={common.onHealthCheck}
+            onRelease={common.onRelease}
+            onProvision={common.onProvision}
+          />
+        );
       case "shop":
-        return <ShopPage {...common} />;
+        return <ShopPage state={state} t={op} onBuy={common.onBuy} />;
       case "warehouse":
-        return <WarehousePage state={state} t={op} />;
+        return <WarehousePage state={state} t={op} onExport={common.onExport} />;
       case "cron":
-        return <CronPage {...common} />;
+        return (
+          <CronPage
+            state={state}
+            t={op}
+            onRunCron={common.onRunCron}
+            onToggleCron={common.onToggleCron}
+          />
+        );
       case "terminal":
         return (
           <TerminalPage
             state={state}
             t={op}
-            cleared={termCleared}
-            onClear={() => setTermCleared(true)}
+            termCleared={termCleared}
+            onTermClear={common.onTermClear}
+            onTermCommand={onTermCommand}
           />
         );
       case "settings":
@@ -153,7 +195,7 @@ export function OpsGame() {
       default:
         return null;
     }
-  }, [state, op, patch, termCleared]);
+  }, [state, op, patch, termCleared, onTermCommand]);
 
   if (screen === "setup") {
     return (

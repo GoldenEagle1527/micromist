@@ -1,7 +1,12 @@
 import {
   CROP_ORDER,
+  EXPORT_VALUE,
   HARVEST_VALUE,
+  HOST_POOL,
+  PACKAGE_FROM_SLUG,
+  PACKAGE_SLUG,
   SEED_PRICE,
+  SITE_PROVISION_COST,
   type CropId,
   type CronTask,
   type InventoryItem,
@@ -14,6 +19,10 @@ let seq = 0;
 function nid(prefix: string): string {
   seq += 1;
   return `${prefix}-${Date.now().toString(36)}-${seq}`;
+}
+
+function pkg(crop: CropId): string {
+  return PACKAGE_SLUG[crop];
 }
 
 function pushLog(
@@ -39,6 +48,14 @@ function bumpInventory(
   }
   if (delta <= 0) return next;
   return [...next, { id: nid("inv"), crop, qty: delta }];
+}
+
+function nextHost(plots: Plot[]): string {
+  const used = new Set(plots.map((p) => p.host));
+  for (const h of HOST_POOL) {
+    if (!used.has(h)) return h;
+  }
+  return `site-${plots.length + 1}.local`;
 }
 
 export function createInitialState(): OpsState {
@@ -127,6 +144,11 @@ export function createInitialState(): OpsState {
 
   state = pushLog(state, "ok", "panel boot · node cluster online");
   state = pushLog(state, "info", "loaded 6 websites · 3 cron jobs · app store ready");
+  state = pushLog(
+    state,
+    "info",
+    "hint · install apps → deploy on idle sites → run batch-health → backup-release",
+  );
   return state;
 }
 
@@ -159,20 +181,26 @@ export function toggleSidebar(state: OpsState): OpsState {
 
 export function buySeed(state: OpsState, crop: CropId): OpsState {
   const price = SEED_PRICE[crop];
+  const name = pkg(crop);
   if (state.coins < price) {
-    return pushLog(state, "warn", `install ${crop} failed · insufficient balance (${state.coins}/${price})`);
+    return pushLog(
+      state,
+      "warn",
+      `install ${name} failed · insufficient balance (${state.coins}/${price})`,
+    );
   }
   const seeds = { ...state.seeds, [crop]: state.seeds[crop] + 1 };
   return pushLog(
     { ...state, coins: state.coins - price, seeds },
     "ok",
-    `installed package app/${crop} · −${price} credits`,
+    `installed package app/${name} · −${price} credits`,
   );
 }
 
 export function plantOnPlot(state: OpsState, plotId: string, crop: CropId): OpsState {
+  const name = pkg(crop);
   if (state.seeds[crop] <= 0) {
-    return pushLog(state, "warn", `deploy ${crop} failed · package not in registry`);
+    return pushLog(state, "warn", `deploy ${name} failed · package not in registry`);
   }
   const plot = state.plots.find((p) => p.id === plotId);
   if (!plot || plot.status !== "empty") {
@@ -194,7 +222,156 @@ export function plantOnPlot(state: OpsState, plotId: string, crop: CropId): OpsS
   return pushLog(
     { ...state, plots, seeds },
     "ok",
-    `site ${plot.host} provisioned with ${crop} · build started`,
+    `site ${plot.host} provisioned with ${name} · build started`,
+  );
+}
+
+/** Single-site health check (water / revive alert). */
+export function healthCheckPlot(state: OpsState, plotId: string): OpsState {
+  const now = Date.now();
+  const plot = state.plots.find((p) => p.id === plotId);
+  if (!plot) {
+    return pushLog(state, "warn", `health-check failed · unknown site ${plotId}`);
+  }
+  if (plot.status === "empty") {
+    return pushLog(state, "info", `health-check ${plot.host} · idle (nothing to refresh)`);
+  }
+  if (plot.status === "ready") {
+    return pushLog(
+      { ...state, plots: state.plots.map((p) =>
+        p.id === plotId ? { ...p, moisture: Math.min(100, p.moisture + 8), lastActionAt: now } : p,
+      )},
+      "ok",
+      `health-check ${plot.host} · pending release (metrics refreshed)`,
+    );
+  }
+
+  const plots = state.plots.map((p) => {
+    if (p.id !== plotId) return p;
+    if (p.status === "wilted") {
+      return {
+        ...p,
+        status: "growing" as const,
+        moisture: 55,
+        growth: Math.min(99, p.growth + 12),
+        lastActionAt: now,
+      };
+    }
+    const moisture = Math.min(100, p.moisture + 28);
+    const growth = Math.min(100, p.growth + 22 + Math.floor(moisture / 25));
+    return {
+      ...p,
+      moisture,
+      growth,
+      status: growth >= 100 ? ("ready" as const) : ("growing" as const),
+      lastActionAt: now,
+    };
+  });
+  const after = plots.find((p) => p.id === plotId)!;
+  return pushLog(
+    { ...state, plots },
+    "ok",
+    after.status === "ready"
+      ? `health-check ${plot.host} · build complete · pending release`
+      : `health-check ${plot.host} · load ${after.moisture}% · build ${after.growth}%`,
+  );
+}
+
+/** Single-site backup & release (harvest). */
+export function releasePlot(state: OpsState, plotId: string): OpsState {
+  const now = Date.now();
+  const plot = state.plots.find((p) => p.id === plotId);
+  if (!plot) {
+    return pushLog(state, "warn", `release failed · unknown site ${plotId}`);
+  }
+  if (plot.status !== "ready" || !plot.crop) {
+    return pushLog(state, "warn", `release aborted · ${plot.host} not pending`);
+  }
+  const crop = plot.crop;
+  const gain = HARVEST_VALUE[crop];
+  const plots = state.plots.map((p) =>
+    p.id === plotId
+      ? {
+          ...p,
+          status: "empty" as const,
+          crop: null,
+          growth: 0,
+          moisture: Math.max(20, p.moisture - 15),
+          lastActionAt: now,
+        }
+      : p,
+  );
+  let next: OpsState = {
+    ...state,
+    coins: state.coins + gain,
+    inventory: bumpInventory(state.inventory, crop, 1),
+    plots,
+    day: state.day + 1,
+  };
+  return pushLog(
+    next,
+    "ok",
+    `backup-release ${plot.host} · ${pkg(crop)} published · +${gain} credits`,
+  );
+}
+
+/** Export harvested artifacts from Files for credits. */
+export function exportArtifact(state: OpsState, crop: CropId, qty = 1): OpsState {
+  const name = pkg(crop);
+  const want = Math.max(1, Math.floor(qty));
+  const row = state.inventory.find((i) => i.crop === crop);
+  const have = row?.qty ?? 0;
+  if (have < want) {
+    return pushLog(
+      state,
+      "warn",
+      `export ${name} failed · not enough files (${have}/${want})`,
+    );
+  }
+  const unit = EXPORT_VALUE[crop];
+  const gained = unit * want;
+  return pushLog(
+    {
+      ...state,
+      coins: state.coins + gained,
+      inventory: bumpInventory(state.inventory, crop, -want),
+    },
+    "ok",
+    `exported ${want}× ${name} artifact · +${gained} credits`,
+  );
+}
+
+/** Provision an extra idle website. */
+export function provisionSite(state: OpsState): OpsState {
+  if (state.plots.length >= HOST_POOL.length) {
+    return pushLog(state, "warn", "provision failed · site quota reached");
+  }
+  const cost = SITE_PROVISION_COST + Math.max(0, state.plots.length - 6) * 25;
+  if (state.coins < cost) {
+    return pushLog(
+      state,
+      "warn",
+      `provision failed · insufficient balance (${state.coins}/${cost})`,
+    );
+  }
+  const host = nextHost(state.plots);
+  const plot: Plot = {
+    id: nid("plot"),
+    host,
+    status: "empty",
+    crop: null,
+    growth: 0,
+    moisture: 45,
+    lastActionAt: Date.now(),
+  };
+  return pushLog(
+    {
+      ...state,
+      coins: state.coins - cost,
+      plots: [...state.plots, plot],
+    },
+    "ok",
+    `provisioned website ${host} · −${cost} credits`,
   );
 }
 
@@ -270,8 +447,10 @@ export function runCron(state: OpsState, taskId: CronTask["id"]): OpsState {
   }
 
   // scan-pests
+  let alerts = 0;
   const plots = next.plots.map((p) => {
     if (p.status === "growing" && p.moisture < 15) {
+      alerts += 1;
       return { ...p, status: "wilted" as const };
     }
     if (p.status === "growing") {
@@ -281,8 +460,10 @@ export function runCron(state: OpsState, taskId: CronTask["id"]): OpsState {
   });
   next = pushLog(
     { ...next, plots },
-    "info",
-    "cron security-scan · finished (high-load sites may alert)",
+    alerts > 0 ? "warn" : "info",
+    alerts > 0
+      ? `cron security-scan · ${alerts} site(s) entered alert`
+      : "cron security-scan · finished (no new alerts)",
   );
   return next;
 }
@@ -308,4 +489,169 @@ export function dashboardStats(state: OpsState) {
   );
   const seedStock = CROP_ORDER.reduce((a, c) => a + state.seeds[c], 0);
   return { growing, ready, empty, wilted, avgMoisture, seedStock };
+}
+
+export type TermResult = { state: OpsState; echo: string[] };
+
+const TERM_HELP = [
+  "commands:",
+  "  help                         show this help",
+  "  status                       cluster summary",
+  "  sites                        list websites",
+  "  install <pkg>                buy from app store (nginx|mysql|redis|postgres)",
+  "  deploy <host> <pkg>          deploy package on idle site",
+  "  health [host]                health-check one site or batch-health",
+  "  release [host]               backup-release one site or all pending",
+  "  scan                         run security-scan",
+  "  export <pkg> [qty]           export files for credits",
+  "  provision                    add an idle website",
+  "  clear                        clear terminal view",
+];
+
+function resolveCrop(token: string): CropId | null {
+  const key = token.trim().toLowerCase();
+  if (key in PACKAGE_FROM_SLUG) return PACKAGE_FROM_SLUG[key]!;
+  if ((CROP_ORDER as string[]).includes(key)) return key as CropId;
+  return null;
+}
+
+function findPlot(state: OpsState, token: string): Plot | undefined {
+  const t = token.trim().toLowerCase();
+  return state.plots.find(
+    (p) => p.host.toLowerCase() === t || p.id.toLowerCase() === t || p.host.toLowerCase().startsWith(t),
+  );
+}
+
+/** Parse a terminal line into engine actions. Returns echo lines for the UI. */
+export function runTerminalCommand(state: OpsState, raw: string): TermResult {
+  const line = raw.trim().replace(/\s+/g, " ");
+  if (!line) return { state, echo: [] };
+
+  const parts = line.split(" ");
+  const cmd = parts[0]!.toLowerCase();
+  const echo: string[] = [`$ ${line}`];
+
+  if (cmd === "help" || cmd === "?") {
+    return { state, echo: [...echo, ...TERM_HELP] };
+  }
+
+  if (cmd === "clear" || cmd === "cls") {
+    return { state, echo: ["__CLEAR__"] };
+  }
+
+  if (cmd === "status") {
+    const s = dashboardStats(state);
+    echo.push(
+      `uptime day ${state.day} · balance ${state.coins}`,
+      `sites ${state.plots.length} · running ${s.growing} · pending ${s.ready} · idle ${s.empty} · alert ${s.wilted}`,
+      `avg load ${s.avgMoisture}% · apps ready ${s.seedStock}`,
+    );
+    return { state: pushLog(state, "info", "terminal status · queried"), echo };
+  }
+
+  if (cmd === "sites" || cmd === "ls") {
+    for (const p of state.plots) {
+      const app = p.crop ? pkg(p.crop) : "-";
+      echo.push(`${p.host.padEnd(16)} ${p.status.padEnd(8)} ${app.padEnd(10)} build=${p.growth}% load=${p.moisture}%`);
+    }
+    return { state, echo };
+  }
+
+  if (cmd === "install") {
+    const crop = parts[1] ? resolveCrop(parts[1]) : null;
+    if (!crop) {
+      echo.push("usage: install <nginx|mysql|redis|postgres>");
+      return { state, echo };
+    }
+    const next = buySeed(state, crop);
+    echo.push(next.logs[0]?.text ?? "done");
+    return { state: next, echo };
+  }
+
+  if (cmd === "deploy") {
+    if (parts.length < 3) {
+      echo.push("usage: deploy <host> <pkg>");
+      return { state, echo };
+    }
+    const plot = findPlot(state, parts[1]!);
+    const crop = resolveCrop(parts[2]!);
+    if (!plot) {
+      echo.push(`unknown host: ${parts[1]}`);
+      return { state, echo };
+    }
+    if (!crop) {
+      echo.push(`unknown package: ${parts[2]}`);
+      return { state, echo };
+    }
+    const next = plantOnPlot(state, plot.id, crop);
+    echo.push(next.logs[0]?.text ?? "done");
+    return { state: next, echo };
+  }
+
+  if (cmd === "health" || cmd === "check") {
+    if (parts[1]) {
+      const plot = findPlot(state, parts[1]);
+      if (!plot) {
+        echo.push(`unknown host: ${parts[1]}`);
+        return { state, echo };
+      }
+      const next = healthCheckPlot(state, plot.id);
+      echo.push(next.logs[0]?.text ?? "done");
+      return { state: next, echo };
+    }
+    const next = runCron(state, "water-all");
+    echo.push(next.logs[0]?.text ?? "done");
+    return { state: next, echo };
+  }
+
+  if (cmd === "release" || cmd === "backup") {
+    if (parts[1]) {
+      const plot = findPlot(state, parts[1]);
+      if (!plot) {
+        echo.push(`unknown host: ${parts[1]}`);
+        return { state, echo };
+      }
+      const next = releasePlot(state, plot.id);
+      echo.push(next.logs[0]?.text ?? "done");
+      return { state: next, echo };
+    }
+    const next = runCron(state, "harvest-ready");
+    echo.push(next.logs[0]?.text ?? "done");
+    return { state: next, echo };
+  }
+
+  if (cmd === "scan") {
+    const next = runCron(state, "scan-pests");
+    echo.push(next.logs[0]?.text ?? "done");
+    return { state: next, echo };
+  }
+
+  if (cmd === "export") {
+    const crop = parts[1] ? resolveCrop(parts[1]) : null;
+    if (!crop) {
+      echo.push("usage: export <pkg> [qty]");
+      return { state, echo };
+    }
+    const qty = parts[2] ? Number.parseInt(parts[2], 10) : 1;
+    if (!Number.isFinite(qty) || qty < 1) {
+      echo.push("qty must be a positive integer");
+      return { state, echo };
+    }
+    const next = exportArtifact(state, crop, qty);
+    echo.push(next.logs[0]?.text ?? "done");
+    return { state: next, echo };
+  }
+
+  if (cmd === "provision" || cmd === "new-site") {
+    const next = provisionSite(state);
+    echo.push(next.logs[0]?.text ?? "done");
+    return { state: next, echo };
+  }
+
+  echo.push(`unknown command: ${cmd} · type help`);
+  return { state, echo };
+}
+
+export function nextProvisionCost(state: OpsState): number {
+  return SITE_PROVISION_COST + Math.max(0, state.plots.length - 6) * 25;
 }
