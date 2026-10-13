@@ -65,6 +65,18 @@ export const games: GameMeta[] = [
     },
     badge: { zh: "3D", en: "3D" },
   },
+  {
+    slug: "term-run",
+    mode: "single",
+    title: { zh: "终端跑酷", en: "term-run" },
+    blurb: {
+      zh: "行长即地形：在 access.log 的山脊上侧跑，躲 5xx、踩 2xx。旁人只看见终端在刷日志。",
+      en: "Line length is terrain. Side-run the access.log ridge, dodge 5xx, land 2xx. Looks like a terminal to anyone watching.",
+    },
+    badge: { zh: "摸鱼", en: "Slack" },
+    audience: "staging",
+  },
+
 ];
 
 function audienceAllows(audience: GameAudience | undefined, kind: SiteKind): boolean {
