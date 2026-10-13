@@ -291,7 +291,7 @@ export function ShopPage({ state, t, onBuy }: Pick<PageProps, "state" | "t" | "o
                 {crop === "lettuce" ? "Ng" : crop === "tomato" ? "My" : crop === "potato" ? "Rd" : "Pg"}
               </div>
               <h3>{t.app[crop]}</h3>
-              <p className="ops-muted">{t.appBlurb[crop]}</p>
+              <p className="ops-muted ops-shop-blurb">{t.appBlurb[crop]}</p>
               <div className="ops-shop-meta">
                 <span>{t.shopPrice(price)}</span>
                 <span>{t.shopOwned(state.seeds[crop])}</span>
