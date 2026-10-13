@@ -68,10 +68,10 @@ export const games: GameMeta[] = [
   {
     slug: "term-run",
     mode: "single",
-    title: { zh: "终端跑酷", en: "term-run" },
+    title: { zh: "access.log", en: "access.log" },
     blurb: {
-      zh: "行长即地形：在 access.log 的山脊上侧跑，躲 5xx、踩 2xx。旁人只看见终端在刷日志。",
-      en: "Line length is terrain. Side-run the access.log ridge, dodge 5xx, land 2xx. Looks like a terminal to anyone watching.",
+      zh: "看起来就是 tail -f 在刷访问日志。行越长光标越靠右；空格跳过 5xx 和空行。",
+      en: "Looks like tail -f on an access log. Longer lines push the caret right; space skips 5xx and voids.",
     },
     badge: { zh: "摸鱼", en: "Slack" },
     audience: "staging",

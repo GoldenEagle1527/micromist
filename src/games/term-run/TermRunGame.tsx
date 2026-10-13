@@ -1,14 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import "./term-run.css";
 import { useLocale } from "../../i18n";
-import {
-  createEngine,
-  jump,
-  resetEngine,
-  slide,
-  step,
-  type EngineState,
-} from "./engine";
+import { createEngine, jump, resetEngine, step, type EngineState } from "./engine";
 import { drawFrame } from "./render";
 import { loadScores, recordRun, type TermRunScores } from "./scores";
 
@@ -18,7 +11,6 @@ export function TermRunGame() {
   const stateRef = useRef<EngineState>(createEngine());
   const scoresRef = useRef<TermRunScores>(loadScores());
   const recordedRef = useRef(false);
-  const [best, setBest] = useState(() => loadScores().best?.score ?? 0);
   const [, setUiTick] = useState(0);
 
   const restart = useCallback(() => {
@@ -39,7 +31,8 @@ export function TermRunGame() {
     let alive = true;
 
     const resize = () => {
-      const rect = canvas.getBoundingClientRect();
+      const parent = canvas.parentElement;
+      const rect = parent?.getBoundingClientRect() ?? canvas.getBoundingClientRect();
       const dpr = Math.min(2, window.devicePixelRatio || 1);
       const w = Math.max(1, Math.floor(rect.width * dpr));
       const h = Math.max(1, Math.floor(rect.height * dpr));
@@ -56,21 +49,18 @@ export function TermRunGame() {
       last = now;
       blink += dt;
       const st = stateRef.current;
-      const h = canvas.height;
-      step(st, dt, h);
+      step(st, dt);
 
       if (st.phase === "dead" && !recordedRef.current) {
         recordedRef.current = true;
-        const { scores, isNewBest } = recordRun({
+        const { scores } = recordRun({
           score: st.score,
           lines: st.linesPassed,
           ok: st.okCount,
-          distance: Math.floor(st.distance),
+          distance: st.linesPassed,
           at: Date.now(),
         });
         scoresRef.current = scores;
-        if (isNewBest) setBest(st.score);
-        else setBest(scores.best?.score ?? 0);
         setUiTick((n) => n + 1);
       }
 
@@ -93,22 +83,14 @@ export function TermRunGame() {
     const onKey = (e: KeyboardEvent) => {
       if (e.repeat) return;
       const st = stateRef.current;
-      const canvas = canvasRef.current;
-      const h = canvas?.height || 540;
-
       if (e.code === "Space" || e.code === "ArrowUp" || e.code === "KeyW") {
         e.preventDefault();
         if (st.phase === "dead") {
           restart();
           return;
         }
-        jump(st, h);
+        jump(st);
         return;
-      }
-      if (e.code === "ArrowDown" || e.code === "KeyS") {
-        e.preventDefault();
-        if (st.phase === "dead") return;
-        slide(st);
       }
       if (e.code === "KeyR" && st.phase === "dead") restart();
     };
@@ -118,44 +100,23 @@ export function TermRunGame() {
 
   const onPointer = () => {
     const st = stateRef.current;
-    const canvas = canvasRef.current;
-    const h = canvas?.height || 540;
     if (st.phase === "dead") {
       restart();
       return;
     }
-    jump(st, h);
+    jump(st);
   };
 
-  const zh = locale === "zh";
-
   return (
-    <section className="term-run">
-      <header className="term-run-head">
-        <div>
-          <h1>term-run</h1>
-          <p>
-            {zh
-              ? "行越长坡越高。躲 5xx，踩 2xx。旁人眼里只是 access.log 在刷。"
-              : "Line length is terrain height. Dodge 5xx, land 2xx. Looks like access.log."}
-          </p>
-        </div>
-        <div className="term-run-best">best={best}</div>
-      </header>
-
-      <div className="term-run-stage">
+    <div className="game-viewport term-run-viewport">
+      <div className="game-stage term-run-stage">
         <canvas
           ref={canvasRef}
           role="img"
-          aria-label={zh ? "终端跑酷画布" : "Terminal runner canvas"}
+          aria-label="access.log"
           onPointerDown={onPointer}
         />
       </div>
-
-      <p className="term-run-help">
-        <kbd>Space</kbd> / <kbd>↑</kbd> {zh ? "跳" : "jump"} · <kbd>↓</kbd>{" "}
-        {zh ? "滑铲" : "slide"} · {zh ? "点画布也可跳" : "tap canvas to jump"}
-      </p>
-    </section>
+    </div>
   );
 }

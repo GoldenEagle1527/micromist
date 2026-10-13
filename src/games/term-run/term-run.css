@@ -1,71 +1,16 @@
-/* term-run — fish-slacking terminal runner */
+/* term-run — full-viewport black terminal; fish-slacking first */
 
-.term-run {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-  width: min(100%, 960px);
-  margin: 0 auto;
+.term-run-viewport {
+  background: #0c0c0c;
 }
 
-.term-run-head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 0.5rem 1rem;
+.term-run-viewport .term-run-stage {
+  background: #0c0c0c;
+  cursor: text;
 }
 
-.term-run-head h1 {
-  margin: 0;
-  font-size: 1.25rem;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  letter-spacing: 0.02em;
-}
-
-.term-run-head p {
-  margin: 0;
-  color: var(--md-sys-color-on-surface-variant);
-  font-size: 0.9rem;
-  max-width: 36rem;
-}
-
-.term-run-best {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 0.85rem;
-  color: var(--md-sys-color-primary);
-}
-
-.term-run-stage {
-  width: 100%;
-  aspect-ratio: 960 / 540;
-  background: #0a0c0f;
-  border-radius: var(--md-sys-shape-corner-md);
-  overflow: hidden;
-  border: 1px solid color-mix(in srgb, #3dd68c 35%, var(--glass-border));
-  box-shadow: var(--glass-shadow);
-  touch-action: none;
-  cursor: pointer;
-}
-
-.term-run-stage canvas {
+.term-run-viewport .term-run-stage canvas {
   display: block;
   width: 100%;
   height: 100%;
-}
-
-.term-run-help {
-  margin: 0;
-  font-size: 0.82rem;
-  color: var(--md-sys-color-on-surface-variant);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-}
-
-.term-run-help kbd {
-  display: inline-block;
-  padding: 0.05rem 0.35rem;
-  border: 1px solid var(--line);
-  border-radius: 4px;
-  font-size: 0.78rem;
-  background: color-mix(in srgb, var(--md-sys-color-surface) 80%, #000 20%);
 }
