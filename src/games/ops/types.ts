@@ -6,7 +6,8 @@ export type OpsPageId =
   | "shop"
   | "warehouse"
   | "cron"
-  | "terminal";
+  | "terminal"
+  | "settings";
 
 export type CropId = "lettuce" | "tomato" | "potato" | "chili";
 

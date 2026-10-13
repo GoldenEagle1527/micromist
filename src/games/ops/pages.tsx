@@ -318,3 +318,39 @@ export function TerminalPage({
     </div>
   );
 }
+
+export function SettingsPage({ t }: Pick<PageProps, "t">) {
+  return (
+    <div className="ops-page">
+      <header className="ops-page-head">
+        <h2>{t.settingsTitle}</h2>
+        <p className="ops-page-sub">{t.menuHint.settings}</p>
+      </header>
+      <p className="ops-settings-note">{t.settingsNote}</p>
+      <div className="ops-table-wrap">
+        <table className="ops-table ops-map-table">
+          <thead>
+            <tr>
+              <th>{t.settingsColOps}</th>
+              <th>{t.settingsColFarm}</th>
+              <th>{t.settingsColHint}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {t.mapRows.map((row) => (
+              <tr key={`${row.ops}-${row.farm}`}>
+                <td>
+                  <strong className="ops-map-ops">{row.ops}</strong>
+                </td>
+                <td>
+                  <span className="ops-map-farm">{row.farm}</span>
+                </td>
+                <td className="ops-muted">{row.hint}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}

@@ -732,3 +732,30 @@
     max-height: min(55dvh, 420px);
   }
 }
+
+
+/* Settings — farm↔ops mapping (only page that may show farm words). */
+.ops-settings-note {
+  margin: 0 0 0.9rem;
+  padding: 0.65rem 0.8rem;
+  border-radius: var(--md-sys-shape-corner-sm);
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--md-sys-color-primary) 8%, var(--md-sys-color-surface-container));
+  font-size: 0.82rem;
+  line-height: 1.45;
+  color: var(--ink);
+}
+
+.ops-map-table .ops-map-ops {
+  font-weight: 600;
+}
+
+.ops-map-table .ops-map-farm {
+  color: color-mix(in srgb, #2e7d32 55%, var(--ink));
+  font-weight: 500;
+}
+
+.ops-map-table th:nth-child(3),
+.ops-map-table td:nth-child(3) {
+  min-width: 8rem;
+}

@@ -17,6 +17,7 @@ import {
   CronPage,
   DashboardPage,
   PlotsPage,
+  SettingsPage,
   ShopPage,
   TerminalPage,
   WarehousePage,
@@ -147,6 +148,8 @@ export function OpsGame() {
             onClear={() => setTermCleared(true)}
           />
         );
+      case "settings":
+        return <SettingsPage t={op} />;
       default:
         return null;
     }
