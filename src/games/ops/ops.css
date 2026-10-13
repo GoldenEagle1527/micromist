@@ -1,9 +1,20 @@
 /* 运维 — self-built ops-panel shell (micromist tokens; not a fork of any panel). */
 
+/* Stretch under platform .shell > .main so the panel fills remaining viewport. */
+.main:has(.ops-shell),
+.main:has(.ops-setup) {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
 .ops-setup {
   display: grid;
   place-items: center;
-  min-height: min(70vh, 640px);
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: 0;
+  height: 100%;
   padding: 1rem;
 }
 
@@ -41,12 +52,17 @@
   --ops-sidebar-w: 220px;
   display: grid;
   grid-template-columns: var(--ops-sidebar-w) minmax(0, 1fr);
-  min-height: min(78vh, 860px);
-  max-height: min(86vh, 920px);
-  border-radius: var(--md-sys-shape-corner-md);
+  /* Fill .main under the platform topbar (no black gap below). */
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: 0;
+  height: 100%;
+  max-height: none;
+  border-radius: 0;
   overflow: hidden;
-  border: 1px solid var(--glass-border);
-  box-shadow: var(--glass-shadow);
+  border: 0;
+  border-top: 1px solid var(--glass-border);
+  box-shadow: none;
   background: color-mix(in srgb, var(--md-sys-color-surface) 88%, #000 12%);
 }
 
@@ -571,7 +587,8 @@
   .ops-shell {
     grid-template-columns: 1fr;
     max-height: none;
-    min-height: min(100dvh, 920px);
+    min-height: 0;
+    height: 100%;
     position: relative;
     overflow: hidden;
   }

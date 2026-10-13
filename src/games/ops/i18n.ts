@@ -144,7 +144,7 @@ export const opsZh: OpsDict = {
   cropBlurb: {
     lettuce: "高性能反向代理 · 轻量 · 稳定",
     tomato: "关系型数据库 · 常用业务底座",
-    potato: "内存键值缓存 · 低延迟",
+    potato: "适合缓存与会话",
     chili: "企业级数据库 · 高负载场景",
   },
   status: {
@@ -246,7 +246,7 @@ export const opsEn: OpsDict = {
   cropBlurb: {
     lettuce: "High-performance reverse proxy · light · stable",
     tomato: "Relational database · common app backbone",
-    potato: "In-memory KV cache · low latency",
+    potato: "Good for cache and sessions",
     chili: "Enterprise database · high-load workloads",
   },
   status: {
