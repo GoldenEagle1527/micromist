@@ -1,38 +1,21 @@
 /**
- * Pure terminal look: dense uvicorn.access lines, vertical scroll.
- * No platformer chrome, no hearts/combo, no jagged terrain stroke.
- * Player = blinking block caret on the focus line.
+ * Ordinary terminal look: uniform text, no game chrome.
+ * Player caret locked to vertical center; logs scroll past.
+ * Bumps = a leading "#" in the gutter; gaps = blank rows.
  */
 
-import { MAX_ERR, type EngineState } from "./engine";
+import type { EngineState } from "./engine";
 import type { LogLine } from "./logs";
 
-const BG = "#0c0c0c";
-const FG = "#d4d4d4";
-const FG_DIM = "#6a6a6a";
-const FG_MUTED = "#3c3c3c";
-const GREEN = "#4ec94e";
-const AMBER = "#ce9178";
-const RED = "#f44747";
-const STATUS_OK = "#b5cea8";
-const STATUS_3 = "#569cd6";
-const STATUS_4 = "#ce9178";
-const STATUS_5 = "#f44747";
+const BG = "#000000";
+const FG = "#cccccc";
+const FG_DIM = "#777777";
+const FG_FAINT = "#555555";
 
-function lineColor(line: LogLine, isFocus: boolean): string {
-  if (line.cliff) return FG_MUTED;
-  switch (line.statusClass) {
-    case "server":
-      return STATUS_5;
-    case "client":
-      return STATUS_4;
-    case "redirect":
-      return STATUS_3;
-    case "ok":
-      return isFocus ? FG : STATUS_OK;
-    default:
-      return isFocus ? FG : FG_DIM;
-  }
+function gutterOf(line: LogLine): string {
+  if (line.kind === "gap") return "  ";
+  if (line.bump > 0) return "# ";
+  return "  ";
 }
 
 export function drawFrame(
@@ -45,105 +28,91 @@ export function drawFrame(
   ctx.fillStyle = BG;
   ctx.fillRect(0, 0, w, h);
 
-  const padX = Math.max(8, Math.floor(w * 0.012));
-  const promptH = Math.max(18, Math.floor(h * 0.032));
-  const fontPx = Math.max(11, Math.min(15, Math.floor(h / 42)));
-  const rowH = fontPx + 4;
-  const rows = Math.max(8, Math.floor((h - promptH * 2 - 8) / rowH));
+  const padX = Math.max(6, Math.floor(w * 0.01));
+  const fontPx = Math.max(12, Math.min(14, Math.floor(h / 48)));
+  const rowH = fontPx + 3;
+  const rowsHalf = Math.max(6, Math.floor(h / rowH / 2));
 
   ctx.font = `${fontPx}px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace`;
   ctx.textBaseline = "top";
-
-  const last = Math.floor(state.streamHead);
-  const first = Math.max(0, last - rows + 1);
-  const frac = state.streamHead - last; // sub-line scroll
-  const topY = promptH + 6 - frac * rowH;
-
-  const focusIdx = Math.floor(state.py);
   const charW = ctx.measureText("M").width;
 
-  // Log lines (newest toward bottom)
-  for (let i = first; i <= last + 1; i++) {
-    const line = state.lines[i];
-    if (!line) continue;
-    const row = i - first;
-    const y = topY + row * rowH;
-    if (y < promptH || y > h - promptH - 4) continue;
+  // Camera: player progress is always at vertical center
+  const centerY = Math.floor(h / 2 - fontPx / 2);
+  const progress = state.progress;
+  const first = Math.floor(progress - rowsHalf) - 1;
+  const last = Math.ceil(progress + rowsHalf) + 1;
 
-    const isFocus = i === focusIdx;
-    const age = last - i;
-    let col = lineColor(line, isFocus);
-    if (!isFocus && age > 8) {
-      // older lines fade — like a real scrollback
-      ctx.globalAlpha = Math.max(0.35, 1 - age * 0.04);
+  const maxChars = Math.max(24, Math.floor((w - padX * 2) / charW) - 2);
+
+  for (let i = first; i <= last; i++) {
+    if (i < 0 || i >= state.lines.length) continue;
+    const line = state.lines[i]!;
+    const y = centerY + (i - progress) * rowH;
+    if (y < -rowH || y > h + rowH) continue;
+
+    // Jump offset only for drawing player — lines stay put
+    const gutter = gutterOf(line);
+    let text: string;
+    if (line.kind === "gap") {
+      text = "";
     } else {
-      ctx.globalAlpha = 1;
-    }
-    if (state.warnFlash > 0 && isFocus) {
-      col = AMBER;
+      const body =
+        line.raw.length > maxChars
+          ? line.raw.slice(0, maxChars - 1) + "…"
+          : line.raw;
+      text = gutter + body;
     }
 
-    const text = line.cliff ? "" : line.raw;
-    // Clip to canvas width in characters
-    const maxChars = Math.max(20, Math.floor((w - padX * 2) / charW));
-    const shown = text.length > maxChars ? text.slice(0, maxChars - 1) + "…" : text;
-    ctx.fillStyle = col;
-    ctx.fillText(shown || (line.cliff ? "" : " "), padX, y);
-
-    // Dim pad to the right of short lines — keeps the ragged edge readable
-    if (!line.cliff && line.len < maxChars && isFocus) {
-      // nothing — ragged edge is natural
-    }
+    // Uniform color — real terminals don't rainbow status codes here
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = FG;
+    if (text) ctx.fillText(text, padX, y);
   }
   ctx.globalAlpha = 1;
 
-  // Player caret — block cursor at (px column, py row), not a sprite
-  const caretRow = state.py - first;
-  const caretY = topY + caretRow * rowH;
-  const caretX = padX + state.px * charW;
-  const blinkOn = opts.blink % 1.05 < 0.72 || !state.onGround || state.phase === "ready";
-  if (blinkOn && caretY > promptH && caretY < h - promptH) {
-    ctx.fillStyle = state.phase === "dead" ? RED : GREEN;
-    ctx.globalAlpha = state.onGround ? 0.95 : 0.7;
-    ctx.fillRect(Math.min(caretX, w - padX - charW), caretY, Math.max(2, charW * 0.85), fontPx);
-    ctx.globalAlpha = 1;
+  // Player caret — always at horizontal gutter + vertical center, lift when jumping
+  const caretX = padX;
+  const caretY = centerY - state.height * rowH;
+  const blinkOn =
+    opts.blink % 1.1 < 0.75 || !state.onGround || state.phase !== "running";
+  if (blinkOn && caretY > -fontPx && caretY < h) {
+    ctx.fillStyle = FG;
+    ctx.fillRect(caretX, caretY, Math.max(2, charW * 0.9), fontPx);
   }
 
-  // Top prompt — only HUD, disguised as shell
+  // Minimal top line — looks like the shell that launched tail
   ctx.fillStyle = FG_DIM;
-  const errs = `${state.errs}/${MAX_ERR}`;
-  const prompt =
+  const top =
     state.phase === "dead"
-      ? `$ tail -f access.log  # terminated  bytes=${state.score}  best=${opts.best}`
-      : `$ tail -f access.log  # bytes=${state.score}  ok=${state.okCount}  lines=${state.linesPassed}  err=${errs}`;
-  ctx.fillText(prompt, padX, 4);
+      ? `$ tail -f access.log`
+      : `$ tail -f access.log`;
+  ctx.fillText(top, padX, 4);
 
-  // Bottom status line — looks like a shell prompt, not a game HUD
-  ctx.fillStyle = FG_MUTED;
-  const bottom =
-    opts.locale === "zh"
-      ? `~/logs $  space=跳过异常行  ·  best=${opts.best}`
-      : `~/logs $  space=skip  ·  best=${opts.best}`;
-  ctx.fillText(bottom, padX, h - promptH);
+  // Score disguised as a dim status comment — only when running/dead
+  if (state.phase !== "ready") {
+    ctx.fillStyle = FG_FAINT;
+    const meta = `# ${state.score}  best=${opts.best}`;
+    ctx.fillText(meta, padX + ctx.measureText(top + "  ").width, 4);
+  }
 
   if (state.phase === "ready") {
-    // No dim overlay title card — only a comment line in the stream band
-    ctx.fillStyle = FG_DIM;
+    // One faint comment, no overlay card
+    ctx.fillStyle = FG_FAINT;
     const tip =
       opts.locale === "zh"
-        ? "# space / 点击 开始  ·  跳过 5xx 与空行  ·  旁人只看见日志在刷"
-        : "# space / click to follow  ·  skip 5xx & voids  ·  looks like logs";
-    ctx.fillText(tip, padX, h * 0.42);
+        ? `# space`
+        : `# space`;
+    ctx.fillText(tip, padX, centerY - rowH * 2);
   }
 
   if (state.phase === "dead") {
-    // Inline "error" lines — still terminal, not a game over modal
-    ctx.fillStyle = RED;
-    const y0 = h * 0.4;
+    ctx.fillStyle = FG;
+    const y0 = centerY - rowH;
     ctx.fillText(`ERROR: ${state.deathReason || "Connection reset"}`, padX, y0);
-    ctx.fillStyle = AMBER;
+    ctx.fillStyle = FG_DIM;
     ctx.fillText(
-      `# bytes=${state.score} ok=${state.okCount} lines=${state.linesPassed}  ·  space to retry`,
+      `# score=${state.score} lines=${state.linesPassed}  ·  space to retry`,
       padX,
       y0 + rowH,
     );

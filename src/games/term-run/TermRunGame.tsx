@@ -56,7 +56,7 @@ export function TermRunGame() {
         const { scores } = recordRun({
           score: st.score,
           lines: st.linesPassed,
-          ok: st.okCount,
+          ok: 0,
           distance: st.linesPassed,
           at: Date.now(),
         });

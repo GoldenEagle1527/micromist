@@ -70,8 +70,8 @@ export const games: GameMeta[] = [
     mode: "single",
     title: { zh: "access.log", en: "access.log" },
     blurb: {
-      zh: "看起来就是 tail -f 在刷访问日志。行越长光标越靠右；空格跳过 5xx 和空行。",
-      en: "Looks like tail -f on an access log. Longer lines push the caret right; space skips 5xx and voids.",
+      zh: "看起来就是普通终端在刷 access.log。空格跳：一格凸起、两格二连跳、空行要跳过。",
+      en: "Looks like a plain terminal tailing access.log. Space to jump: 1-row bump, 2-row double-jump, blank gaps.",
     },
     badge: { zh: "摸鱼", en: "Slack" },
     audience: "staging",

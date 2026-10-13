@@ -1,67 +1,27 @@
 /**
- * Access-log lines → terrain segments.
- * height from trimmed length; status/ms drive hazards & feel.
+ * Access-log lines for term-run.
+ * Terrain is NOT line length — only ground / bump1 / bump2 / gap.
  */
 
-export type LogStatusClass = "ok" | "redirect" | "client" | "server" | "none";
+export type CellKind = "ground" | "bump1" | "bump2" | "gap";
 
 export type LogLine = {
   raw: string;
-  len: number;
-  status: number | null;
-  statusClass: LogStatusClass;
-  ms: number | null;
-  /** Blank / separator → cliff */
-  cliff: boolean;
+  kind: CellKind;
+  /** Obstacle height in rows: bump1→1, bump2→1 per cell (pair makes 2). */
+  bump: number;
 };
 
-const L_REF = 120;
-const H_MIN = 0.12;
-const H_MAX = 1;
-
-export function statusClassOf(status: number | null): LogStatusClass {
-  if (status == null) return "none";
-  if (status >= 200 && status < 300) return "ok";
-  if (status >= 300 && status < 400) return "redirect";
-  if (status >= 400 && status < 500) return "client";
-  if (status >= 500) return "server";
-  return "none";
-}
-
-/** Normalized height 0..1 from line length. */
-export function heightOf(line: LogLine): number {
-  if (line.cliff) return 0;
-  const h = line.len / L_REF;
-  return Math.min(H_MAX, Math.max(H_MIN, h));
-}
-
-function parseStatusMs(raw: string): { status: number | null; ms: number | null } {
-  const m = raw.match(/\b([1-5]\d{2})\b(?:\s+(\d+)ms)?\s*$/);
-  if (!m) {
-    const onlyMs = raw.match(/\b(\d+)ms\s*$/);
-    return { status: null, ms: onlyMs ? Number(onlyMs[1]) : null };
-  }
-  return {
-    status: Number(m[1]),
-    ms: m[2] != null ? Number(m[2]) : null,
-  };
-}
-
-export function makeLogLine(raw: string): LogLine {
+export function makeLogLine(raw: string, kind: CellKind = "ground"): LogLine {
   const trimmed = raw.replace(/\s+$/, "");
-  const cliff = trimmed.length === 0 || /^[-=_*]{4,}$/.test(trimmed);
-  const { status, ms } = cliff ? { status: null, ms: null } : parseStatusMs(trimmed);
-  return {
-    raw: trimmed,
-    len: trimmed.length,
-    status,
-    statusClass: statusClassOf(status),
-    ms,
-    cliff,
-  };
+  if (kind === "gap" || trimmed.length === 0) {
+    return { raw: "", kind: "gap", bump: 0 };
+  }
+  const bump = kind === "bump1" || kind === "bump2" ? 1 : 0;
+  return { raw: trimmed, kind, bump };
 }
 
-/** Desensitized uvicorn.access-style sample (teaches early terrain). */
+/** Desensitized uvicorn.access sample — early flat stretch. */
 export const SAMPLE_LOGS: string[] = [
   '2026-10-13 13:21:04,112 - INFO - adpilot|uvicorn.access - 127.0.0.1:51234 - "GET /api/v1/health HTTP/1.1" 200 4ms',
   '2026-10-13 13:21:04,188 - INFO - adpilot|uvicorn.access - 127.0.0.1:51234 - "GET /api/v1/platforms HTTP/1.1" 200 17ms',
@@ -83,35 +43,20 @@ export const SAMPLE_LOGS: string[] = [
   '2026-10-13 13:21:05,077 - INFO - adpilot|uvicorn.access - 198.51.100.7:22002 - "PUT /api/v1/campaigns/12 HTTP/1.1" 200 27ms',
   '2026-10-13 13:21:05,130 - INFO - adpilot|uvicorn.access - 203.0.113.44:39013 - "GET /api/v1/login HTTP/1.1" 302 5ms',
   '2026-10-13 13:21:05,188 - INFO - adpilot|uvicorn.access - 10.0.0.8:48108 - "GET /api/v1/platforms HTTP/1.1" 200 16ms',
-  "",
-  '2026-10-13 13:21:05,255 - INFO - adpilot|uvicorn.access - 203.0.113.44:39014 - "GET /api/v1/ads?page=2&page_size=50 HTTP/1.1" 200 29ms',
-  '2026-10-13 13:21:05,310 - ERROR - adpilot|uvicorn.access - 203.0.113.44:39014 - "GET /api/v1/reports/heavy HTTP/1.1" 500 210ms',
-  '2026-10-13 13:21:05,366 - INFO - adpilot|uvicorn.access - 127.0.0.1:51237 - "GET /api/v1/health HTTP/1.1" 200 4ms',
-  '2026-10-13 13:21:05,420 - INFO - adpilot|uvicorn.access - 10.0.0.8:48109 - "GET /api/v1/campaigns?page=1&page_size=20 HTTP/1.1" 200 21ms',
-  '2026-10-13 13:21:05,488 - INFO - adpilot|uvicorn.access - 198.51.100.7:22003 - "POST /api/v1/ads HTTP/1.1" 201 33ms',
-  '2026-10-13 13:21:05,540 - INFO - adpilot|uvicorn.access - 10.0.0.8:48110 - "GET /api/v1/forbidden HTTP/1.1" 403 7ms',
-  '2026-10-13 13:21:05,599 - INFO - adpilot|uvicorn.access - 203.0.113.44:39015 - "GET /api/v1/platforms HTTP/1.1" 200 18ms',
-  '2026-10-13 13:21:05,655 - INFO - adpilot|uvicorn.access - 127.0.0.1:51238 - "GET /api/v1/me HTTP/1.1" 200 10ms',
 ];
 
-const PATHS_SHORT = [
+const PATHS = [
   "/api/v1/health",
   "/api/v1/me",
   "/api/v1/platforms",
   "/api/v1/settings",
   "/favicon.ico",
   "/api/v1/ads/1",
-];
-
-const PATHS_MID = [
   "/api/v1/campaigns?page=1&page_size=20",
   "/api/v1/ads?page=1&page_size=50&status=active",
   "/api/v1/reports/summary",
   "/api/v1/campaigns/12/creatives",
   "/api/v1/auth/refresh",
-];
-
-const PATHS_LONG = [
   "/api/v1/campaigns?page=1&page_size=100&sort=-updated_at&q=brand&locale=zh-CN",
   "/api/v1/export?format=csv&from=2026-09-01&to=2026-10-13&tz=Asia/Shanghai&cols=id,name,spend",
   "/api/v1/ads?page=3&page_size=100&status=active&platform=meta&q=summer_sale_2026",
@@ -152,79 +97,100 @@ function formatTs(dayStart: number, index: number): string {
   );
 }
 
+function buildAccessLine(rng: () => number, dayStart: number, i: number): string {
+  const path = PATHS[Math.floor(rng() * PATHS.length)]!;
+  const method = rng() < 0.12 ? (rng() < 0.5 ? "POST" : "PUT") : "GET";
+  const ip = IPS[Math.floor(rng() * IPS.length)]!;
+  const port = 10000 + Math.floor(rng() * 50000);
+  let status = 200;
+  const sRoll = rng();
+  if (sRoll < 0.03) status = rng() < 0.5 ? 500 : 502;
+  else if (sRoll < 0.08) status = rng() < 0.6 ? 404 : 403;
+  else if (sRoll < 0.11) status = 302;
+  else if (method === "POST" && rng() < 0.3) status = 201;
+  const ms =
+    status >= 500
+      ? 80 + Math.floor(rng() * 200)
+      : path.includes("export") || path.includes("search")
+        ? 40 + Math.floor(rng() * 120)
+        : 2 + Math.floor(rng() * 28);
+  const level = status >= 500 ? "ERROR" : "INFO";
+  return (
+    `${formatTs(dayStart, i)} - ${level} - adpilot|uvicorn.access - ` +
+    `${ip}:${port} - "${method} ${path} HTTP/1.1" ${status} ${ms}ms`
+  );
+}
+
 export type SynthOpts = {
   seed?: number;
-  /** Distance / line index — raises 4xx/5xx and long paths. */
+  /** Climbs with distance — more bumps/gaps. */
   difficulty?: number;
 };
 
 /**
- * Endless synthetic uvicorn.access lines.
- * difficulty 0 = tutorial hills; climbs with distance.
+ * Endless lines with obstacle pattern:
+ * ground · bump1 (1 row) · bump2 (2 rows) · gap (blank).
  */
 export function* synthLogs(opts: SynthOpts = {}): Generator<LogLine> {
   const rng = mulberry32(opts.seed ?? 20261013);
   let i = 0;
   const dayStart = Date.UTC(2026, 9, 13, 5, 21, 4);
+  let sinceObstacle = 0;
 
   while (true) {
-    const diff = Math.max(0, opts.difficulty ?? 0) + i / 80;
-    const roll = rng();
+    const diff = Math.max(0, opts.difficulty ?? 0) + i / 90;
+    sinceObstacle += 1;
 
-    // Occasional blank cliff after early game
-    if (i > 24 && rng() < Math.min(0.08, 0.02 + diff * 0.008)) {
-      i += 1;
-      yield makeLogLine("");
-      continue;
+    // Cooldown so obstacles aren't stacked too tight
+    const minGap = Math.max(3, 6 - Math.floor(diff * 0.4));
+    if (sinceObstacle >= minGap && i > 18) {
+      const pBump1 = Math.min(0.12, 0.04 + diff * 0.01);
+      const pBump2 = Math.min(0.08, 0.015 + diff * 0.008);
+      const pGap = Math.min(0.1, 0.025 + diff * 0.009);
+      const roll = rng();
+      if (roll < pGap) {
+        sinceObstacle = 0;
+        i += 1;
+        yield makeLogLine("", "gap");
+        // Rare double gap
+        if (rng() < 0.25 + diff * 0.02) {
+          i += 1;
+          yield makeLogLine("", "gap");
+        }
+        continue;
+      }
+      if (roll < pGap + pBump2) {
+        sinceObstacle = 0;
+        const a = buildAccessLine(rng, dayStart, i++);
+        const b = buildAccessLine(rng, dayStart, i++);
+        yield makeLogLine(a, "bump2");
+        yield makeLogLine(b, "bump2");
+        continue;
+      }
+      if (roll < pGap + pBump2 + pBump1) {
+        sinceObstacle = 0;
+        const a = buildAccessLine(rng, dayStart, i++);
+        yield makeLogLine(a, "bump1");
+        continue;
+      }
     }
 
-    let path: string;
-    const lenRoll = rng();
-    if (lenRoll < 0.45 - Math.min(0.15, diff * 0.02)) {
-      path = PATHS_SHORT[Math.floor(rng() * PATHS_SHORT.length)]!;
-    } else if (lenRoll < 0.78) {
-      path = PATHS_MID[Math.floor(rng() * PATHS_MID.length)]!;
-    } else {
-      path = PATHS_LONG[Math.floor(rng() * PATHS_LONG.length)]!;
-    }
-
-    const method = rng() < 0.12 ? (rng() < 0.5 ? "POST" : "PUT") : "GET";
-    const ip = IPS[Math.floor(rng() * IPS.length)]!;
-    const port = 10000 + Math.floor(rng() * 50000);
-
-    // Status mix
-    let status = 200;
-    const sRoll = rng();
-    const p5 = Math.min(0.14, 0.01 + diff * 0.012);
-    const p4 = Math.min(0.18, 0.03 + diff * 0.015);
-    const p3 = 0.04;
-    if (sRoll < p5) status = rng() < 0.5 ? 500 : 502;
-    else if (sRoll < p5 + p4) status = rng() < 0.6 ? 404 : 403;
-    else if (sRoll < p5 + p4 + p3) status = 302;
-    else if (method === "POST" && rng() < 0.3) status = 201;
-
-    let ms: number;
-    if (status >= 500) ms = 80 + Math.floor(rng() * 200);
-    else if (path.includes("export") || path.includes("search")) {
-      ms = 40 + Math.floor(rng() * 120);
-    } else if (rng() < 0.08 + diff * 0.01) {
-      ms = 60 + Math.floor(rng() * 180); // spike
-    } else {
-      ms = 2 + Math.floor(rng() * 28);
-    }
-
-    const level = status >= 500 ? "ERROR" : "INFO";
-    const raw =
-      `${formatTs(dayStart, i)} - ${level} - adpilot|uvicorn.access - ` +
-      `${ip}:${port} - "${method} ${path} HTTP/1.1" ${status} ${ms}ms`;
-
-    i += 1;
-    // silence unused
-    void roll;
-    yield makeLogLine(raw);
+    const raw = buildAccessLine(rng, dayStart, i++);
+    yield makeLogLine(raw, "ground");
   }
 }
 
+/** Sample with a few teaching obstacles after a flat runway. */
 export function sampleAsLines(): LogLine[] {
-  return SAMPLE_LOGS.map(makeLogLine);
+  const base = SAMPLE_LOGS.map((s) => makeLogLine(s, "ground"));
+  // Teach with space: bump1 → flats → bump2×2 → flats → gap
+  base.push(makeLogLine(SAMPLE_LOGS[0]!, "bump1"));
+  for (const i of [1, 2, 3, 4]) base.push(makeLogLine(SAMPLE_LOGS[i]!, "ground"));
+  base.push(makeLogLine(SAMPLE_LOGS[5]!, "bump2"));
+  base.push(makeLogLine(SAMPLE_LOGS[6]!, "bump2"));
+  for (const i of [7, 8, 9]) base.push(makeLogLine(SAMPLE_LOGS[i]!, "ground"));
+  base.push(makeLogLine("", "gap"));
+  base.push(makeLogLine(SAMPLE_LOGS[10]!, "ground"));
+  base.push(makeLogLine(SAMPLE_LOGS[11]!, "ground"));
+  return base;
 }

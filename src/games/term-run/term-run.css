@@ -1,11 +1,11 @@
-/* term-run — full-viewport black terminal; fish-slacking first */
+/* term-run — plain black terminal; fish-slacking */
 
 .term-run-viewport {
-  background: #0c0c0c;
+  background: #000;
 }
 
 .term-run-viewport .term-run-stage {
-  background: #0c0c0c;
+  background: #000;
   cursor: text;
 }
 
