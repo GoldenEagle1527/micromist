@@ -3,7 +3,6 @@ import { bladeZh } from "../../games/blade-break/i18n";
 import { deepMarchZh } from "../../games/deep-march/i18n";
 import { chromaZh } from "../../games/chroma-slide/i18n";
 import { explosiveZh } from "../../games/explosive-chess/i18n";
-import { opsZh } from "../../games/ops/i18n";
 
 export const zh: Dict = {
   brand: "微渺",
@@ -66,5 +65,4 @@ export const zh: Dict = {
   chroma: chromaZh,
   blade: bladeZh,
   deepMarch: deepMarchZh,
-  ops: opsZh,
 };
