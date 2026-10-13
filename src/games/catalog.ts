@@ -70,8 +70,8 @@ export const games: GameMeta[] = [
     mode: "single",
     title: { zh: "运维", en: "Ops" },
     blurb: {
-      zh: "本机运维面板：仪表盘、网站、应用商店、文件、计划任务与终端。单人本地，进度只存本机。",
-      en: "Local ops panel: Home, Websites, App Store, Files, Cron, and Terminal. Solo local; progress stays on this device.",
+      zh: "本机运维面板：装应用、部署、巡检、发布，养成微型机房。单人本地，进度只存本机。",
+      en: "Local ops panel: install, deploy, health-check, release — grow a mini datacenter. Solo local; progress stays on this device.",
     },
     badge: { zh: "单机", en: "Offline" },
     audience: "staging",

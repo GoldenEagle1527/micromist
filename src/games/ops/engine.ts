@@ -1,5 +1,6 @@
 import {
   CROP_ORDER,
+  DEFAULT_PREFS,
   EXPORT_VALUE,
   HARVEST_VALUE,
   HOST_POOL,
@@ -11,6 +12,7 @@ import {
   type CronTask,
   type InventoryItem,
   type LogLine,
+  type OpsPrefs,
   type OpsState,
   type Plot,
 } from "./types";
@@ -140,6 +142,7 @@ export function createInitialState(): OpsState {
     logs: [],
     page: "dashboard",
     sidebarCollapsed: false,
+    prefs: { ...DEFAULT_PREFS },
   };
 
   state = pushLog(state, "ok", "panel boot · node cluster online");
@@ -147,7 +150,7 @@ export function createInitialState(): OpsState {
   state = pushLog(
     state,
     "info",
-    "hint · install apps → deploy on idle sites → run batch-health → backup-release",
+    "hint · install apps → deploy on idle sites → health-check → backup-release · handle alerts",
   );
   return state;
 }
@@ -157,6 +160,7 @@ export function normalizeState(raw: unknown): OpsState | null {
   const s = raw as Partial<OpsState>;
   if (!Array.isArray(s.plots) || typeof s.coins !== "number") return null;
   const base = createInitialState();
+  const prefsIn = (s as { prefs?: Partial<OpsPrefs> }).prefs;
   return {
     ...base,
     ...s,
@@ -168,6 +172,12 @@ export function normalizeState(raw: unknown): OpsState | null {
     page: s.page ?? "dashboard",
     sidebarCollapsed: Boolean(s.sidebarCollapsed),
     day: typeof s.day === "number" ? s.day : 1,
+    prefs: {
+      ...DEFAULT_PREFS,
+      ...(prefsIn && typeof prefsIn === "object" ? prefsIn : {}),
+      compact: Boolean(prefsIn?.compact ?? DEFAULT_PREFS.compact),
+      showDebug: Boolean(prefsIn?.showDebug ?? DEFAULT_PREFS.showDebug),
+    },
   };
 }
 
@@ -177,6 +187,14 @@ export function setPage(state: OpsState, page: OpsState["page"]): OpsState {
 
 export function toggleSidebar(state: OpsState): OpsState {
   return { ...state, sidebarCollapsed: !state.sidebarCollapsed };
+}
+
+export function setPref(
+  state: OpsState,
+  key: keyof OpsPrefs,
+  value: boolean,
+): OpsState {
+  return { ...state, prefs: { ...state.prefs, [key]: value } };
 }
 
 export function buySeed(state: OpsState, crop: CropId): OpsState {
@@ -226,7 +244,7 @@ export function plantOnPlot(state: OpsState, plotId: string, crop: CropId): OpsS
   );
 }
 
-/** Single-site health check (water / revive alert). */
+/** Single-site health check (revive alert / push build). */
 export function healthCheckPlot(state: OpsState, plotId: string): OpsState {
   const now = Date.now();
   const plot = state.plots.find((p) => p.id === plotId);
@@ -238,9 +256,14 @@ export function healthCheckPlot(state: OpsState, plotId: string): OpsState {
   }
   if (plot.status === "ready") {
     return pushLog(
-      { ...state, plots: state.plots.map((p) =>
-        p.id === plotId ? { ...p, moisture: Math.min(100, p.moisture + 8), lastActionAt: now } : p,
-      )},
+      {
+        ...state,
+        plots: state.plots.map((p) =>
+          p.id === plotId
+            ? { ...p, moisture: Math.min(100, p.moisture + 8), lastActionAt: now }
+            : p,
+        ),
+      },
       "ok",
       `health-check ${plot.host} · pending release (metrics refreshed)`,
     );
@@ -277,7 +300,75 @@ export function healthCheckPlot(state: OpsState, plotId: string): OpsState {
   );
 }
 
-/** Single-site backup & release (harvest). */
+/**
+ * Overnight pass after a day advances: load drift, worsen ignored alerts,
+ * then run every enabled cron once (no further day bump from auto harvest).
+ */
+export function applyOvernight(state: OpsState): OpsState {
+  const now = Date.now();
+  let crashed = 0;
+  let drifted = 0;
+  const plots = state.plots.map((p) => {
+    if (p.status === "growing") {
+      drifted += 1;
+      const moisture = Math.max(0, p.moisture - 4);
+      return { ...p, moisture, lastActionAt: now };
+    }
+    if (p.status === "wilted") {
+      if (p.moisture <= 5) {
+        crashed += 1;
+        return {
+          ...p,
+          status: "empty" as const,
+          crop: null,
+          growth: 0,
+          moisture: 12,
+          lastActionAt: now,
+        };
+      }
+      return {
+        ...p,
+        moisture: Math.max(0, p.moisture - 10),
+        lastActionAt: now,
+      };
+    }
+    if (p.status === "ready") {
+      return { ...p, moisture: Math.max(0, p.moisture - 2) };
+    }
+    return p;
+  });
+
+  let next: OpsState = { ...state, plots };
+  if (drifted > 0) {
+    next = pushLog(next, "info", `overnight · load drift on ${drifted} running site(s)`);
+  }
+  if (crashed > 0) {
+    next = pushLog(
+      next,
+      "warn",
+      `alert timeout · ${crashed} site(s) crashed · redeploy required`,
+    );
+  }
+
+  const enabled = next.cron.filter((t) => t.enabled);
+  for (const job of enabled) {
+    next = runCron(next, job.id, { fromAuto: true });
+  }
+  if (enabled.length > 0) {
+    next = pushLog(
+      next,
+      "info",
+      `overnight automation · ${enabled.length} enabled cron job(s)`,
+    );
+  }
+  return next;
+}
+
+function bumpDay(state: OpsState): OpsState {
+  return applyOvernight({ ...state, day: state.day + 1 });
+}
+
+/** Single-site backup & release. */
 export function releasePlot(state: OpsState, plotId: string): OpsState {
   const now = Date.now();
   const plot = state.plots.find((p) => p.id === plotId);
@@ -306,13 +397,13 @@ export function releasePlot(state: OpsState, plotId: string): OpsState {
     coins: state.coins + gain,
     inventory: bumpInventory(state.inventory, crop, 1),
     plots,
-    day: state.day + 1,
   };
-  return pushLog(
+  next = pushLog(
     next,
     "ok",
     `backup-release ${plot.host} · ${pkg(crop)} published · +${gain} credits`,
   );
+  return bumpDay(next);
 }
 
 /** Export harvested artifacts from Files for credits. */
@@ -375,8 +466,15 @@ export function provisionSite(state: OpsState): OpsState {
   );
 }
 
-export function runCron(state: OpsState, taskId: CronTask["id"]): OpsState {
+export type RunCronOpts = { fromAuto?: boolean };
+
+export function runCron(
+  state: OpsState,
+  taskId: CronTask["id"],
+  opts: RunCronOpts = {},
+): OpsState {
   const now = Date.now();
+  const fromAuto = Boolean(opts.fromAuto);
   const cron = state.cron.map((t) =>
     t.id === taskId ? { ...t, lastRunAt: now } : t,
   );
@@ -407,7 +505,13 @@ export function runCron(state: OpsState, taskId: CronTask["id"]): OpsState {
       }
       return { ...p, moisture: Math.min(100, p.moisture + 10) };
     });
-    next = pushLog({ ...next, plots }, "ok", "cron batch-health · refreshed metrics on all sites");
+    next = pushLog(
+      { ...next, plots },
+      "ok",
+      fromAuto
+        ? "cron batch-health (auto) · refreshed metrics on all sites"
+        : "cron batch-health · refreshed metrics on all sites",
+    );
     return next;
   }
 
@@ -434,15 +538,17 @@ export function runCron(state: OpsState, taskId: CronTask["id"]): OpsState {
       coins,
       inventory,
       plots,
-      day: next.day + (harvested > 0 ? 1 : 0),
     };
     next = pushLog(
       next,
       harvested > 0 ? "ok" : "info",
       harvested > 0
-        ? `cron backup-release · ${harvested} sites published · balance updated`
-        : "cron backup-release · no pending sites",
+        ? `cron backup-release${fromAuto ? " (auto)" : ""} · ${harvested} sites published · balance updated`
+        : `cron backup-release${fromAuto ? " (auto)" : ""} · no pending sites`,
     );
+    if (harvested > 0 && !fromAuto) {
+      return bumpDay(next);
+    }
     return next;
   }
 
@@ -462,8 +568,8 @@ export function runCron(state: OpsState, taskId: CronTask["id"]): OpsState {
     { ...next, plots },
     alerts > 0 ? "warn" : "info",
     alerts > 0
-      ? `cron security-scan · ${alerts} site(s) entered alert`
-      : "cron security-scan · finished (no new alerts)",
+      ? `cron security-scan${fromAuto ? " (auto)" : ""} · ${alerts} site(s) entered alert`
+      : `cron security-scan${fromAuto ? " (auto)" : ""} · finished (no new alerts)`,
   );
   return next;
 }
@@ -489,6 +595,10 @@ export function dashboardStats(state: OpsState) {
   );
   const seedStock = CROP_ORDER.reduce((a, c) => a + state.seeds[c], 0);
   return { growing, ready, empty, wilted, avgMoisture, seedStock };
+}
+
+export function listAlerts(state: OpsState): Plot[] {
+  return state.plots.filter((p) => p.status === "wilted");
 }
 
 export type TermResult = { state: OpsState; echo: string[] };
@@ -518,7 +628,10 @@ function resolveCrop(token: string): CropId | null {
 function findPlot(state: OpsState, token: string): Plot | undefined {
   const t = token.trim().toLowerCase();
   return state.plots.find(
-    (p) => p.host.toLowerCase() === t || p.id.toLowerCase() === t || p.host.toLowerCase().startsWith(t),
+    (p) =>
+      p.host.toLowerCase() === t ||
+      p.id.toLowerCase() === t ||
+      p.host.toLowerCase().startsWith(t),
   );
 }
 
@@ -552,7 +665,9 @@ export function runTerminalCommand(state: OpsState, raw: string): TermResult {
   if (cmd === "sites" || cmd === "ls") {
     for (const p of state.plots) {
       const app = p.crop ? pkg(p.crop) : "-";
-      echo.push(`${p.host.padEnd(16)} ${p.status.padEnd(8)} ${app.padEnd(10)} build=${p.growth}% load=${p.moisture}%`);
+      echo.push(
+        `${p.host.padEnd(16)} ${p.status.padEnd(8)} ${app.padEnd(10)} build=${p.growth}% load=${p.moisture}%`,
+      );
     }
     return { state, echo };
   }
@@ -654,4 +769,30 @@ export function runTerminalCommand(state: OpsState, raw: string): TermResult {
 
 export function nextProvisionCost(state: OpsState): number {
   return SITE_PROVISION_COST + Math.max(0, state.plots.length - 6) * 25;
+}
+
+export type OpsSaveFile = {
+  v: number;
+  kind: "micromist-ops";
+  exportedAt: number;
+  data: OpsState;
+};
+
+export function buildSaveFile(state: OpsState): OpsSaveFile {
+  return {
+    v: 1,
+    kind: "micromist-ops",
+    exportedAt: Date.now(),
+    data: state,
+  };
+}
+
+export function parseSaveFile(raw: unknown): OpsState | null {
+  if (raw == null || typeof raw !== "object") return null;
+  const obj = raw as Partial<OpsSaveFile> & { data?: unknown };
+  if (obj.kind === "micromist-ops" && obj.data != null) {
+    return normalizeState(obj.data);
+  }
+  // Accept bare state JSON too.
+  return normalizeState(raw);
 }

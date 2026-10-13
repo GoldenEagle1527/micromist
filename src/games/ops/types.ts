@@ -1,4 +1,4 @@
-/** Farm-as-ops placeholder state for the 运维 shell. */
+/** Gameified micro-datacenter state for the 运维 panel shell. */
 
 export type OpsPageId =
   | "dashboard"
@@ -9,6 +9,7 @@ export type OpsPageId =
   | "terminal"
   | "settings";
 
+/** Internal package id (UI shows Nginx/MySQL/… via i18n). */
 export type CropId = "lettuce" | "tomato" | "potato" | "chili";
 
 export type PlotStatus = "empty" | "growing" | "ready" | "wilted";
@@ -19,8 +20,9 @@ export type Plot = {
   host: string;
   status: PlotStatus;
   crop: CropId | null;
-  /** 0–100 growth while growing. */
+  /** 0–100 build progress while running. */
   growth: number;
+  /** Site load % (resource metric). */
   moisture: number;
   lastActionAt: number;
 };
@@ -46,6 +48,13 @@ export type LogLine = {
   text: string;
 };
 
+export type OpsPrefs = {
+  /** Tighter padding / denser tables. */
+  compact: boolean;
+  /** Show host ids and raw status in debug-ish spots. */
+  showDebug: boolean;
+};
+
 export type OpsState = {
   coins: number;
   day: number;
@@ -56,6 +65,12 @@ export type OpsState = {
   logs: LogLine[];
   page: OpsPageId;
   sidebarCollapsed: boolean;
+  prefs: OpsPrefs;
+};
+
+export const DEFAULT_PREFS: OpsPrefs = {
+  compact: false,
+  showDebug: false,
 };
 
 export const CROP_ORDER: CropId[] = ["lettuce", "tomato", "potato", "chili"];
@@ -76,7 +91,10 @@ export const HARVEST_VALUE: Record<CropId, number> = {
 
 export const SLUG = "ops";
 
-/** Ops-facing package id (never show farm crop names outside Settings). */
+/** Panel version shown in Settings → About. */
+export const PANEL_VERSION = "0.2.0";
+
+/** Ops-facing package id. */
 export const PACKAGE_SLUG: Record<CropId, string> = {
   lettuce: "nginx",
   tomato: "mysql",

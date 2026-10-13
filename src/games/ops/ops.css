@@ -734,30 +734,103 @@
 }
 
 
-/* Settings — farm↔ops mapping (only page that may show farm words). */
-.ops-settings-note {
-  margin: 0 0 0.9rem;
-  padding: 0.65rem 0.8rem;
+/* Settings — real prefs / save / about */
+.ops-settings-block {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.ops-settings-flash {
+  margin: 0 0 0.75rem;
+  padding: 0.55rem 0.75rem;
   border-radius: var(--md-sys-shape-corner-sm);
-  border: 1px solid var(--line);
-  background: color-mix(in srgb, var(--md-sys-color-primary) 8%, var(--md-sys-color-surface-container));
-  font-size: 0.82rem;
-  line-height: 1.45;
+  border: 1px solid color-mix(in srgb, #2e7d32 35%, var(--line));
+  background: color-mix(in srgb, #2e7d32 12%, var(--md-sys-color-surface-container));
+  font-size: 0.85rem;
+}
+
+.ops-settings-about {
+  margin: 0;
+  font-size: 0.88rem;
+  line-height: 1.5;
   color: var(--ink);
 }
 
-.ops-map-table .ops-map-ops {
-  font-weight: 600;
+.ops-toggle-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  padding: 0.45rem 0.15rem;
+  cursor: pointer;
 }
 
-.ops-map-table .ops-map-farm {
-  color: color-mix(in srgb, #2e7d32 55%, var(--ink));
-  font-weight: 500;
+.ops-toggle-row input {
+  margin-top: 0.2rem;
 }
 
-.ops-map-table th:nth-child(3),
-.ops-map-table td:nth-child(3) {
-  min-width: 8rem;
+.ops-toggle-row span {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.ops-toggle-row small {
+  font-size: 0.78rem;
+}
+
+.ops-alert-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.ops-alert-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.55rem 0.65rem;
+  border-radius: var(--md-sys-shape-corner-sm);
+  border: 1px solid color-mix(in srgb, #c62828 30%, var(--line));
+  background: color-mix(in srgb, #c62828 8%, var(--md-sys-color-surface-container));
+}
+
+.ops-alert-row > div {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem;
+  min-width: 0;
+}
+
+.ops-alert-text {
+  font-size: 0.85rem;
+}
+
+.ops-debug-id {
+  font-size: 0.7rem;
+  margin-top: 0.15rem;
+}
+
+.ops-shell-compact .ops-content {
+  padding: 0.55rem 0.7rem 1rem;
+}
+
+.ops-shell-compact .ops-stat-card {
+  padding: 0.55rem 0.65rem;
+}
+
+.ops-shell-compact .ops-table th,
+.ops-shell-compact .ops-table td {
+  padding: 0.4rem 0.45rem;
+}
+
+.ops-shell-compact .ops-nav-item {
+  padding: 0.4rem 0.5rem;
 }
 
 /* Quick actions on dashboard */

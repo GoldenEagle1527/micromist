@@ -1,10 +1,11 @@
-import { useMemo, useState, type FormEvent, type KeyboardEvent } from "react";
+import { useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import type { OpsDict } from "./i18n";
-import { dashboardStats, nextProvisionCost } from "./engine";
+import { dashboardStats, listAlerts, nextProvisionCost } from "./engine";
 import {
   CROP_ORDER,
   EXPORT_VALUE,
   HOST_POOL,
+  PANEL_VERSION,
   SEED_PRICE,
   type CropId,
   type OpsState,
@@ -24,6 +25,12 @@ type PageProps = {
   onTermCommand: (line: string) => string[];
   termCleared: boolean;
   onTermClear: () => void;
+  onExportSave: () => void;
+  onImportSave: (file: File) => void;
+  onResetSave: () => void;
+  onToggleCompact: () => void;
+  onToggleDebug: () => void;
+  settingsFlash: string | null;
 };
 
 function formatTime(at: number | null, neverLabel: string): string {
@@ -49,8 +56,10 @@ export function DashboardPage({
   state,
   t,
   onRunCron,
-}: Pick<PageProps, "state" | "t" | "onRunCron">) {
+  onHealthCheck,
+}: Pick<PageProps, "state" | "t" | "onRunCron" | "onHealthCheck">) {
   const stats = useMemo(() => dashboardStats(state), [state]);
+  const alerts = useMemo(() => listAlerts(state), [state]);
   const cards = [
     { label: t.cardGrowing, value: String(stats.growing) },
     { label: t.cardReady, value: String(stats.ready) },
@@ -89,6 +98,30 @@ export function DashboardPage({
             {t.dashQuickScan}
           </button>
         </div>
+      </section>
+      <section className="ops-panel">
+        <h3>{t.alertsTitle}</h3>
+        {alerts.length === 0 ? (
+          <p className="ops-muted">{t.alertsEmpty}</p>
+        ) : (
+          <ul className="ops-alert-list">
+            {alerts.map((plot) => (
+              <li key={plot.id} className="ops-alert-row">
+                <div>
+                  <StatusPill status="wilted" label={t.status.wilted} />
+                  <span className="ops-alert-text">{t.alertsHost(plot.host)}</span>
+                </div>
+                <button
+                  type="button"
+                  className="ops-btn ops-btn-sm"
+                  onClick={() => onHealthCheck(plot.id)}
+                >
+                  {t.alertsHandle}
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
       </section>
       <section className="ops-panel">
         <h3>{t.recentLogs}</h3>
@@ -154,11 +187,14 @@ export function PlotsPage({
               <tr key={plot.id}>
                 <td>
                   <code>{plot.host}</code>
+                  {state.prefs.showDebug ? (
+                    <div className="ops-muted ops-debug-id">{plot.id}</div>
+                  ) : null}
                 </td>
                 <td>
                   <StatusPill status={plot.status} label={t.status[plot.status]} />
                 </td>
-                <td>{plot.crop ? t.crop[plot.crop] : "—"}</td>
+                <td>{plot.crop ? t.app[plot.crop] : "—"}</td>
                 <td>
                   <div className="ops-bar" title={`${plot.growth}%`}>
                     <div className="ops-bar-fill" style={{ width: `${plot.growth}%` }} />
@@ -183,7 +219,7 @@ export function PlotsPage({
                                 setPicking(null);
                               }}
                             >
-                              {t.crop[crop]} ({state.seeds[crop]})
+                              {t.app[crop]} ({state.seeds[crop]})
                             </button>
                           ))
                         )}
@@ -206,7 +242,9 @@ export function PlotsPage({
                     )
                   ) : (
                     <div className="ops-inline-pick">
-                      {(plot.status === "growing" || plot.status === "wilted" || plot.status === "ready") && (
+                      {(plot.status === "growing" ||
+                        plot.status === "wilted" ||
+                        plot.status === "ready") && (
                         <button
                           type="button"
                           className="ops-btn ops-btn-sm"
@@ -252,8 +290,8 @@ export function ShopPage({ state, t, onBuy }: Pick<PageProps, "state" | "t" | "o
               <div className="ops-shop-icon" aria-hidden>
                 {crop === "lettuce" ? "Ng" : crop === "tomato" ? "My" : crop === "potato" ? "Rd" : "Pg"}
               </div>
-              <h3>{t.crop[crop]}</h3>
-              <p className="ops-muted">{t.cropBlurb[crop]}</p>
+              <h3>{t.app[crop]}</h3>
+              <p className="ops-muted">{t.appBlurb[crop]}</p>
               <div className="ops-shop-meta">
                 <span>{t.shopPrice(price)}</span>
                 <span>{t.shopOwned(state.seeds[crop])}</span>
@@ -301,7 +339,7 @@ export function WarehousePage({
             <tbody>
               {state.inventory.map((item) => (
                 <tr key={item.id}>
-                  <td>{t.crop[item.crop]}</td>
+                  <td>{t.app[item.crop]}</td>
                   <td>{item.qty}</td>
                   <td>
                     <button
@@ -465,38 +503,100 @@ export function TerminalPage({
   );
 }
 
-export function SettingsPage({ t }: Pick<PageProps, "t">) {
+export function SettingsPage({
+  state,
+  t,
+  onExportSave,
+  onImportSave,
+  onResetSave,
+  onToggleCompact,
+  onToggleDebug,
+  settingsFlash,
+}: Pick<
+  PageProps,
+  | "state"
+  | "t"
+  | "onExportSave"
+  | "onImportSave"
+  | "onResetSave"
+  | "onToggleCompact"
+  | "onToggleDebug"
+  | "settingsFlash"
+>) {
+  const fileRef = useRef<HTMLInputElement>(null);
+
   return (
     <div className="ops-page">
       <header className="ops-page-head">
         <h2>{t.settingsTitle}</h2>
         <p className="ops-page-sub">{t.menuHint.settings}</p>
       </header>
-      <p className="ops-settings-note">{t.settingsNote}</p>
-      <div className="ops-table-wrap">
-        <table className="ops-table ops-map-table">
-          <thead>
-            <tr>
-              <th>{t.settingsColOps}</th>
-              <th>{t.settingsColFarm}</th>
-              <th>{t.settingsColHint}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {t.mapRows.map((row) => (
-              <tr key={`${row.ops}-${row.farm}`}>
-                <td>
-                  <strong className="ops-map-ops">{row.ops}</strong>
-                </td>
-                <td>
-                  <span className="ops-map-farm">{row.farm}</span>
-                </td>
-                <td className="ops-muted">{row.hint}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+
+      {settingsFlash ? <p className="ops-settings-flash">{settingsFlash}</p> : null}
+
+      <section className="ops-panel ops-settings-block">
+        <h3>{t.settingsSaveTitle}</h3>
+        <p className="ops-muted">{t.settingsSaveHint}</p>
+        <div className="ops-quick-row">
+          <button type="button" className="ops-btn" onClick={onExportSave}>
+            {t.settingsExport}
+          </button>
+          <button type="button" className="ops-btn" onClick={() => fileRef.current?.click()}>
+            {t.settingsImport}
+          </button>
+          <button
+            type="button"
+            className="ops-btn ops-btn-ghost"
+            onClick={() => {
+              if (window.confirm(t.settingsResetConfirm)) onResetSave();
+            }}
+          >
+            {t.settingsReset}
+          </button>
+        </div>
+        <input
+          ref={fileRef}
+          type="file"
+          accept="application/json,.json"
+          hidden
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            e.target.value = "";
+            if (file) onImportSave(file);
+          }}
+        />
+      </section>
+
+      <section className="ops-panel ops-settings-block">
+        <h3>{t.settingsPrefsTitle}</h3>
+        <label className="ops-toggle-row">
+          <input
+            type="checkbox"
+            checked={state.prefs.compact}
+            onChange={onToggleCompact}
+          />
+          <span>
+            <strong>{t.settingsCompact}</strong>
+            <small className="ops-muted">{t.settingsCompactHint}</small>
+          </span>
+        </label>
+        <label className="ops-toggle-row">
+          <input
+            type="checkbox"
+            checked={state.prefs.showDebug}
+            onChange={onToggleDebug}
+          />
+          <span>
+            <strong>{t.settingsDebug}</strong>
+            <small className="ops-muted">{t.settingsDebugHint}</small>
+          </span>
+        </label>
+      </section>
+
+      <section className="ops-panel ops-settings-block">
+        <h3>{t.settingsAboutTitle}</h3>
+        <p className="ops-settings-about">{t.settingsAboutBody(PANEL_VERSION)}</p>
+      </section>
     </div>
   );
 }

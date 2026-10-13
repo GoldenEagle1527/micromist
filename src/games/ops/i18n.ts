@@ -26,6 +26,10 @@ export type OpsDict = {
   cardCoins: string;
   cardDay: string;
   recentLogs: string;
+  alertsTitle: string;
+  alertsEmpty: string;
+  alertsHandle: string;
+  alertsHost: (host: string) => string;
   plotsTitle: string;
   plotsColHost: string;
   plotsColStatus: string;
@@ -56,8 +60,8 @@ export type OpsDict = {
   terminalTitle: string;
   terminalHint: string;
   terminalClear: string;
-  crop: Record<CropId, string>;
-  cropBlurb: Record<CropId, string>;
+  app: Record<CropId, string>;
+  appBlurb: Record<CropId, string>;
   status: Record<PlotStatus, string>;
   cronName: Record<CronTaskId, string>;
   cronBlurb: Record<CronTaskId, string>;
@@ -78,12 +82,22 @@ export type OpsDict = {
   terminalRun: string;
   terminalPlaceholder: string;
   settingsTitle: string;
-  settingsNote: string;
-  settingsColOps: string;
-  settingsColFarm: string;
-  settingsColHint: string;
-  /** Farm↔ops mapping rows — only shown on Settings. */
-  mapRows: { ops: string; farm: string; hint: string }[];
+  settingsSaveTitle: string;
+  settingsSaveHint: string;
+  settingsExport: string;
+  settingsImport: string;
+  settingsReset: string;
+  settingsResetConfirm: string;
+  settingsPrefsTitle: string;
+  settingsCompact: string;
+  settingsCompactHint: string;
+  settingsDebug: string;
+  settingsDebugHint: string;
+  settingsAboutTitle: string;
+  settingsAboutBody: (version: string) => string;
+  settingsImportOk: string;
+  settingsImportFail: string;
+  settingsExportOk: string;
 };
 
 export const opsZh: OpsDict = {
@@ -114,7 +128,7 @@ export const opsZh: OpsDict = {
     warehouse: "文件管理",
     cron: "定时任务",
     terminal: "运行日志",
-    settings: "映射与偏好",
+    settings: "存档与偏好",
   },
   statusOnline: "节点在线",
   statusUptime: (day) => `运行第 ${day} 天`,
@@ -129,6 +143,10 @@ export const opsZh: OpsDict = {
   cardCoins: "余额",
   cardDay: "运行天数",
   recentLogs: "最近事件",
+  alertsTitle: "告警",
+  alertsEmpty: "暂无未处理告警。",
+  alertsHandle: "处理",
+  alertsHost: (host) => `${host} · 健康度异常，建议巡检`,
   plotsTitle: "网站",
   plotsColHost: "域名 / 主机",
   plotsColStatus: "状态",
@@ -159,13 +177,13 @@ export const opsZh: OpsDict = {
   terminalTitle: "终端",
   terminalHint: "可交互终端 · 输入 help 查看命令",
   terminalClear: "清屏",
-  crop: {
+  app: {
     lettuce: "Nginx",
     tomato: "MySQL",
     potato: "Redis",
     chili: "PostgreSQL",
   },
-  cropBlurb: {
+  appBlurb: {
     lettuce: "高性能反向代理 · 轻量 · 稳定",
     tomato: "关系型数据库 · 常用业务底座",
     potato: "适合缓存与会话",
@@ -183,9 +201,9 @@ export const opsZh: OpsDict = {
     "scan-pests": "安全扫描",
   },
   cronBlurb: {
-    "water-all": "巡检全部站点并刷新资源指标",
-    "harvest-ready": "对「待发布」站点执行备份与发布",
-    "scan-pests": "扫描异常；高负载站点可能进入告警",
+    "water-all": "巡检全部站点并刷新资源指标；启用后跨日自动跑",
+    "harvest-ready": "对「待发布」站点执行备份与发布；启用后跨日自动跑",
+    "scan-pests": "扫描异常；高负载站点可能进入告警；启用后跨日自动跑",
   },
   toastNeedCoins: "余额不足",
   healthCheck: "巡检",
@@ -204,40 +222,23 @@ export const opsZh: OpsDict = {
   terminalRun: "执行",
   terminalPlaceholder: "输入命令，help 查看",
   settingsTitle: "设置",
-  settingsNote: "本面板的底层玩法映射（仅设置页可见）。其它页面一律使用运维用语。",
-  settingsColOps: "运维术语",
-  settingsColFarm: "种地含义",
-  settingsColHint: "说明",
-  mapRows: [
-    { ops: "仪表盘", farm: "农场总览", hint: "地块与资源一览" },
-    { ops: "网站", farm: "地块", hint: "每一行主机对应一块田" },
-    { ops: "应用商店 / 安装", farm: "种子商店 / 买种子", hint: "用余额兑换可部署的应用包" },
-    { ops: "文件", farm: "仓库", hint: "收获后的产物存放处" },
-    { ops: "计划任务", farm: "定时农活", hint: "浇水、收获、查虫等自动化" },
-    { ops: "终端", farm: "农场日志", hint: "可执行命令的事件流" },
-    { ops: "部署", farm: "播种", hint: "空闲站点种下应用" },
-    { ops: "余额 / 额度", farm: "金币", hint: "买种子与收获结算" },
-    { ops: "运行中", farm: "生长中", hint: "作物尚未成熟" },
-    { ops: "待发布", farm: "可收获", hint: "构建完成，可备份发布" },
-    { ops: "空闲站点", farm: "空地", hint: "尚无作物" },
-    { ops: "异常告警", farm: "枯萎", hint: "负载过低等异常" },
-    { ops: "负载", farm: "水分", hint: "站点资源指标" },
-    { ops: "构建进度", farm: "生长进度", hint: "0–100%" },
-    { ops: "应用 / 应用包", farm: "作物 / 种子", hint: "部署到地块上的种类" },
-    { ops: "Nginx", farm: "生菜", hint: "轻量作物" },
-    { ops: "MySQL", farm: "番茄", hint: "常用作物" },
-    { ops: "Redis", farm: "土豆", hint: "缓存向作物" },
-    { ops: "PostgreSQL", farm: "辣椒", hint: "高负载作物" },
-    { ops: "批量健康检查", farm: "浇水", hint: "提升负载并推进生长" },
-    { ops: "备份并发布", farm: "收获", hint: "清空待发布站点并入库/入账" },
-    { ops: "安全扫描", farm: "查害虫", hint: "高负载风险可能告警" },
-    { ops: "待装应用", farm: "种子库存", hint: "已安装尚未部署的数量" },
-    { ops: "运行天数", farm: "天数", hint: "面板开局以来的日计数" },
-    { ops: "巡检", farm: "浇水（单块）", hint: "对单个站点刷新负载并推进构建" },
-    { ops: "发布", farm: "收获（单块）", hint: "对单个待发布站点备份入库" },
-    { ops: "导出", farm: "卖出产物", hint: "文件换额度" },
-    { ops: "开通站点", farm: "开垦新地", hint: "花额度增加空闲网站" },
-  ],
+  settingsSaveTitle: "存档",
+  settingsSaveHint: "进度保存在本机 IndexedDB。可导出备份、导入或重置。",
+  settingsExport: "导出存档",
+  settingsImport: "导入存档",
+  settingsReset: "重置面板",
+  settingsResetConfirm: "确定清空本机运维进度并重新开局？",
+  settingsPrefsTitle: "偏好",
+  settingsCompact: "紧凑布局",
+  settingsCompactHint: "缩小内边距，一屏多看几行",
+  settingsDebug: "显示调试信息",
+  settingsDebugHint: "在网站表额外显示站点 id",
+  settingsAboutTitle: "关于",
+  settingsAboutBody: (version) =>
+    `运维面板 ${version} · micromist 单机玩法。装应用、部署、巡检、发布——养成你的微型机房。数据只存本机。`,
+  settingsImportOk: "存档已导入",
+  settingsImportFail: "导入失败：文件无效",
+  settingsExportOk: "存档已下载",
 };
 
 export const opsEn: OpsDict = {
@@ -268,7 +269,7 @@ export const opsEn: OpsDict = {
     warehouse: "File manager",
     cron: "Scheduled jobs",
     terminal: "Runtime logs",
-    settings: "Mapping & prefs",
+    settings: "Save & preferences",
   },
   statusOnline: "Node online",
   statusUptime: (day) => `Uptime day ${day}`,
@@ -283,6 +284,10 @@ export const opsEn: OpsDict = {
   cardCoins: "Balance",
   cardDay: "Uptime days",
   recentLogs: "Recent events",
+  alertsTitle: "Alerts",
+  alertsEmpty: "No open alerts.",
+  alertsHandle: "Resolve",
+  alertsHost: (host) => `${host} · health anomaly — run a health check`,
   plotsTitle: "Websites",
   plotsColHost: "Domain / host",
   plotsColStatus: "Status",
@@ -313,13 +318,13 @@ export const opsEn: OpsDict = {
   terminalTitle: "Terminal",
   terminalHint: "Interactive shell · type help for commands",
   terminalClear: "Clear",
-  crop: {
+  app: {
     lettuce: "Nginx",
     tomato: "MySQL",
     potato: "Redis",
     chili: "PostgreSQL",
   },
-  cropBlurb: {
+  appBlurb: {
     lettuce: "High-performance reverse proxy · light · stable",
     tomato: "Relational database · common app backbone",
     potato: "Good for cache and sessions",
@@ -337,9 +342,9 @@ export const opsEn: OpsDict = {
     "scan-pests": "Security scan",
   },
   cronBlurb: {
-    "water-all": "Inspect all sites and refresh resource metrics",
-    "harvest-ready": "Backup and release sites marked pending",
-    "scan-pests": "Scan anomalies; high-load sites may alert",
+    "water-all": "Inspect all sites and refresh metrics; runs overnight when enabled",
+    "harvest-ready": "Backup and release pending sites; runs overnight when enabled",
+    "scan-pests": "Scan anomalies; high-load sites may alert; runs overnight when enabled",
   },
   toastNeedCoins: "Insufficient balance",
   healthCheck: "Health check",
@@ -358,39 +363,21 @@ export const opsEn: OpsDict = {
   terminalRun: "Run",
   terminalPlaceholder: "Type a command — help for list",
   settingsTitle: "Settings",
-  settingsNote:
-    "Underlying farm↔ops mapping (visible on this Settings page only). All other pages stay in ops language.",
-  settingsColOps: "Ops term",
-  settingsColFarm: "Farm meaning",
-  settingsColHint: "Notes",
-  mapRows: [
-    { ops: "Home", farm: "Farm overview", hint: "Plots and resources at a glance" },
-    { ops: "Websites", farm: "Plots", hint: "Each host row is a field plot" },
-    { ops: "App Store / Install", farm: "Seed shop / buy seeds", hint: "Spend balance for deployable packages" },
-    { ops: "Files", farm: "Warehouse", hint: "Harvested goods land here" },
-    { ops: "Cron", farm: "Scheduled farm jobs", hint: "Water, harvest, pest scan, etc." },
-    { ops: "Terminal", farm: "Farm log", hint: "Event stream with runnable commands" },
-    { ops: "Deploy", farm: "Plant", hint: "Sow an app on an idle site" },
-    { ops: "Balance / credits", farm: "Coins", hint: "Buy seeds and settle harvests" },
-    { ops: "Running", farm: "Growing", hint: "Crop not ready yet" },
-    { ops: "Pending release", farm: "Ready to harvest", hint: "Build finished; can backup & release" },
-    { ops: "Idle sites", farm: "Empty plot", hint: "No crop planted" },
-    { ops: "Alerts", farm: "Wilted", hint: "Low load / anomaly" },
-    { ops: "Load", farm: "Moisture", hint: "Site resource metric" },
-    { ops: "Build", farm: "Growth progress", hint: "0–100%" },
-    { ops: "App / package", farm: "Crop / seed", hint: "What you deploy onto a plot" },
-    { ops: "Nginx", farm: "Lettuce", hint: "Light crop" },
-    { ops: "MySQL", farm: "Tomato", hint: "Common crop" },
-    { ops: "Redis", farm: "Potato", hint: "Cache-oriented crop" },
-    { ops: "PostgreSQL", farm: "Chili", hint: "High-load crop" },
-    { ops: "Batch health check", farm: "Water all", hint: "Raise load and push growth" },
-    { ops: "Backup & release", farm: "Harvest", hint: "Clear pending sites; inventory + balance" },
-    { ops: "Security scan", farm: "Pest scan", hint: "High-load sites may alert" },
-    { ops: "Apps ready", farm: "Seed stock", hint: "Installed but not yet deployed" },
-    { ops: "Uptime days", farm: "Day count", hint: "Days since panel start" },
-    { ops: "Health check", farm: "Water (single plot)", hint: "Refresh one site load and push build" },
-    { ops: "Release", farm: "Harvest (single plot)", hint: "Backup one pending site into Files" },
-    { ops: "Export", farm: "Sell goods", hint: "Trade files for credits" },
-    { ops: "Provision site", farm: "Clear new field", hint: "Spend credits for another idle website" },
-  ],
+  settingsSaveTitle: "Save data",
+  settingsSaveHint: "Progress is stored in this device's IndexedDB. Export a backup, import, or reset.",
+  settingsExport: "Export save",
+  settingsImport: "Import save",
+  settingsReset: "Reset panel",
+  settingsResetConfirm: "Clear local ops progress and start fresh?",
+  settingsPrefsTitle: "Preferences",
+  settingsCompact: "Compact layout",
+  settingsCompactHint: "Tighter padding so more rows fit on screen",
+  settingsDebug: "Show debug info",
+  settingsDebugHint: "Show site ids on the Websites table",
+  settingsAboutTitle: "About",
+  settingsAboutBody: (version) =>
+    `Ops panel ${version} · micromist solo. Install, deploy, health-check, release — grow your mini datacenter. Data stays on this device.`,
+  settingsImportOk: "Save imported",
+  settingsImportFail: "Import failed: invalid file",
+  settingsExportOk: "Save downloaded",
 };

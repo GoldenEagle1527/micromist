@@ -3,17 +3,20 @@ import "./ops.css";
 import { useLocale } from "../../i18n";
 import { clearLocalProgress, useLocalGamePersist } from "../local-persist";
 import {
+  buildSaveFile,
   buySeed,
   createInitialState,
   exportArtifact,
   healthCheckPlot,
   normalizeState,
+  parseSaveFile,
   plantOnPlot,
   provisionSite,
   releasePlot,
   runCron,
   runTerminalCommand,
   setPage,
+  setPref,
   toggleCron,
   toggleSidebar,
 } from "./engine";
@@ -47,6 +50,7 @@ export function OpsGame() {
   const [hasSave, setHasSave] = useState(false);
   const [termCleared, setTermCleared] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [settingsFlash, setSettingsFlash] = useState<string | null>(null);
 
   // Keep save while on setup after a session exists; never pass null once hydrated save is present.
   const persistState = screen === "panel" || hasSave ? state : null;
@@ -80,6 +84,12 @@ export function OpsGame() {
     return () => window.removeEventListener("keydown", onKey);
   }, [mobileNavOpen]);
 
+  useEffect(() => {
+    if (!settingsFlash) return;
+    const id = window.setTimeout(() => setSettingsFlash(null), 2800);
+    return () => window.clearTimeout(id);
+  }, [settingsFlash]);
+
   const enterFresh = useCallback(() => {
     clearProgress();
     clearLocalProgress(SLUG);
@@ -88,6 +98,7 @@ export function OpsGame() {
     setHasSave(true);
     setTermCleared(false);
     setMobileNavOpen(false);
+    setSettingsFlash(null);
     setScreen("panel");
   }, [clearProgress]);
 
@@ -137,47 +148,103 @@ export function OpsGame() {
     return result.echo;
   }, []);
 
+  const onExportSave = useCallback(() => {
+    const file = buildSaveFile(stateRef.current);
+    const blob = new Blob([JSON.stringify(file, null, 2)], {
+      type: "application/json",
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `micromist-ops-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    setSettingsFlash(op.settingsExportOk);
+  }, [op.settingsExportOk]);
+
+  const onImportSave = useCallback(
+    (file: File) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        try {
+          const text = String(reader.result ?? "");
+          const parsed = JSON.parse(text) as unknown;
+          const fixed = parseSaveFile(parsed);
+          if (!fixed) {
+            setSettingsFlash(op.settingsImportFail);
+            return;
+          }
+          setState(fixed);
+          stateRef.current = fixed;
+          setHasSave(true);
+          setTermCleared(false);
+          setSettingsFlash(op.settingsImportOk);
+        } catch {
+          setSettingsFlash(op.settingsImportFail);
+        }
+      };
+      reader.onerror = () => setSettingsFlash(op.settingsImportFail);
+      reader.readAsText(file);
+    },
+    [op.settingsImportFail, op.settingsImportOk],
+  );
+
+  const onResetSave = useCallback(() => {
+    clearProgress();
+    clearLocalProgress(SLUG);
+    const fresh = createInitialState();
+    setState(fresh);
+    stateRef.current = fresh;
+    setHasSave(true);
+    setTermCleared(false);
+    setSettingsFlash(null);
+  }, [clearProgress]);
+
   const pageBody = useMemo(() => {
-    const common = {
-      state,
-      t: op,
-      onBuy: (crop: CropId) => patch((s) => buySeed(s, crop)),
-      onPlant: (plotId: string, crop: CropId) => patch((s) => plantOnPlot(s, plotId, crop)),
-      onHealthCheck: (plotId: string) => patch((s) => healthCheckPlot(s, plotId)),
-      onRelease: (plotId: string) => patch((s) => releasePlot(s, plotId)),
-      onExport: (crop: CropId, qty?: number) => patch((s) => exportArtifact(s, crop, qty)),
-      onProvision: () => patch((s) => provisionSite(s)),
-      onRunCron: (id: OpsState["cron"][number]["id"]) => patch((s) => runCron(s, id)),
-      onToggleCron: (id: OpsState["cron"][number]["id"]) => patch((s) => toggleCron(s, id)),
-      onTermCommand,
-      termCleared,
-      onTermClear: () => setTermCleared(true),
-    };
+    const onRunCron = (id: OpsState["cron"][number]["id"]) =>
+      patch((s) => runCron(s, id));
+    const onHealthCheck = (plotId: string) => patch((s) => healthCheckPlot(s, plotId));
+
     switch (state.page) {
       case "dashboard":
-        return <DashboardPage state={state} t={op} onRunCron={common.onRunCron} />;
+        return (
+          <DashboardPage
+            state={state}
+            t={op}
+            onRunCron={onRunCron}
+            onHealthCheck={onHealthCheck}
+          />
+        );
       case "plots":
         return (
           <PlotsPage
             state={state}
             t={op}
-            onPlant={common.onPlant}
-            onHealthCheck={common.onHealthCheck}
-            onRelease={common.onRelease}
-            onProvision={common.onProvision}
+            onPlant={(plotId, crop) => patch((s) => plantOnPlot(s, plotId, crop))}
+            onHealthCheck={onHealthCheck}
+            onRelease={(plotId) => patch((s) => releasePlot(s, plotId))}
+            onProvision={() => patch((s) => provisionSite(s))}
           />
         );
       case "shop":
-        return <ShopPage state={state} t={op} onBuy={common.onBuy} />;
+        return (
+          <ShopPage state={state} t={op} onBuy={(crop: CropId) => patch((s) => buySeed(s, crop))} />
+        );
       case "warehouse":
-        return <WarehousePage state={state} t={op} onExport={common.onExport} />;
+        return (
+          <WarehousePage
+            state={state}
+            t={op}
+            onExport={(crop, qty) => patch((s) => exportArtifact(s, crop, qty))}
+          />
+        );
       case "cron":
         return (
           <CronPage
             state={state}
             t={op}
-            onRunCron={common.onRunCron}
-            onToggleCron={common.onToggleCron}
+            onRunCron={onRunCron}
+            onToggleCron={(id) => patch((s) => toggleCron(s, id))}
           />
         );
       case "terminal":
@@ -186,16 +253,41 @@ export function OpsGame() {
             state={state}
             t={op}
             termCleared={termCleared}
-            onTermClear={common.onTermClear}
+            onTermClear={() => setTermCleared(true)}
             onTermCommand={onTermCommand}
           />
         );
       case "settings":
-        return <SettingsPage t={op} />;
+        return (
+          <SettingsPage
+            state={state}
+            t={op}
+            onExportSave={onExportSave}
+            onImportSave={onImportSave}
+            onResetSave={onResetSave}
+            onToggleCompact={() =>
+              patch((s) => setPref(s, "compact", !s.prefs.compact))
+            }
+            onToggleDebug={() =>
+              patch((s) => setPref(s, "showDebug", !s.prefs.showDebug))
+            }
+            settingsFlash={settingsFlash}
+          />
+        );
       default:
         return null;
     }
-  }, [state, op, patch, termCleared, onTermCommand]);
+  }, [
+    state,
+    op,
+    patch,
+    termCleared,
+    onTermCommand,
+    onExportSave,
+    onImportSave,
+    onResetSave,
+    settingsFlash,
+  ]);
 
   if (screen === "setup") {
     return (
@@ -232,6 +324,7 @@ export function OpsGame() {
         "ops-shell",
         collapsed ? "ops-shell-collapsed" : "",
         mobileNavOpen ? "ops-shell-mobile-open" : "",
+        state.prefs.compact ? "ops-shell-compact" : "",
       ]
         .filter(Boolean)
         .join(" ")}
