@@ -31,7 +31,7 @@
 
 Workers Static Assets 的静态资源请求**免费且不计次数**。只提供 `index.html` / JS / CSS 的 SPA 路径不会跑 Worker。
 
-薄 Worker 主要在 `/ws`、`/ws/*` 上拦截（`run_worker_first`），计入 Workers Free 每日调用与 CPU 配额。
+薄 Worker 在 `/ws`、`/ws/*` 以及爆炸棋 Agent 指南 `/agent-guide`、`/agent-guide/*` 上拦截（`run_worker_first`），计入 Workers Free 每日调用与 CPU 配额。指南必须由 Worker 返回正文，不能落到 SPA 壳。
 
 Durable Objects 在免费计划可用，但创建时需使用 **`new_sqlite_classes`**。本仓库已按此配置；SQLite 仅作 DO 运行时后端（例如房间短暂持久化以防休眠丢状态），**不是**用户库或历史战绩库。空房间应休眠并回收。
 
@@ -71,7 +71,7 @@ npm run deploy
 
 WebSocket：`GET /ws/:roomId`（`Upgrade: websocket`）→ `GameRoom`。
 
-爆炸棋 Agent 联机（测试站优先，与人类同一房间协议）：[`docs/agent-ws-explosive-chess.md`](docs/agent-ws-explosive-chess.md)。
+爆炸棋 Agent 联机（与人类同一房间协议）。协议正文：[`docs/agent-ws-explosive-chess.md`](docs/agent-ws-explosive-chess.md)，由 Worker 公开在 `/agent-guide/explosive-chess`。联机大厅「交给 Agent」复制的提示里带有该链接和当前 host 的 WebSocket。
 
 ## 目录结构
 

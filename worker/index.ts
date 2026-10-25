@@ -1,4 +1,5 @@
 import { parseRoomId } from "../shared/multiplayer";
+import { handleAgentGuide } from "./agent-guide";
 import { GameRoom } from "./game-room";
 
 export { GameRoom };
@@ -19,6 +20,14 @@ function roomIdFromPath(pathname: string): string | null {
 export default {
   async fetch(request, env): Promise<Response> {
     const url = new URL(request.url);
+
+    // Public Agent Guide. Must run in the Worker so curl/agents get the protocol
+    // body, not the SPA shell. Listed in assets.run_worker_first.
+    if (url.pathname === "/agent-guide" || url.pathname.startsWith("/agent-guide/")) {
+      const guide = handleAgentGuide(request);
+      if (guide) return guide;
+    }
+
     const roomId = roomIdFromPath(url.pathname);
 
     if (url.pathname === "/ws" || url.pathname === "/ws/" || roomId !== null) {
