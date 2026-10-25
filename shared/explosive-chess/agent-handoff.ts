@@ -1,6 +1,6 @@
 /**
  * Ready-to-paste prompts for explosive-chess.
- * The home page copies `promptInviteAgent`: fetch the Agent Guide, then ask the human.
+ * The explosive-chess setup page copies `promptInviteAgent`: fetch the Agent Guide, then ask the human.
  * The filled-in room prompts stay for a caller that already has a room code.
  */
 import {
@@ -9,7 +9,7 @@ import {
   type ExplosiveRoomEndpoints,
 } from "./agent-guide";
 
-/** Home page: one prompt. The agent reads the guide, then asks the human how to start. */
+/** Setup page (`/play/explosive-chess`): one prompt. The agent reads the guide, then asks the human how to start. */
 export function promptInviteAgent(origin: string): string {
   const guideUrl = explosiveChessGuideUrl(origin);
   return `Play explosive-chess (爆炸棋) with the human who pasted this. No MCP.

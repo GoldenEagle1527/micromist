@@ -31,15 +31,15 @@ async function copyText(text: string): Promise<boolean> {
   }
 }
 
-export type HomeAgentInviteProps = {
+export type AgentInviteProps = {
   line: string;
   copyLabel: string;
   copiedLabel: string;
   failedLabel: string;
 };
 
-/** One sentence and one prompt on the home page, under the explosive-chess card. */
-export function HomeAgentInvite({ line, copyLabel, copiedLabel, failedLabel }: HomeAgentInviteProps) {
+/** One sentence, one prompt, and one Copy button on the explosive-chess setup page. */
+export function AgentInvite({ line, copyLabel, copiedLabel, failedLabel }: AgentInviteProps) {
   const titleId = useId();
   const origin = typeof window !== "undefined" ? window.location.origin : "http://localhost";
   const prompt = promptInviteAgent(origin);
@@ -60,9 +60,9 @@ export function HomeAgentInvite({ line, copyLabel, copiedLabel, failedLabel }: H
   const buttonLabel = phase === "ok" ? copiedLabel : phase === "fail" ? failedLabel : copyLabel;
 
   return (
-    <section className="home-agent-invite" aria-labelledby={titleId}>
+    <section className="explosive-agent-invite" aria-labelledby={titleId}>
       <p id={titleId}>{line}</p>
-      <pre className="home-agent-prompt">{prompt}</pre>
+      <pre className="explosive-agent-prompt">{prompt}</pre>
       <button
         type="button"
         className="primary"

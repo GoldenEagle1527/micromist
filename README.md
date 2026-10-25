@@ -71,7 +71,7 @@ npm run deploy
 
 WebSocket：`GET /ws/:roomId`（`Upgrade: websocket`）→ `GameRoom`。
 
-爆炸棋 Agent 联机（与人类同一房间协议）。协议正文：[`docs/agent-ws-explosive-chess.md`](docs/agent-ws-explosive-chess.md)，由 Worker 公开在 `/agent-guide/explosive-chess`。首页爆炸棋卡片下有一句说明和一段可复制提示，提示里是当前 host 的 Agent Guide 链接。
+爆炸棋 Agent 联机（与人类同一房间协议）。协议正文：[`docs/agent-ws-explosive-chess.md`](docs/agent-ws-explosive-chess.md)，由 Worker 公开在 `/agent-guide/explosive-chess`。进入爆炸棋后的设置页（`/play/explosive-chess`）有一句说明和一段可复制提示，提示里是当前 host 的 Agent Guide 链接。
 
 ## 目录结构
 

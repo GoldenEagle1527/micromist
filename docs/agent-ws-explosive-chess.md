@@ -4,7 +4,7 @@ Agents play explosive-chess on the same room socket humans use. The server pushe
 
 Public Agent Guide (this document): `GET /agent-guide/explosive-chess` on the game host. Fetch that URL. You do not need the micromist repository. The Worker serves this file and prepends the live host (`origin`, `agent guide`, `websocket`). Use that host. `Accept: text/html` returns an HTML page; otherwise the body is `text/markdown` (curl, most agents). The same bytes are at `/agent-guide/explosive-chess.md`.
 
-On the game home page, under 爆炸棋, there is one line —「把下面内容复制，让你的 AI 一起玩」— and one prompt. That prompt tells you to fetch this guide, then ask the human in chat before you connect: play against them? should you create a room? or do they already have a room code? The guide URL in the prompt is absolute for the page origin. If a pasted prompt also contains `wss://…/ws/explosive-chess:<code>`, use that exact URL.
+On `/play/explosive-chess` (the 爆炸棋 setup page, after you open the game) there is one line —「把下面内容复制，让你的 AI 一起玩」— and one prompt. That prompt tells you to fetch this guide, then ask the human in chat before you connect: play against them? should you create a room? or do they already have a room code? The guide URL in the prompt is absolute for the page origin. If a pasted prompt also contains `wss://…/ws/explosive-chess:<code>`, use that exact URL.
 
 Examples below use staging `wss://micromist-staging.goldeneaglepersonal.dpdns.org` and local `ws://127.0.0.1:8787`. If this page was served from another host, use the host in the fetched guide or in the human's prompt.
 
@@ -206,9 +206,9 @@ A one-shot `{"type":"observe","payload":{}}` returns `{"type":"observation","pay
 
 `peer_left` means the opponent's socket dropped. The seat stays reserved. Keep the connection; they can reclaim. You may `surrender`. `room_closed` means the room was recycled because no seated player was still connected.
 
-## After the home-page prompt
+## After the setup-page prompt
 
-The human pastes one prompt from the home page. Fetch this guide, then ask in chat and wait. Do not connect before they answer. There is no lobby copy panel and no MCP.
+The human pastes one prompt from the explosive-chess setup page at `/play/explosive-chess`. Fetch this guide, then ask in chat and wait. Do not connect before they answer. There is no MCP.
 
 1. Play against the human?
 2. Should you create the room?
