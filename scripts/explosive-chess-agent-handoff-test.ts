@@ -76,7 +76,7 @@ c.section("served guide");
   c.check(composed.includes("your_turn"), "protocol your_turn kept");
   c.check(composed.includes("legalActions"), "protocol legalActions kept");
   c.check(composed.includes("There is no MCP"), "protocol no-MCP kept");
-  c.check(composed.includes("把下面内容复制，让你的 AI 一起玩"), "setup invite line is in the guide");
+  c.check(composed.includes("点我，把内容发给 AI 陪你一起玩吧"), "setup invite line is in the guide");
   c.check(composed.includes("should you create a room"), "guide tells the agent to ask about creating a room");
   c.check(composed.indexOf("# 当前站点") < composed.indexOf("# 爆炸棋"), "host block is first");
 
@@ -254,7 +254,19 @@ c.section("setup invite");
   const setup = readFileSync("src/games/explosive-chess/ExplosiveChessSetup.tsx", "utf8");
   c.check(setup.includes("AgentInvite"), "setup page renders the invite");
   c.check(setup.includes("agentInviteLine"), "setup page shows the one sentence");
+  c.check(!setup.includes("agentInviteCopy"), "setup page has no separate copy label");
+  const headingAt = setup.indexOf("ex.setupTitle");
+  const inviteAt = setup.indexOf("<AgentInvite");
+  const panelCloseAt = setup.indexOf("</div>", inviteAt);
+  c.check(headingAt >= 0 && inviteAt > headingAt, "invite sits under the match setup heading");
+  c.check(panelCloseAt > inviteAt, "invite is inside the match setup panel");
   c.check(!setup.includes("AgentHandoff") && !setup.includes("invite-agent"), "complex handoff UI stays removed");
+  const inviteUi = readFileSync("src/games/explosive-chess/AgentInvite.tsx", "utf8");
+  c.check(!inviteUi.includes("<pre") && !inviteUi.includes("<textarea") && !inviteUi.includes("explosive-agent-prompt"), "prompt body is not shown");
+  c.check(!inviteUi.includes("copyLabel"), "invite has no separate copy button");
+  c.check(inviteUi.includes("promptInviteAgent"), "click copies the handoff prompt");
+  const inviteCss = readFileSync("src/games/explosive-chess/explosive-chess.css", "utf8");
+  c.check(!inviteCss.includes("explosive-agent-prompt"), "prompt preview style is removed");
   let handoffUi = false;
   try {
     readFileSync("src/games/explosive-chess/AgentHandoff.tsx", "utf8");
@@ -270,9 +282,9 @@ c.section("setup copy strings");
   const enKeys = Object.keys(explosiveEn).sort();
   const zhKeys = Object.keys(explosiveZh).sort();
   c.check(enKeys.join() === zhKeys.join(), "en and zh explosive strings match", enKeys.filter((k) => !zhKeys.includes(k)).join(","));
-  c.check(explosiveZh.agentInviteLine === "把下面内容复制，让你的 AI 一起玩", "chinese one-liner");
-  c.check(explosiveEn.agentInviteLine.length > 0, "english one-liner");
-  c.check(explosiveZh.agentInviteCopy === "复制" && explosiveEn.agentInviteCopy === "Copy", "one copy button label");
+  c.check(explosiveZh.agentInviteLine === "点我，把内容发给 AI 陪你一起玩吧", "chinese one-liner");
+  c.check(explosiveEn.agentInviteLine.length > 0 && !explosiveEn.agentInviteLine.includes("\n"), "english one-liner");
+  c.check(!("agentInviteCopy" in explosiveEn) && !("agentInviteCopy" in explosiveZh), "no separate copy button label");
   for (const gone of ["agentHandoffTitle", "copyForAgent", "copyAgentA", "dualTitle", "copyWsOnly"]) {
     c.check(!(gone in explosiveEn) && !(gone in explosiveZh), `${gone} removed`);
   }

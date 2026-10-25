@@ -207,44 +207,40 @@ html[data-theme="dark"] .explosive-status .explosive-count.blue {
   margin: 0.85rem 0 0;
 }
 
-.explosive-agent-invite {
+button.explosive-agent-invite {
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 0.65rem;
+  align-items: center;
   width: 100%;
-  padding: 1rem 1.1rem 1.05rem;
-  border-radius: var(--md-sys-shape-corner-lg);
-  background: var(--glass-bg);
-  border: 1px solid var(--glass-border);
-  box-shadow: var(--glass-shadow);
-  backdrop-filter: var(--backdrop);
-  -webkit-backdrop-filter: var(--backdrop);
+  margin: 0.9rem 0 0;
+  padding: 0.7rem 0.9rem;
+  border: 1px solid color-mix(in srgb, var(--md-sys-color-primary) 45%, var(--md-sys-color-outline-variant));
+  border-radius: var(--md-sys-shape-corner-md);
+  background: color-mix(in srgb, var(--md-sys-color-primary) 8%, transparent);
+  color: var(--md-sys-color-primary);
+  font-size: 0.95rem;
+  font-weight: 600;
+  line-height: 1.4;
+  text-align: left;
+  cursor: pointer;
+  min-height: 2.75rem;
 }
 
-.explosive-agent-invite p {
-  margin: 0;
-  color: var(--md-sys-color-on-surface);
-  font-size: 0.98rem;
+button.explosive-agent-invite:hover {
+  background: color-mix(in srgb, var(--md-sys-color-primary) 14%, transparent);
 }
 
-.explosive-agent-prompt {
-  width: 100%;
-  margin: 0;
-  white-space: pre-wrap;
-  word-break: break-word;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 0.8rem;
-  line-height: 1.45;
-  padding: 0.75rem 0.8rem;
-  border-radius: var(--md-sys-shape-corner-sm);
-  background: var(--md-sys-color-surface-container-highest);
-  color: var(--md-sys-color-on-surface);
-  user-select: all;
+button.explosive-agent-invite[data-phase="ok"] {
+  border-color: var(--md-sys-color-primary);
 }
 
-.explosive-agent-invite button {
-  align-self: flex-start;
+button.explosive-agent-invite:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--md-sys-color-primary) 55%, transparent);
+  outline-offset: 2px;
+}
+
+button.explosive-agent-invite[data-phase="fail"] {
+  border-color: #c62828;
+  color: #e53935;
 }
 
 @media (min-width: 720px) {

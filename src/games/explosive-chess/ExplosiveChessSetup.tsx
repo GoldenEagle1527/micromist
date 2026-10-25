@@ -75,12 +75,6 @@ export function ExplosiveChessSetup({
 }: ExplosiveChessSetupProps) {
   return (
       <div className="explosive-chess explosive-setup">
-        <AgentInvite
-          line={ex.agentInviteLine}
-          copyLabel={ex.agentInviteCopy}
-          copiedLabel={ex.agentInviteCopied}
-          failedLabel={ex.agentInviteFailed}
-        />
         <div className="panel">
           <h2>{ex.setupTitle}</h2>
           <p className="hint" style={{ marginTop: 0 }}>
@@ -256,6 +250,11 @@ export function ExplosiveChessSetup({
               </button>
             </div>
           ) : null}
+          <AgentInvite
+            line={ex.agentInviteLine}
+            copiedLabel={ex.agentInviteCopied}
+            failedLabel={ex.agentInviteFailed}
+          />
         </div>
 
         {settings.opponent === "online" ? (
