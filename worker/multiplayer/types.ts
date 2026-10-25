@@ -1,10 +1,12 @@
-import type { Role, RoomPlayer, Seat } from "../../shared/multiplayer";
+import type { PlayerKind, Role, RoomPlayer, Seat } from "../../shared/multiplayer";
 
 export type SessionAttachment = {
   playerId: string;
   seat: Seat;
   role: Role;
   name: string;
+  /** Hibernated sockets opened before agent seats omit this. */
+  kind?: PlayerKind;
 };
 
 export type PlayerRecord = RoomPlayer;
