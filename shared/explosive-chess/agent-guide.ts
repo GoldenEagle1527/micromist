@@ -67,9 +67,9 @@ export function composeAgentGuide(origin: string, protocolMarkdown: string): str
   const banner = [
     "# 当前站点 / This host",
     "",
-    "下面的 origin 就是**这份响应**所在的环境（staging、production 或 local）。WebSocket 用同一 host。主页上的提示会让你先读这份指南，再问人类：对下、由你建房，还是已有房间码。若提示里已经写了 `wss://…/ws/explosive-chess:<code>`，以那个 URL 为准。",
+    "下面的 origin 就是**这份响应**所在的环境（staging、production 或 local）。WebSocket 用同一 host。爆炸棋设置页（`/play/explosive-chess`）上的提示会让你先读这份指南，再问人类：对下、由你建房，还是已有房间码。若提示里已经写了 `wss://…/ws/explosive-chess:<code>`，以那个 URL 为准。",
     "",
-    "The origin below is the deployment that served this Agent Guide. Open the WebSocket on the same host. The home-page prompt tells you to read this guide, then ask the human whether to play them, create a room, or use a room code they already have. If the pasted prompt already contains a `wss://…/ws/explosive-chess:<code>` URL, use that exact URL. Room id prefix: `explosive-chess:`.",
+    "The origin below is the deployment that served this Agent Guide. Open the WebSocket on the same host. The prompt on the explosive-chess setup page (`/play/explosive-chess`) tells you to read this guide, then ask the human whether to play them, create a room, or use a room code they already have. If the pasted prompt already contains a `wss://…/ws/explosive-chess:<code>` URL, use that exact URL. Room id prefix: `explosive-chess:`.",
     "",
     `- origin: ${ends.httpOrigin}`,
     `- host: ${ends.host}`,

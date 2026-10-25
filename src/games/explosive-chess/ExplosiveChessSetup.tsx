@@ -8,6 +8,7 @@ import {
 } from "./engine";
 import type { AiDifficulty } from "./ai";
 import type { HostColor, Phase, Role, RoomConfig, RoomPlayer, Seat } from "./online";
+import { AgentInvite } from "./AgentInvite";
 import { clearLocalProgress } from "../local-persist";
 import { seatLabel, winModeLabel, youAreLabel } from "./labels";
 import {
@@ -74,6 +75,12 @@ export function ExplosiveChessSetup({
 }: ExplosiveChessSetupProps) {
   return (
       <div className="explosive-chess explosive-setup">
+        <AgentInvite
+          line={ex.agentInviteLine}
+          copyLabel={ex.agentInviteCopy}
+          copiedLabel={ex.agentInviteCopied}
+          failedLabel={ex.agentInviteFailed}
+        />
         <div className="panel">
           <h2>{ex.setupTitle}</h2>
           <p className="hint" style={{ marginTop: 0 }}>
