@@ -340,6 +340,7 @@ export function ExplosiveChessSetup({
                 {onlinePlayers.map((p) => (
                   <li key={p.playerId}>
                     {p.name} · {seatLabel(p.seat, ex)} · {p.role}
+                    {p.kind === "agent" ? ` · ${ex.agentMark}` : ""}
                     {p.rematch ? ` · ${ex.rematchMark}` : ""}
                     {!p.connected ? ` · ${ex.offline}` : ""}
                   </li>

@@ -71,6 +71,8 @@ Runs `vite build` then `wrangler deploy`. You need a Cloudflare account and `wra
 
 WebSocket: `GET /ws/:roomId` with `Upgrade: websocket` → `GameRoom`.
 
+Explosive-chess agent play (staging first, same room protocol as humans): [`docs/agent-ws-explosive-chess.md`](docs/agent-ws-explosive-chess.md).
+
 ## Project layout
 
 ```

@@ -71,6 +71,8 @@ npm run deploy
 
 WebSocket：`GET /ws/:roomId`（`Upgrade: websocket`）→ `GameRoom`。
 
+爆炸棋 Agent 联机（测试站优先，与人类同一房间协议）：[`docs/agent-ws-explosive-chess.md`](docs/agent-ws-explosive-chess.md)。
+
 ## 目录结构
 
 ```
