@@ -8,7 +8,6 @@ import {
 } from "./engine";
 import type { AiDifficulty } from "./ai";
 import type { HostColor, Phase, Role, RoomConfig, RoomPlayer, Seat } from "./online";
-import { AgentHandoff } from "./AgentHandoff";
 import { clearLocalProgress } from "../local-persist";
 import { seatLabel, winModeLabel, youAreLabel } from "./labels";
 import {
@@ -335,21 +334,6 @@ export function ExplosiveChessSetup({
                 {onlineConfig.hostColor === "red" ? ex.colorRed : ex.colorBlue}
               </p>
             ) : null}
-
-            <AgentHandoff
-              ex={ex}
-              roomCode={roomCode}
-              onlinePhase={onlinePhase}
-              onlineSeat={onlineSeat}
-              onlinePlayers={onlinePlayers}
-              roomFromQuery={roomFromQuery}
-              rules={{
-                boardSize: onlineConfig?.boardSize ?? settings.boardSize,
-                winMode: onlineConfig?.winMode ?? settings.winMode,
-                winParam: onlineConfig?.winParam ?? settings.winParam,
-                hostColor: onlineConfig?.hostColor ?? settings.hostColor,
-              }}
-            />
 
             {onlinePlayers.length > 0 ? (
               <ul className="explosive-player-list">

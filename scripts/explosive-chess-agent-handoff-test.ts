@@ -16,6 +16,7 @@ import {
   promptDualGuest,
   promptDualHost,
   promptHumanOpponent,
+  promptInviteAgent,
   type AgentMatchRules,
 } from "../shared/explosive-chess/agent-handoff";
 import { explosiveEn, explosiveZh } from "../src/games/explosive-chess/i18n";
@@ -75,7 +76,8 @@ c.section("served guide");
   c.check(composed.includes("your_turn"), "protocol your_turn kept");
   c.check(composed.includes("legalActions"), "protocol legalActions kept");
   c.check(composed.includes("There is no MCP"), "protocol no-MCP kept");
-  c.check(composed.includes("交给 Agent"), "lobby handoff mentioned");
+  c.check(composed.includes("把下面内容复制，让你的 AI 一起玩"), "home invite line is in the guide");
+  c.check(composed.includes("should you create a room"), "guide tells the agent to ask about creating a room");
   c.check(composed.indexOf("# 当前站点") < composed.indexOf("# 爆炸棋"), "host block is first");
 
   const html = renderAgentGuideHtml(composed, `${origin}/agent-guide/explosive-chess.md`);
@@ -227,14 +229,51 @@ c.section("copy prompts");
   c.check(freshAgentId("Agent A") !== freshAgentId("Agent A"), "fresh ids differ");
 }
 
-c.section("lobby copy strings");
+c.section("home invite");
+{
+  const invite = promptInviteAgent(origin);
+  c.check(invite.includes(`${origin}/agent-guide/explosive-chess`), "invite uses the absolute guide URL");
+  c.check(invite.includes("Play against me"), "invite asks about playing the human");
+  c.check(invite.includes("Should I create a room?"), "invite asks who creates the room");
+  c.check(invite.includes("do you already have a room code?"), "invite asks for an existing room code");
+  c.check(invite.includes("要和我对下吗"), "invite asks in Chinese");
+  c.check(invite.includes("需要我建房吗"), "invite asks about creating a room in Chinese");
+  c.check(invite.includes("已经有房间码"), "invite asks for a room code in Chinese");
+  c.check(invite.includes("No MCP") || invite.includes("没有 MCP"), "invite says no MCP");
+  c.check(!invite.includes("/ws/explosive-chess:"), "invite does not prefill a room socket");
+  const local = promptInviteAgent("http://127.0.0.1:8787");
+  c.check(
+    local.includes("http://127.0.0.1:8787/agent-guide/explosive-chess"),
+    "local invite uses the page origin",
+  );
+  c.check(!local.includes(origin), "local invite does not leak another host");
+
+  const home = readFileSync("src/pages/HomePage.tsx", "utf8");
+  c.check(home.includes("HomeAgentInvite"), "home renders the invite");
+  c.check(home.includes("agentInviteLine"), "home shows the one sentence");
+  const setup = readFileSync("src/games/explosive-chess/ExplosiveChessSetup.tsx", "utf8");
+  c.check(!setup.includes("AgentHandoff") && !setup.includes("invite-agent"), "lobby handoff UI is gone");
+  let handoffUi = false;
+  try {
+    readFileSync("src/games/explosive-chess/AgentHandoff.tsx", "utf8");
+    handoffUi = true;
+  } catch {
+    handoffUi = false;
+  }
+  c.check(!handoffUi, "complex handoff component is removed");
+}
+
+c.section("home copy strings");
 {
   const enKeys = Object.keys(explosiveEn).sort();
   const zhKeys = Object.keys(explosiveZh).sort();
   c.check(enKeys.join() === zhKeys.join(), "en and zh explosive strings match", enKeys.filter((k) => !zhKeys.includes(k)).join(","));
-  c.check(explosiveEn.agentHandoffTitle === "Invite Agent", "english section title");
-  c.check(explosiveZh.agentHandoffTitle === "交给 Agent", "chinese section title");
-  c.check(explosiveEn.copyForAgent.length > 0 && explosiveZh.copyForAgent.length > 0, "primary copy labels");
+  c.check(explosiveZh.agentInviteLine === "把下面内容复制，让你的 AI 一起玩", "chinese one-liner");
+  c.check(explosiveEn.agentInviteLine.length > 0, "english one-liner");
+  c.check(explosiveZh.agentInviteCopy === "复制" && explosiveEn.agentInviteCopy === "Copy", "one copy button label");
+  for (const gone of ["agentHandoffTitle", "copyForAgent", "copyAgentA", "dualTitle", "copyWsOnly"]) {
+    c.check(!(gone in explosiveEn) && !(gone in explosiveZh), `${gone} removed`);
+  }
 }
 
 c.finish();
