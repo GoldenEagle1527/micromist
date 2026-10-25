@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { promptInviteAgent } from "../../../shared/explosive-chess/agent-handoff";
 
 type CopyPhase = "idle" | "ok" | "fail";
@@ -33,14 +33,12 @@ async function copyText(text: string): Promise<boolean> {
 
 export type AgentInviteProps = {
   line: string;
-  copyLabel: string;
   copiedLabel: string;
   failedLabel: string;
 };
 
-/** One sentence, one prompt, and one Copy button on the explosive-chess setup page. */
-export function AgentInvite({ line, copyLabel, copiedLabel, failedLabel }: AgentInviteProps) {
-  const titleId = useId();
+/** One clickable row at the bottom of explosive-chess match setup. The prompt is copied, not shown. */
+export function AgentInvite({ line, copiedLabel, failedLabel }: AgentInviteProps) {
   const origin = typeof window !== "undefined" ? window.location.origin : "http://localhost";
   const prompt = promptInviteAgent(origin);
   const [phase, setPhase] = useState<CopyPhase>("idle");
@@ -48,7 +46,7 @@ export function AgentInvite({ line, copyLabel, copiedLabel, failedLabel }: Agent
 
   useEffect(() => {
     setPhase("idle");
-  }, [copyLabel]);
+  }, [line]);
 
   useEffect(
     () => () => {
@@ -57,26 +55,23 @@ export function AgentInvite({ line, copyLabel, copiedLabel, failedLabel }: Agent
     [],
   );
 
-  const buttonLabel = phase === "ok" ? copiedLabel : phase === "fail" ? failedLabel : copyLabel;
+  const label = phase === "ok" ? copiedLabel : phase === "fail" ? failedLabel : line;
 
   return (
-    <section className="explosive-agent-invite" aria-labelledby={titleId}>
-      <p id={titleId}>{line}</p>
-      <pre className="explosive-agent-prompt">{prompt}</pre>
-      <button
-        type="button"
-        className="primary"
-        aria-live="polite"
-        onClick={() => {
-          void copyText(prompt).then((ok) => {
-            setPhase(ok ? "ok" : "fail");
-            if (timer.current != null) window.clearTimeout(timer.current);
-            timer.current = window.setTimeout(() => setPhase("idle"), 2000);
-          });
-        }}
-      >
-        {buttonLabel}
-      </button>
-    </section>
+    <button
+      type="button"
+      className="explosive-agent-invite"
+      data-phase={phase}
+      aria-live="polite"
+      onClick={() => {
+        void copyText(prompt).then((ok) => {
+          setPhase(ok ? "ok" : "fail");
+          if (timer.current != null) window.clearTimeout(timer.current);
+          timer.current = window.setTimeout(() => setPhase("idle"), 2000);
+        });
+      }}
+    >
+      {label}
+    </button>
   );
 }
