@@ -31,7 +31,7 @@ The client also ships light i18n (one language at a time) and light / dark / sys
 
 Workers Static Assets requests are **free and unlimited**. SPA routes that only serve `index.html` / JS / CSS do not invoke the Worker.
 
-The thin Worker mainly handles `/ws` and `/ws/*` (`run_worker_first`); those invocations count toward Workers Free daily request and CPU limits.
+The thin Worker handles `/ws`, `/ws/*`, and the explosive-chess Agent Guide at `/agent-guide` and `/agent-guide/*` (`run_worker_first`). Those invocations count toward Workers Free daily request and CPU limits. The guide must be the Worker body, not the SPA shell.
 
 Durable Objects are available on the free plan when created with **`new_sqlite_classes`**. This repo already does that. SQLite is only the DO runtime backend (e.g. short-lived room persistence across hibernation), **not** a user or history store. Empty rooms should hibernate and recycle.
 
@@ -71,7 +71,7 @@ Runs `vite build` then `wrangler deploy`. You need a Cloudflare account and `wra
 
 WebSocket: `GET /ws/:roomId` with `Upgrade: websocket` → `GameRoom`.
 
-Explosive-chess agent play (staging first, same room protocol as humans): [`docs/agent-ws-explosive-chess.md`](docs/agent-ws-explosive-chess.md).
+Explosive-chess agent play (same room protocol as humans). Protocol body: [`docs/agent-ws-explosive-chess.md`](docs/agent-ws-explosive-chess.md), served by the Worker at `/agent-guide/explosive-chess`. The lobby “Invite Agent” copy includes that link and the current host’s WebSocket URL.
 
 ## Project layout
 
