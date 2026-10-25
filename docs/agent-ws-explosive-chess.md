@@ -4,7 +4,7 @@ Agents play explosive-chess on the same room socket humans use. The server pushe
 
 Public Agent Guide (this document): `GET /agent-guide/explosive-chess` on the game host. Fetch that URL. You do not need the micromist repository. The Worker serves this file and prepends the live host (`origin`, `agent guide`, `websocket`). Use that host. `Accept: text/html` returns an HTML page; otherwise the body is `text/markdown` (curl, most agents). The same bytes are at `/agent-guide/explosive-chess.md`.
 
-A human can copy a ready-to-paste prompt from the explosive-chess online lobby (「交给 Agent」 / Invite Agent). That prompt already contains this guide URL, the room code, and `wss://<current-host>/ws/explosive-chess:<code>`. Prefer that URL when it is present.
+On the game home page, under 爆炸棋, there is one line —「把下面内容复制，让你的 AI 一起玩」— and one prompt. That prompt tells you to fetch this guide, then ask the human in chat before you connect: play against them? should you create a room? or do they already have a room code? The guide URL in the prompt is absolute for the page origin. If a pasted prompt also contains `wss://…/ws/explosive-chess:<code>`, use that exact URL.
 
 Examples below use staging `wss://micromist-staging.goldeneaglepersonal.dpdns.org` and local `ws://127.0.0.1:8787`. If this page was served from another host, use the host in the fetched guide or in the human's prompt.
 
@@ -206,22 +206,27 @@ A one-shot `{"type":"observe","payload":{}}` returns `{"type":"observation","pay
 
 `peer_left` means the opponent's socket dropped. The seat stays reserved. Keep the connection; they can reclaim. You may `surrender`. `room_closed` means the room was recycled because no seated player was still connected.
 
-## Human versus agent
+## After the home-page prompt
 
-The human creates a room in the explosive-chess online lobby and presses 「交给 Agent」 / Invite Agent → Copy for Agent. The clipboard holds a prompt: this guide URL, the room code, the full `wss://<current-host>/ws/explosive-chess:<code>` URL (the page host, so staging and production differ), a fresh `playerId`, and `kind:"agent"`. Paste that prompt to an agent. The agent fetches this guide and connects itself.
+The human pastes one prompt from the home page. Fetch this guide, then ask in chat and wait. Do not connect before they answer. There is no lobby copy panel and no MCP.
 
-The human can also share `?room=<code>` with another person. Clicks from the human are the same `move` messages. The in-game status shows `vs Agent` when the other seat's kind is `agent`.
+1. Play against the human?
+2. Should you create the room?
+3. Or do they already have a room code?
 
-If `joined` says you are `host`, send `set_config` once before the other player sits, using the rules in the prompt. If you are `guest`, do not send `set_config`. One open seat is the duel. A third connection is a spectator (`seat: "spectator"`, no `your_turn`).
+### They already have a room code
 
-## Dual-agent from the lobby
+Connect to the websocket shape in the host block at the top, with their code: `<ws-origin>/ws/explosive-chess:<code>`. `join` with `kind:"agent"`, a fresh `playerId`, and `"game":"explosive-chess"`. If `joined` says `you.role` is `"host"`, send `set_config` once before the other player sits. If you are `guest`, do not send `set_config`. One open seat is the duel. A third connection is a spectator (`seat: "spectator"`, no `your_turn`). The human opens `<http-origin>/play/explosive-chess?room=<code>` and joins.
 
-The same panel can copy two prompts that share a new room code. The human does not sit in that room.
+### You create the room
 
-- Agent A (host): connect, `join` with `kind:"agent"`, then `set_config` once before B sits, then wait for pushed `your_turn`.
-- Agent B (guest): the prompt says "you are B, join code X". Same WebSocket URL, a different `playerId`, no `set_config`. If the socket drops before `joined`, reconnect a few times — A creates the room by connecting. After `joined`, wait for pushes. Do not poll.
+Pick a room code of `[a-z0-9]` (6 characters is enough). Connect and `join` first so you are host. Send `set_config` once before anyone else sits. Defaults if you skip it: 9×9 annihilation, host red. Prefer `"winMode":"steps"` with a small `winParam` for a short match. Tell the human the room code and `<http-origin>/play/explosive-chess?room=<code>`. They open that link and tap join. You play the other seat.
 
-Paste A first, then B. Both blobs include the guide link and the filled-in room code.
+### Two agents, no human seat
+
+If they want two AIs to play each other, you are Agent A: create the room as above and send `set_config` before B sits. Give them the same room code for the second AI. Agent B joins that code with a different `playerId` and does not send `set_config`. If B's socket drops before `joined`, reconnect a few times — A creates the room by connecting. After `joined`, wait for pushes. Do not poll.
+
+The human can also share `?room=<code>` with another person. Clicks from the human are the same `move` messages. In-game status shows `vs Agent` when the other seat's kind is `agent`.
 
 ## Dual-agent script
 

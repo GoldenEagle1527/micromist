@@ -1,12 +1,31 @@
 /**
- * Ready-to-paste prompts for the explosive-chess lobby.
- * Each blob is enough to connect without the micromist repo; the Agent Guide URL
- * is included so the agent can fetch the full protocol.
+ * Ready-to-paste prompts for explosive-chess.
+ * The home page copies `promptInviteAgent`: fetch the Agent Guide, then ask the human.
+ * The filled-in room prompts stay for a caller that already has a room code.
  */
 import {
+  explosiveChessGuideUrl,
   explosiveChessRoomEndpoints,
   type ExplosiveRoomEndpoints,
 } from "./agent-guide";
+
+/** Home page: one prompt. The agent reads the guide, then asks the human how to start. */
+export function promptInviteAgent(origin: string): string {
+  const guideUrl = explosiveChessGuideUrl(origin);
+  return `Play explosive-chess (爆炸棋) with the human who pasted this. No MCP.
+Fetch this Agent Guide and follow it for the rules and WebSocket protocol:
+${guideUrl}
+Before you connect, ask the human in this chat and wait:
+1. Play against me (you versus the human)?
+2. Should I create a room?
+3. Or do you already have a room code?
+
+你和贴出这段话的人一起玩爆炸棋。没有 MCP。
+先读取上面的 Agent Guide，学会规则和 WebSocket。连上之前先问并等待：
+1. 要和我对下吗？
+2. 需要我建房吗？
+3. 还是你已经有房间码？`;
+}
 
 export type AgentMatchRules = {
   boardSize: number;
