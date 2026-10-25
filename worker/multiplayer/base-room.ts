@@ -9,7 +9,9 @@
 import { DurableObject } from "cloudflare:workers";
 import {
   isSeatedSeat,
+  normalizePlayerKind,
   parseRoomId,
+  playerKindFromJoin,
   type Phase,
   type Role,
   type Seat,
@@ -58,6 +60,7 @@ export class GameRoom extends DurableObject<Env> {
         existing.seat = attachment.seat;
         existing.role = attachment.role;
         existing.name = attachment.name || existing.name;
+        existing.kind = normalizePlayerKind(attachment.kind ?? existing.kind);
       } else {
         this.players.set(attachment.playerId, {
           playerId: attachment.playerId,
@@ -67,6 +70,7 @@ export class GameRoom extends DurableObject<Env> {
           ready: false,
           rematch: false,
           connected: true,
+          kind: normalizePlayerKind(attachment.kind),
         });
         if (attachment.role === "host") this.hostId = attachment.playerId;
       }
@@ -130,7 +134,12 @@ export class GameRoom extends DurableObject<Env> {
     this.players.clear();
     for (const p of snap.players ?? []) {
       // Rehydrate seats; connected flags refreshed from live sockets above/below.
-      this.players.set(p.playerId, { ...p, connected: false, ready: false });
+      this.players.set(p.playerId, {
+        ...p,
+        connected: false,
+        ready: false,
+        kind: normalizePlayerKind(p.kind),
+      });
     }
     this.ensureAdapter();
     this.adapter?.hydrate(snap.adapter);
@@ -184,6 +193,7 @@ export class GameRoom extends DurableObject<Env> {
       seat: "spectator",
       role: "spectator",
       name: "",
+      kind: "human",
     };
     server.serializeAttachment(empty);
     this.sessions.set(server, { ...empty });
@@ -338,14 +348,17 @@ export class GameRoom extends DurableObject<Env> {
     }
 
     const existing = this.players.get(playerId);
+    const kind = playerKindFromJoin(payload.kind, existing?.kind);
     if (existing && isSeatedSeat(existing.seat)) {
       existing.name = name;
       existing.connected = true;
+      existing.kind = kind;
       const role: Role =
         existing.role === "host" || existing.role === "guest" ? existing.role : "guest";
       existing.role = role;
-      this.attach(ws, { playerId, seat: existing.seat, role, name });
-      this.send(ws, "welcome", { playerId, seat: existing.seat, role });
+      this.attach(ws, { playerId, seat: existing.seat, role, name, kind });
+      this.send(ws, "welcome", { playerId, seat: existing.seat, role, kind });
+      this.adapter.onSeated?.(ws, existing, { reclaimed: true });
       this.sendRoom(ws);
       if (this.phase === "playing" || this.phase === "over") {
         this.adapter.onReclaimSync(ws, existing);
@@ -357,7 +370,7 @@ export class GameRoom extends DurableObject<Env> {
     }
 
     const assigned = this.assignNewSeat(playerId);
-    this.players.set(playerId, {
+    const player: PlayerRecord = {
       playerId,
       name,
       seat: assigned.seat,
@@ -365,7 +378,9 @@ export class GameRoom extends DurableObject<Env> {
       ready: false,
       rematch: false,
       connected: true,
-    });
+      kind,
+    };
+    this.players.set(playerId, player);
     if (assigned.role === "host") this.hostId = playerId;
 
     this.attach(ws, {
@@ -373,8 +388,10 @@ export class GameRoom extends DurableObject<Env> {
       seat: assigned.seat,
       role: assigned.role,
       name,
+      kind,
     });
-    this.send(ws, "welcome", { playerId, seat: assigned.seat, role: assigned.role });
+    this.send(ws, "welcome", { playerId, seat: assigned.seat, role: assigned.role, kind });
+    this.adapter.onSeated?.(ws, player, { reclaimed: false });
     this.broadcastRoom();
     if (this.phase === "lobby") this.adapter.tryStartGame();
     void this.persist();
@@ -415,6 +432,7 @@ export class GameRoom extends DurableObject<Env> {
         playerId,
         seat,
         role: next.role,
+        kind: normalizePlayerKind(next.kind),
       });
     }
   }
@@ -445,6 +463,7 @@ export class GameRoom extends DurableObject<Env> {
         ready: p.ready,
         rematch: p.rematch,
         connected: p.connected,
+        kind: normalizePlayerKind(p.kind),
       }));
     return {
       players,
