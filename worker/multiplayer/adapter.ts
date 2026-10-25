@@ -30,6 +30,15 @@ export type GameRoomAdapter = {
   hostSeat: () => Seat;
   onRecycle: () => void;
   onReclaimSync: (ws: WebSocket, player: PlayerRecord) => void;
+  /**
+   * After the shell has attached a joined or reclaimed socket, before tryStartGame.
+   * Games that speak to agents use this for join pushes. Others may omit it.
+   */
+  onSeated?: (
+    ws: WebSocket,
+    player: PlayerRecord,
+    info: { reclaimed: boolean },
+  ) => void;
   tryStartGame: () => void;
   onSetConfig: (
     ws: WebSocket,
