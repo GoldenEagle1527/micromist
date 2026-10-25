@@ -118,6 +118,8 @@ export function ExplosiveChessGame() {
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reconnectAttemptsRef = useRef(0);
   const intentionalLeaveRef = useRef(false);
+  /** Host set_config once per room. A later welcome (seat refresh) must not send it again. */
+  const configSentForRoomRef = useRef<string | null>(null);
   const onlinePhaseRef = useRef<Phase | "idle" | "connecting" | "reconnecting">("idle");
   const roomCodeRef = useRef(roomCode);
   const pendingOnlineStartRef = useRef<{
@@ -457,6 +459,7 @@ export function ExplosiveChessGame() {
     clearMoveLock();
     clientRef.current?.close();
     clientRef.current = null;
+    configSentForRoomRef.current = null;
     setOnlinePhase("idle");
     setOnlineStatus("");
     setOnlinePlayers([]);
@@ -556,7 +559,13 @@ export function ExplosiveChessGame() {
               playerColorRef.current = color;
             }
             setOnlineStatus(`${tRef.current.explosive.seatInfo}${seatLabel(payload.seat, tRef.current.explosive)} (${payload.role})`);
-            if (payload.role === "host" && onlinePhaseRef.current !== "playing" && screenRef.current !== "playing") {
+            if (
+              payload.role === "host" &&
+              onlinePhaseRef.current !== "playing" &&
+              screenRef.current !== "playing" &&
+              configSentForRoomRef.current !== trimmed
+            ) {
+              configSentForRoomRef.current = trimmed;
               const s = settingsRef.current;
               client.setConfig({
                 boardSize: s.boardSize,

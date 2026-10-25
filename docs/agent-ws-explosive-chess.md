@@ -2,7 +2,11 @@
 
 Agents play explosive-chess on the same room socket humans use. The server pushes turn and board changes. Do not poll and do not sleep-wait for the opponent. There is no MCP endpoint.
 
-Use staging first: `wss://micromist-staging.goldeneaglepersonal.dpdns.org`. Local worker: `ws://127.0.0.1:8787`. Production UI changes are not required; a human can still open the normal room link and play the other seat.
+Public Agent Guide (this document): `GET /agent-guide/explosive-chess` on the game host. Fetch that URL. You do not need the micromist repository. The Worker serves this file and prepends the live host (`origin`, `agent guide`, `websocket`). Use that host. `Accept: text/html` returns an HTML page; otherwise the body is `text/markdown` (curl, most agents). The same bytes are at `/agent-guide/explosive-chess.md`.
+
+A human can copy a ready-to-paste prompt from the explosive-chess online lobby (「交给 Agent」 / Invite Agent). That prompt already contains this guide URL, the room code, and `wss://<current-host>/ws/explosive-chess:<code>`. Prefer that URL when it is present.
+
+Examples below use staging `wss://micromist-staging.goldeneaglepersonal.dpdns.org` and local `ws://127.0.0.1:8787`. If this page was served from another host, use the host in the fetched guide or in the human's prompt.
 
 ## Endpoint
 
@@ -204,7 +208,20 @@ A one-shot `{"type":"observe","payload":{}}` returns `{"type":"observation","pay
 
 ## Human versus agent
 
-The human creates a room in the explosive-chess UI and shares `?room=<code>`. The agent connects to `/ws/explosive-chess:<code>`, joins with `kind: "agent"`, and plays `your_turn` / `move` as above. Clicks from the human are the same `move` messages. The in-game status shows `vs Agent` when the other seat's kind is `agent`.
+The human creates a room in the explosive-chess online lobby and presses 「交给 Agent」 / Invite Agent → Copy for Agent. The clipboard holds a prompt: this guide URL, the room code, the full `wss://<current-host>/ws/explosive-chess:<code>` URL (the page host, so staging and production differ), a fresh `playerId`, and `kind:"agent"`. Paste that prompt to an agent. The agent fetches this guide and connects itself.
+
+The human can also share `?room=<code>` with another person. Clicks from the human are the same `move` messages. The in-game status shows `vs Agent` when the other seat's kind is `agent`.
+
+If `joined` says you are `host`, send `set_config` once before the other player sits, using the rules in the prompt. If you are `guest`, do not send `set_config`. One open seat is the duel. A third connection is a spectator (`seat: "spectator"`, no `your_turn`).
+
+## Dual-agent from the lobby
+
+The same panel can copy two prompts that share a new room code. The human does not sit in that room.
+
+- Agent A (host): connect, `join` with `kind:"agent"`, then `set_config` once before B sits, then wait for pushed `your_turn`.
+- Agent B (guest): the prompt says "you are B, join code X". Same WebSocket URL, a different `playerId`, no `set_config`. If the socket drops before `joined`, reconnect a few times — A creates the room by connecting. After `joined`, wait for pushes. Do not poll.
+
+Paste A first, then B. Both blobs include the guide link and the filled-in room code.
 
 ## Dual-agent script
 
