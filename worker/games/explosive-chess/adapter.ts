@@ -9,10 +9,18 @@ import {
   type GameConfig,
   type GameInstance,
   type PlayerColor,
+  type Winner,
   type WinMode,
 } from "../../../shared/explosive-chess/engine";
-import { isSeatedSeat, type Seat } from "../../../shared/multiplayer";
+import {
+  buildExplosiveObservation,
+  winnerColorName,
+  type ExplosiveObservation,
+  type ExplosiveYou,
+} from "../../../shared/explosive-chess/observe";
+import { isSeatedSeat, normalizePlayerKind, type Seat } from "../../../shared/multiplayer";
 import type { GameRoomAdapter, RoomHost } from "../../multiplayer/adapter";
+import type { PlayerRecord } from "../../multiplayer/types";
 
 type HostColor = "red" | "blue";
 
@@ -73,6 +81,18 @@ export function createExplosiveChessAdapter(host: RoomHost): GameRoomAdapter {
       configFrozen = false;
     },
 
+    onSeated: (ws, player, info) => {
+      host.send(ws, "joined", {
+        game: host.gameSlug,
+        roomCode: host.roomCode,
+        roomId: `${host.gameSlug}:${host.roomCode}`,
+        phase: host.phase,
+        reclaimed: info.reclaimed,
+        you: youFrom(player),
+      });
+      notifyOpponents(ws, player, info.reclaimed);
+    },
+
     onReclaimSync: (ws, player) => {
       const yourColor = seatToColor(player.seat);
       if (!yourColor || !game) return;
@@ -81,11 +101,14 @@ export function createExplosiveChessAdapter(host: RoomHost): GameRoomAdapter {
         yourColor: player.seat === "blue" ? "blue" : "red",
       });
       host.send(ws, "state", { fullState: game.getFullState() });
+      const observation = observationFor(player);
+      host.send(ws, "observation", { observation });
       if (host.phase === "over") {
-        host.send(ws, "game_over", {
-          winner: game.winner,
-          winReason: game.winReason,
-        });
+        host.send(ws, "game_over", gameOverBody(game.winner, game.winReason));
+        return;
+      }
+      if (canMove(player.seat)) {
+        host.send(ws, "your_turn", { observation });
       }
     },
 
@@ -149,7 +172,9 @@ export function createExplosiveChessAdapter(host: RoomHost): GameRoomAdapter {
         });
       }
 
+      pushStart();
       host.broadcast("state", { fullState: game.getFullState() });
+      pushYourTurn();
       host.broadcastRoom();
       void host.persist();
     },
@@ -163,6 +188,12 @@ export function createExplosiveChessAdapter(host: RoomHost): GameRoomAdapter {
           return true;
         case "move":
           handleMove(ws, payload);
+          return true;
+        case "act":
+          handleAct(ws, payload);
+          return true;
+        case "observe":
+          handleObserve(ws);
           return true;
         case "surrender":
           handleSurrender(ws);
@@ -207,9 +238,38 @@ export function createExplosiveChessAdapter(host: RoomHost): GameRoomAdapter {
     },
   };
 
+  function handleAct(ws: WebSocket, payload: Record<string, unknown>) {
+    const action = actionRecord(payload);
+    if (action.type === "move") {
+      handleMove(ws, action);
+      return;
+    }
+    if (action.type === "surrender") {
+      handleSurrender(ws);
+      return;
+    }
+    host.send(ws, "error", { message: "Unknown action" });
+  }
+
+  function handleObserve(ws: WebSocket) {
+    const session = host.requireJoined(ws);
+    if (!session) return;
+    const player = host.players.get(session.playerId);
+    if (!player) {
+      host.send(ws, "error", { message: "Join first" });
+      return;
+    }
+    host.send(ws, "observation", { observation: observationFor(player) });
+  }
+
   function handleMove(ws: WebSocket, payload: Record<string, unknown>) {
     const session = host.requireJoined(ws);
     if (!session) return;
+    const player = host.players.get(session.playerId);
+    if (!player) {
+      host.send(ws, "error", { message: "Join first" });
+      return;
+    }
     if (host.phase !== "playing" || !game) {
       host.send(ws, "error", { message: "Game not in progress" });
       return;
@@ -223,9 +283,15 @@ export function createExplosiveChessAdapter(host: RoomHost): GameRoomAdapter {
       host.send(ws, "error", { message: "Not your turn" });
       return;
     }
-    const row = typeof payload.row === "number" ? payload.row : -1;
-    const col = typeof payload.col === "number" ? payload.col : -1;
-    if (!game.isValidMove(row, col, color)) {
+    const row = payload.row;
+    const col = payload.col;
+    if (
+      typeof row !== "number" ||
+      typeof col !== "number" ||
+      !Number.isInteger(row) ||
+      !Number.isInteger(col) ||
+      !game.isValidMove(row, col, color)
+    ) {
       host.send(ws, "error", { message: "Invalid move" });
       return;
     }
@@ -235,19 +301,25 @@ export function createExplosiveChessAdapter(host: RoomHost): GameRoomAdapter {
       return;
     }
 
+    if (result.gameOver) host.setPhase("over");
+    const view = observationFor(player);
     host.broadcast("state", {
       fullState: game.getFullState(),
       lastMove: { row, col },
       animationFrames: result.animationFrames,
     });
+    host.broadcast("move_applied", {
+      action: { type: "move", row, col },
+      by: view.you,
+      publicState: view.publicState,
+      gameOver: result.gameOver,
+    });
 
     if (result.gameOver) {
-      host.setPhase("over");
-      host.broadcast("game_over", {
-        winner: result.winner,
-        winReason: result.winReason,
-      });
+      host.broadcast("game_over", gameOverBody(result.winner, result.winReason));
       host.broadcastRoom();
+    } else {
+      pushYourTurn();
     }
     void host.persist();
   }
@@ -255,6 +327,11 @@ export function createExplosiveChessAdapter(host: RoomHost): GameRoomAdapter {
   function handleSurrender(ws: WebSocket) {
     const session = host.requireJoined(ws);
     if (!session) return;
+    const player = host.players.get(session.playerId);
+    if (!player) {
+      host.send(ws, "error", { message: "Join first" });
+      return;
+    }
     if (host.phase !== "playing" || !game) {
       host.send(ws, "error", { message: "Game not in progress" });
       return;
@@ -267,8 +344,15 @@ export function createExplosiveChessAdapter(host: RoomHost): GameRoomAdapter {
     const winner: PlayerColor = color === COLOR_RED ? COLOR_BLUE : COLOR_RED;
     game.forceGameOver(winner, "surrender");
     host.setPhase("over");
+    const view = observationFor(player);
     host.broadcast("state", { fullState: game.getFullState() });
-    host.broadcast("game_over", { winner, winReason: "surrender" });
+    host.broadcast("move_applied", {
+      action: { type: "surrender" },
+      by: view.you,
+      publicState: view.publicState,
+      gameOver: true,
+    });
+    host.broadcast("game_over", gameOverBody(winner, "surrender"));
     host.broadcastRoom();
     void host.persist();
   }
@@ -302,6 +386,87 @@ export function createExplosiveChessAdapter(host: RoomHost): GameRoomAdapter {
     }
     host.broadcastRoom();
     void host.persist();
+  }
+
+  function youFrom(player: PlayerRecord): ExplosiveYou {
+    const color = player.seat === "red" || player.seat === "blue" ? player.seat : null;
+    return {
+      playerId: player.playerId,
+      name: player.name,
+      seat: player.seat,
+      role: player.role,
+      kind: normalizePlayerKind(player.kind),
+      color,
+    };
+  }
+
+  function observationFor(player: PlayerRecord): ExplosiveObservation {
+    return buildExplosiveObservation({
+      phase: host.phase,
+      you: youFrom(player),
+      config,
+      game,
+    });
+  }
+
+  function canMove(seat: Seat): boolean {
+    if (host.phase !== "playing" || !game || game.gameOver) return false;
+    const turn = game.currentTurn === COLOR_RED ? "red" : "blue";
+    return seat === turn;
+  }
+
+  function pushStart(): void {
+    for (const [ws, session] of host.sessions) {
+      if (!session.playerId) continue;
+      const yourColor = session.seat === "red" || session.seat === "blue" ? session.seat : null;
+      host.send(ws, "start", {
+        phase: "playing",
+        config: api.getPublicConfig(),
+        yourColor,
+        firstColor: "red",
+      });
+    }
+  }
+
+  function pushYourTurn(): void {
+    for (const [ws, session] of host.sessions) {
+      if (!session.playerId || !canMove(session.seat)) continue;
+      const player = host.players.get(session.playerId);
+      if (!player) continue;
+      host.send(ws, "your_turn", { observation: observationFor(player) });
+    }
+  }
+
+  function gameOverBody(winner: Winner, winReason: string) {
+    return {
+      winner,
+      winnerColor: winnerColorName(winner),
+      winReason,
+    };
+  }
+
+  function notifyOpponents(ws: WebSocket, player: PlayerRecord, reclaimed: boolean): void {
+    if (!isSeatedSeat(player.seat)) return;
+    const body = {
+      playerId: player.playerId,
+      name: player.name,
+      seat: player.seat,
+      role: player.role,
+      kind: normalizePlayerKind(player.kind),
+      reclaimed,
+    };
+    for (const [sock, session] of host.sessions) {
+      if (sock === ws || !session.playerId || session.playerId === player.playerId) continue;
+      host.send(sock, "opponent_joined", body);
+    }
+  }
+
+  function actionRecord(payload: Record<string, unknown>): Record<string, unknown> {
+    const nested = payload.action;
+    if (nested && typeof nested === "object" && !Array.isArray(nested)) {
+      return nested as Record<string, unknown>;
+    }
+    return payload;
   }
 
   return api;
