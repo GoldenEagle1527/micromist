@@ -584,7 +584,14 @@ export function ExplosiveChessGame() {
                 setOnlineStatus(tRef.current.explosive.peerOffline);
                 setTip(tRef.current.explosive.peerWait);
               } else {
-                setOnlineStatus(tRef.current.explosive.inProgress);
+                const vsAgent = payload.players.some(
+                  (p) =>
+                    p.kind === "agent" &&
+                    p.playerId !== getOrCreatePlayerId() &&
+                    (p.seat === "red" || p.seat === "blue"),
+                );
+                const progress = tRef.current.explosive.inProgress;
+                setOnlineStatus(vsAgent ? `${progress} · ${tRef.current.explosive.vsAgent}` : progress);
               }
             } else if (payload.phase === "over") {
               setOnlinePhase("over");

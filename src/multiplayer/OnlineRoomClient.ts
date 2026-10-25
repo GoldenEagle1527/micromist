@@ -6,16 +6,22 @@ import {
   formatRoomId,
   parseRoomId,
   type Phase,
+  type PlayerKind,
   type Role,
   type RoomPlayer,
   type Seat,
 } from "../../shared/multiplayer";
 import { gameStoreGet, gameStoreSet } from "../lib/game-store";
 
-export type { Phase, Role, RoomPlayer, Seat };
+export type { Phase, PlayerKind, Role, RoomPlayer, Seat };
 
 export type CommonHandlers = {
-  onWelcome?: (payload: { playerId: string; seat: Seat; role: Role }) => void;
+  onWelcome?: (payload: {
+    playerId: string;
+    seat: Seat;
+    role: Role;
+    kind?: PlayerKind;
+  }) => void;
   onRoom?: (payload: {
     players: RoomPlayer[];
     config: Record<string, unknown>;
