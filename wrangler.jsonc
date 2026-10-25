@@ -13,7 +13,7 @@
     // is explicit if you inspect or deploy the built config.
     "directory": "./dist/client",
     "not_found_handling": "single-page-application",
-    "run_worker_first": ["/ws", "/ws/*"]
+    "run_worker_first": ["/ws", "/ws/*", "/agent-guide", "/agent-guide/*"]
   },
   "durable_objects": {
     "bindings": [
