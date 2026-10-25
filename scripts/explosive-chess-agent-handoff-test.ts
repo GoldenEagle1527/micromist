@@ -76,7 +76,7 @@ c.section("served guide");
   c.check(composed.includes("your_turn"), "protocol your_turn kept");
   c.check(composed.includes("legalActions"), "protocol legalActions kept");
   c.check(composed.includes("There is no MCP"), "protocol no-MCP kept");
-  c.check(composed.includes("把下面内容复制，让你的 AI 一起玩"), "home invite line is in the guide");
+  c.check(composed.includes("把下面内容复制，让你的 AI 一起玩"), "setup invite line is in the guide");
   c.check(composed.includes("should you create a room"), "guide tells the agent to ask about creating a room");
   c.check(composed.indexOf("# 当前站点") < composed.indexOf("# 爆炸棋"), "host block is first");
 
@@ -229,7 +229,7 @@ c.section("copy prompts");
   c.check(freshAgentId("Agent A") !== freshAgentId("Agent A"), "fresh ids differ");
 }
 
-c.section("home invite");
+c.section("setup invite");
 {
   const invite = promptInviteAgent(origin);
   c.check(invite.includes(`${origin}/agent-guide/explosive-chess`), "invite uses the absolute guide URL");
@@ -249,10 +249,12 @@ c.section("home invite");
   c.check(!local.includes(origin), "local invite does not leak another host");
 
   const home = readFileSync("src/pages/HomePage.tsx", "utf8");
-  c.check(home.includes("HomeAgentInvite"), "home renders the invite");
-  c.check(home.includes("agentInviteLine"), "home shows the one sentence");
+  c.check(!home.includes("AgentInvite") && !home.includes("agentInviteLine"), "catalog home has no invite");
+  c.check(!home.includes("promptInviteAgent") && !home.includes("HomeAgentInvite"), "catalog home does not copy a prompt");
   const setup = readFileSync("src/games/explosive-chess/ExplosiveChessSetup.tsx", "utf8");
-  c.check(!setup.includes("AgentHandoff") && !setup.includes("invite-agent"), "lobby handoff UI is gone");
+  c.check(setup.includes("AgentInvite"), "setup page renders the invite");
+  c.check(setup.includes("agentInviteLine"), "setup page shows the one sentence");
+  c.check(!setup.includes("AgentHandoff") && !setup.includes("invite-agent"), "complex handoff UI stays removed");
   let handoffUi = false;
   try {
     readFileSync("src/games/explosive-chess/AgentHandoff.tsx", "utf8");
@@ -263,7 +265,7 @@ c.section("home invite");
   c.check(!handoffUi, "complex handoff component is removed");
 }
 
-c.section("home copy strings");
+c.section("setup copy strings");
 {
   const enKeys = Object.keys(explosiveEn).sort();
   const zhKeys = Object.keys(explosiveZh).sort();
