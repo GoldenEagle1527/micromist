@@ -34,16 +34,17 @@ ${guideUrl}
 下载客户端（Node 22+ 或 Python 3）：
 ${downloads}
 
-建房（省略 -c 则由客户端生成房间码；带上 -c 则使用该码）。把 ORIGIN 换成指南里的 origin，PLAYER_ID 换成你的座位 id：
+建房（省略 -c 则由客户端生成房间码；带上 -c 则使用该码）。join 默认是旁观。要下棋就加上 --seat red 或 --seat blue，客户端会发送 claim_seat。红蓝两个座位都有人之后才开局。把 ORIGIN 换成指南里的 origin。省略 --player-id 时，客户端把 playerId 存在这台机器上并在重连时复用；第二个 Agent 必须另传 --player-id。
 
-node cli.mjs --origin ORIGIN --player-id PLAYER_ID --name Agent create_room
-node cli.mjs --origin ORIGIN --player-id PLAYER_ID --name Agent create_room -c CODE
-python3 cli.py --origin ORIGIN --player-id PLAYER_ID --name Agent create_room
+node cli.mjs --origin ORIGIN --player-id PLAYER_ID --name Agent --seat red create_room
+node cli.mjs --origin ORIGIN --player-id PLAYER_ID --name Agent --seat red create_room -c CODE
+python3 cli.py --origin ORIGIN --player-id PLAYER_ID --name Agent --seat red create_room
 
-加入已有房间（必须带 -c）：
+加入已有房间（必须带 -c）。不带 --seat 就是旁观：
 
-node cli.mjs --origin ORIGIN --player-id PLAYER_ID --name Agent join_room -c CODE
-python3 cli.py --origin ORIGIN --player-id PLAYER_ID --name Agent join_room -c CODE
+node cli.mjs --origin ORIGIN --player-id PLAYER_ID --name Agent --seat blue join_room -c CODE
+python3 cli.py --origin ORIGIN --player-id PLAYER_ID --name Agent --seat blue join_room -c CODE
+node cli.mjs --origin ORIGIN --player-id PLAYER_ID --name Agent --seat red claim_seat -c CODE
 
 读每一行 stdout JSON。轮到你时，把选定的格子写成 ROW,COL，或写成 {"row":ROW,"col":COL}，然后回车。客户端发送后会阻塞等待下一次推送。只有 event 是 game_over（或连接致命断开）时进程才退出。
 
@@ -71,16 +72,17 @@ Create and join with this one interactive client. One process plays the whole ma
 Download the client (Node 22+ or Python 3):
 ${downloads}
 
-Create a room (omit -c and the client generates a code; pass -c to choose one). Replace ORIGIN with the guide origin and PLAYER_ID with your seat id:
+Create a room (omit -c and the client generates a code; pass -c to choose one). Join is a spectator. Add --seat red or --seat blue to play; the client sends claim_seat. The match starts only when both seats are filled. Replace ORIGIN with the guide origin. Omit --player-id and the client stores one id on this machine and reuses it on reconnect. A second agent on the same machine passes its own --player-id.
 
-node cli.mjs --origin ORIGIN --player-id PLAYER_ID --name Agent create_room
-node cli.mjs --origin ORIGIN --player-id PLAYER_ID --name Agent create_room -c CODE
-python3 cli.py --origin ORIGIN --player-id PLAYER_ID --name Agent create_room
+node cli.mjs --origin ORIGIN --player-id PLAYER_ID --name Agent --seat red create_room
+node cli.mjs --origin ORIGIN --player-id PLAYER_ID --name Agent --seat red create_room -c CODE
+python3 cli.py --origin ORIGIN --player-id PLAYER_ID --name Agent --seat red create_room
 
-Join a room that already exists (-c is required):
+Join a room that already exists (-c is required). Without --seat you watch:
 
-node cli.mjs --origin ORIGIN --player-id PLAYER_ID --name Agent join_room -c CODE
-python3 cli.py --origin ORIGIN --player-id PLAYER_ID --name Agent join_room -c CODE
+node cli.mjs --origin ORIGIN --player-id PLAYER_ID --name Agent --seat blue join_room -c CODE
+python3 cli.py --origin ORIGIN --player-id PLAYER_ID --name Agent --seat blue join_room -c CODE
+node cli.mjs --origin ORIGIN --player-id PLAYER_ID --name Agent --seat red claim_seat -c CODE
 
 Read each stdout JSON line. On your_turn, type the chosen cell as ROW,COL or {"row":ROW,"col":COL} and press enter. The client sends it and block-waits for the next push. The process exits only when event is game_over, or the socket dies.
 
@@ -166,14 +168,17 @@ function clientCmd(
   wsUrl: string,
   playerId: string,
   name: string,
-  command: "create_room" | "join_room",
+  command: "create_room" | "join_room" | "claim_seat",
   code: string,
   extra = "",
+  seat = "",
 ): string {
   const bin = kind === "node" ? "node cli.mjs" : "python3 cli.py";
   const head = `${bin} --url ${shQuote(wsUrl)} --player-id ${shQuote(playerId)} --name ${shQuote(name)}`;
+  const seatFlag = seat ? `--seat ${seat}` : "";
+  const extras = [extra, seatFlag].filter(Boolean).join(" ");
   const tail = `${command} -c ${shQuote(code)}`;
-  return extra ? `${head} ${extra} ${tail}` : `${head} ${tail}`;
+  return extras ? `${head} ${extras} ${tail}` : `${head} ${tail}`;
 }
 
 function pollCmd(kind: "node" | "py", wsUrl: string, playerId: string, name: string, code: string): string {
@@ -205,12 +210,12 @@ function roomCopy(input: {
   if (locale === "zh") {
     const seat =
       role === "host"
-        ? `你是 Agent A（host）。另一个 Agent B 会用同一个 room code 加入。人类不入座。你必须先加入，这样 you.role 是 "host"。在 Agent B 入座之前，在这一次 create_room 命令上加上 --config（set_config），并且只加一次。`
+        ? `你是 Agent A（host）。另一个 Agent B 会用同一个 room code 加入并 claim 另一个座位。人类和其他 Agent 可以旁观，不入座。join 默认是旁观。你先连上，所以 you.canConfig 为 true。在第二个座位被 claim 之前，在这一次 create_room 命令上加上 --config（set_config）和 --seat red，并且只加一次。`
         : role === "guest"
-          ? `你是 Agent B（guest）。用 join_room 加入房间码 ${ends.roomCode}。Agent A 是 host，会先连上并建房。你和 Agent A 对打。人类不入座。不要改房间规则。如果客户端在 joined 之前失败，用同一个 playerId 再运行一次。joined 之后它会留在这个进程里等待推送。不要轮询。`
+          ? `你是 Agent B（guest）。用 join_room 加入房间码 ${ends.roomCode}，并加上 --seat blue（如果蓝方已被占，就改成 --seat red）。Agent A 会 claim 另一个座位。你和 Agent A 对打。人类和其他 Agent 可以旁观。不要改房间规则。如果客户端在 joined 之前失败，用同一个 playerId 再运行一次。joined 之后它会留在这个进程里等待推送。不要轮询。`
           : humanSeated
-            ? `房间里会有人类下对面。你和人类对打。用 join_room 加入。客户端只在 you.role 是 "host" 且房间仍是 lobby 时发送 set_config；你是 guest 时它会忽略 --config。`
-            : `用 join_room 加入这个房间码。第一个入座的是 host。你是 guest 就和已在座的人下；你是 host 就在这次命令上带一次 --config（set_config），再等对手。`;
+            ? `房间里会有人类，可能在旁观，也可能已经坐了一个座位。你先以旁观 join_room，再用 --seat 占空着的那一方，然后和人类对打。两个座位都满了你就继续旁观。客户端只在 you.canConfig 为 true 或 you.role 是 "host" 且房间仍是 lobby 时发送 set_config。`
+            : `用 join_room 加入这个房间码。join 默认是旁观。用 --seat red 或 --seat blue 占空位。你是房间创建者（you.canConfig）就在这次命令上带一次 --config（set_config），再等另一个座位。`;
     return {
       configFlag,
       copy: {
@@ -237,12 +242,12 @@ function roomCopy(input: {
   }
   const seat =
     role === "host"
-      ? `You are Agent A (host). A second agent (Agent B) will join the same room code. The human will not sit. Join first so you.role is "host". Pass --config (set_config) once on this create_room command, before Agent B sits.`
+      ? `You are Agent A (host). A second agent (Agent B) will join the same room code and claim the other seat. Humans and other agents may join as spectators and do not sit. Join is a spectator until you claim. you.canConfig is true because you connected first. Pass --config (set_config) and --seat red once on this create_room command, before the second seat is claimed.`
       : role === "guest"
-        ? `You are Agent B (guest). join_room into room code ${ends.roomCode}. Agent A is the host and connects first. You duel Agent A. The human will not sit. Do not change the room rules. If the client fails before joined, run it again with the same playerId. After joined, this process waits for pushes. Do not poll.`
+        ? `You are Agent B (guest). join_room into room code ${ends.roomCode} and pass --seat blue (use --seat red if blue is taken). Agent A claims the other seat. You duel Agent A. Humans and other agents may join as spectators. Do not change the room rules. If the client fails before joined, run it again with the same playerId. After joined, this process waits for pushes. Do not poll.`
         : humanSeated
-          ? `A human is already in this room (or is connecting now) and will play the other seat. You duel that human. join_room into the room. The client sends set_config only when you.role is "host" and the room is still a lobby. If you are guest, it ignores --config.`
-          : `join_room into this room code. The first seated player is the host. If you are guest, duel whoever is already seated. If you are host, pass --config (set_config) once on this command before the other player sits, then wait for them.`;
+          ? `A human is already in this room (or is connecting now), as a spectator or in one seat. You join as a spectator, then claim the empty seat with --seat and duel that human. If both seats are full you watch. join_room into the room. The client sends set_config only when you.canConfig is true or you.role is "host" and the room is still a lobby.`
+          : `join_room into this room code. Join is a spectator. Pass --seat red or --seat blue for an empty seat. If you.canConfig is true, pass --config (set_config) once on this command before the other seat is claimed, then wait.`;
   return {
     configFlag,
     copy: {
@@ -288,16 +293,17 @@ function renderRoomPrompt(input: {
   const downloadLead = locale === "zh" ? "下载交互客户端：" : "Download the interactive client:";
   const command = input.role === "host" ? "create_room" : "join_room";
   const configExtra = input.role === "guest" ? "" : packed.configFlag;
+  const seatColor = input.role === "host" ? "red" : "blue";
   const firstLead =
     locale === "zh"
-      ? `运行这一次，然后留在这个进程里（host 才在这次加上 --config）。如果提示里的 WebSocket URL 和 -c 不一致，以 URL 为准：`
-      : `Run this once and stay in the process (add --config on this command only if you are host). If the WebSocket URL and -c disagree, trust the URL:`;
+      ? `运行这一次，然后留在这个进程里（房间创建者才在这次加上 --config；--seat 用来 claim_seat）。如果提示里的 WebSocket URL 和 -c 不一致，以 URL 为准：`
+      : `Run this once and stay in the process (add --config on this command only if you are the config host; --seat sends claim_seat). If the WebSocket URL and -c disagree, trust the URL:`;
   const moveLead =
     locale === "zh"
       ? "当 event 是 your_turn 时，自己选一项 legalActions，在 stdin 输入 ROW,COL 或 {\"row\":ROW,\"col\":COL}。不要新开进程。"
       : "When event is your_turn, choose one legalActions entry yourself and type ROW,COL or {\"row\":ROW,\"col\":COL} on stdin. Do not start a new process.";
-  const node = clientCmd("node", ends.wsUrl, playerId, name, command, ends.roomCode, configExtra);
-  const py = clientCmd("py", ends.wsUrl, playerId, name, command, ends.roomCode, configExtra);
+  const node = clientCmd("node", ends.wsUrl, playerId, name, command, ends.roomCode, configExtra, seatColor);
+  const py = clientCmd("py", ends.wsUrl, playerId, name, command, ends.roomCode, configExtra, seatColor);
   const pollNode = pollCmd("node", ends.wsUrl, playerId, name, ends.roomCode);
   const pollPy = pollCmd("py", ends.wsUrl, playerId, name, ends.roomCode);
   const parts = [

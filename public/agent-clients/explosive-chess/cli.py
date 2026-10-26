@@ -9,10 +9,10 @@ Standard library only. Written for common Python 3.8+ interpreters.
 Stdout is one JSON object per line. Diagnostics go to stderr.
 --poll is the one-shot fallback for environments that cannot hold this session.
 
-  python3 cli.py --origin https://HOST create_room
-  python3 cli.py --origin https://HOST create_room -c CODE
-  python3 cli.py --origin https://HOST join_room -c CODE
-  python3 cli.py --url wss://HOST/ws/explosive-chess:CODE join_room
+  python3 cli.py --origin https://HOST --seat red create_room
+  python3 cli.py --origin https://HOST --seat red create_room -c CODE
+  python3 cli.py --origin https://HOST --seat blue join_room -c CODE
+  python3 cli.py --url wss://HOST/ws/explosive-chess:CODE --seat red claim_seat -c CODE
 """
 
 from __future__ import annotations
@@ -48,25 +48,32 @@ moves. It exits when event is game_over, or on a fatal disconnect.
 Do not wrap it in a solver, search tree, or auto-play loop.
 The one-shot client that exited after a single your_turn is retired.
 
-  python3 cli.py --origin https://HOST create_room
-  python3 cli.py --origin https://HOST create_room -c CODE
-  python3 cli.py --origin https://HOST join_room -c CODE
-  python3 cli.py --url wss://HOST/ws/explosive-chess:CODE join_room
+  python3 cli.py --origin https://HOST --seat red create_room
+  python3 cli.py --origin https://HOST --seat red create_room -c CODE
+  python3 cli.py --origin https://HOST --seat blue join_room -c CODE
+  python3 cli.py --url wss://HOST/ws/explosive-chess:CODE --seat red claim_seat -c CODE
 
-  create_room   Open a room. -c is optional. Omit -c for a generated code.
-  join_room     Sit in a room. -c CODE is required unless --url has the code.
+  create_room   Open a room and join as a spectator. -c is optional.
+  join_room     Join a room as a spectator. -c CODE is required unless --url has the code.
+  claim_seat    Join, then claim --seat red or blue. -c CODE is required unless --url has it.
   -c, --code    Room code [a-z0-9]
   --origin      http(s) origin of the game host
   --url         Exact websocket URL. Used as-is when present.
-  --player-id   Seat id to join and reclaim (default: a fresh agent id)
+  --seat        red or blue. Sent as claim_seat after join. Omit to watch.
+  --player-id   This process's id. Omit to reuse the id stored on this machine.
   --name        Display name (default Agent)
-  --config      JSON object. Sent as set_config only if you are host and the room is still a lobby
+  --config      JSON object. Sent as set_config when you.canConfig is true (or you.role is host) and the room is still a lobby
   --verbose     Include board on each JSON line
   --timeout     Seconds to block for one server push. Omit to wait until game_over
   --poll        One-shot fallback. Prints one JSON line and exits. Accepts --move ROW,COL
   --move        Poll only. ROW,COL you already chose. Interactive play types this on stdin
   --help
 
+Join does not take a seat. Pass --seat red or --seat blue to play.
+The same playerId reclaims red, blue, or spectator. A new id is a new person.
+Omit --player-id to use ~/.config/micromist/explosive-chess-player-id
+(or $XDG_CONFIG_HOME/micromist/explosive-chess-player-id). Passing --player-id
+does not replace that file. A second agent on this machine passes its own id.
 Interactive stdin is ROW,COL or {"row":ROW,"col":COL}.
 Stdout is one JSON object per line. Diagnostics go to stderr.
 Python 3.8+ standard library only. No third-party packages.
@@ -341,6 +348,45 @@ def _would_block(exc):
     return err in (getattr(socket, "EAGAIN", 11), getattr(socket, "EWOULDBLOCK", 11))
 
 
+def player_id_file():
+    base = os.environ.get("XDG_CONFIG_HOME") or os.path.join(os.path.expanduser("~"), ".config")
+    return os.path.join(base, "micromist", "explosive-chess-player-id")
+
+
+def valid_player_id(value):
+    if not value or len(value) > 80:
+        return False
+    for ch in value:
+        ok = ("a" <= ch <= "z") or ("A" <= ch <= "Z") or ("0" <= ch <= "9") or ch in "._:-"
+        if not ok:
+            return False
+    return True
+
+
+def load_or_create_player_id():
+    path = player_id_file()
+    try:
+        with open(path, "r", encoding="utf-8") as handle:
+            existing = handle.read().strip()
+        if valid_player_id(existing):
+            sys.stderr.write("playerId %s loaded from %s\n" % (existing, path))
+            return existing
+    except OSError:
+        pass
+    created = "agent-" + token(8)
+    try:
+        directory = os.path.dirname(path)
+        if directory and not os.path.isdir(directory):
+            os.makedirs(directory, 0o700)
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write(created + "\n")
+        sys.stderr.write("playerId %s stored at %s\n" % (created, path))
+    except OSError as exc:
+        sys.stderr.write("could not store playerId at %s: %s\n" % (path, exc))
+    return created
+
+
 def token(size):
     alphabet = "abcdefghijklmnopqrstuvwxyz0123456789"
     raw = os.urandom(size)
@@ -459,6 +505,8 @@ class Args(object):
         self.timeout = None
         self.command = ""
         self.code = ""
+        self.seat = ""
+        self.player_id_from_flag = False
         self.budget = None
 
 
@@ -487,6 +535,9 @@ def parse_args(argv):
             args.url = take()
         elif flag == "--player-id":
             args.player_id = take()
+            args.player_id_from_flag = True
+        elif flag == "--seat":
+            args.seat = take().strip().lower()
         elif flag == "--name":
             args.name = take()
         elif flag == "--move":
@@ -500,9 +551,9 @@ def parse_args(argv):
                 raise CliError("--timeout must be a non-negative number of seconds")
         elif flag in ("-c", "--code"):
             args.code = take().strip().lower()
-        elif flag in ("create_room", "join_room"):
+        elif flag in ("create_room", "join_room", "claim_seat"):
             if args.command:
-                raise CliError("only one of create_room or join_room")
+                raise CliError("only one of create_room, join_room, or claim_seat")
             args.command = flag
         else:
             raise CliError("unknown argument %s" % flag)
@@ -512,13 +563,15 @@ def parse_args(argv):
 
 def normalize(args):
     if not args.command:
-        raise CliError("missing command create_room or join_room")
+        raise CliError("missing command create_room, join_room, or claim_seat")
     if args.timeout is not None and (args.timeout < 0 or args.timeout != args.timeout):
         raise CliError("--timeout must be a non-negative number of seconds")
+    if args.seat and args.seat not in ("red", "blue"):
+        raise CliError("--seat must be red or blue")
+    if args.command == "claim_seat" and not args.seat:
+        raise CliError("claim_seat requires --seat red or --seat blue")
     if args.code and not _room_code(args.code):
         raise CliError("room code must be [a-z0-9]")
-    if not args.player_id.strip():
-        args.player_id = "agent-" + token(8)
     if args.command == "create_room" and not args.code and not args.url:
         args.code = token(6)
     from_url = code_from_ws_url(args.url) if args.url else ""
@@ -527,9 +580,9 @@ def normalize(args):
     if not args.code:
         args.code = from_url
     if not args.code:
-        if args.command == "join_room":
-            raise CliError("join_room requires -c CODE")
-        raise CliError("missing room code")
+        if args.command == "create_room":
+            raise CliError("missing room code")
+        raise CliError("%s requires -c CODE" % args.command)
     if not _room_code(args.code):
         raise CliError("room code must be [a-z0-9]")
     if not args.url:
@@ -547,6 +600,13 @@ def normalize(args):
         args.budget = None
     else:
         args.budget = min(args.timeout, 3600)
+    if not args.player_id.strip():
+        if args.player_id_from_flag:
+            raise CliError("--player-id must not be empty")
+        args.player_id = load_or_create_player_id()
+    args.player_id = args.player_id.strip()
+    if not valid_player_id(args.player_id):
+        raise CliError("--player-id must be 1-80 characters of letters, digits, dot, underscore, colon, or dash")
 
 
 def _room_code(code):
@@ -601,15 +661,21 @@ def connect_and_join(args):
     raise TransportError("join failed")
 
 
+def can_configure(you, phase):
+    if not isinstance(you, dict):
+        return False
+    if phase and phase != "lobby":
+        return False
+    return you.get("canConfig") is True or you.get("role") == "host"
+
+
 def maybe_config(client, joined, config):
     if not config:
         return
     payload = joined.get("payload") if isinstance(joined.get("payload"), dict) else {}
     you = payload.get("you") if isinstance(payload.get("you"), dict) else {}
-    if you.get("role") != "host":
-        sys.stderr.write("not host; ignoring --config\n")
-        return
-    if payload.get("phase") and payload.get("phase") != "lobby":
+    if not can_configure(you, payload.get("phase")):
+        sys.stderr.write("not the config host; ignoring --config\n")
         return
     client.queue = [msg for msg in client.queue if msg.get("type") != "room"]
     client.send_msg("set_config", config)
@@ -637,6 +703,37 @@ def blank_state(args):
         "moveMark": 0,
         "awaitingAck": False,
     }
+
+
+def maybe_claim(client, args, state, quiet=False):
+    if not args.seat:
+        return
+    timeout = args.budget if args.budget else 15
+    client.send_msg("claim_seat", {"seat": args.seat})
+    deadline = time.monotonic() + timeout
+    msg = client.wait_for(lambda item: item.get("type") in ("seated", "error"), deadline)
+    if msg.get("type") == "error":
+        body = msg.get("payload") if isinstance(msg.get("payload"), dict) else {}
+        raise CliError(str(body.get("message") or "claim_seat failed"))
+    payload = msg.get("payload") if isinstance(msg.get("payload"), dict) else {}
+    you = payload.get("you") if isinstance(payload.get("you"), dict) else None
+    if you is not None:
+        state["you"] = you
+    elif isinstance(state.get("you"), dict):
+        nxt = dict(state["you"])
+        nxt["seat"] = payload.get("seat")
+        nxt["role"] = payload.get("role")
+        nxt["color"] = payload.get("seat")
+        state["you"] = nxt
+    if not quiet:
+        emit(args, state, "seated", {"ok": True})
+
+
+def is_spectator(state):
+    you = state.get("you")
+    if not isinstance(you, dict):
+        return True
+    return you.get("seat") in (None, "spectator")
 
 
 def state_from_joined(args, joined):
@@ -889,20 +986,11 @@ def run_interactive(args):
 
 def interactive_session(client, stdin_buf, args, state, joined):
     emit(args, state, "joined", {"ok": True})
-    you = state.get("you") if isinstance(state.get("you"), dict) else {}
-    if you.get("seat") == "spectator":
-        emit(
-            args,
-            state,
-            "spectator",
-            {
-                "ok": False,
-                "error": "Room is full. This connection is a spectator and will not receive your_turn.",
-            },
-        )
-        return client, 1
     maybe_config(client, joined, args.config)
+    maybe_claim(client, args, state)
     client.drain_available()
+    if is_spectator(state):
+        emit(args, state, "spectator", {"ok": True})
     while True:
         try:
             msg = client.wait_for(lambda item: relevant(client, args, state, item), deadline_for(args.budget))
@@ -946,6 +1034,12 @@ def interactive_session(client, stdin_buf, args, state, joined):
                     state["lastOpponentMove"] = found
                 emit(args, state, "game_over", {"ok": True})
                 return client, 0
+            if is_spectator(state):
+                action = payload.get("action")
+                if action is not None:
+                    state["lastOpponentMove"] = action
+                emit(args, state, "watch", {"ok": True})
+                continue
             if isinstance(player, str) and player != args.player_id:
                 emit(args, state, "opponent", {"ok": True})
             continue
@@ -1017,22 +1111,17 @@ def run_poll(args):
     client, joined = connect_and_join(args)
     state = state_from_joined(args, joined)
     try:
-        you = state.get("you") if isinstance(state.get("you"), dict) else {}
-        if you.get("seat") == "spectator":
+        maybe_config(client, joined, args.config)
+        maybe_claim(client, args, state, quiet=True)
+        client.drain_available()
+        if is_spectator(state):
             emit(
                 args,
                 state,
                 "spectator",
-                {
-                    "ok": False,
-                    "mode": "poll",
-                    "yourTurn": False,
-                    "error": "Room is full. This connection is a spectator and will not receive your_turn.",
-                },
+                {"ok": True, "mode": "poll", "yourTurn": False},
             )
-            return client, 1
-        maybe_config(client, joined, args.config)
-        client.drain_available()
+            return client, 0
         ack = 20 if not args.budget else min(args.budget, 20)
         if args.move is None:
             mark = client.high_water()

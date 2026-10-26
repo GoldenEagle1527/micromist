@@ -111,6 +111,21 @@ html[data-theme="dark"] .explosive-status .explosive-count.blue {
   background: var(--md-sys-color-surface-container-high);
 }
 
+.explosive-roster {
+  margin-top: 0.75rem;
+}
+
+.explosive-roster-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.explosive-roster-row button {
+  flex: 0 0 auto;
+}
+
 .explosive-controls input[type="text"] {
   background: var(--md-sys-color-surface-container-highest);
   color: var(--md-sys-color-on-surface);
