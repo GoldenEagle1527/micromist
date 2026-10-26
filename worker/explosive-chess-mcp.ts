@@ -1,10 +1,9 @@
 /**
- * Hosted MCP facade for explosive-chess.
- * One Durable Object per MCP session holds the outbound room WebSocket.
- * Game state stays in GameRoom. This object only dials `/ws/explosive-chess:<code>`.
+ * Dormant MCP session for explosive-chess.
+ * `worker/index.ts` does not mount this on `/mcp`. The class stays exported so the
+ * existing Durable Object migration still has its binding. Game state stays in GameRoom.
  */
 import { DurableObject } from "cloudflare:workers";
-import { matchExplosiveChessMcpPath } from "../shared/explosive-chess/agent-guide";
 import {
   explosiveChessMcpHttp,
   legacySseResponse,
@@ -18,6 +17,15 @@ import {
 } from "../shared/explosive-chess/mcp-session";
 
 const STORAGE_KEY = "mcp_seat_v1";
+const MCP_STREAM_PATH = "/mcp/explosive-chess";
+const MCP_SSE_PATH = "/mcp/explosive-chess/sse";
+
+function matchExplosiveChessMcpPath(pathname: string): "stream" | "sse" | null {
+  const path = pathname.length > 1 && pathname.endsWith("/") ? pathname.slice(0, -1) : pathname;
+  if (path === MCP_STREAM_PATH) return "stream";
+  if (path === MCP_SSE_PATH) return "sse";
+  return null;
+}
 
 async function socketFromResponse(response: Response): Promise<RoomSocket> {
   const ws = response.webSocket;
@@ -103,7 +111,10 @@ function plain(status: number, message: string): Response {
   });
 }
 
-/** Worker entry. Unknown `/mcp/*` paths 404. chroma-slide is not served here. */
+/**
+ * Not mounted. `worker/index.ts` answers `/mcp` with 404.
+ * Kept so the session implementation can still be exercised without a public route.
+ */
 export async function routeExplosiveChessMcp(request: Request, env: Env): Promise<Response | null> {
   const url = new URL(request.url);
   if (url.pathname !== "/mcp" && !url.pathname.startsWith("/mcp/")) return null;
