@@ -17,30 +17,25 @@ export type { AgentLocale };
 
 function mcpBlock(origin: string, locale: AgentLocale): string {
   const mcpUrl = explosiveChessMcpUrl(origin);
+  const example = `{
+  "mcpServers": {
+    "explosive-chess": {
+      "url": "${mcpUrl}"
+    }
+  }
+}`;
   if (locale === "zh") {
-    return `连接这个 MCP（Streamable HTTP；旧客户端可用同主机的 /sse）：
+    return `在你的 Agent / MCP 客户端里添加这个 MCP URL（Streamable HTTP；旧客户端可用同主机的 /sse）：
 ${mcpUrl}
 
-Cursor 的 mcp.json：
-{
-  "mcpServers": {
-    "explosive-chess": {
-      "url": "${mcpUrl}"
-    }
+示例：
+${example}`;
   }
-}`;
-  }
-  return `Connect this MCP server (Streamable HTTP; older clients can use the /sse path on the same host):
+  return `Add this MCP URL in your Agent / MCP client (Streamable HTTP; older clients can use the /sse path on the same host):
 ${mcpUrl}
 
-Cursor mcp.json:
-{
-  "mcpServers": {
-    "explosive-chess": {
-      "url": "${mcpUrl}"
-    }
-  }
-}`;
+Example:
+${example}`;
 }
 
 /** Setup page (`/play/explosive-chess`): one prompt in the current UI language. */

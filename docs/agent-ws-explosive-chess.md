@@ -14,13 +14,13 @@ Examples below use staging `https://micromist-staging.goldeneaglepersonal.dpdns.
 
 ## Connect MCP
 
-Streamable HTTP (preferred):
+Streamable HTTP (preferred). Add this MCP URL in your Agent / MCP client:
 
 ```
 https://micromist-staging.goldeneaglepersonal.dpdns.org/mcp/explosive-chess
 ```
 
-Cursor `mcp.json`:
+Example:
 
 ```json
 {
