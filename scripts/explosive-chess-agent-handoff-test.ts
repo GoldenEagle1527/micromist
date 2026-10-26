@@ -133,6 +133,11 @@ c.section("served guide");
     !composed.includes("鏖战") && !composed.includes("步数制") && !composed.includes("面积制"),
     "english guide does not use chinese mode labels",
   );
+  c.check(
+    composed.includes("reusedRoom") && composed.includes("you.canConfig") && composed.includes("websocket closed"),
+    "english guide covers an existing room, canConfig, and reconnect",
+  );
+  c.check(composed.includes("A second Enter is not required"), "english guide says one stdin line is one move");
 
   const composedZh = composeAgentGuide(origin, protocolZh, "zh");
   c.check(composedZh.startsWith("# 当前站点"), "chinese guide starts with the host block");
@@ -154,6 +159,10 @@ c.section("served guide");
       !composedZh.includes("Area control") &&
       !composedZh.includes("Annihilation"),
     "chinese guide does not use english mode labels",
+  );
+  c.check(
+    composedZh.includes("reusedRoom") && composedZh.includes("websocket closed") && composedZh.includes("不需要再按一次 Enter"),
+    "chinese guide covers an existing room, reconnect, and one-line stdin",
   );
 
   const html = renderAgentGuideHtml(composed, `${origin}/agent-guide/explosive-chess/en.md`, "en", `${origin}/agent-guide/explosive-chess/zh`);
@@ -656,7 +665,10 @@ type EventLine = {
   roomCode?: string;
   board?: unknown;
   result?: { winnerColor?: string };
-  you?: { seat?: string; role?: string };
+  canConfig?: boolean;
+  reusedRoom?: boolean;
+  recoverable?: boolean;
+  you?: { seat?: string; role?: string; canConfig?: boolean };
 };
 
 function startSession(command: string, args: string[]) {
@@ -693,6 +705,9 @@ function startSession(command: string, args: string[]) {
     exited: () => exited,
     write(text: string) {
       child.stdin.write(text.endsWith("\n") ? text : `${text}\n`);
+    },
+    writeRaw(text: string) {
+      child.stdin.write(text);
     },
     async waitFor(pred: (rows: EventLine[]) => boolean, ms = 4000) {
       const start = Date.now();
@@ -940,6 +955,142 @@ c.section("official clients");
       c.check(mock.inbound.some((msg) => msg.type === "claim_seat" && msg.payload?.seat === "red"), "node claim_seat asks for red");
       const seated = session.lines.find((row) => row.event === "seated");
       c.check(seated?.you?.seat === "red" && seated.you.role === "host", "seated line reports the claimed seat");
+      c.check(seated?.canConfig === true && seated.you?.canConfig === true, "seated canConfig stays the server bit");
+    } finally {
+      await session.close();
+      await mock.close();
+    }
+  }
+
+  {
+    const mock = await listenMock((msg, send) => {
+      if (msg.type === "join") {
+        send({
+          type: "joined",
+          payload: {
+            roomCode: "abc",
+            phase: "lobby",
+            reclaimed: false,
+            reusedRoom: true,
+            you: {
+              playerId: "agent-1",
+              name: "Agent",
+              seat: "spectator",
+              role: "host",
+              kind: "agent",
+              color: null,
+              canConfig: false,
+            },
+          },
+        });
+      }
+    });
+    const args = [
+      ...base(mock.port),
+      "--config",
+      '{"boardSize":9,"winMode":"steps","winParam":8,"hostColor":"red"}',
+      "--seat",
+      "red",
+      "create_room",
+      "-c",
+      "abc",
+    ];
+    for (const [name, command, file] of [
+      ["node", process.execPath, `${CLIENT_DIR}/cli.mjs`],
+      ["python", "python3", `${CLIENT_DIR}/cli.py`],
+    ] as const) {
+      const session = startSession(command, [file, ...args]);
+      try {
+        const done = await session.untilExit();
+        const joined = session.lines.find((row) => row.event === "joined");
+        const err = session.lines.find((row) => row.event === "error");
+        c.check(joined?.reusedRoom === true && joined.canConfig === false, `${name} joined reports reusedRoom and canConfig false`);
+        c.check(
+          done.code === 1 && err?.ok === false && (err.error ?? "").includes("not the config host"),
+          `${name} --config ignore is a stdout error and exits`,
+          session.stderr(),
+        );
+        c.check(
+          !mock.inbound.some((msg) => msg.type === "set_config" || msg.type === "claim_seat"),
+          `${name} does not sit or send set_config when --config cannot apply`,
+        );
+      } finally {
+        await session.close();
+      }
+    }
+    await mock.close();
+  }
+
+  {
+    const mock = await listenMock((msg, send) => {
+      if (msg.type === "join") {
+        send({
+          type: "joined",
+          payload: {
+            roomCode: "abc",
+            phase: "lobby",
+            reclaimed: false,
+            you: { ...seat, role: "host", seat: "red", color: "red", canConfig: true },
+          },
+        });
+      }
+      if (msg.type === "set_config") send({ type: "error", payload: { message: "Config locked after start" } });
+    });
+    const session = startSession(process.execPath, [
+      `${CLIENT_DIR}/cli.mjs`,
+      ...base(mock.port),
+      "--config",
+      '{"boardSize":9,"winMode":"steps","winParam":8,"hostColor":"red"}',
+      "--seat",
+      "red",
+      "create_room",
+      "-c",
+      "abc",
+    ]);
+    try {
+      const done = await session.untilExit();
+      const err = session.lines.find((row) => row.event === "error");
+      c.check(done.code === 1 && (err?.error ?? "").includes("Config locked"), "node exits when set_config is rejected", session.stderr());
+      c.check(!mock.inbound.some((msg) => msg.type === "claim_seat"), "node does not claim a seat after a rejected config");
+    } finally {
+      await session.close();
+      await mock.close();
+    }
+  }
+
+  {
+    const mock = await listenMock((msg, send) => {
+      if (msg.type === "join") {
+        send({
+          type: "joined",
+          payload: {
+            roomCode: "abc",
+            phase: "lobby",
+            reclaimed: false,
+            you: { ...seat, seat: "spectator", role: "spectator", color: null, canConfig: false },
+          },
+        });
+      }
+      if (msg.type === "claim_seat") {
+        send({
+          type: "seated",
+          payload: {
+            seat: "blue",
+            role: "guest",
+            canConfig: false,
+            you: { ...seat, seat: "blue", role: "guest", color: "blue", canConfig: false },
+          },
+        });
+      }
+    });
+    const session = startSession(process.execPath, [`${CLIENT_DIR}/cli.mjs`, ...base(mock.port), "--seat", "blue", "claim_seat", "-c", "abc"]);
+    try {
+      await session.waitFor((rows) => rows.some((row) => row.event === "seated"));
+      const seated = session.lines.find((row) => row.event === "seated");
+      c.check(
+        seated?.you?.role === "guest" && seated.you.canConfig === false && seated.canConfig === false,
+        "seated guest is not reported as config host",
+      );
     } finally {
       await session.close();
       await mock.close();
@@ -1065,6 +1216,35 @@ c.section("official clients");
       await session.close();
       await mock.close();
     }
+  }
+
+  {
+    const oneLine = async (label: string, command: string, file: string, raw: string) => {
+      const mock = await listenMock((msg, send) => {
+        if (msg.type === "join") {
+          send(joinedMessage());
+          send(yourTurnMessage([{ type: "move", row: 0, col: 0 }]));
+        }
+        if (msg.type === "move" && msg.payload?.row === 0 && msg.payload?.col === 0) {
+          send({ type: "game_over", payload: { winner: 2, winnerColor: "blue", winReason: "steps" } });
+        }
+      });
+      const session = startSession(command, [file, ...base(mock.port), "join_room", "-c", "abc"]);
+      try {
+        await session.waitFor((rows) => rows.some((row) => row.event === "your_turn"));
+        session.writeRaw(raw);
+        const done = await session.untilExit();
+        const sent = mock.inbound.some((msg) => msg.type === "move" && msg.payload?.row === 0 && msg.payload?.col === 0);
+        c.check(done.code === 0 && sent, label, session.stderr());
+      } finally {
+        await session.close();
+        await mock.close();
+      }
+    };
+    await oneLine("node accepts one CR-terminated move", process.execPath, `${CLIENT_DIR}/cli.mjs`, "0,0\r");
+    await oneLine("python accepts one CR-terminated move", "python3", `${CLIENT_DIR}/cli.py`, "0,0\r");
+    await oneLine("node accepts one bare pipe move", process.execPath, `${CLIENT_DIR}/cli.mjs`, "0,0");
+    await oneLine("python accepts one bare pipe move", "python3", `${CLIENT_DIR}/cli.py`, "0,0");
   }
 
   {

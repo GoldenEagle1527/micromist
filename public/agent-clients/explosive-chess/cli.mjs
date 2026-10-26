@@ -19,7 +19,6 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import readline from "node:readline";
 
 const HELP = `explosive-chess official interactive client (no chess strength)
 
@@ -43,7 +42,7 @@ The one-shot client that exited after a single your_turn is retired.
   --seat        red or blue. Sent as claim_seat after join. Omit to watch.
   --player-id   This process's id. Omit to reuse the id stored on this machine.
   --name        Display name (default Agent)
-  --config      JSON object. Sent as set_config when you.canConfig is true (or you.role is host) and the room is still a lobby
+  --config      JSON object. Sent as set_config only when you.canConfig is true and the room is still a lobby. If it cannot apply, stdout gets an error JSON line and the process exits before play
   --verbose     Include board on each JSON line
   --timeout     Seconds to block for one server push. Omit to wait until game_over
   --poll        One-shot fallback. Prints one JSON line and exits. Accepts --move ROW,COL
@@ -55,14 +54,16 @@ The same playerId reclaims red, blue, or spectator. A new id is a new person.
 Omit --player-id to use ~/.config/micromist/explosive-chess-player-id
 (or $XDG_CONFIG_HOME/micromist/explosive-chess-player-id). Passing --player-id
 does not replace that file. A second agent on this machine passes its own id.
-Interactive stdin is ROW,COL or {"row":ROW,"col":COL}.
-Stdout is one JSON object per line. Diagnostics go to stderr.
+Interactive stdin is one move per line: ROW,COL or {"row":ROW,"col":COL}, ended by \\n or \\r.
+A second Enter is not required. Stdout is one JSON object per line. Diagnostics go to stderr.
 Node 22+ for global WebSocket. Otherwise use cli.py.
 `;
 
 const ABORT = Symbol("abort");
 const EOF = Symbol("eof");
 const TIMED_OUT = Symbol("timeout");
+const KEEPALIVE_MS = 20000;
+const RECONNECT_HINT = "Reconnect with the same --player-id and claim the same seat.";
 
 class CliError extends Error {}
 
@@ -397,8 +398,29 @@ class AgentSocket {
     });
   }
 
+  startKeepalive() {
+    this.stopKeepalive();
+    // Text frame "ping" is answered by the room's auto-response ("pong")
+    // without waking game logic. Idle proxies drop a quiet socket.
+    this._ping = setInterval(() => {
+      if (this.closed || this.stopping) return;
+      try {
+        this.ws.send("ping");
+      } catch {
+        /* close handler reports the drop */
+      }
+    }, KEEPALIVE_MS);
+    if (typeof this._ping.unref === "function") this._ping.unref();
+  }
+
+  stopKeepalive() {
+    if (this._ping) clearInterval(this._ping);
+    this._ping = null;
+  }
+
   close() {
     this.stopping = true;
+    this.stopKeepalive();
     try {
       this.ws.close();
     } catch {
@@ -452,6 +474,7 @@ function blankState(args) {
     board: null,
     phase: null,
     reclaimed: null,
+    reusedRoom: false,
     playUrl: `${httpOriginFrom(args)}/play/explosive-chess?room=${args.code}`,
     result: null,
     moveMark: 0,
@@ -472,11 +495,16 @@ function emit(args, state, event, extra = {}) {
   if (event === "joined") {
     line.playerId = args.playerId;
     line.reclaimed = state.reclaimed;
+    line.reusedRoom = state.reusedRoom === true;
+    line.canConfig = state.you?.canConfig === true;
     line.playUrl = state.playUrl;
     line.phase = state.phase;
   }
+  if (event === "seated") line.canConfig = state.you?.canConfig === true;
   if (event === "game_over") line.result = state.result;
   if (extra.error) line.error = extra.error;
+  if (extra.recoverable === true) line.recoverable = true;
+  if (extra.hint) line.hint = extra.hint;
   if (extra.mode) line.mode = extra.mode;
   if (extra.yourTurn != null) line.yourTurn = extra.yourTurn;
   if (args.verbose) line.board = state.board ?? null;
@@ -511,6 +539,11 @@ function ourApplySeq(seen, playerId, mark) {
     }
   }
   return seq;
+}
+
+function disconnectExtra(message) {
+  if (!/websocket closed/i.test(message)) return { ok: false, error: message };
+  return { ok: false, error: "websocket closed", recoverable: true, hint: RECONNECT_HINT };
 }
 
 function opponentMove(seen, playerId) {
@@ -555,6 +588,7 @@ async function connectAndJoin(args) {
         throw new CliError(message);
       }
       await sock.idle();
+      sock.startKeepalive();
       return { sock, joined };
     } catch (err) {
       lastErr = err;
@@ -570,7 +604,18 @@ async function connectAndJoin(args) {
 function canConfigure(you, phase) {
   if (!you || typeof you !== "object") return false;
   if (phase && phase !== "lobby") return false;
-  return you.canConfig === true || you.role === "host";
+  // canConfig is the server bit (playerId === hostId). role "host" is the same
+  // fact after a seat claim, but a payload that says canConfig false must not
+  // be overridden by role. Missing canConfig keeps the older role fallback.
+  if (you.canConfig === false) return false;
+  if (you.canConfig === true) return true;
+  return you.role === "host";
+}
+
+function configBlockedReason(you, phase) {
+  if (phase && phase !== "lobby") return "config locked; room is not a lobby";
+  if (!you || you.canConfig === false) return "not the config host; ignoring --config";
+  return "not the config host; ignoring --config";
 }
 
 async function maybeConfig(sock, joined, config) {
@@ -578,15 +623,14 @@ async function maybeConfig(sock, joined, config) {
   const you = joined.payload && joined.payload.you;
   const phase = joined.payload && joined.payload.phase;
   if (!canConfigure(you, phase)) {
-    console.error("not the config host; ignoring --config");
-    return;
+    throw new CliError(configBlockedReason(you, phase));
   }
   sock.buf = sock.buf.filter((msg) => msg.type !== "room");
   sock.send("set_config", config);
   const msg = await sock.waitFor((item) => item.type === "room" || item.type === "error", 15000);
   if (msg.type === "error") {
-    const message = String((msg.payload && msg.payload.message) || "");
-    if (!/locked/i.test(message)) throw new CliError(message || "set_config failed");
+    const message = String((msg.payload && msg.payload.message) || "set_config failed");
+    throw new CliError(message);
   }
 }
 
@@ -603,11 +647,25 @@ async function maybeClaim(sock, args, state, quiet = false) {
     throw new CliError(message);
   }
   const payload = msg.payload || {};
-  if (payload.you && typeof payload.you === "object") state.you = payload.you;
-  else if (state.you && typeof state.you === "object") {
-    state.you = { ...state.you, seat: payload.seat, role: payload.role, color: payload.seat };
-  }
+  state.you = youFromSeat(state.you, payload);
   if (!quiet) emit(args, state, "seated", { ok: true });
+}
+
+function youFromSeat(prev, payload) {
+  const fromServer = payload.you && typeof payload.you === "object" ? { ...payload.you } : null;
+  if (fromServer) {
+    if (typeof fromServer.canConfig !== "boolean" && typeof payload.canConfig === "boolean") {
+      fromServer.canConfig = payload.canConfig;
+    }
+    if (fromServer.seat == null && payload.seat != null) fromServer.seat = payload.seat;
+    if (fromServer.role == null && payload.role != null) fromServer.role = payload.role;
+    return fromServer;
+  }
+  if (!prev || typeof prev !== "object") return prev;
+  const next = { ...prev, seat: payload.seat ?? prev.seat, color: payload.seat ?? prev.color };
+  if (payload.role != null) next.role = payload.role;
+  if (typeof payload.canConfig === "boolean") next.canConfig = payload.canConfig;
+  return next;
 }
 
 function isSpectator(state) {
@@ -621,29 +679,93 @@ function stateFromJoined(args, joined) {
   state.you = payload.you || null;
   state.phase = payload.phase || null;
   state.reclaimed = payload.reclaimed === true;
+  state.reusedRoom =
+    payload.reusedRoom === true || (args.command === "create_room" && state.you && state.you.canConfig === false);
   if (state.roomCode) {
     state.playUrl = `${httpOriginFrom(args)}/play/explosive-chess?room=${state.roomCode}`;
   }
   return state;
 }
 
+function isCompleteMove(text) {
+  try {
+    return parseStdinMove(text) != null;
+  } catch {
+    return false;
+  }
+}
+
 function createLines() {
-  const rl = readline.createInterface({ input: process.stdin, terminal: false, crlfDelay: Infinity });
+  // Do not use readline. With crlfDelay, a pipe or raw PTY that ends a line on
+  // \\r waits for another byte before the line is emitted, so one ROW,COL sits
+  // until a second Enter. Split \\n, \\r\\n, and a bare \\r here, and on a
+  // non-TTY accept one complete move that arrived without a delimiter.
   const pending = [];
   const waiters = [];
+  let buf = "";
+  let skipLf = false;
   let eof = false;
-  rl.on("line", (line) => {
+  const pushLine = (line) => {
     const waiter = waiters.shift();
     if (waiter) waiter(line);
     else pending.push(line);
-  });
-  rl.on("close", () => {
+  };
+  const feed = (text) => {
+    if (skipLf) {
+      if (text.startsWith("\n")) text = text.slice(1);
+      skipLf = false;
+    }
+    if (!text) return;
+    buf += text;
+    while (buf.length) {
+      const n = buf.indexOf("\n");
+      const r = buf.indexOf("\r");
+      if (n < 0 && r < 0) break;
+      if (r >= 0 && (n < 0 || r < n)) {
+        const line = buf.slice(0, r);
+        buf = buf.slice(r + 1);
+        if (buf.startsWith("\n")) buf = buf.slice(1);
+        else if (buf.length === 0) skipLf = true;
+        pushLine(line);
+        continue;
+      }
+      const line = buf.slice(0, n);
+      buf = buf.slice(n + 1);
+      skipLf = false;
+      pushLine(line);
+    }
+  };
+  const onData = (chunk) => {
+    const text = String(chunk);
+    const before = buf;
+    feed(text);
+    if (!process.stdin.isTTY && before.length === 0 && buf.length > 0 && !/[\r\n]/.test(text) && isCompleteMove(buf)) {
+      const line = buf;
+      buf = "";
+      pushLine(line);
+    }
+  };
+  const onEnd = () => {
+    if (buf.length) {
+      pushLine(buf);
+      buf = "";
+    }
     eof = true;
     const waiter = waiters.shift();
     if (waiter) waiter(EOF);
-  });
+  };
+  process.stdin.setEncoding("utf8");
+  process.stdin.on("data", onData);
+  process.stdin.on("end", onEnd);
+  process.stdin.resume();
   return {
-    rl,
+    rl: {
+      close() {
+        process.stdin.off("data", onData);
+        process.stdin.off("end", onEnd);
+        process.stdin.pause();
+      },
+    },
     pending,
     waiters,
     get eof() {
@@ -752,14 +874,21 @@ async function fillResult(sock, state, moveMsg) {
 }
 
 async function runInteractive(args) {
-  const { sock, joined } = await connectAndJoin(args);
-  const state = stateFromJoined(args, joined);
+  // Start reading stdin before the handshake so a move written during connect
+  // is queued, and a single ROW,COL\\n is not stuck behind readline.
   const lines = createLines();
+  let sock = null;
+  let state = blankState(args);
   try {
-    return await interactiveSession(sock, lines, args, state, joined);
+    const connected = await connectAndJoin(args);
+    sock = connected.sock;
+    state = stateFromJoined(args, connected.joined);
+    return await interactiveSession(sock, lines, args, state, connected.joined);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    emit(args, state, /timeout/i.test(message) ? "timeout" : "error", { ok: false, error: message });
+    const event = /timeout/i.test(message) && !/websocket closed/i.test(message) ? "timeout" : "error";
+    const extra = /websocket closed/i.test(message) ? disconnectExtra(message) : { ok: false, error: message };
+    emit(args, state, event, extra);
     return { sock, lines, code: 1 };
   }
 }
@@ -783,7 +912,7 @@ async function interactiveSession(sock, lines, args, state, joined) {
           emit(args, state, "timeout", { ok: false, error: message });
           return { sock, lines, code: 1 };
         }
-        emit(args, state, "error", { ok: false, error: /closed/i.test(message) ? "websocket closed" : message });
+        emit(args, state, "error", disconnectExtra(message));
         return { sock, lines, code: 1 };
       }
       if (msg.type === "game_over") {
@@ -864,7 +993,13 @@ function pollLine(args, state, event, extra = {}) {
 async function runPoll(args) {
   const { sock, joined } = await connectAndJoin(args);
   const state = stateFromJoined(args, joined);
-  await maybeConfig(sock, joined, args.config);
+  try {
+    await maybeConfig(sock, joined, args.config);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    emit(args, state, "error", { ok: false, error: message, mode: "poll" });
+    return { sock, code: 1 };
+  }
   await maybeClaim(sock, args, state, true);
   await sock.idle();
   if (isSpectator(state)) {

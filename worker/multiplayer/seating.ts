@@ -31,6 +31,8 @@ export function decideClaim(input: {
       return { ok: false, message: "Seat taken" };
     }
   }
+  // "host" here is the config host (hostId), not the red seat. Blue stays host
+  // when that playerId connected first. The other seat is always guest.
   const role: Role = hostId === player.playerId ? "host" : "guest";
   return { ok: true, changed: true, seat, role };
 }
