@@ -1,16 +1,18 @@
 /**
- * Explosive-chess agent handoff: public guide negotiation and locale MCP copy.
+ * Explosive-chess agent handoff: public guide negotiation, locale copy, and official clients.
  * Run: npm run test:explosive-handoff
  */
-import { existsSync, readFileSync } from "node:fs";
+import { spawn } from "node:child_process";
+import { createHash } from "node:crypto";
+import { createServer, type IncomingMessage } from "node:http";
+import type { Socket } from "node:net";
+import { readFileSync } from "node:fs";
 import {
   agentGuideHttpResponse,
   composeAgentGuide,
-  explosiveChessMcpUrl,
-  explosiveChessPlayUrl,
+  explosiveChessClients,
   explosiveChessWsUrl,
   matchAgentGuidePath,
-  matchExplosiveChessMcpPath,
   prefersHtml,
   renderAgentGuideHtml,
   type AgentGuideProtocols,
@@ -43,18 +45,16 @@ const rules: AgentMatchRules = {
 function assertLocale(text: string, locale: AgentLocale, name: string): void {
   if (locale === "en") {
     c.check(!CJK.test(text), `${name} english has no CJK`);
-    c.check(text.includes("no_update"), `${name} restacks wait_for_turn`);
-    c.check(text.includes(explosiveChessMcpUrl(origin)), `${name} names the MCP url`);
-    c.check(text.includes("keeps the WebSocket open"), `${name} says the MCP keeps the socket open`);
-    c.check(!text.includes("ws-wait"), `${name} does not name the removed wait script`);
+    c.check(text.includes("Do not poll."), `${name} says not to poll`);
+    c.check(text.includes("There is no MCP."), `${name} says no MCP`);
+    c.check(text.includes("keeps the WebSocket open"), `${name} says to keep the socket open`);
   } else {
     c.check(CJK.test(text), `${name} chinese has CJK`);
     c.check(!text.includes("Should I create a room?"), `${name} chinese has no english invite question`);
     c.check(!text.includes("You are an explosive-chess agent."), `${name} chinese does not use the english intro`);
-    c.check(text.includes("no_update"), `${name} restacks wait_for_turn`);
-    c.check(text.includes(explosiveChessMcpUrl(origin)), `${name} names the MCP url`);
+    c.check(text.includes("不要轮询"), `${name} says not to poll`);
+    c.check(text.includes("没有 MCP"), `${name} says no MCP`);
     c.check(text.includes("不要断开"), `${name} says not to disconnect`);
-    c.check(!text.includes("ws-wait"), `${name} does not name the removed wait script`);
   }
 }
 
@@ -73,9 +73,6 @@ c.section("guide path");
   c.check(matchAgentGuidePath("/agent-guide/other") === "unknown", "unknown slug");
   c.check(matchAgentGuidePath("/ws/explosive-chess:abc") === null, "ws is not a guide");
   c.check(matchAgentGuidePath("/play/explosive-chess") === null, "play page is not a guide");
-  c.check(matchExplosiveChessMcpPath("/mcp/explosive-chess") === "stream", "mcp stream path");
-  c.check(matchExplosiveChessMcpPath("/mcp/explosive-chess/sse") === "sse", "mcp sse path");
-  c.check(matchExplosiveChessMcpPath("/mcp/chroma-slide") === null, "chroma-slide has no mcp path");
 }
 
 c.section("accept negotiation");
@@ -101,35 +98,29 @@ c.section("served guide");
     composed.includes("wss://micromist-staging.goldeneaglepersonal.dpdns.org/ws/explosive-chess:<code>"),
     "banner names the websocket shape",
   );
-  c.check(composed.includes(explosiveChessMcpUrl(origin)), "banner names the MCP url");
-  c.check(composed.includes("https://micromist-staging.goldeneaglepersonal.dpdns.org/mcp/explosive-chess"), "guide names the staging MCP url");
-  c.check(!composed.includes("/agent-clients/"), "guide does not advertise client downloads");
-  c.check(!composed.includes("ws-wait"), "guide does not name the removed wait script");
-  c.check(!composed.includes("There is no MCP"), "guide no longer says there is no MCP");
+  c.check(composed.includes(`${origin}${explosiveChessClients.nodeWait}`), "banner names the node wait client");
+  c.check(composed.includes(`${origin}${explosiveChessClients.pythonWait}`), "banner names the python wait client");
+  c.check(composed.includes(`${origin}${explosiveChessClients.nodePoll}`), "banner names the node poll client");
+  c.check(composed.includes(`${origin}${explosiveChessClients.pythonPoll}`), "banner names the python poll client");
   c.check(composed.includes("your_turn"), "protocol your_turn kept");
   c.check(composed.includes("legalActions"), "protocol legalActions kept");
+  c.check(composed.includes("There is no MCP"), "protocol no-MCP kept");
   c.check(composed.includes("Keep that socket open"), "guide says the socket must stay open");
-  c.check(composed.includes("Leave the MCP session connected"), "guide says the host waits connected");
+  c.check(composed.includes("Leave your socket open"), "guide says the host waits connected");
   c.check(composed.includes("Click me to send this to your AI and play together."), "english setup invite line is in the guide");
   c.check(!composed.includes("点我，把内容发给 AI 陪你一起玩吧"), "english guide does not use the chinese invite line");
   c.check(composed.includes("should you create a room"), "guide tells the agent to ask about creating a room");
   c.check(composed.includes("no chess strength"), "guide says the clients have no chess strength");
   c.check(composed.includes("Do not write a solver"), "guide forbids a solver");
-  c.check(composed.includes("Agent / MCP client"), "english guide names a generic MCP client");
-  c.check(!composed.includes("Cursor") && !composed.includes("mcp.json"), "english guide does not name a Cursor config");
   c.check(composed.indexOf("# This host") < composed.indexOf("# explosive"), "english host block is first");
 
   const composedZh = composeAgentGuide(origin, protocolZh, "zh");
   c.check(composedZh.startsWith("# 当前站点"), "chinese guide starts with the host block");
   c.check(composedZh.includes("点我，把内容发给 AI 陪你一起玩吧"), "chinese setup invite line is in the guide");
   c.check(!composedZh.includes("should you create a room"), "chinese guide does not use the english question");
-  c.check(composedZh.includes("没有棋力"), "chinese guide says the server has no chess strength");
-  c.check(composedZh.includes(explosiveChessMcpUrl(origin)), "chinese banner names the MCP url");
-  c.check(!composedZh.includes("/agent-clients/"), "chinese guide does not advertise client downloads");
+  c.check(composedZh.includes("它们没有棋力"), "chinese guide says the clients have no chess strength");
   c.check(composedZh.includes("不要编写求解器"), "chinese guide forbids a solver");
   c.check(composedZh.includes(`${origin}/agent-guide/explosive-chess/zh`), "chinese banner names its guide URL");
-  c.check(composedZh.includes("Agent / MCP 客户端"), "chinese guide names a generic MCP client");
-  c.check(!composedZh.includes("Cursor") && !composedZh.includes("mcp.json"), "chinese guide does not name a Cursor config");
   c.check(composedZh.indexOf("# 当前站点") < composedZh.indexOf("# 爆炸棋"), "chinese host block is first");
 
   const html = renderAgentGuideHtml(composed, `${origin}/agent-guide/explosive-chess/en.md`, "en", `${origin}/agent-guide/explosive-chess/zh`);
@@ -140,11 +131,11 @@ c.section("served guide");
     "explosive-chess",
     "set_config",
     "game_over",
+    "websocat",
     "Ready is disabled",
     "Needs Node 22+",
-    "wait_for_turn",
     origin,
-    explosiveChessMcpUrl(origin),
+    "no MCP",
   ]) {
     c.check(text.includes(needle), `html text keeps ${needle}`);
   }
@@ -250,18 +241,17 @@ c.section("served guide");
   );
   const wrangler = readFileSync("wrangler.jsonc", "utf8");
   c.check(wrangler.includes('"/agent-guide/*"'), "worker runs before the SPA for the guide");
-  c.check(wrangler.includes('"/mcp/*"'), "worker runs before the SPA for MCP");
-  c.check(wrangler.includes("ExplosiveChessMcp"), "wrangler binds the MCP session object");
-  c.check(!wrangler.includes("/agent-clients"), "removed client downloads are not a worker route");
+  c.check(wrangler.includes('"/mcp/*"'), "worker answers /mcp before the SPA shell");
+  c.check(!wrangler.includes("/agent-clients"), "client downloads are static assets, not a worker route");
   const workerSrcIndex = readFileSync("worker/index.ts", "utf8");
-  c.check(workerSrcIndex.includes("routeExplosiveChessMcp"), "worker routes the MCP facade");
-  c.check(workerSrcIndex.includes("export { GameRoom, ExplosiveChessMcp }"), "worker exports the MCP session class");
+  c.check(!workerSrcIndex.includes("routeExplosiveChessMcp"), "worker does not mount the MCP session");
+  c.check(workerSrcIndex.includes("No MCP server on this host."), "worker tells /mcp callers there is no MCP server");
 }
 
 c.section("copy prompts");
 {
   const code = "ab12cd";
-  const play = explosiveChessPlayUrl(origin, code);
+  const ws = explosiveChessWsUrl(origin, code);
   for (const locale of ["en", "zh"] as const) {
     const guest = promptHumanOpponent({
       origin,
@@ -292,25 +282,23 @@ c.section("copy prompts");
     ] as const) {
       const label = `${locale} ${name}`;
       c.check(text.includes(`${origin}/agent-guide/explosive-chess/${locale}`), `${label} has the locale guide URL`);
-      c.check(text.includes(explosiveChessMcpUrl(origin)), `${label} names the MCP url`);
-      c.check(!text.includes("/ws/explosive-chess:"), `${label} does not hand out a room socket`);
-      c.check(!text.includes("ws-wait") && !text.includes("/agent-clients/"), `${label} has no client download`);
-      c.check(text.includes(play), `${label} has the human play URL`);
+      c.check(text.includes(ws), `${label} has the websocket URL`);
       c.check(text.includes(code), `${label} has the room code`);
       c.check(text.includes("your_turn"), `${label} waits for your_turn`);
       c.check(text.includes("legalActions"), `${label} plays from legalActions`);
       c.check(text.includes("game_over"), `${label} states the goal`);
       c.check(text.includes('kind "agent"'), `${label} join kind is agent`);
       c.check(text.includes('"explosive-chess"'), `${label} join names the game`);
-      c.check(text.includes("take_turn"), `${label} names take_turn`);
+      c.check(text.includes(`${origin}${explosiveChessClients.nodeWait}`), `${label} downloads the node wait client`);
+      c.check(text.includes(`${origin}${explosiveChessClients.pythonWait}`), `${label} downloads the python wait client`);
+      c.check(text.includes(`${origin}${explosiveChessClients.nodePoll}`), `${label} names the poll fallback`);
+      c.check(text.includes("--move ROW,COL"), `${label} shows the move flag`);
       c.check(text.includes("minimax"), `${label} forbids a search engine`);
-      c.check(text.includes("mcpServers"), `${label} includes a generic MCP config example`);
-      c.check(!text.includes("Cursor") && !text.includes("mcp.json"), `${label} does not name a Cursor config`);
       assertLocale(text, locale, label);
     }
-    c.check(guest.includes("playerId：agent-human1") || guest.includes("playerId: agent-human1"), `${locale} human prompt uses the given playerId`);
-    c.check(host.includes("playerId：agent-a-host01") || host.includes("playerId: agent-a-host01"), `${locale} host prompt uses the given playerId`);
-    c.check(join.includes("playerId：agent-b-join01") || join.includes("playerId: agent-b-join01"), `${locale} guest prompt uses the given playerId`);
+    c.check(guest.includes("--player-id 'agent-human1'"), `${locale} human prompt uses the given playerId`);
+    c.check(host.includes("--player-id 'agent-a-host01'"), `${locale} host prompt uses the given playerId`);
+    c.check(join.includes("--player-id 'agent-b-join01'"), `${locale} guest prompt uses the given playerId`);
     c.check(guest.includes("set_config"), `${locale} human prompt can set_config when it is host`);
     c.check(host.includes(`"winMode":"steps"`), `${locale} host prompt sends the UI rules`);
     c.check(host.includes(`"winParam":4`), `${locale} host prompt sends winParam`);
@@ -344,22 +332,14 @@ c.section("setup invite");
   c.check(inviteZh.includes("要和我对下吗"), "invite asks in Chinese");
   c.check(inviteZh.includes("需要我建房吗"), "invite asks about creating a room in Chinese");
   c.check(inviteZh.includes("已经有房间码"), "invite asks for a room code in Chinese");
-  c.check(invite.includes(explosiveChessMcpUrl(origin)), "english invite names the staging MCP url");
-  c.check(inviteZh.includes(explosiveChessMcpUrl(origin)), "chinese invite names the staging MCP url");
-  c.check(invite.includes("create_room"), "english invite names create_room");
-  c.check(inviteZh.includes("join_room"), "chinese invite names join_room");
-  c.check(!invite.includes("There is no MCP."), "english invite no longer says there is no MCP");
-  c.check(!inviteZh.includes("没有 MCP"), "chinese invite no longer says there is no MCP");
+  c.check(invite.includes("There is no MCP."), "english invite says no MCP");
+  c.check(inviteZh.includes("没有 MCP"), "chinese invite says no MCP");
   c.check(!invite.includes("/ws/explosive-chess:"), "invite does not prefill a room socket");
   c.check(!inviteZh.includes("/ws/explosive-chess:"), "chinese invite does not prefill a room socket");
-  c.check(!invite.includes("ws-wait") && !inviteZh.includes("/agent-clients/"), "invites do not download clients");
+  c.check(invite.includes(`${origin}${explosiveChessClients.nodeWait}`), "english invite downloads the node client");
+  c.check(inviteZh.includes(`${origin}${explosiveChessClients.pythonWait}`), "chinese invite downloads the python client");
   c.check(invite.includes("Do not write a solver"), "english invite forbids a solver");
   c.check(inviteZh.includes("不要编写求解器"), "chinese invite forbids a solver");
-  c.check(invite.includes("Agent / MCP client"), "english invite names a generic MCP client");
-  c.check(inviteZh.includes("Agent / MCP 客户端"), "chinese invite names a generic MCP client");
-  c.check(invite.includes("mcpServers") && inviteZh.includes("mcpServers"), "invites include a generic MCP config example");
-  c.check(!invite.includes("Cursor") && !invite.includes("mcp.json"), "english invite does not name a Cursor config");
-  c.check(!inviteZh.includes("Cursor") && !inviteZh.includes("mcp.json"), "chinese invite does not name a Cursor config");
   assertLocale(invite, "en", "invite");
   assertLocale(inviteZh, "zh", "invite");
   const local = promptInviteAgent("http://127.0.0.1:8787", "en");
@@ -416,23 +396,408 @@ c.section("setup copy strings");
   }
 }
 
+const WS_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
+const CLIENT_DIR = "public/agent-clients/explosive-chess";
 
-c.section("client downloads removed");
-{
-  for (const file of [
-    "public/agent-clients/explosive-chess/ws-wait.mjs",
-    "public/agent-clients/explosive-chess/ws-poll.mjs",
-    "public/agent-clients/explosive-chess/ws_wait.py",
-    "public/agent-clients/explosive-chess/ws_poll.py",
-  ]) {
-    c.check(!existsSync(file), `${file} is removed`);
+function encodeTextFrame(text: string): Buffer {
+  const payload = Buffer.from(text, "utf8");
+  const len = payload.length;
+  let header: Buffer;
+  if (len < 126) header = Buffer.from([0x81, len]);
+  else if (len < 65536) header = Buffer.from([0x81, 126, (len >> 8) & 0xff, len & 0xff]);
+  else {
+    header = Buffer.alloc(10);
+    header[0] = 0x81;
+    header[1] = 127;
+    header.writeBigUInt64BE(BigInt(len), 2);
   }
-  const docs = readFileSync("docs/agent-ws-explosive-chess.md", "utf8") + readFileSync("docs/agent-ws-explosive-chess.zh.md", "utf8");
-  c.check(!docs.includes("ws-wait") && !docs.includes("ws_wait") && !docs.includes("/agent-clients/"), "docs do not publish client downloads");
-  c.check(docs.includes("/mcp/explosive-chess"), "docs name the MCP path");
-  const stdio = readFileSync("scripts/explosive-chess-mcp-stdio.ts", "utf8");
-  c.check(!stdio.includes("Cursor") && !stdio.includes("mcp.json"), "stdio setup example does not name a Cursor config");
-  c.check(stdio.includes("Agent / MCP client"), "stdio setup example names a generic MCP client");
+  return Buffer.concat([header, payload]);
+}
+
+function decodeFrames(buf: Buffer): { frames: string[]; rest: Buffer } {
+  const frames: string[] = [];
+  let offset = 0;
+  while (offset + 2 <= buf.length) {
+    const b0 = buf[offset] ?? 0;
+    const b1 = buf[offset + 1] ?? 0;
+    const opcode = b0 & 0x0f;
+    let len = b1 & 0x7f;
+    let pos = offset + 2;
+    if (len === 126) {
+      if (pos + 2 > buf.length) break;
+      len = buf.readUInt16BE(pos);
+      pos += 2;
+    } else if (len === 127) {
+      if (pos + 8 > buf.length) break;
+      len = Number(buf.readBigUInt64BE(pos));
+      pos += 8;
+    }
+    const masked = (b1 & 0x80) !== 0;
+    const maskLen = masked ? 4 : 0;
+    if (pos + maskLen + len > buf.length) break;
+    const raw = buf.subarray(pos + maskLen, pos + maskLen + len);
+    const payload = Buffer.alloc(len);
+    if (masked) {
+      const mask = buf.subarray(pos, pos + 4);
+      for (let i = 0; i < len; i += 1) payload[i] = (raw[i] ?? 0) ^ (mask[i % 4] ?? 0);
+    } else {
+      raw.copy(payload);
+    }
+    offset = pos + maskLen + len;
+    if (opcode === 0x1) frames.push(payload.toString("utf8"));
+  }
+  return { frames, rest: Buffer.from(buf.subarray(offset)) };
+}
+
+type Inbound = { type?: string; payload?: { row?: number; col?: number; playerId?: string; kind?: string } };
+
+function runClient(command: string, args: string[], timeoutMs = 8000): Promise<{ code: number | null; stdout: string; stderr: string }> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args, { stdio: ["ignore", "pipe", "pipe"] });
+    let stdout = "";
+    let stderr = "";
+    const timer = setTimeout(() => {
+      child.kill("SIGKILL");
+      reject(new Error(`client hung\n${stderr}\n${stdout}`));
+    }, timeoutMs);
+    child.stdout.setEncoding("utf8");
+    child.stderr.setEncoding("utf8");
+    child.stdout.on("data", (chunk: string) => {
+      stdout += chunk;
+    });
+    child.stderr.on("data", (chunk: string) => {
+      stderr += chunk;
+    });
+    child.on("error", (err) => {
+      clearTimeout(timer);
+      reject(err);
+    });
+    child.on("close", (code) => {
+      clearTimeout(timer);
+      resolve({ code, stdout, stderr });
+    });
+  });
+}
+
+function listenMock(onMessage: (msg: Inbound, send: (obj: unknown) => void) => void): Promise<{ port: number; inbound: Inbound[]; close: () => Promise<void> }> {
+  const inbound: Inbound[] = [];
+  const sockets = new Set<Socket>();
+  const server = createServer();
+  server.on("connection", (sock) => {
+    sockets.add(sock);
+    sock.on("close", () => sockets.delete(sock));
+    sock.on("error", () => {});
+  });
+  server.on("upgrade", (req: IncomingMessage, socket) => {
+    const keyHeader = req.headers["sec-websocket-key"];
+    const key = Array.isArray(keyHeader) ? keyHeader[0] : keyHeader;
+    if (!key) {
+      socket.destroy();
+      return;
+    }
+    const accept = createHash("sha1").update(key + WS_GUID).digest("base64");
+    socket.write(
+      "HTTP/1.1 101 Switching Protocols\r\n" +
+        "Upgrade: websocket\r\n" +
+        "Connection: Upgrade\r\n" +
+        `Sec-WebSocket-Accept: ${accept}\r\n\r\n`,
+    );
+    let buf = Buffer.alloc(0);
+    const send = (obj: unknown) => {
+      try {
+        socket.write(encodeTextFrame(JSON.stringify(obj)));
+      } catch {
+        /* closed */
+      }
+    };
+    socket.on("data", (chunk: Buffer) => {
+      buf = Buffer.concat([buf, chunk]);
+      const decoded = decodeFrames(buf);
+      buf = decoded.rest;
+      for (const text of decoded.frames) {
+        let msg: Inbound;
+        try {
+          msg = JSON.parse(text) as Inbound;
+        } catch {
+          continue;
+        }
+        inbound.push(msg);
+        try {
+          onMessage(msg, send);
+        } catch (err) {
+          console.error(err);
+        }
+      }
+    });
+  });
+  return new Promise((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => {
+      const addr = server.address();
+      const port = typeof addr === "object" && addr ? addr.port : 0;
+      resolve({
+        port,
+        inbound,
+        close: () =>
+          new Promise((done) => {
+            for (const sock of sockets) sock.destroy();
+            server.close(() => done());
+          }),
+      });
+    });
+  });
+}
+
+const seat = {
+  playerId: "agent-1",
+  name: "Agent",
+  seat: "blue",
+  role: "guest",
+  kind: "agent",
+  color: "blue",
+};
+
+function joinedMessage(role: "guest" | "host" = "guest") {
+  return {
+    type: "joined",
+    payload: {
+      roomCode: "abc",
+      phase: "lobby",
+      reclaimed: false,
+      you: { ...seat, role, seat: role === "host" ? "red" : "blue", color: role === "host" ? "red" : "blue" },
+    },
+  };
+}
+
+function yourTurnMessage(actions = [
+  { type: "move", row: 1, col: 1 },
+  { type: "move", row: 4, col: 5 },
+]) {
+  return {
+    type: "your_turn",
+    payload: {
+      observation: {
+        phase: "playing",
+        you: seat,
+        publicState: { turn: "blue", fullState: { gameOver: false }, board: [] },
+        legalActions: actions,
+      },
+    },
+  };
+}
+
+c.section("official clients");
+{
+  const nodeWaitSrc = readFileSync(`${CLIENT_DIR}/ws-wait.mjs`);
+  const nodePollSrc = readFileSync(`${CLIENT_DIR}/ws-poll.mjs`);
+  const pyWaitSrc = readFileSync(`${CLIENT_DIR}/ws_wait.py`);
+  const pyPollSrc = readFileSync(`${CLIENT_DIR}/ws_poll.py`);
+  c.check(nodeWaitSrc.equals(nodePollSrc), "node poll client is the wait client selected by filename");
+  c.check(pyWaitSrc.equals(pyPollSrc), "python poll client is the wait client selected by filename");
+  for (const [name, src] of [
+    ["node", nodeWaitSrc.toString("utf8")],
+    ["python", pyWaitSrc.toString("utf8")],
+  ] as const) {
+    c.check(src.includes('kind') && src.includes('"agent"'), `${name} joins as kind agent`);
+    c.check(!src.includes("minimax") && !src.includes("mcts") && !src.includes("Math.random"), `${name} has no move search`);
+    c.check(!src.includes("legalActions[0]") && !src.includes("random.choice"), `${name} does not pick a legal action`);
+    c.check(!src.includes("from websockets") && !src.includes('require("ws")'), `${name} has no third-party websocket package`);
+  }
+  c.check(pyWaitSrc.toString("utf8").includes("hashlib"), "python client speaks websocket with the standard library");
+
+  const nodeHelp = await runClient(process.execPath, [`${CLIENT_DIR}/ws-wait.mjs`, "--help"]);
+  c.check(nodeHelp.code === 0 && nodeHelp.stdout.includes("no chess strength"), "node help");
+  const pyHelp = await runClient("python3", [`${CLIENT_DIR}/ws_wait.py`, "--help"]);
+  c.check(pyHelp.code === 0 && pyHelp.stdout.includes("no chess strength"), "python help");
+  const nodeUsage = await runClient(process.execPath, [`${CLIENT_DIR}/ws-wait.mjs`, "--player-id", "agent-1"]);
+  const nodeUsageJson = JSON.parse(nodeUsage.stdout) as { ok?: boolean; error?: string };
+  c.check(nodeUsage.code === 1 && nodeUsageJson.ok === false && (nodeUsageJson.error ?? "").includes("--url"), "node usage error is json");
+
+  const nodeUrl = (port: number) => `ws://127.0.0.1:${port}/ws/explosive-chess:abc`;
+  const common = (port: number) => ["--url", nodeUrl(port), "--player-id", "agent-1", "--name", "Agent", "--timeout", "5"];
+
+  {
+    const mock = await listenMock((msg, send) => {
+      if (msg.type === "join") {
+        send(joinedMessage());
+        send(yourTurnMessage());
+      }
+    });
+    try {
+      const result = await runClient(process.execPath, [`${CLIENT_DIR}/ws-wait.mjs`, ...common(mock.port)]);
+      const json = JSON.parse(result.stdout) as { ok?: boolean; event?: string; legalActions?: unknown[]; yourTurn?: boolean };
+      c.check(result.code === 0 && json.event === "your_turn" && json.ok === true, "node wait returns your_turn", result.stderr);
+      c.check(Array.isArray(json.legalActions) && json.legalActions.length === 2 && json.yourTurn === true, "node wait copies every legal action");
+      c.check(mock.inbound.every((msg) => msg.type !== "move"), "node wait without --move does not send a move");
+      c.check(mock.inbound.some((msg) => msg.payload?.kind === "agent"), "node join kind is agent");
+    } finally {
+      await mock.close();
+    }
+  }
+
+  {
+    const mock = await listenMock((msg, send) => {
+      if (msg.type === "join") {
+        send(joinedMessage());
+        send(yourTurnMessage());
+      }
+      if (msg.type === "move") send({ type: "error", payload: { message: "Invalid move" } });
+    });
+    try {
+      const result = await runClient(process.execPath, [`${CLIENT_DIR}/ws-wait.mjs`, ...common(mock.port), "--move", "1,1"]);
+      const json = JSON.parse(result.stdout) as { event?: string; error?: string; legalActions?: Array<{ row?: number }> };
+      const rejected = result.code === 1 && json.event === "error" && (json.error ?? "").includes("Invalid move");
+      c.check(rejected, "node wait surfaces a rejected move", rejected ? "" : result.stdout);
+      c.check((json.legalActions ?? []).length === 2, "rejected move still returns the legal actions");
+      c.check(mock.inbound.some((msg) => msg.type === "move" && msg.payload?.row === 1 && msg.payload?.col === 1), "node sends the chosen cell");
+    } finally {
+      await mock.close();
+    }
+  }
+
+  {
+    const mock = await listenMock((msg, send) => {
+      if (msg.type === "join") send(joinedMessage());
+      if (msg.type === "move") {
+        send({
+          type: "move_applied",
+          payload: { action: { type: "move", row: 1, col: 1 }, by: { playerId: "agent-1" }, gameOver: false },
+        });
+        setTimeout(() => {
+          send({
+            type: "move_applied",
+            payload: { action: { type: "move", row: 2, col: 3 }, by: { playerId: "human-1" }, gameOver: false },
+          });
+          send(yourTurnMessage([{ type: "move", row: 0, col: 2 }]));
+        }, 300);
+      }
+    });
+    try {
+      const started = Date.now();
+      const result = await runClient(process.execPath, [`${CLIENT_DIR}/ws-wait.mjs`, ...common(mock.port), "--move", "1,1"]);
+      const json = JSON.parse(result.stdout) as { event?: string; lastOpponentMove?: { row?: number; col?: number } };
+      c.check(result.code === 0 && json.event === "your_turn", "node wait blocks until the next your_turn", result.stderr);
+      c.check(json.lastOpponentMove?.row === 2 && json.lastOpponentMove?.col === 3, "node wait reports the opponent move");
+      c.check(Date.now() - started >= 250, "node wait did not return before the opponent push");
+    } finally {
+      await mock.close();
+    }
+  }
+
+  {
+    const mock = await listenMock((msg, send) => {
+      if (msg.type === "join") send(joinedMessage("host"));
+      if (msg.type === "set_config") {
+        send({ type: "room", payload: { phase: "lobby" } });
+        setTimeout(() => send(yourTurnMessage()), 40);
+      }
+    });
+    try {
+      const result = await runClient(process.execPath, [
+        `${CLIENT_DIR}/ws-wait.mjs`,
+        ...common(mock.port),
+        "--config",
+        '{"boardSize":9,"winMode":"steps","winParam":4,"hostColor":"red"}',
+      ]);
+      const json = JSON.parse(result.stdout) as { event?: string };
+      c.check(result.code === 0 && json.event === "your_turn", "node host config then waits", result.stderr);
+      c.check(mock.inbound.some((msg) => msg.type === "set_config"), "node host sends set_config");
+      c.check(mock.inbound.every((msg) => msg.type !== "move"), "node host config run does not invent a move");
+    } finally {
+      await mock.close();
+    }
+  }
+
+  {
+    const mock = await listenMock((msg, send) => {
+      if (msg.type === "join") send(joinedMessage());
+      if (msg.type === "move") {
+        send({
+          type: "move_applied",
+          payload: { action: { type: "move", row: 0, col: 2 }, by: { playerId: "agent-1" }, gameOver: false },
+        });
+      }
+      if (msg.type === "observe") {
+        send({
+          type: "observation",
+          payload: {
+            observation: {
+              phase: "playing",
+              you: seat,
+              publicState: { turn: "red", fullState: { gameOver: false } },
+              legalActions: [],
+            },
+          },
+        });
+      }
+    });
+    try {
+      const result = await runClient(process.execPath, [`${CLIENT_DIR}/ws-poll.mjs`, ...common(mock.port), "--move", "0,2"]);
+      const json = JSON.parse(result.stdout) as { event?: string; mode?: string; yourTurn?: boolean };
+      c.check(result.code === 0 && json.event === "observation" && json.mode === "poll", "node poll returns without waiting for your_turn", result.stderr);
+      c.check(json.yourTurn === false, "node poll reports that it is not your turn");
+      c.check(mock.inbound.some((msg) => msg.type === "observe"), "node poll sends one observe");
+    } finally {
+      await mock.close();
+    }
+  }
+
+  {
+    const mock = await listenMock((msg, send) => {
+      if (msg.type === "join") {
+        send(joinedMessage());
+        send(yourTurnMessage());
+      }
+    });
+    try {
+      const result = await runClient("python3", [`${CLIENT_DIR}/ws_wait.py`, ...common(mock.port)]);
+      const json = JSON.parse(result.stdout) as { event?: string; legalActions?: unknown[] };
+      const pyWaitOk = result.code === 0 && json.event === "your_turn";
+      c.check(pyWaitOk, "python wait returns your_turn", pyWaitOk ? "" : `${result.stderr}\n${result.stdout}`);
+      c.check((json.legalActions ?? []).length === 2, "python wait copies every legal action");
+      c.check(mock.inbound.every((msg) => msg.type !== "move"), "python wait without --move does not send a move");
+    } finally {
+      await mock.close();
+    }
+  }
+
+  {
+    const mock = await listenMock((msg, send) => {
+      if (msg.type === "join") send(joinedMessage());
+      if (msg.type === "move") {
+        send({
+          type: "move_applied",
+          payload: { action: { type: "move", row: 3, col: 4 }, by: { playerId: "agent-1" }, gameOver: false },
+        });
+      }
+      if (msg.type === "observe") {
+        send({
+          type: "observation",
+          payload: {
+            observation: {
+              phase: "playing",
+              you: seat,
+              publicState: { turn: "red", fullState: { gameOver: false } },
+              legalActions: [],
+            },
+          },
+        });
+      }
+    });
+    try {
+      const result = await runClient("python3", [`${CLIENT_DIR}/ws_poll.py`, ...common(mock.port), "--move", "3,4"]);
+      const json = JSON.parse(result.stdout) as { event?: string; mode?: string; yourTurn?: boolean };
+      const pyPollOk = result.code === 0 && json.event === "observation" && json.mode === "poll";
+      c.check(pyPollOk, "python poll returns an observation", pyPollOk ? "" : `${result.stderr}\n${result.stdout}`);
+      c.check(json.yourTurn === false, "python poll does not claim the turn");
+      c.check(
+        mock.inbound.some((msg) => msg.type === "move" && msg.payload?.row === 3 && msg.payload?.col === 4),
+        "python sends the chosen cell",
+      );
+    } finally {
+      await mock.close();
+    }
+  }
 }
 
 c.finish();
