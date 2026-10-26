@@ -23,6 +23,7 @@ import {
   promptDualHost,
   promptHumanOpponent,
   promptInviteAgent,
+  winModeGlossary,
   type AgentLocale,
   type AgentMatchRules,
 } from "../shared/explosive-chess/agent-handoff";
@@ -118,6 +119,20 @@ c.section("served guide");
   c.check(composed.includes("no chess strength"), "guide says the clients have no chess strength");
   c.check(composed.includes("Do not write a solver"), "guide forbids a solver");
   c.check(composed.indexOf("# This host") < composed.indexOf("# explosive"), "english host block is first");
+  c.check(composed.includes("## Win modes"), "english guide has a win modes section");
+  c.check(composed.includes('**Annihilation** (`annihilation`)'), "english guide maps Annihilation");
+  c.check(composed.includes('**Step limit** (`steps`)'), "english guide maps Step limit");
+  c.check(composed.includes('**Area control** (`area`)'), "english guide maps Area control");
+  c.check(composed.includes("Wiped out all enemy pieces"), "english guide names the annihilation result");
+  c.check(composed.includes("First to hold {n} cells"), "english guide names the area result");
+  c.check(
+    composed.includes("For a short match, use `steps` with a small `winParam`."),
+    "english guide keeps the short-match tip",
+  );
+  c.check(
+    !composed.includes("鏖战") && !composed.includes("步数制") && !composed.includes("面积制"),
+    "english guide does not use chinese mode labels",
+  );
 
   const composedZh = composeAgentGuide(origin, protocolZh, "zh");
   c.check(composedZh.startsWith("# 当前站点"), "chinese guide starts with the host block");
@@ -127,6 +142,19 @@ c.section("served guide");
   c.check(composedZh.includes("不要编写求解器"), "chinese guide forbids a solver");
   c.check(composedZh.includes(`${origin}/agent-guide/explosive-chess/zh`), "chinese banner names its guide URL");
   c.check(composedZh.indexOf("# 当前站点") < composedZh.indexOf("# 爆炸棋"), "chinese host block is first");
+  c.check(composedZh.includes("## 胜负模式"), "chinese guide has a win modes section");
+  c.check(composedZh.includes("**鏖战（歼灭）**（`annihilation`）"), "chinese guide maps 鏖战（歼灭）");
+  c.check(composedZh.includes("界面上也常写成「鏖战」"), "chinese guide maps the short 鏖战 label");
+  c.check(composedZh.includes("**步数制**（`steps`）"), "chinese guide maps 步数制");
+  c.check(composedZh.includes("**面积制**（`area`）"), "chinese guide maps 面积制");
+  c.check(composedZh.includes("想下短局，用 `steps` 和一个小的 `winParam`。"), "chinese guide keeps the short-match tip");
+  c.check(
+    !composedZh.includes("## Win modes") &&
+      !composedZh.includes("Step limit") &&
+      !composedZh.includes("Area control") &&
+      !composedZh.includes("Annihilation"),
+    "chinese guide does not use english mode labels",
+  );
 
   const html = renderAgentGuideHtml(composed, `${origin}/agent-guide/explosive-chess/en.md`, "en", `${origin}/agent-guide/explosive-chess/zh`);
   const text = html.replace(/<[^>]+>/g, " ");
@@ -310,6 +338,9 @@ c.section("copy prompts");
     c.check(guest.includes("set_config"), `${locale} human prompt can set_config when it is host`);
     c.check(host.includes(`"winMode":"steps"`), `${locale} host prompt sends the UI rules`);
     c.check(host.includes(`"winParam":4`), `${locale} host prompt sends winParam`);
+    c.check(host.includes(winModeGlossary(locale)), `${locale} host prompt includes the mode glossary`);
+    c.check(guest.includes(winModeGlossary(locale)), `${locale} human prompt includes the mode glossary`);
+    c.check(!join.includes(winModeGlossary(locale)), `${locale} guest prompt does not repeat the config glossary`);
     c.check(!join.includes("set_config"), `${locale} guest prompt does not send set_config`);
     c.check(join.includes("You are Agent B") || join.includes("你是 Agent B"), `${locale} guest prompt names B`);
   }
@@ -352,6 +383,18 @@ c.section("setup invite");
   c.check(!invite.includes("ws-wait") && !inviteZh.includes("ws-wait"), "invite does not document the retired client");
   c.check(invite.includes("Do not write a solver"), "english invite forbids a solver");
   c.check(inviteZh.includes("不要编写求解器"), "chinese invite forbids a solver");
+  c.check(invite.includes(winModeGlossary("en")), "english invite includes the mode glossary");
+  c.check(invite.includes('"Annihilation" = annihilation'), "english invite maps Annihilation");
+  c.check(invite.includes('"Step limit" = steps'), "english invite maps Step limit");
+  c.check(invite.includes('"Area control" = area'), "english invite maps Area control");
+  c.check(invite.includes('guide section "Win modes"'), "english invite points at the guide section");
+  c.check(inviteZh.includes(winModeGlossary("zh")), "chinese invite includes the mode glossary");
+  c.check(inviteZh.includes("「鏖战」或「鏖战（歼灭）」= annihilation"), "chinese invite maps 鏖战（歼灭）");
+  c.check(inviteZh.includes("「步数制」= steps"), "chinese invite maps 步数制");
+  c.check(inviteZh.includes("「面积制」= area"), "chinese invite maps 面积制");
+  c.check(inviteZh.includes("指南「胜负模式」"), "chinese invite points at the guide section");
+  c.check(!inviteZh.includes("Win modes") && !inviteZh.includes("Step limit") && !inviteZh.includes("Annihilation"), "chinese invite has no english mode labels");
+  c.check(!invite.includes("鏖战") && !invite.includes("步数制") && !invite.includes("面积制"), "english invite has no chinese mode labels");
   assertLocale(invite, "en", "invite");
   assertLocale(inviteZh, "zh", "invite");
   const local = promptInviteAgent("http://127.0.0.1:8787", "en");
