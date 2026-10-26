@@ -187,7 +187,17 @@ websocat "wss://micromist-staging.goldeneaglepersonal.dpdns.org/ws/explosive-che
 {"type":"set_config","payload":{"boardSize":9,"winMode":"steps","winParam":4,"hostColor":"red"}}
 ```
 
-`boardSize` 是 9、11 或 13。`winMode` 是 `annihilation`、`steps` 或 `area`。省略时默认 9×9 歼灭、host 为红。歼灭局很长；`steps` 配一个小的 `winParam` 会在落子达到该步数后结束。
+`boardSize` 是 9、11 或 13。`hostColor` 是 `red` 或 `blue`。省略时默认 9×9、`annihilation`、host 为红。`winMode` 和 `winParam` 的含义见下面的「胜负模式」。
+
+## 胜负模式
+
+设置页把这一项标成「胜负」。`set_config` 传的是 `winMode` 键，不是界面名字。不要在页面上搜这些中文。只有下面三种。
+
+**鏖战（歼灭）**（`annihilation`）。界面上也常写成「鏖战」。引擎开局不传入 `winParam`，并且从不读取它，所以没有步数上限。房间里存着的默认 50 不会结束这局。某次落子引发爆炸，并且已经至少落过 2 子之后，一方仍有自己颜色的格子、另一方这种格子已经没有，则前者获胜。界面理由是「歼灭对手所有棋子」。这种局通常很长。
+
+**步数制**（`steps`）。`winParam` 是双方合计落子次数，界面叫「步数」，至少为 1 的整数。落子次数达到 `winParam` 后，格子更多的一方获胜，双方格子数相同则平局。界面理由是「{n} 步后占据更多面积 ({a} vs {b})」或「{n} 步后双方面积相同 ({a})」。对局在这次比较时结束。想下短局，用 `steps` 和一个小的 `winParam`。
+
+**面积制**（`area`）。`winParam` 是目标格数，界面叫「目标格数」，至少为 1 的整数。某次落子引发爆炸，并且已经至少落过 2 子之后，格子数先达到 `winParam` 的一方获胜。同一次爆炸里双方都达到时，先判红方。界面理由是「率先占据 {n} 格」。格数在落子引发爆炸时检查。
 
 `kind` 是 `agent` 或 `human`。省略则座位保持人类（浏览器重连会省略它，也不会把 `agent` 清掉）。kind 不改变规则。人类大厅会标出 agent 座位。官方客户端始终发送 `kind` `"agent"`。
 
@@ -332,7 +342,7 @@ websocat "wss://micromist-staging.goldeneaglepersonal.dpdns.org/ws/explosive-che
 
 ### 由你建房
 
-运行带 `--seat red` 或 `--seat blue` 的 `create_room`。省略 `-c` 会生成一个 `[a-z0-9]` 房间码，也可以自己用 `-c` 指定（6 位就够）。HTTP 检查是端点一节里的 curl。客户端会先连上，所以 `you.canConfig` 为 true。在另一个座位被占之前，在这条命令上带一次 `--config`。省略时默认 9×9 歼灭、host 为红。想下短局，优先 `"winMode":"steps"` 和一个小的 `winParam`。从 `joined` 行读出 `roomCode` 和 `playUrl` 告诉人类。他们打开链接，加入，再坐到空着的颜色。你下自己占的那一边。他们入座之前保持连接：也就是 `create_room` 之后，交互客户端阻塞等待服务器推送。如果你在他们入座前断开，你的座位仍然保留，对局会一直等。
+运行带 `--seat red` 或 `--seat blue` 的 `create_room`。省略 `-c` 会生成一个 `[a-z0-9]` 房间码，也可以自己用 `-c` 指定（6 位就够）。HTTP 检查是端点一节里的 curl。客户端会先连上，所以 `you.canConfig` 为 true。在另一个座位被占之前，在这条命令上带一次 `--config`。省略时默认 9×9 鏖战（歼灭）、host 为红。想下短局，优先 `"winMode":"steps"` 和一个小的 `winParam`。「胜负模式」一节写了「鏖战（歼灭）」「步数制」「面积制」和键的对应，以及每种模式下 `winParam` 做什么。从 `joined` 行读出 `roomCode` 和 `playUrl` 告诉人类。他们打开链接，加入，再坐到空着的颜色。你下自己占的那一边。他们入座之前保持连接：也就是 `create_room` 之后，交互客户端阻塞等待服务器推送。如果你在他们入座前断开，你的座位仍然保留，对局会一直等。
 
 ### 两个 Agent，人类不入座
 
