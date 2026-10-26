@@ -53,6 +53,8 @@ node cli.mjs --origin ORIGIN --player-id PLAYER_ID --name Agent --seat red claim
 node cli.mjs --origin ORIGIN --poll --player-id PLAYER_ID --name Agent join_room -c CODE --move ROW,COL
 python3 cli.py --origin ORIGIN --poll --player-id PLAYER_ID --name Agent join_room -c CODE --move ROW,COL
 
+${winModeGlossary("zh")}
+
 连上之前，先在对话里问人类并等待回答：
 1. 要和我对下吗？
 2. 需要我建房吗？
@@ -90,6 +92,8 @@ Only if this environment cannot keep a process blocked on the socket, add --poll
 
 node cli.mjs --origin ORIGIN --poll --player-id PLAYER_ID --name Agent join_room -c CODE --move ROW,COL
 python3 cli.py --origin ORIGIN --poll --player-id PLAYER_ID --name Agent join_room -c CODE --move ROW,COL
+
+${winModeGlossary("en")}
 
 Before you connect, ask the human in this chat and wait:
 1. Play against me (you versus the human)?
@@ -161,6 +165,19 @@ function configJson(rules: AgentMatchRules): string {
 
 function rulesLine(rules: AgentMatchRules): string {
   return `boardSize ${rules.boardSize}, winMode ${rules.winMode}, winParam ${rules.winParam}, hostColor ${rules.hostColor}`;
+}
+
+/**
+ * Setup labels ↔ `winMode` keys, plus how `winParam` is actually applied.
+ * One locale per string. Semantics follow `createGame` in engine.ts and the worker adapter:
+ * annihilation never reads winParam; steps compares cell counts once placements reach winParam;
+ * area checks the target only after an exploding placement, once at least two placements exist.
+ */
+export function winModeGlossary(locale: AgentLocale): string {
+  if (locale === "zh") {
+    return `胜负模式见指南「胜负模式」。不要在页面上搜中文名。set_config 只传 winMode 键，而且只有你可以配置、房间仍是 lobby 时才发送。「鏖战」或「鏖战（歼灭）」= annihilation：引擎不读取 winParam，没有步数上限；落子引发爆炸且已至少落过 2 子后，一方仍有自己颜色的格子、另一方已经没有，则前者获胜（界面「歼灭对手所有棋子」）。房间里即使带着默认 winParam 50，也不结束鏖战。「步数制」= steps：winParam 是双方合计落子次数（界面「步数」，至少为 1）；达到后格子更多的一方获胜，格子数相同则平局。短局用 steps 和一个小的 winParam。「面积制」= area：winParam 是目标格数（界面「目标格数」，至少为 1）；落子引发爆炸且已至少落过 2 子后，先达到该格数的一方获胜，同一次爆炸里双方都达到时先判红方。没有引发爆炸的落子不会结束面积制。`;
+  }
+  return `Win modes are in the guide section "Win modes". Do not search the page for the label. set_config takes the winMode key, and only when you may configure and the room is still a lobby. "Annihilation" = annihilation: the engine does not read winParam, so there is no step limit; after a placement explodes and at least two placements have been made, the side that still has cells of its color wins when the other color has none (UI: "Wiped out all enemy pieces"). A stored winParam such as the default 50 does not end annihilation. "Step limit" = steps: winParam is the total number of placements by both sides (the "Steps" field, an integer of at least 1); at that count the side with more cells wins, and equal cells is a draw. For a short match use steps with a small winParam. "Area control" = area: winParam is the target cell count (the "Target cells" field, an integer of at least 1); after a placement explodes and at least two placements have been made, the first side with at least that many cells wins, and red is checked first when both cross on the same explosion. A placement that does not explode does not end area control.`;
 }
 
 function clientCmd(
@@ -236,7 +253,7 @@ function roomCopy(input: {
         configNote:
           role === "guest"
             ? ""
-            : `规则（${rulesLine(rules)}）。只有你是 host 且房间仍是 lobby 时，客户端才会发送这一次 set_config：\n${configFlag}`,
+            : `规则（${rulesLine(rules)}）。只有你是 host 且房间仍是 lobby 时，客户端才会发送这一次 set_config：\n${configFlag}\n\n${winModeGlossary("zh")}`,
       },
     };
   }
@@ -269,7 +286,7 @@ function roomCopy(input: {
       configNote:
         role === "guest"
           ? ""
-          : `Rules (${rulesLine(rules)}). The client sends this set_config once only when you are host and the room is still a lobby:\n${configFlag}`,
+          : `Rules (${rulesLine(rules)}). The client sends this set_config once only when you are host and the room is still a lobby:\n${configFlag}\n\n${winModeGlossary("en")}`,
     },
   };
 }
