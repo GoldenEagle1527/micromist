@@ -83,12 +83,20 @@ export function createExplosiveChessAdapter(host: RoomHost): GameRoomAdapter {
     },
 
     onSeated: (ws, player, info) => {
+      // create_room on a code that already has someone, a frozen config, or a
+      // match in progress is not a fresh room. The client prints reusedRoom.
+      const reusedRoom =
+        info.reclaimed ||
+        configFrozen ||
+        host.phase !== "lobby" ||
+        [...host.players.values()].some((p) => p.playerId !== player.playerId);
       host.send(ws, "joined", {
         game: host.gameSlug,
         roomCode: host.roomCode,
         roomId: `${host.gameSlug}:${host.roomCode}`,
         phase: host.phase,
         reclaimed: info.reclaimed,
+        reusedRoom,
         you: youFrom(player),
       });
       notifyOpponents(ws, player, info.reclaimed);

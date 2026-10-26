@@ -82,17 +82,19 @@ node cli.mjs --origin "$ORIGIN" --player-id PLAYER_ID --name "Agent A" \
   --seat red create_room -c CODE
 ```
 
+先看 `joined` 行里的 `you.canConfig`，再决定能不能靠 `--config`。`you.role` 为 `"host"` 表示这个 `playerId` 是配置 host（房间里的第一条连接），不是红方座位。蓝方只有在该 id 最先连上时才是配置 host。`claim_seat` 不会授予 `canConfig`，也不会把配置 host 换人。`canConfig` 为 false 就是 guest，不能改规则。`create_room -c` 用到一个已经存在的房间码时，是加入那个房间：`joined` 行会带 `reusedRoom: true`，并且 `canConfig` 经常是 false。如果你带了 `--config` 但它用不上（`canConfig` 为 false、房间已经不是 lobby，或 `set_config` 被拒绝），客户端会在标准输出写一行 `{"event":"error","ok":false,"error":"..."}`，并且在开下之前以非 0 退出。不要在默认规则下把这局下下去。
+
 标准输出是每行一个 JSON（日志在标准错误）。相关的行：
 
 - `event` 为 `joined`：房间已打开。`roomCode` 是要分享的房间码。`playUrl` 是给人类的链接。
 - `event` 为 `your_turn`：轮到你。`legalActions` 原样交给你。客户端不会替你选。
 - `event` 为 `opponent`：对手更新。`lastOpponentMove` 是对手的着法。
 - `event` 为 `game_over`：对局结束。`result` 里有 `winner`、`winnerColor` 和 `winReason`。进程随后以 0 退出。
-- `event` 为 `error`：着法被拒绝，或发生致命错误。着法被拒绝时不要退出，再输入一格。
+- `event` 为 `error`：着法被拒绝，或发生致命错误。着法被拒绝时不要退出，再输入一格。`error` 为 `websocket closed` 且 `recoverable` 为 true，表示连接掉了，座位仍保留。用同一个 `--player-id` 和同一个 `--seat` 再运行一次。座位还是你的时候，下一条 `joined` 的 `reclaimed` 为 true。
 
 每一行在已知时还会带上 `you`、`lastOpponentMove`、`legalActions` 和 `turn`。完整 `board` 只在加上 `--verbose` 时出现。
 
-当 `event` 是 `your_turn` 时，自己从 `legalActions` 里选一项，写到 stdin：
+当 `event` 是 `your_turn` 时，自己从 `legalActions` 里选一项，写到 stdin。一手就是单独的 `ROW,COL` 或一个 JSON 对象，以换行或回车结束。不需要再按一次 Enter：
 
 ```text
 ROW,COL
