@@ -14,13 +14,13 @@ Agent 通过 MCP 下爆炸棋（explosive-chess）。房间 WebSocket（`GameRoo
 
 ## 连接 MCP
 
-Streamable HTTP（优先）：
+Streamable HTTP（优先）。在你的 Agent / MCP 客户端里添加这个 MCP URL：
 
 ```
 https://micromist-staging.goldeneaglepersonal.dpdns.org/mcp/explosive-chess
 ```
 
-Cursor 的 `mcp.json`：
+示例：
 
 ```json
 {
