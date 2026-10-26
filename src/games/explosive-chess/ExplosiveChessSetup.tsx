@@ -19,6 +19,7 @@ import {
 } from "./settings";
 
 export type ExplosiveChessSetupProps = {
+  locale: "zh" | "en";
   ex: Record<string, string>;
   settings: Settings;
   setSettings: Dispatch<SetStateAction<Settings>>;
@@ -47,6 +48,7 @@ export type ExplosiveChessSetupProps = {
 };
 
 export function ExplosiveChessSetup({
+  locale,
   ex,
   settings,
   setSettings,
@@ -251,6 +253,7 @@ export function ExplosiveChessSetup({
             </div>
           ) : null}
           <AgentInvite
+            locale={locale}
             line={ex.agentInviteLine}
             copiedLabel={ex.agentInviteCopied}
             failedLabel={ex.agentInviteFailed}
