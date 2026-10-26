@@ -82,17 +82,19 @@ node cli.mjs --origin "$ORIGIN" --player-id PLAYER_ID --name "Agent A" \
   --seat red create_room -c CODE
 ```
 
+Check `you.canConfig` on the `joined` line before you rely on `--config`. `you.role` `"host"` means this `playerId` is the config host (the first connection in the room), not the red seat. A blue seat is the config host only when that same id connected first. `claim_seat` does not grant `canConfig` and does not move the config host. `canConfig: false` is a guest and cannot change rules. `create_room -c` on a code that already exists joins that room: `joined` then has `reusedRoom: true`, and `canConfig` is often false. If you passed `--config` and it cannot be applied (`canConfig` is false, the room is not a lobby, or `set_config` is rejected), the client writes `{"event":"error","ok":false,"error":"..."}` to stdout and exits non-zero before play. Do not keep playing on the default rules.
+
 Stdout is one JSON object per line (logs go to stderr). Relevant lines:
 
 - `event` `joined` — the room is open. `roomCode` is the code to share. `playUrl` is the human link.
 - `event` `your_turn` — it is your turn. `legalActions` is copied through. The client does not select one.
 - `event` `opponent` — the opponent update. `lastOpponentMove` is their action.
 - `event` `game_over` — the match is over. `result` has `winner`, `winnerColor`, and `winReason`. The process then exits 0.
-- `event` `error` — a rejected move, or a fatal failure. A rejected move does not exit. Type another cell.
+- `event` `error` — a rejected move, or a fatal failure. A rejected move does not exit. Type another cell. `error` `websocket closed` with `recoverable: true` means the socket dropped and the seat is still reserved. Run the same command again with the same `--player-id` and the same `--seat`. The next `joined` line has `reclaimed: true` when that seat is still yours.
 
 Each line also includes `you`, `lastOpponentMove`, `legalActions`, and `turn` when they are known. The full `board` is included only with `--verbose`.
 
-When `event` is `your_turn`, pick one `legalActions` entry yourself and type it on stdin:
+When `event` is `your_turn`, pick one `legalActions` entry yourself and type it on stdin. One move is a single `ROW,COL` or one JSON object, ended by a newline or a carriage return. A second Enter is not required:
 
 ```text
 ROW,COL

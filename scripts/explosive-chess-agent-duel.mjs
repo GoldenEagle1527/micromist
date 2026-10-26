@@ -209,8 +209,16 @@ try {
 
   alpha.send("claim_seat", { seat: "red" });
   const seatedA = await alpha.waitFor((m) => m.type === "seated", 8000);
-  if (seatedA.payload?.you?.role !== "host" || seatedA.payload?.you?.seat !== "red" || seatedA.payload?.you?.color !== "red") {
+  if (
+    seatedA.payload?.you?.role !== "host" ||
+    seatedA.payload?.you?.seat !== "red" ||
+    seatedA.payload?.you?.color !== "red" ||
+    seatedA.payload?.you?.canConfig !== true
+  ) {
     throw new Error(`red claim was ${JSON.stringify(seatedA.payload?.you)}`);
+  }
+  if (joinedA.payload?.reusedRoom !== false) {
+    throw new Error(`fresh room reusedRoom ${JSON.stringify(joinedA.payload?.reusedRoom)}`);
   }
 
   beta = await connect(url);
@@ -233,8 +241,15 @@ try {
   if (opp.payload?.kind !== "agent" || opp.payload?.seat !== "blue") {
     throw new Error(`opponent_joined ${JSON.stringify(opp.payload)}`);
   }
-  if (seatedB.payload?.you?.role !== "guest" || seatedB.payload?.you?.color !== "blue") {
+  if (
+    seatedB.payload?.you?.role !== "guest" ||
+    seatedB.payload?.you?.color !== "blue" ||
+    seatedB.payload?.you?.canConfig === true
+  ) {
     throw new Error(`blue claim was ${JSON.stringify(seatedB.payload?.you)}`);
+  }
+  if (joinedB.payload?.reusedRoom !== true) {
+    throw new Error(`guest reusedRoom ${JSON.stringify(joinedB.payload?.reusedRoom)}`);
   }
 
   await Promise.all([
