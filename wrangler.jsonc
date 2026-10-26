@@ -13,13 +13,17 @@
     // is explicit if you inspect or deploy the built config.
     "directory": "./dist/client",
     "not_found_handling": "single-page-application",
-    "run_worker_first": ["/ws", "/ws/*", "/agent-guide", "/agent-guide/*"]
+    "run_worker_first": ["/ws", "/ws/*", "/agent-guide", "/agent-guide/*", "/mcp", "/mcp/*"]
   },
   "durable_objects": {
     "bindings": [
       {
         "name": "GAME_ROOM",
         "class_name": "GameRoom"
+      },
+      {
+        "name": "EXPLOSIVE_CHESS_MCP",
+        "class_name": "ExplosiveChessMcp"
       }
     ]
   },
@@ -27,6 +31,10 @@
     {
       "tag": "v1",
       "new_sqlite_classes": ["GameRoom"]
+    },
+    {
+      "tag": "v2",
+      "new_sqlite_classes": ["ExplosiveChessMcp"]
     }
   ],
   "routes": [
