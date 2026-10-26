@@ -31,7 +31,7 @@
 
 Workers Static Assets 的静态资源请求**免费且不计次数**。只提供 `index.html` / JS / CSS 的 SPA 路径不会跑 Worker。
 
-薄 Worker 在 `/ws`、`/ws/*` 以及爆炸棋 Agent 指南 `/agent-guide`、`/agent-guide/*` 上拦截（`run_worker_first`），计入 Workers Free 每日调用与 CPU 配额。指南必须由 Worker 返回正文，不能落到 SPA 壳。
+薄 Worker 在 `/ws`、`/ws/*`、爆炸棋 Agent 指南 `/agent-guide`、`/agent-guide/*`，以及爆炸棋 MCP `/mcp`、`/mcp/*` 上拦截（`run_worker_first`），计入 Workers Free 每日调用与 CPU 配额。指南和 MCP 必须由 Worker 返回，不能落到 SPA 壳。
 
 Durable Objects 在免费计划可用，但创建时需使用 **`new_sqlite_classes`**。本仓库已按此配置；SQLite 仅作 DO 运行时后端（例如房间短暂持久化以防休眠丢状态），**不是**用户库或历史战绩库。空房间应休眠并回收。
 
@@ -71,7 +71,7 @@ npm run deploy
 
 WebSocket：`GET /ws/:roomId`（`Upgrade: websocket`）→ `GameRoom`。
 
-爆炸棋 Agent 联机（与人类同一房间协议）。协议正文：[`docs/agent-ws-explosive-chess.md`](docs/agent-ws-explosive-chess.md)，由 Worker 公开在 `/agent-guide/explosive-chess`。进入爆炸棋后的设置页（`/play/explosive-chess`）在「对局设置」底部有一行可点文字。点它会把当前 host 的 Agent Guide 提示复制到剪贴板，页面上不展示提示正文。
+爆炸棋 Agent 联机仍走房间 WebSocket。Agent 侧用薄 MCP 封装（`/mcp/explosive-chess`，会话 Durable Object 在内部拨号并握着连接）。协议正文：[`docs/agent-ws-explosive-chess.md`](docs/agent-ws-explosive-chess.md)，由 Worker 公开在 `/agent-guide/explosive-chess`。staging 示例：`https://micromist-staging.goldeneaglepersonal.dpdns.org/mcp/explosive-chess`。进入爆炸棋后的设置页（`/play/explosive-chess`）在「对局设置」底部有一行可点文字。点它会把当前 host 的 Agent Guide 和 MCP 地址复制到剪贴板，页面上不展示提示正文。chroma-slide 没有 MCP。
 
 ## 目录结构
 
@@ -80,12 +80,12 @@ src/                 React SPA（壳、首页、/play、i18n、主题）
 src/games/           各游戏客户端与 catalog
 worker/              Worker 入口与 GameRoom / 游戏 adapter
 shared/              可在 SPA 与 Worker 间共用的纯逻辑（按需）
-wrangler.jsonc       Static Assets + GAME_ROOM + sqlite migration
+wrangler.jsonc       Static Assets + GAME_ROOM + 爆炸棋 MCP 会话 DO + sqlite migration
 ```
 
 新增游戏（单机）：在 `catalog` 登记 → 实现玩法组件 → 在 `/play` 按 slug 挂载。进度优先写本机存储。
 
-新增联机：写 `worker/games/<slug>/adapter.ts` 并注册到共用 `GameRoom`，客户端接共享联机壳；勿为每个游戏新建 DO 绑定。
+新增联机：写 `worker/games/<slug>/adapter.ts` 并注册到共用 `GameRoom`，客户端接共享联机壳；勿为每个游戏新建 DO 绑定。爆炸棋 MCP 的 `ExplosiveChessMcp` 只是 Agent 会话，内部仍拨号 `GameRoom`，不是新的游戏房间。
 
 ## 脚本
 
