@@ -1,8 +1,9 @@
 import { parseRoomId } from "../shared/multiplayer";
 import { handleAgentGuide } from "./agent-guide";
+import { routeExplosiveChessMcp, ExplosiveChessMcp } from "./explosive-chess-mcp";
 import { GameRoom } from "./game-room";
 
-export { GameRoom };
+export { GameRoom, ExplosiveChessMcp };
 
 /**
  * Route WebSocket upgrades to a Durable Object named `gameSlug:code`.
@@ -26,6 +27,13 @@ export default {
     if (url.pathname === "/agent-guide" || url.pathname.startsWith("/agent-guide/")) {
       const guide = handleAgentGuide(request);
       if (guide) return guide;
+    }
+
+    // Explosive-chess MCP facade. GameRoom remains the room protocol.
+    // chroma-slide and any other slug 404 here.
+    if (url.pathname === "/mcp" || url.pathname.startsWith("/mcp/")) {
+      const mcp = await routeExplosiveChessMcp(request, env);
+      if (mcp) return mcp;
     }
 
     const roomId = roomIdFromPath(url.pathname);
