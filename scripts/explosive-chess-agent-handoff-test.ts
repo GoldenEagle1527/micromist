@@ -115,6 +115,8 @@ c.section("served guide");
   c.check(composed.includes("should you create a room"), "guide tells the agent to ask about creating a room");
   c.check(composed.includes("no chess strength"), "guide says the clients have no chess strength");
   c.check(composed.includes("Do not write a solver"), "guide forbids a solver");
+  c.check(composed.includes("Agent / MCP client"), "english guide names a generic MCP client");
+  c.check(!composed.includes("Cursor") && !composed.includes("mcp.json"), "english guide does not name a Cursor config");
   c.check(composed.indexOf("# This host") < composed.indexOf("# explosive"), "english host block is first");
 
   const composedZh = composeAgentGuide(origin, protocolZh, "zh");
@@ -126,6 +128,8 @@ c.section("served guide");
   c.check(!composedZh.includes("/agent-clients/"), "chinese guide does not advertise client downloads");
   c.check(composedZh.includes("不要编写求解器"), "chinese guide forbids a solver");
   c.check(composedZh.includes(`${origin}/agent-guide/explosive-chess/zh`), "chinese banner names its guide URL");
+  c.check(composedZh.includes("Agent / MCP 客户端"), "chinese guide names a generic MCP client");
+  c.check(!composedZh.includes("Cursor") && !composedZh.includes("mcp.json"), "chinese guide does not name a Cursor config");
   c.check(composedZh.indexOf("# 当前站点") < composedZh.indexOf("# 爆炸棋"), "chinese host block is first");
 
   const html = renderAgentGuideHtml(composed, `${origin}/agent-guide/explosive-chess/en.md`, "en", `${origin}/agent-guide/explosive-chess/zh`);
@@ -300,6 +304,8 @@ c.section("copy prompts");
       c.check(text.includes('"explosive-chess"'), `${label} join names the game`);
       c.check(text.includes("take_turn"), `${label} names take_turn`);
       c.check(text.includes("minimax"), `${label} forbids a search engine`);
+      c.check(text.includes("mcpServers"), `${label} includes a generic MCP config example`);
+      c.check(!text.includes("Cursor") && !text.includes("mcp.json"), `${label} does not name a Cursor config`);
       assertLocale(text, locale, label);
     }
     c.check(guest.includes("playerId：agent-human1") || guest.includes("playerId: agent-human1"), `${locale} human prompt uses the given playerId`);
@@ -349,6 +355,11 @@ c.section("setup invite");
   c.check(!invite.includes("ws-wait") && !inviteZh.includes("/agent-clients/"), "invites do not download clients");
   c.check(invite.includes("Do not write a solver"), "english invite forbids a solver");
   c.check(inviteZh.includes("不要编写求解器"), "chinese invite forbids a solver");
+  c.check(invite.includes("Agent / MCP client"), "english invite names a generic MCP client");
+  c.check(inviteZh.includes("Agent / MCP 客户端"), "chinese invite names a generic MCP client");
+  c.check(invite.includes("mcpServers") && inviteZh.includes("mcpServers"), "invites include a generic MCP config example");
+  c.check(!invite.includes("Cursor") && !invite.includes("mcp.json"), "english invite does not name a Cursor config");
+  c.check(!inviteZh.includes("Cursor") && !inviteZh.includes("mcp.json"), "chinese invite does not name a Cursor config");
   assertLocale(invite, "en", "invite");
   assertLocale(inviteZh, "zh", "invite");
   const local = promptInviteAgent("http://127.0.0.1:8787", "en");
@@ -419,6 +430,9 @@ c.section("client downloads removed");
   const docs = readFileSync("docs/agent-ws-explosive-chess.md", "utf8") + readFileSync("docs/agent-ws-explosive-chess.zh.md", "utf8");
   c.check(!docs.includes("ws-wait") && !docs.includes("ws_wait") && !docs.includes("/agent-clients/"), "docs do not publish client downloads");
   c.check(docs.includes("/mcp/explosive-chess"), "docs name the MCP path");
+  const stdio = readFileSync("scripts/explosive-chess-mcp-stdio.ts", "utf8");
+  c.check(!stdio.includes("Cursor") && !stdio.includes("mcp.json"), "stdio setup example does not name a Cursor config");
+  c.check(stdio.includes("Agent / MCP client"), "stdio setup example names a generic MCP client");
 }
 
 c.finish();
