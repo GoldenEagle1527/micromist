@@ -2,7 +2,7 @@
  * Ready-to-paste prompts for explosive-chess.
  * Chinese UI copies a Chinese-only prompt. English UI copies an English-only prompt.
  * The setup page copies `promptInviteAgent`. Filled room prompts stay for a caller that already has a room code.
- * Prompts point at the locale guide and the official transport clients. They do not mix languages.
+ * Prompts point at the locale guide and the official interactive clients. They do not mix languages.
  */
 import {
   explosiveChessClientUrl,
@@ -18,35 +18,39 @@ export type { AgentLocale };
 /** Setup page (`/play/explosive-chess`): one prompt in the current UI language. */
 export function promptInviteAgent(origin: string, locale: AgentLocale): string {
   const guideUrl = explosiveChessGuideUrl(origin, locale);
-  const downloads = waitDownloads(origin);
-  const polls = pollDownloads(origin);
+  const downloads = clientDownloads(origin);
   if (locale === "zh") {
     return `你是爆炸棋（explosive-chess）Agent。没有 MCP。
 
 先读取这份 Agent Guide，并按它操作：
 ${guideUrl}
 
-每一手都由你自己决定。客户端打印 your_turn 之后，从 legalActions 里选一项，把其中的 row 和 col 作为 --move ROW,COL 传入。不要自己编坐标。
+每一手都由你自己决定。客户端每来一条事件就打印一行 JSON。当 event 是 your_turn 时，从 legalActions 里选一项，在同一个进程的 stdin 上输入 ROW,COL。不要自己编坐标。
 
-不要编写求解器、搜索树、minimax、MCTS、自动对弈循环，或任何代替你选着法的脚本。官方客户端只负责传输：连接、发送你已经选定的着法、等待服务器推送。它们没有棋力。不要把它们改成引擎。不要自己编写 WebSocket 客户端。以 kind "agent" 加入，game 为 "explosive-chess"。
+不要编写求解器、搜索树、minimax、MCTS、自动对弈循环，或任何代替你选着法的脚本。官方客户端只负责传输：连接、发送你输入的着法、等待服务器推送。它们没有棋力。不要把它们改成引擎。不要自己编写 WebSocket 客户端。以 kind "agent" 加入，game 为 "explosive-chess"。
 
-建房仍走指南里的现有流程：先用 curl 做 HTTP 路由检查，再连接并 join。第一个入座的是 host。房间打开之后再用官方客户端。不要自己写 WebSocket。
+建房和加入都用这一份交互客户端。一个进程下完整局，它会一直握着 WebSocket。不要在一次 your_turn 之后退出。不要为每一手新开进程。在 event 为 game_over 之前不要断开。不要轮询。
 
-下载等待版客户端（Node 22+ 或 Python 3）：
+下载客户端（Node 22+ 或 Python 3）：
 ${downloads}
 
-房间打开后，发送你选定的着法，然后阻塞到服务器推送 your_turn、对手落子或 game_over。把 WS_URL、PLAYER_ID、ROW、COL 换成实际值：
+建房（省略 -c 则由客户端生成房间码；带上 -c 则使用该码）。把 ORIGIN 换成指南里的 origin，PLAYER_ID 换成你的座位 id：
 
-node ws-wait.mjs --url WS_URL --player-id PLAYER_ID --name Agent --move ROW,COL
-python3 ws_wait.py --url WS_URL --player-id PLAYER_ID --name Agent --move ROW,COL
+node cli.mjs --origin ORIGIN --player-id PLAYER_ID --name Agent create_room
+node cli.mjs --origin ORIGIN --player-id PLAYER_ID --name Agent create_room -c CODE
+python3 cli.py --origin ORIGIN --player-id PLAYER_ID --name Agent create_room
 
-等待版客户端会阻塞，并在打印结果之前保持 WebSocket 连接。然后它打印一个 JSON 并退出。在它打印之前不要断开。不要轮询。用同一个 playerId 再次运行即可收回座位。优先使用等待版。
+加入已有房间（必须带 -c）：
 
-只有当前环境无法让进程阻塞等待时，才下载轮询备用。轮询脚本仍然不会替你选着法：
-${polls}
+node cli.mjs --origin ORIGIN --player-id PLAYER_ID --name Agent join_room -c CODE
+python3 cli.py --origin ORIGIN --player-id PLAYER_ID --name Agent join_room -c CODE
 
-node ws-poll.mjs --url WS_URL --player-id PLAYER_ID --name Agent --move ROW,COL
-python3 ws_poll.py --url WS_URL --player-id PLAYER_ID --name Agent --move ROW,COL
+读每一行 stdout JSON。轮到你时，把选定的格子写成 ROW,COL，或写成 {"row":ROW,"col":COL}，然后回车。客户端发送后会阻塞等待下一次推送。只有 event 是 game_over（或连接致命断开）时进程才退出。
+
+只有当前环境无法让进程一直阻塞时，才在同一份客户端上加 --poll。它仍然不会替你选着法。--move 只属于这一备用路径：
+
+node cli.mjs --origin ORIGIN --poll --player-id PLAYER_ID --name Agent join_room -c CODE --move ROW,COL
+python3 cli.py --origin ORIGIN --poll --player-id PLAYER_ID --name Agent join_room -c CODE --move ROW,COL
 
 连上之前，先在对话里问人类并等待回答：
 1. 要和我对下吗？
@@ -58,27 +62,32 @@ python3 ws_poll.py --url WS_URL --player-id PLAYER_ID --name Agent --move ROW,CO
 Fetch this Agent Guide and follow it:
 ${guideUrl}
 
-You choose every move yourself. When the client prints your_turn, pick one entry from legalActions and pass that row and col as --move ROW,COL. Do not invent coordinates.
+You choose every move yourself. The client prints one JSON line per event. When event is your_turn, pick one entry from legalActions and type ROW,COL on that same process's stdin. Do not invent coordinates.
 
-Do not write a solver, a search tree, minimax, MCTS, an auto-play loop, or any script that chooses moves for you. The official clients are transport only: they connect, send the move you already chose, and wait for the server push. They have no chess strength. Do not modify them into an engine. Do not write your own WebSocket client. Join as kind "agent" with game "explosive-chess".
+Do not write a solver, a search tree, minimax, MCTS, an auto-play loop, or any script that chooses moves for you. The official client is transport only: it connects, sends the move you type, and waits for the server push. It has no chess strength. Do not modify it into an engine. Do not write your own WebSocket client. Join as kind "agent" with game "explosive-chess".
 
-Creating a room stays on the guide's existing flow: the curl HTTP route check, then connect and join. The first seated player is the host. After the room is open, use the official client. Do not invent WebSocket glue.
+Create and join with this one interactive client. One process plays the whole match and keeps the WebSocket open. Do not exit after one your_turn. Do not start a new process per move. Do not disconnect before event is game_over. Do not poll.
 
-Download a wait client (Node 22+ or Python 3):
+Download the client (Node 22+ or Python 3):
 ${downloads}
 
-After the room is open, send the move you chose, then block until the server pushes your_turn, the opponent's move, or game_over. Replace WS_URL, PLAYER_ID, ROW, and COL:
+Create a room (omit -c and the client generates a code; pass -c to choose one). Replace ORIGIN with the guide origin and PLAYER_ID with your seat id:
 
-node ws-wait.mjs --url WS_URL --player-id PLAYER_ID --name Agent --move ROW,COL
-python3 ws_wait.py --url WS_URL --player-id PLAYER_ID --name Agent --move ROW,COL
+node cli.mjs --origin ORIGIN --player-id PLAYER_ID --name Agent create_room
+node cli.mjs --origin ORIGIN --player-id PLAYER_ID --name Agent create_room -c CODE
+python3 cli.py --origin ORIGIN --player-id PLAYER_ID --name Agent create_room
 
-The wait client blocks and keeps the WebSocket open until it prints one JSON object and exits. Leave that process running until it prints. Do not poll. Run it again with the same playerId to reclaim the seat. Prefer the wait client.
+Join a room that already exists (-c is required):
 
-Only if this environment cannot keep a process blocked on the socket, download the poll fallback. The poll script still does not choose a move:
-${polls}
+node cli.mjs --origin ORIGIN --player-id PLAYER_ID --name Agent join_room -c CODE
+python3 cli.py --origin ORIGIN --player-id PLAYER_ID --name Agent join_room -c CODE
 
-node ws-poll.mjs --url WS_URL --player-id PLAYER_ID --name Agent --move ROW,COL
-python3 ws_poll.py --url WS_URL --player-id PLAYER_ID --name Agent --move ROW,COL
+Read each stdout JSON line. On your_turn, type the chosen cell as ROW,COL or {"row":ROW,"col":COL} and press enter. The client sends it and block-waits for the next push. The process exits only when event is game_over, or the socket dies.
+
+Only if this environment cannot keep a process blocked on the socket, add --poll to the same client. It still does not choose a move. --move belongs only to that fallback:
+
+node cli.mjs --origin ORIGIN --poll --player-id PLAYER_ID --name Agent join_room -c CODE --move ROW,COL
+python3 cli.py --origin ORIGIN --poll --player-id PLAYER_ID --name Agent join_room -c CODE --move ROW,COL
 
 Before you connect, ask the human in this chat and wait:
 1. Play against me (you versus the human)?
@@ -132,17 +141,10 @@ function shQuote(value: string): string {
   return `'${value.replace(/'/g, `'\\''`)}'`;
 }
 
-function waitDownloads(origin: string): string {
+function clientDownloads(origin: string): string {
   return [
-    `curl -fsSL -o ws-wait.mjs ${shQuote(explosiveChessClientUrl(origin, explosiveChessClients.nodeWait))}`,
-    `curl -fsSL -o ws_wait.py ${shQuote(explosiveChessClientUrl(origin, explosiveChessClients.pythonWait))}`,
-  ].join("\n");
-}
-
-function pollDownloads(origin: string): string {
-  return [
-    `curl -fsSL -o ws-poll.mjs ${shQuote(explosiveChessClientUrl(origin, explosiveChessClients.nodePoll))}`,
-    `curl -fsSL -o ws_poll.py ${shQuote(explosiveChessClientUrl(origin, explosiveChessClients.pythonPoll))}`,
+    `curl -fsSL -o cli.mjs ${shQuote(explosiveChessClientUrl(origin, explosiveChessClients.node))}`,
+    `curl -fsSL -o cli.py ${shQuote(explosiveChessClientUrl(origin, explosiveChessClients.python))}`,
   ].join("\n");
 }
 
@@ -160,15 +162,23 @@ function rulesLine(rules: AgentMatchRules): string {
 }
 
 function clientCmd(
-  script: "node-wait" | "node-poll" | "py-wait" | "py-poll",
+  kind: "node" | "py",
   wsUrl: string,
   playerId: string,
   name: string,
+  command: "create_room" | "join_room",
+  code: string,
   extra = "",
 ): string {
-  const bin = script.startsWith("node") ? `node ${script.endsWith("poll") ? "ws-poll.mjs" : "ws-wait.mjs"}` : `python3 ${script.endsWith("poll") ? "ws_poll.py" : "ws_wait.py"}`;
-  const line = `${bin} --url ${shQuote(wsUrl)} --player-id ${shQuote(playerId)} --name ${shQuote(name)}`;
-  return extra ? `${line} ${extra}` : line;
+  const bin = kind === "node" ? "node cli.mjs" : "python3 cli.py";
+  const head = `${bin} --url ${shQuote(wsUrl)} --player-id ${shQuote(playerId)} --name ${shQuote(name)}`;
+  const tail = `${command} -c ${shQuote(code)}`;
+  return extra ? `${head} ${extra} ${tail}` : `${head} ${tail}`;
+}
+
+function pollCmd(kind: "node" | "py", wsUrl: string, playerId: string, name: string, code: string): string {
+  const bin = kind === "node" ? "node cli.mjs" : "python3 cli.py";
+  return `${bin} --url ${shQuote(wsUrl)} --poll --player-id ${shQuote(playerId)} --name ${shQuote(name)} join_room -c ${shQuote(code)} --move ROW,COL`;
 }
 
 type RoomCopy = {
@@ -195,22 +205,22 @@ function roomCopy(input: {
   if (locale === "zh") {
     const seat =
       role === "host"
-        ? `你是 Agent A（host）。另一个 Agent B 会用同一个 room code 加入。人类不入座。你必须先加入，这样 you.role 是 "host"。在 Agent B 入座之前，立刻在第一次运行时加上 --config（set_config），并且只加一次。`
+        ? `你是 Agent A（host）。另一个 Agent B 会用同一个 room code 加入。人类不入座。你必须先加入，这样 you.role 是 "host"。在 Agent B 入座之前，在这一次 create_room 命令上加上 --config（set_config），并且只加一次。`
         : role === "guest"
-          ? `你是 Agent B（guest）。加入房间码 ${ends.roomCode}。Agent A 是 host，会先连上并建房。你和 Agent A 对打。人类不入座。不要改房间规则。如果客户端在 joined 之前失败，再运行一次。joined 之后它会等待推送。不要轮询。`
+          ? `你是 Agent B（guest）。用 join_room 加入房间码 ${ends.roomCode}。Agent A 是 host，会先连上并建房。你和 Agent A 对打。人类不入座。不要改房间规则。如果客户端在 joined 之前失败，用同一个 playerId 再运行一次。joined 之后它会留在这个进程里等待推送。不要轮询。`
           : humanSeated
-            ? `房间里会有人类下对面。你和人类对打。优先作为 guest 加入。如果 JSON 里 you.role 是 "host"，说明你先入座：在对手入座前的第一次运行加上一次 --config（set_config）。如果是 "guest"，不要加 --config。`
-            : `加入这个房间码。第一个入座的是 host。你是 guest 就和已在座的人下；你是 host 就先加一次 --config（set_config），再等对手。`;
+            ? `房间里会有人类下对面。你和人类对打。用 join_room 加入。客户端只在 you.role 是 "host" 且房间仍是 lobby 时发送 set_config；你是 guest 时它会忽略 --config。`
+            : `用 join_room 加入这个房间码。第一个入座的是 host。你是 guest 就和已在座的人下；你是 host 就在这次命令上带一次 --config（set_config），再等对手。`;
     return {
       configFlag,
       copy: {
         intro: "你是爆炸棋（explosive-chess）Agent。没有 MCP。",
         choose:
-          "每一手都由你自己决定。客户端打印 your_turn 之后，从 legalActions 里选一项，把其中的 row 和 col 作为 --move ROW,COL 传入。不要自己编坐标。",
+          "每一手都由你自己决定。客户端打印 your_turn 之后，从 legalActions 里选一项，在这个进程的 stdin 上输入 ROW,COL。不要自己编坐标。",
         forbid:
-          '不要编写求解器、搜索树、minimax、MCTS、自动对弈循环，或任何代替你选着法的脚本。官方客户端只负责传输：连接、发送你已经选定的着法、等待服务器推送。它们没有棋力。不要把它们改成引擎。不要自己编写 WebSocket 客户端。以 kind "agent" 加入，game 为 "explosive-chess"。',
-        hold: "等待版客户端会阻塞，并在打印结果之前保持 WebSocket 连接，直到服务器推送 your_turn、对手落子或 game_over。然后它打印一个 JSON 并退出。在它打印之前不要断开。不要轮询。用同一个 playerId 再次运行即可收回座位。优先使用等待版。",
-        pollLead: "只有当前环境无法让进程阻塞等待时，才使用轮询备用。轮询脚本仍然不会替你选着法：",
+          '不要编写求解器、搜索树、minimax、MCTS、自动对弈循环，或任何代替你选着法的脚本。官方客户端只负责传输：连接、发送你输入的着法、等待服务器推送。它们没有棋力。不要把它们改成引擎。不要自己编写 WebSocket 客户端。以 kind "agent" 加入，game 为 "explosive-chess"。',
+        hold: "这一个进程会一直握着 WebSocket，直到 JSON 行的 event 是 game_over。它不会在一次 your_turn 之后退出。在那之前不要断开。不要轮询。用同一个 playerId 再运行，只在进程真的退出之后才用来收回座位。",
+        pollLead: "只有当前环境无法让进程一直阻塞时，才使用 --poll 备用。轮询仍然不会替你选着法：",
         goal:
           role === "host"
             ? `目标：和 Agent B 对打，直到 JSON 的 event 是 game_over。如果人类还要把房间码交给 B，房间码是 ${ends.roomCode}。`
@@ -221,29 +231,29 @@ function roomCopy(input: {
         configNote:
           role === "guest"
             ? ""
-            : `规则（${rulesLine(rules)}）。只有你是 host 时，在第二个人入座之前的第一次运行加上：\n${configFlag}`,
+            : `规则（${rulesLine(rules)}）。只有你是 host 且房间仍是 lobby 时，客户端才会发送这一次 set_config：\n${configFlag}`,
       },
     };
   }
   const seat =
     role === "host"
-      ? `You are Agent A (host). A second agent (Agent B) will join the same room code. The human will not sit. Join first so you.role is "host". Pass --config (set_config) once on the first run, immediately, before Agent B sits.`
+      ? `You are Agent A (host). A second agent (Agent B) will join the same room code. The human will not sit. Join first so you.role is "host". Pass --config (set_config) once on this create_room command, before Agent B sits.`
       : role === "guest"
-        ? `You are Agent B (guest). Join room code ${ends.roomCode}. Agent A is the host and connects first. You duel Agent A. The human will not sit. Do not change the room rules. If the client fails before joined, run it again. After joined, it waits for pushes. Do not poll.`
+        ? `You are Agent B (guest). join_room into room code ${ends.roomCode}. Agent A is the host and connects first. You duel Agent A. The human will not sit. Do not change the room rules. If the client fails before joined, run it again with the same playerId. After joined, this process waits for pushes. Do not poll.`
         : humanSeated
-          ? `A human is already in this room (or is connecting now) and will play the other seat. You duel that human. Prefer joining as guest. If the JSON you.role is "host", you sat first: pass --config (set_config) once on the first run, before the other player sits. If you.role is "guest", do not pass --config.`
-          : `Join this room code. The first seated player is the host. If you are guest, duel whoever is already seated. If you are host, pass --config (set_config) once before the other player sits, then wait for them.`;
+          ? `A human is already in this room (or is connecting now) and will play the other seat. You duel that human. join_room into the room. The client sends set_config only when you.role is "host" and the room is still a lobby. If you are guest, it ignores --config.`
+          : `join_room into this room code. The first seated player is the host. If you are guest, duel whoever is already seated. If you are host, pass --config (set_config) once on this command before the other player sits, then wait for them.`;
   return {
     configFlag,
     copy: {
       intro: "You are an explosive-chess agent. There is no MCP.",
       choose:
-        "You choose every move yourself. When the client prints your_turn, pick one entry from legalActions and pass that row and col as --move ROW,COL. Do not invent coordinates.",
+        "You choose every move yourself. When the client prints your_turn, pick one entry from legalActions and type ROW,COL on that process's stdin. Do not invent coordinates.",
       forbid:
-        'Do not write a solver, a search tree, minimax, MCTS, an auto-play loop, or any script that chooses moves for you. The official clients are transport only: they connect, send the move you already chose, and wait for the server push. They have no chess strength. Do not modify them into an engine. Do not write your own WebSocket client. Join as kind "agent" with game "explosive-chess".',
-      hold: "The wait client blocks and keeps the WebSocket open until the server pushes your_turn, the opponent's move, or game_over. It then prints one JSON object and exits. Leave that process running until it prints. Do not poll. Run it again with the same playerId to reclaim the seat. Prefer the wait client.",
+        'Do not write a solver, a search tree, minimax, MCTS, an auto-play loop, or any script that chooses moves for you. The official client is transport only: it connects, sends the move you type, and waits for the server push. It has no chess strength. Do not modify it into an engine. Do not write your own WebSocket client. Join as kind "agent" with game "explosive-chess".',
+      hold: "This one process keeps the WebSocket open until the JSON line event is game_over. It does not exit after one your_turn. Leave that process running. Do not poll. Run it again with the same playerId only if the process actually exited, to reclaim the seat.",
       pollLead:
-        "Only if this environment cannot keep a process blocked on the socket, use the poll fallback. The poll script still does not choose a move:",
+        "Only if this environment cannot keep a process blocked on the socket, use the --poll fallback. The poll invocation still does not choose a move:",
       goal:
         role === "host"
           ? `Goal: duel Agent B until the JSON event is game_over. If the human still needs to invite B, the room code is ${ends.roomCode}.`
@@ -254,7 +264,7 @@ function roomCopy(input: {
       configNote:
         role === "guest"
           ? ""
-          : `Rules (${rulesLine(rules)}). Add this once on the first run only when you are host, before the second player sits:\n${configFlag}`,
+          : `Rules (${rulesLine(rules)}). The client sends this set_config once only when you are host and the room is still a lobby:\n${configFlag}`,
     },
   };
 }
@@ -275,22 +285,21 @@ function renderRoomPrompt(input: {
   const guideLine = locale === "zh" ? "先读取这份 Agent Guide，并按它操作：" : "Fetch this Agent Guide and follow it:";
   const roomLine = locale === "zh" ? `房间码：${ends.roomCode}` : `Room code: ${ends.roomCode}`;
   const wsLine = locale === "zh" ? `WebSocket：${ends.wsUrl}` : `WebSocket: ${ends.wsUrl}`;
-  const downloadLead = locale === "zh" ? "下载等待版客户端：" : "Download a wait client:";
+  const downloadLead = locale === "zh" ? "下载交互客户端：" : "Download the interactive client:";
+  const command = input.role === "host" ? "create_room" : "join_room";
+  const configExtra = input.role === "guest" ? "" : packed.configFlag;
   const firstLead =
     locale === "zh"
-      ? "第一次运行会加入并等待（host 才在这次加上 --config）："
-      : "The first run joins and waits (add --config on this run only if you are host):";
+      ? `运行这一次，然后留在这个进程里（host 才在这次加上 --config）。如果提示里的 WebSocket URL 和 -c 不一致，以 URL 为准：`
+      : `Run this once and stay in the process (add --config on this command only if you are host). If the WebSocket URL and -c disagree, trust the URL:`;
   const moveLead =
     locale === "zh"
-      ? "当 event 是 your_turn 时，自己选一项 legalActions，再运行："
-      : "When event is your_turn, choose one legalActions entry yourself, then run:";
-  const configExtra = input.role === "guest" ? "" : packed.configFlag;
-  const firstNode = clientCmd("node-wait", ends.wsUrl, playerId, name, configExtra);
-  const firstPy = clientCmd("py-wait", ends.wsUrl, playerId, name, configExtra);
-  const moveNode = clientCmd("node-wait", ends.wsUrl, playerId, name, "--move ROW,COL");
-  const movePy = clientCmd("py-wait", ends.wsUrl, playerId, name, "--move ROW,COL");
-  const pollNode = clientCmd("node-poll", ends.wsUrl, playerId, name, "--move ROW,COL");
-  const pollPy = clientCmd("py-poll", ends.wsUrl, playerId, name, "--move ROW,COL");
+      ? "当 event 是 your_turn 时，自己选一项 legalActions，在 stdin 输入 ROW,COL 或 {\"row\":ROW,\"col\":COL}。不要新开进程。"
+      : "When event is your_turn, choose one legalActions entry yourself and type ROW,COL or {\"row\":ROW,\"col\":COL} on stdin. Do not start a new process.";
+  const node = clientCmd("node", ends.wsUrl, playerId, name, command, ends.roomCode, configExtra);
+  const py = clientCmd("py", ends.wsUrl, playerId, name, command, ends.roomCode, configExtra);
+  const pollNode = pollCmd("node", ends.wsUrl, playerId, name, ends.roomCode);
+  const pollPy = pollCmd("py", ends.wsUrl, playerId, name, ends.roomCode);
   const parts = [
     copy.intro,
     "",
@@ -309,20 +318,17 @@ function renderRoomPrompt(input: {
     copy.configNote,
     "",
     downloadLead,
-    waitDownloads(origin),
+    clientDownloads(origin),
     "",
     firstLead,
-    firstNode,
-    firstPy,
+    node,
+    py,
     "",
     moveLead,
-    moveNode,
-    movePy,
     "",
     copy.hold,
     "",
     copy.pollLead,
-    pollDownloads(origin),
     pollNode,
     pollPy,
     "",
