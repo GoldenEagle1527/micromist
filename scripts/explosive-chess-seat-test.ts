@@ -105,6 +105,10 @@ c.section("room shell");
   const adapter = readFileSync("worker/games/explosive-chess/adapter.ts", "utf8");
   c.check(adapter.includes("explicitSeating: true"), "explosive-chess opts into explicit seating");
   c.check(adapter.includes('p.seat === "red"') && adapter.includes('p.seat === "blue"'), "the match waits for both colors");
+  c.check(src.includes("canConfig: this.hostId === player.playerId"), "seated canConfig follows hostId, not the color");
+  c.check(src.includes("canConfig: this.hostId === playerId"), "welcome canConfig follows hostId");
+  c.check(adapter.includes("canConfig: host.hostId === player.playerId"), "observation canConfig follows hostId");
+  c.check(adapter.includes("reusedRoom"), "joined reports when create_room attached to an existing room");
 }
 
 c.finish();

@@ -231,7 +231,7 @@ function roomCopy(input: {
         : role === "guest"
           ? `你是 Agent B（guest）。用 join_room 加入房间码 ${ends.roomCode}，并加上 --seat blue（如果蓝方已被占，就改成 --seat red）。Agent A 会 claim 另一个座位。你和 Agent A 对打。人类和其他 Agent 可以旁观。不要改房间规则。如果客户端在 joined 之前失败，用同一个 playerId 再运行一次。joined 之后它会留在这个进程里等待推送。不要轮询。`
           : humanSeated
-            ? `房间里会有人类，可能在旁观，也可能已经坐了一个座位。你先以旁观 join_room，再用 --seat 占空着的那一方，然后和人类对打。两个座位都满了你就继续旁观。客户端只在 you.canConfig 为 true 或 you.role 是 "host" 且房间仍是 lobby 时发送 set_config。`
+            ? `房间里会有人类，可能在旁观，也可能已经坐了一个座位。你先以旁观 join_room，再用 --seat 占空着的那一方，然后和人类对打。两个座位都满了你就继续旁观。客户端只在 you.canConfig 为 true 且房间仍是 lobby 时发送 set_config。you.role 为 "host" 表示这个 playerId 是配置 host（第一条连接），不是红方座位。canConfig 为 false 时 --config 不会生效，客户端会在 stdout 打印 error 并在开下前退出。`
             : `用 join_room 加入这个房间码。join 默认是旁观。用 --seat red 或 --seat blue 占空位。你是房间创建者（you.canConfig）就在这次命令上带一次 --config（set_config），再等另一个座位。`;
     return {
       configFlag,
@@ -263,7 +263,7 @@ function roomCopy(input: {
       : role === "guest"
         ? `You are Agent B (guest). join_room into room code ${ends.roomCode} and pass --seat blue (use --seat red if blue is taken). Agent A claims the other seat. You duel Agent A. Humans and other agents may join as spectators. Do not change the room rules. If the client fails before joined, run it again with the same playerId. After joined, this process waits for pushes. Do not poll.`
         : humanSeated
-          ? `A human is already in this room (or is connecting now), as a spectator or in one seat. You join as a spectator, then claim the empty seat with --seat and duel that human. If both seats are full you watch. join_room into the room. The client sends set_config only when you.canConfig is true or you.role is "host" and the room is still a lobby.`
+          ? `A human is already in this room (or is connecting now), as a spectator or in one seat. You join as a spectator, then claim the empty seat with --seat and duel that human. If both seats are full you watch. join_room into the room. The client sends set_config only when you.canConfig is true and the room is still a lobby. you.role "host" means this playerId is the config host (the first connection), not the red seat. If canConfig is false, --config does not apply: the client prints an error on stdout and exits before play.`
           : `join_room into this room code. Join is a spectator. Pass --seat red or --seat blue for an empty seat. If you.canConfig is true, pass --config (set_config) once on this command before the other seat is claimed, then wait.`;
   return {
     configFlag,

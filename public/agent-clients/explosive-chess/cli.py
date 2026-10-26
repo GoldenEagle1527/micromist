@@ -39,6 +39,8 @@ MAX_FRAME = 16 * 1024 * 1024
 ABORT = object()
 STDIN_EOF = object()
 TIMED_OUT = object()
+KEEPALIVE_S = 20
+RECONNECT_HINT = "Reconnect with the same --player-id and claim the same seat."
 
 HELP = """explosive-chess official interactive client (no chess strength)
 
@@ -62,7 +64,7 @@ The one-shot client that exited after a single your_turn is retired.
   --seat        red or blue. Sent as claim_seat after join. Omit to watch.
   --player-id   This process's id. Omit to reuse the id stored on this machine.
   --name        Display name (default Agent)
-  --config      JSON object. Sent as set_config when you.canConfig is true (or you.role is host) and the room is still a lobby
+  --config      JSON object. Sent as set_config only when you.canConfig is true and the room is still a lobby. If it cannot apply, stdout gets an error JSON line and the process exits before play
   --verbose     Include board on each JSON line
   --timeout     Seconds to block for one server push. Omit to wait until game_over
   --poll        One-shot fallback. Prints one JSON line and exits. Accepts --move ROW,COL
@@ -74,8 +76,8 @@ The same playerId reclaims red, blue, or spectator. A new id is a new person.
 Omit --player-id to use ~/.config/micromist/explosive-chess-player-id
 (or $XDG_CONFIG_HOME/micromist/explosive-chess-player-id). Passing --player-id
 does not replace that file. A second agent on this machine passes its own id.
-Interactive stdin is ROW,COL or {"row":ROW,"col":COL}.
-Stdout is one JSON object per line. Diagnostics go to stderr.
+Interactive stdin is one move per line: ROW,COL or {"row":ROW,"col":COL}, ended by a newline or a carriage return.
+A second Enter is not required. Stdout is one JSON object per line. Diagnostics go to stderr.
 Python 3.8+ standard library only. No third-party packages.
 """
 
@@ -156,6 +158,17 @@ class WsClient(object):
         self.sock = raw
         self.buf = rest
         self._drain_buf()
+
+    def keepalive(self):
+        # Text frame "ping" is answered by the room auto-response ("pong").
+        if self.sock is None or self.closed:
+            return
+        try:
+            self._send_frame(OP_TEXT, b"ping")
+        except TransportError:
+            raise
+        except OSError as exc:
+            raise TransportError("websocket closed: %s" % exc)
 
     def close(self):
         self.closed = True
@@ -252,20 +265,26 @@ class WsClient(object):
     def _fill_some(self, deadline):
         if self.sock is None:
             raise TransportError("websocket closed")
-        if deadline is None:
-            self.sock.settimeout(None)
-        else:
-            remaining = deadline - time.monotonic()
-            if remaining <= 0:
-                raise TimeoutError("timeout")
-            self.sock.settimeout(remaining)
-        try:
-            chunk = self.sock.recv(65536)
-        except (socket.timeout, TimeoutError):
-            raise TimeoutError("timeout")
-        if not chunk:
-            raise TransportError("websocket closed")
-        self.buf += chunk
+        while True:
+            if deadline is None:
+                slice_s = KEEPALIVE_S
+            else:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise TimeoutError("timeout")
+                slice_s = min(remaining, KEEPALIVE_S)
+            self.sock.settimeout(slice_s)
+            try:
+                chunk = self.sock.recv(65536)
+            except (socket.timeout, TimeoutError):
+                if deadline is not None and deadline - time.monotonic() <= 0:
+                    raise TimeoutError("timeout")
+                self.keepalive()
+                continue
+            if not chunk:
+                raise TransportError("websocket closed")
+            self.buf += chunk
+            return
 
     def _try_pop_frame(self):
         buf = self.buf
@@ -666,7 +685,19 @@ def can_configure(you, phase):
         return False
     if phase and phase != "lobby":
         return False
-    return you.get("canConfig") is True or you.get("role") == "host"
+    # canConfig is the server bit (playerId == hostId). role "host" must not
+    # override an explicit false. Missing canConfig keeps the older role fallback.
+    if you.get("canConfig") is False:
+        return False
+    if you.get("canConfig") is True:
+        return True
+    return you.get("role") == "host"
+
+
+def config_blocked_reason(you, phase):
+    if phase and phase != "lobby":
+        return "config locked; room is not a lobby"
+    return "not the config host; ignoring --config"
 
 
 def maybe_config(client, joined, config):
@@ -674,18 +705,17 @@ def maybe_config(client, joined, config):
         return
     payload = joined.get("payload") if isinstance(joined.get("payload"), dict) else {}
     you = payload.get("you") if isinstance(payload.get("you"), dict) else {}
-    if not can_configure(you, payload.get("phase")):
-        sys.stderr.write("not the config host; ignoring --config\n")
-        return
+    phase = payload.get("phase")
+    if not can_configure(you, phase):
+        raise CliError(config_blocked_reason(you, phase))
     client.queue = [msg for msg in client.queue if msg.get("type") != "room"]
     client.send_msg("set_config", config)
     deadline = time.monotonic() + 15
     msg = client.wait_for(lambda item: item.get("type") in ("room", "error"), deadline)
     if msg.get("type") == "error":
         body = msg.get("payload") if isinstance(msg.get("payload"), dict) else {}
-        message = str(body.get("message") or "")
-        if "locked" not in message.lower():
-            raise CliError(message or "set_config failed")
+        message = str(body.get("message") or "set_config failed")
+        raise CliError(message)
 
 
 def blank_state(args):
@@ -698,6 +728,7 @@ def blank_state(args):
         "board": None,
         "phase": None,
         "reclaimed": None,
+        "reusedRoom": False,
         "playUrl": "%s/play/explosive-chess?room=%s" % (http_origin_from(args), args.code),
         "result": None,
         "moveMark": 0,
@@ -716,17 +747,33 @@ def maybe_claim(client, args, state, quiet=False):
         body = msg.get("payload") if isinstance(msg.get("payload"), dict) else {}
         raise CliError(str(body.get("message") or "claim_seat failed"))
     payload = msg.get("payload") if isinstance(msg.get("payload"), dict) else {}
-    you = payload.get("you") if isinstance(payload.get("you"), dict) else None
-    if you is not None:
-        state["you"] = you
-    elif isinstance(state.get("you"), dict):
-        nxt = dict(state["you"])
-        nxt["seat"] = payload.get("seat")
-        nxt["role"] = payload.get("role")
-        nxt["color"] = payload.get("seat")
-        state["you"] = nxt
+    state["you"] = you_from_seat(state.get("you"), payload)
     if not quiet:
         emit(args, state, "seated", {"ok": True})
+
+
+def you_from_seat(prev, payload):
+    you = payload.get("you") if isinstance(payload.get("you"), dict) else None
+    if you is not None:
+        nxt = dict(you)
+        if not isinstance(nxt.get("canConfig"), bool) and isinstance(payload.get("canConfig"), bool):
+            nxt["canConfig"] = payload.get("canConfig")
+        if nxt.get("seat") is None and payload.get("seat") is not None:
+            nxt["seat"] = payload.get("seat")
+        if nxt.get("role") is None and payload.get("role") is not None:
+            nxt["role"] = payload.get("role")
+        return nxt
+    if not isinstance(prev, dict):
+        return prev
+    nxt = dict(prev)
+    if payload.get("seat") is not None:
+        nxt["seat"] = payload.get("seat")
+        nxt["color"] = payload.get("seat")
+    if payload.get("role") is not None:
+        nxt["role"] = payload.get("role")
+    if isinstance(payload.get("canConfig"), bool):
+        nxt["canConfig"] = payload.get("canConfig")
+    return nxt
 
 
 def is_spectator(state):
@@ -744,6 +791,10 @@ def state_from_joined(args, joined):
     state["you"] = you
     state["phase"] = payload.get("phase")
     state["reclaimed"] = payload.get("reclaimed") is True
+    reused = payload.get("reusedRoom") is True
+    if not reused and args.command == "create_room" and isinstance(you, dict) and you.get("canConfig") is False:
+        reused = True
+    state["reusedRoom"] = reused
     if state["roomCode"]:
         state["playUrl"] = "%s/play/explosive-chess?room=%s" % (http_origin_from(args), state["roomCode"])
     return state
@@ -760,15 +811,24 @@ def emit(args, state, event, extra=None):
         "turn": state.get("turn"),
         "roomCode": state.get("roomCode"),
     }
+    you = state.get("you") if isinstance(state.get("you"), dict) else {}
     if event == "joined":
         line["playerId"] = args.player_id
         line["reclaimed"] = state.get("reclaimed")
+        line["reusedRoom"] = state.get("reusedRoom") is True
+        line["canConfig"] = you.get("canConfig") is True
         line["playUrl"] = state.get("playUrl")
         line["phase"] = state.get("phase")
+    if event == "seated":
+        line["canConfig"] = you.get("canConfig") is True
     if event == "game_over":
         line["result"] = state.get("result")
     if extra.get("error"):
         line["error"] = extra["error"]
+    if extra.get("recoverable") is True:
+        line["recoverable"] = True
+    if extra.get("hint"):
+        line["hint"] = extra["hint"]
     if extra.get("mode"):
         line["mode"] = extra["mode"]
     if "yourTurn" in extra:
@@ -873,19 +933,65 @@ def deadline_for(budget):
     return time.monotonic() + budget
 
 
+def complete_stdin_move(text):
+    if not text or not str(text).strip():
+        return False
+    try:
+        return parse_stdin_move(text) is not None
+    except CliError:
+        return False
+
+
+def disconnect_extra(message):
+    text = str(message)
+    if "websocket closed" in text.lower():
+        return {"ok": False, "error": "websocket closed", "recoverable": True, "hint": RECONNECT_HINT}
+    return {"ok": False, "error": text}
+
+
 class StdinBuf(object):
     def __init__(self):
         self.text = ""
         self.eof = False
+        self.skip_lf = False
+        self.fd = sys.stdin.fileno()
+        self.non_tty = not os.isatty(self.fd)
+        # A buffered TextIOWrapper plus select() holds the first line until more
+        # bytes arrive. Read the fd directly, and treat CR as its own newline.
+        try:
+            os.set_blocking(self.fd, False)
+        except (AttributeError, OSError):
+            pass
 
     def push(self, text):
-        self.text += text
+        if self.skip_lf:
+            if text.startswith("\n"):
+                text = text[1:]
+            self.skip_lf = False
+        if text:
+            self.text += text
 
     def pop_line(self):
-        if "\n" not in self.text:
+        text = self.text
+        n = text.find("\n")
+        r = text.find("\r")
+        if n < 0 and r < 0:
             return None
-        line, self.text = self.text.split("\n", 1)
-        return line
+        if r >= 0 and (n < 0 or r < n):
+            line = text[:r]
+            rest = text[r + 1 :]
+            if rest.startswith("\n"):
+                rest = rest[1:]
+                self.skip_lf = False
+            elif rest == "":
+                self.skip_lf = True
+            else:
+                self.skip_lf = False
+            self.text = rest
+            return line
+        self.skip_lf = False
+        self.text = text[n + 1 :]
+        return text[:n]
 
 
 def read_stdin_or_push(client, stdin_buf, budget):
@@ -899,24 +1005,43 @@ def read_stdin_or_push(client, stdin_buf, budget):
                 return ABORT
             return got
         if stdin_buf.eof:
+            if stdin_buf.text:
+                line = stdin_buf.text
+                stdin_buf.text = ""
+                return line
             return STDIN_EOF
-        timeout = None
+        if stdin_buf.non_tty and complete_stdin_move(stdin_buf.text):
+            try:
+                ready, _, _ = select.select([stdin_buf.fd], [], [], 0)
+            except (ValueError, OSError):
+                ready = []
+            if stdin_buf.fd not in ready:
+                line = stdin_buf.text
+                stdin_buf.text = ""
+                return line
+        slice_s = KEEPALIVE_S
         if deadline is not None:
-            timeout = deadline - time.monotonic()
-            if timeout <= 0:
+            remain = deadline - time.monotonic()
+            if remain <= 0:
                 return TIMED_OUT
+            slice_s = min(KEEPALIVE_S, remain)
         try:
-            readable, _, _ = select.select([client.sock, sys.stdin], [], [], timeout)
+            readable, _, _ = select.select([client.sock, stdin_buf.fd], [], [], slice_s)
         except (ValueError, OSError) as exc:
             raise TransportError("websocket closed: %s" % exc)
         if not readable:
-            return TIMED_OUT
+            if deadline is not None and deadline - time.monotonic() <= 0:
+                return TIMED_OUT
+            client.keepalive()
+            continue
         if client.sock in readable:
             client.drain_available()
-        if sys.stdin in readable:
+        if stdin_buf.fd in readable:
             try:
-                data = os.read(sys.stdin.fileno(), 4096)
+                data = os.read(stdin_buf.fd, 4096)
             except OSError as exc:
+                if _would_block(exc):
+                    continue
                 raise TransportError("stdin read failed: %s" % exc)
             if not data:
                 stdin_buf.eof = True
@@ -979,8 +1104,10 @@ def run_interactive(args):
         return interactive_session(client, stdin_buf, args, state, joined)
     except (CliError, TransportError, TimeoutError, socket.timeout, OSError) as exc:
         message = str(exc)
-        event = "timeout" if "timeout" in message.lower() else "error"
-        emit(args, state, event, {"ok": False, "error": message})
+        event = "timeout" if "timeout" in message.lower() and "websocket closed" not in message.lower() else "error"
+        extra = disconnect_extra(message)
+        extra["ok"] = False
+        emit(args, state, event, extra)
         return client, 1
 
 
@@ -998,13 +1125,7 @@ def interactive_session(client, stdin_buf, args, state, joined):
             emit(args, state, "timeout", {"ok": False, "error": "timeout"})
             return client, 1
         except TransportError as exc:
-            message = str(exc)
-            emit(
-                args,
-                state,
-                "error",
-                {"ok": False, "error": "websocket closed" if "closed" in message.lower() else message},
-            )
+            emit(args, state, "error", disconnect_extra(exc))
             return client, 1
         kind = msg.get("type")
         payload = msg.get("payload") if isinstance(msg.get("payload"), dict) else {}
@@ -1159,8 +1280,12 @@ def run_poll(args):
         return client, finish_poll(args, state, client, msg)
     except (CliError, TransportError, TimeoutError, socket.timeout, OSError) as exc:
         message = str(exc)
-        event = "timeout" if "timeout" in message.lower() else "error"
-        emit(args, state, event, {"ok": False, "mode": "poll", "yourTurn": False, "error": message})
+        event = "timeout" if "timeout" in message.lower() and "websocket closed" not in message.lower() else "error"
+        extra = disconnect_extra(message)
+        extra["ok"] = False
+        extra["mode"] = "poll"
+        extra["yourTurn"] = False
+        emit(args, state, event, extra)
         return client, 1
 
 

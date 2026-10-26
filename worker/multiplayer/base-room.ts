@@ -398,7 +398,15 @@ export class GameRoom extends DurableObject<Env> {
     void this.persist();
   }
 
-  /** Room creator (hostId) or a seated host. Spectators who did not create the room cannot. */
+  /**
+   * Config host is `hostId` (the first connection's playerId), not the red seat
+   * and not whoever called create_room. Explosive-chess claim_seat sets role
+   * "host" only for that same id, so a blue seat can be the config host and a
+   * red seat can be a guest. Claiming a color does not move hostId. The wire
+   * field `canConfig` is hostId === playerId. A guest (canConfig false) cannot
+   * set config. Phase must still be lobby; the second claimed seat starts the
+   * match and locks config for everyone, including the config host.
+   */
   private canConfigure(session: SessionAttachment): boolean {
     return session.role === "host" || session.playerId === this.hostId;
   }
