@@ -18,6 +18,7 @@ import {
   type WireMsg,
 } from "../../shared/multiplayer";
 import type { GameRoomAdapter, RoomHost } from "./adapter";
+import { overlayLiveSockets, replacePlayersFromSnapshot } from "./presence";
 import { getGameAdapterFactory } from "./registry";
 import type { JoinResult, PersistedRoom, PlayerRecord, SessionAttachment } from "./types";
 
@@ -45,38 +46,27 @@ export class GameRoom extends DurableObject<Env> {
       this.roomCode = parsed.code;
     }
 
+    // Snapshot reload marks every seat offline. Overlay hibernated sockets
+    // after that await, still inside this gate, so a later guest join sees
+    // the host's open socket. Scanning getWebSockets() before restore loses
+    // the pass: restore() clears the map and writes connected: false.
     this.ready = this.ctx.blockConcurrencyWhile(async () => {
       await this.restore();
+      this.attachHibernatedSockets();
       this.ensureAdapter();
     });
 
-    for (const ws of this.ctx.getWebSockets()) {
-      const attachment = ws.deserializeAttachment() as SessionAttachment | undefined;
-      if (!attachment?.playerId) continue;
-      this.sessions.set(ws, { ...attachment });
-      const existing = this.players.get(attachment.playerId);
-      if (existing) {
-        existing.connected = true;
-        existing.seat = attachment.seat;
-        existing.role = attachment.role;
-        existing.name = attachment.name || existing.name;
-        existing.kind = normalizePlayerKind(attachment.kind ?? existing.kind);
-      } else {
-        this.players.set(attachment.playerId, {
-          playerId: attachment.playerId,
-          name: attachment.name || "Player",
-          seat: attachment.seat,
-          role: attachment.role,
-          ready: false,
-          rematch: false,
-          connected: true,
-          kind: normalizePlayerKind(attachment.kind),
-        });
-        if (attachment.role === "host") this.hostId = attachment.playerId;
-      }
-    }
-
     this.ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair("ping", "pong"));
+  }
+
+  /** Live sockets win over the persisted `connected: false` flag. */
+  private attachHibernatedSockets(): void {
+    const open = [...this.ctx.getWebSockets()].map((socket) => ({
+      socket,
+      attachment: socket.deserializeAttachment() as SessionAttachment | undefined,
+    }));
+    const newHostId = overlayLiveSockets(this.players, this.sessions, open);
+    if (newHostId) this.hostId = newHostId;
   }
 
   private ensureAdapter(): void {
@@ -131,16 +121,9 @@ export class GameRoom extends DurableObject<Env> {
     if (snap.roomCode) this.roomCode = snap.roomCode;
     this.phase = snap.phase ?? "lobby";
     this.hostId = snap.hostId ?? null;
-    this.players.clear();
-    for (const p of snap.players ?? []) {
-      // Rehydrate seats; connected flags refreshed from live sockets above/below.
-      this.players.set(p.playerId, {
-        ...p,
-        connected: false,
-        ready: false,
-        kind: normalizePlayerKind(p.kind),
-      });
-    }
+    // Seats survive hibernation. Presence does not — attachHibernatedSockets()
+    // sets connected from sockets that are still open.
+    replacePlayersFromSnapshot(this.players, snap.players ?? []);
     this.ensureAdapter();
     this.adapter?.hydrate(snap.adapter);
   }
