@@ -124,8 +124,10 @@ export function ExplosiveChessGame() {
   const roomCodeRef = useRef(roomCode);
   const pendingOnlineStartRef = useRef<{
     config: RoomConfig;
-    yourColor: HostColor;
+    yourColor: HostColor | null;
   } | null>(null);
+  /** Create-room sends set_config once. Join stays a spectator until Sit. */
+  const pendingConfigRef = useRef<string | null>(null);
   const pendingOnlineStateRef = useRef<{
     fullState: FullState;
     lastMove?: { row: number; col: number };
@@ -159,7 +161,7 @@ export function ExplosiveChessGame() {
       const mine = myColorRef.current;
       setTip(
         mine == null
-          ? dict.tipOnline
+          ? dict.youAreSpectator
           : game.currentTurn === mine
             ? dict.tipYourTurn
             : dict.tipOppTurn,
@@ -395,9 +397,9 @@ export function ExplosiveChessGame() {
   );
 
   const mountOnlineBoard = useCallback(
-    (config: RoomConfig, yourColor: HostColor) => {
+    (config: RoomConfig, yourColor: HostColor | null) => {
       const canvas = canvasRef.current;
-      const color = seatToPlayerColor(yourColor);
+      const color = yourColor ? seatToPlayerColor(yourColor) : null;
       setMyColor(color);
       myColorRef.current = color;
       if (color != null) playerColorRef.current = color;
@@ -553,19 +555,19 @@ export function ExplosiveChessGame() {
             setOnlineSeat(payload.seat);
             setOnlineRole(payload.role);
             const color = seatToPlayerColor(payload.seat);
-            if (color != null) {
-              setMyColor(color);
-              myColorRef.current = color;
-              playerColorRef.current = color;
-            }
+            setMyColor(color);
+            myColorRef.current = color;
+            if (color != null) playerColorRef.current = color;
             setOnlineStatus(`${tRef.current.explosive.seatInfo}${seatLabel(payload.seat, tRef.current.explosive)} (${payload.role})`);
             if (
-              payload.role === "host" &&
+              payload.canConfig === true &&
+              pendingConfigRef.current === trimmed &&
               onlinePhaseRef.current !== "playing" &&
               screenRef.current !== "playing" &&
               configSentForRoomRef.current !== trimmed
             ) {
               configSentForRoomRef.current = trimmed;
+              pendingConfigRef.current = null;
               const s = settingsRef.current;
               client.setConfig({
                 boardSize: s.boardSize,
@@ -610,10 +612,15 @@ export function ExplosiveChessGame() {
             reconnectAttemptsRef.current = 0;
             setOnlinePhase("playing");
             setOnlineStatus(tRef.current.explosive.gameStart);
+            const yourColor = payload.yourColor === "red" || payload.yourColor === "blue" ? payload.yourColor : null;
             pendingOnlineStartRef.current = {
               config: payload.config,
-              yourColor: payload.yourColor,
+              yourColor,
             };
+            if (yourColor == null) {
+              setMyColor(null);
+              myColorRef.current = null;
+            }
             setScreen("playing");
             clearMoveLock();
           },
@@ -817,7 +824,13 @@ export function ExplosiveChessGame() {
     saveSettings(next);
     setSettings(next);
     const code = generateRoomCode();
+    pendingConfigRef.current = code;
     connectToRoom(code);
+  };
+
+  const claimSeat = (seat: "red" | "blue") => {
+    const sent = clientRef.current?.claimSeat(seat);
+    if (!sent) setOnlineStatus(tRef.current.explosive.notConnected);
   };
 
   const joinRoom = () => {
@@ -865,6 +878,7 @@ export function ExplosiveChessGame() {
         setRoomCode={setRoomCode}
         onlinePlayers={onlinePlayers}
         onlineRole={onlineRole}
+        claimSeat={claimSeat}
         setShareLink={setShareLink}
         setOnlineStatus={setOnlineStatus}
         reconnectAttemptsRef={reconnectAttemptsRef}
@@ -904,6 +918,8 @@ export function ExplosiveChessGame() {
       setScreen={setScreen}
       destroyBoard={destroyBoard}
       handlePointer={handlePointer}
+      onlinePlayers={onlinePlayers}
+      claimSeat={claimSeat}
     />
   );
 }

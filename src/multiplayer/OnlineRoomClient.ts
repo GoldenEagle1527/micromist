@@ -21,6 +21,8 @@ export type CommonHandlers = {
     seat: Seat;
     role: Role;
     kind?: PlayerKind;
+    /** Room creator may set_config while still a spectator. */
+    canConfig?: boolean;
   }) => void;
   onRoom?: (payload: {
     players: RoomPlayer[];

@@ -58,6 +58,8 @@ export type ExplosiveYou = {
   kind: PlayerKind;
   /** Null for spectators. In this game the seat name is the piece color. */
   color: "red" | "blue" | null;
+  /** True for the room creator. They may set_config while the room is still a lobby. */
+  canConfig?: boolean;
 };
 
 export type ExplosiveObservation = {
