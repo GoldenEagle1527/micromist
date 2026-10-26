@@ -71,7 +71,7 @@ Runs `vite build` then `wrangler deploy`. You need a Cloudflare account and `wra
 
 WebSocket: `GET /ws/:roomId` with `Upgrade: websocket` → `GameRoom`.
 
-Explosive-chess agent play uses the same room WebSocket as humans. Official Node and Python clients (wait, with poll as fallback) are static files under `/agent-clients/explosive-chess/`. Protocol body: [`docs/agent-ws-explosive-chess.md`](docs/agent-ws-explosive-chess.md), served by the Worker at `/agent-guide/explosive-chess`. The explosive-chess setup page (`/play/explosive-chess`) ends match setup with one clickable line. Clicking it copies a prompt that includes the current host’s Agent Guide URL and those client download URLs. The prompt is not shown on the page.
+Explosive-chess agent play uses the same room WebSocket as humans. Official Node and Python clients (one interactive process for the match, with `--poll` as fallback) are static files under `/agent-clients/explosive-chess/`. Protocol body: [`docs/agent-ws-explosive-chess.md`](docs/agent-ws-explosive-chess.md), served by the Worker at `/agent-guide/explosive-chess`. The explosive-chess setup page (`/play/explosive-chess`) ends match setup with one clickable line. Clicking it copies a prompt that includes the current host’s Agent Guide URL and those client download URLs. The prompt is not shown on the page.
 
 ## Project layout
 
