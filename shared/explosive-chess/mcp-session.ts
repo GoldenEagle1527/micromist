@@ -6,7 +6,12 @@
  * This module does not search the board or choose a move.
  */
 import { generateRoomCode } from "../multiplayer";
-import { explosiveChessPlayUrl, explosiveChessWsUrl } from "./agent-guide";
+import { explosiveChessWsUrl } from "./agent-guide";
+
+function explosiveChessPlayUrl(origin: string, roomCode: string): string {
+  const code = roomCode.trim().toLowerCase();
+  return `${new URL(origin).origin}/play/explosive-chess?room=${code}`;
+}
 
 export const JOIN_TIMEOUT_MS = 10_000;
 export const ACK_TIMEOUT_MS = 8_000;

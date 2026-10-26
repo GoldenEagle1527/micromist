@@ -4,13 +4,15 @@
  * Stdio uses Content-Length framing. Neither transport chooses a move.
  */
 import {
-  EXPLOSIVE_CHESS_MCP_PATH,
-  explosiveChessMcpUrl,
-} from "./agent-guide";
-import {
   ExplosiveChessMcpSession,
   type ToolBody,
 } from "./mcp-session";
+
+const EXPLOSIVE_CHESS_MCP_PATH = "/mcp/explosive-chess";
+
+function explosiveChessMcpUrl(origin: string): string {
+  return `${new URL(origin).origin}${EXPLOSIVE_CHESS_MCP_PATH}`;
+}
 
 export const MCP_PROTOCOL_VERSION = "2025-03-26";
 export const MCP_SERVER_NAME = "micromist-explosive-chess";
@@ -441,7 +443,7 @@ export function stdioHelp(): string {
     "  MICROMIST_ORIGIN=https://micromist-staging.goldeneaglepersonal.dpdns.org node <this-file>",
     `  --origin https://host   room socket wss://host/ws/explosive-chess:<code>`,
     `Tools: ${explosiveChessMcpTools.map((tool) => tool.name).join(", ")}`,
-    `Hosted Streamable HTTP: https://micromist-staging.goldeneaglepersonal.dpdns.org${EXPLOSIVE_CHESS_MCP_PATH}`,
+    "Hosted HTTP MCP is not published. Agents play with the official clients from /agent-guide/explosive-chess.",
     "",
   ].join("\n");
 }
