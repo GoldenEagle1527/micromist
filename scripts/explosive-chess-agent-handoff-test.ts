@@ -98,10 +98,13 @@ c.section("served guide");
     composed.includes("wss://micromist-staging.goldeneaglepersonal.dpdns.org/ws/explosive-chess:<code>"),
     "banner names the websocket shape",
   );
-  c.check(composed.includes(`${origin}${explosiveChessClients.nodeWait}`), "banner names the node wait client");
-  c.check(composed.includes(`${origin}${explosiveChessClients.pythonWait}`), "banner names the python wait client");
-  c.check(composed.includes(`${origin}${explosiveChessClients.nodePoll}`), "banner names the node poll client");
-  c.check(composed.includes(`${origin}${explosiveChessClients.pythonPoll}`), "banner names the python poll client");
+  c.check(composed.includes(`${origin}${explosiveChessClients.node}`), "banner names the node client");
+  c.check(composed.includes(`${origin}${explosiveChessClients.python}`), "banner names the python client");
+  c.check(composed.includes("--poll"), "banner names the poll fallback");
+  c.check(composed.includes("create_room"), "guide documents create_room");
+  c.check(composed.includes("join_room"), "guide documents join_room");
+  c.check(composed.includes("stdin"), "guide reads moves from stdin");
+  c.check(composed.includes("retired"), "one-shot client is retired in the guide");
   c.check(composed.includes("your_turn"), "protocol your_turn kept");
   c.check(composed.includes("legalActions"), "protocol legalActions kept");
   c.check(composed.includes("There is no MCP"), "protocol no-MCP kept");
@@ -289,10 +292,13 @@ c.section("copy prompts");
       c.check(text.includes("game_over"), `${label} states the goal`);
       c.check(text.includes('kind "agent"'), `${label} join kind is agent`);
       c.check(text.includes('"explosive-chess"'), `${label} join names the game`);
-      c.check(text.includes(`${origin}${explosiveChessClients.nodeWait}`), `${label} downloads the node wait client`);
-      c.check(text.includes(`${origin}${explosiveChessClients.pythonWait}`), `${label} downloads the python wait client`);
-      c.check(text.includes(`${origin}${explosiveChessClients.nodePoll}`), `${label} names the poll fallback`);
-      c.check(text.includes("--move ROW,COL"), `${label} shows the move flag`);
+      c.check(text.includes(`${origin}${explosiveChessClients.node}`), `${label} downloads the node client`);
+      c.check(text.includes(`${origin}${explosiveChessClients.python}`), `${label} downloads the python client`);
+      c.check(text.includes("--poll"), `${label} names the poll fallback`);
+      c.check(text.includes("--move ROW,COL"), `${label} shows the poll move flag`);
+      c.check(text.includes("stdin"), `${label} reads moves from stdin`);
+      c.check(text.includes("create_room") || text.includes("join_room"), `${label} uses an interactive command`);
+      c.check(!text.includes("ws-wait"), `${label} does not document the retired one-shot client`);
       c.check(text.includes("minimax"), `${label} forbids a search engine`);
       assertLocale(text, locale, label);
     }
@@ -336,8 +342,12 @@ c.section("setup invite");
   c.check(inviteZh.includes("没有 MCP"), "chinese invite says no MCP");
   c.check(!invite.includes("/ws/explosive-chess:"), "invite does not prefill a room socket");
   c.check(!inviteZh.includes("/ws/explosive-chess:"), "chinese invite does not prefill a room socket");
-  c.check(invite.includes(`${origin}${explosiveChessClients.nodeWait}`), "english invite downloads the node client");
-  c.check(inviteZh.includes(`${origin}${explosiveChessClients.pythonWait}`), "chinese invite downloads the python client");
+  c.check(invite.includes(`${origin}${explosiveChessClients.node}`), "english invite downloads the node client");
+  c.check(inviteZh.includes(`${origin}${explosiveChessClients.python}`), "chinese invite downloads the python client");
+  c.check(invite.includes("create_room") && invite.includes("join_room"), "english invite shows both commands");
+  c.check(inviteZh.includes("create_room") && inviteZh.includes("join_room"), "chinese invite shows both commands");
+  c.check(invite.includes("stdin"), "english invite types moves on stdin");
+  c.check(!invite.includes("ws-wait") && !inviteZh.includes("ws-wait"), "invite does not document the retired client");
   c.check(invite.includes("Do not write a solver"), "english invite forbids a solver");
   c.check(inviteZh.includes("不要编写求解器"), "chinese invite forbids a solver");
   assertLocale(invite, "en", "invite");
@@ -479,8 +489,9 @@ function runClient(command: string, args: string[], timeoutMs = 8000): Promise<{
   });
 }
 
-function listenMock(onMessage: (msg: Inbound, send: (obj: unknown) => void) => void): Promise<{ port: number; inbound: Inbound[]; close: () => Promise<void> }> {
+function listenMock(onMessage: (msg: Inbound, send: (obj: unknown) => void, path: string) => void): Promise<{ port: number; inbound: Inbound[]; paths: string[]; close: () => Promise<void> }> {
   const inbound: Inbound[] = [];
+  const paths: string[] = [];
   const sockets = new Set<Socket>();
   const server = createServer();
   server.on("connection", (sock) => {
@@ -489,6 +500,8 @@ function listenMock(onMessage: (msg: Inbound, send: (obj: unknown) => void) => v
     sock.on("error", () => {});
   });
   server.on("upgrade", (req: IncomingMessage, socket) => {
+    const path = req.url || "";
+    paths.push(path);
     const keyHeader = req.headers["sec-websocket-key"];
     const key = Array.isArray(keyHeader) ? keyHeader[0] : keyHeader;
     if (!key) {
@@ -523,7 +536,7 @@ function listenMock(onMessage: (msg: Inbound, send: (obj: unknown) => void) => v
         }
         inbound.push(msg);
         try {
-          onMessage(msg, send);
+          onMessage(msg, send, path);
         } catch (err) {
           console.error(err);
         }
@@ -538,6 +551,7 @@ function listenMock(onMessage: (msg: Inbound, send: (obj: unknown) => void) => v
       resolve({
         port,
         inbound,
+        paths,
         close: () =>
           new Promise((done) => {
             for (const sock of sockets) sock.destroy();
@@ -586,35 +600,129 @@ function yourTurnMessage(actions = [
   };
 }
 
+type EventLine = {
+  event?: string;
+  ok?: boolean;
+  error?: string;
+  legalActions?: Array<{ row?: number; col?: number }>;
+  yourTurn?: boolean;
+  lastOpponentMove?: { row?: number; col?: number } | null;
+  mode?: string;
+  roomCode?: string;
+  board?: unknown;
+  result?: { winnerColor?: string };
+};
+
+function startSession(command: string, args: string[]) {
+  const child = spawn(command, args, { stdio: ["pipe", "pipe", "pipe"] });
+  let stdout = "";
+  let stderr = "";
+  const lines: EventLine[] = [];
+  let exited = false;
+  let exitCode: number | null = null;
+  child.stdout.setEncoding("utf8");
+  child.stderr.setEncoding("utf8");
+  child.stdout.on("data", (chunk: string) => {
+    stdout += chunk;
+    const parts = stdout.split("\n");
+    stdout = parts.pop() ?? "";
+    for (const part of parts) {
+      if (!part.trim()) continue;
+      lines.push(JSON.parse(part) as EventLine);
+    }
+  });
+  child.stderr.on("data", (chunk: string) => {
+    stderr += chunk;
+  });
+  const exitP = new Promise<{ code: number | null }>((resolve) => {
+    child.on("close", (code) => {
+      exited = true;
+      exitCode = code;
+      resolve({ code });
+    });
+  });
+  return {
+    lines,
+    stderr: () => stderr,
+    exited: () => exited,
+    write(text: string) {
+      child.stdin.write(text.endsWith("\n") ? text : `${text}\n`);
+    },
+    async waitFor(pred: (rows: EventLine[]) => boolean, ms = 4000) {
+      const start = Date.now();
+      while (Date.now() - start < ms) {
+        if (pred(lines)) return;
+        if (exited) break;
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      }
+      if (!pred(lines)) {
+        throw new Error(`timed out waiting\nstderr=${stderr}\nlines=${JSON.stringify(lines)}\nexit=${String(exitCode)}`);
+      }
+    },
+    untilExit(ms = 4000) {
+      return Promise.race([
+        exitP,
+        new Promise<{ code: number | null }>((_resolve, reject) => {
+          setTimeout(() => reject(new Error(`no exit\n${stderr}\n${JSON.stringify(lines)}`)), ms);
+        }),
+      ]);
+    },
+    async close() {
+      if (!exited) child.kill("SIGKILL");
+      return exitP;
+    },
+  };
+}
+
 c.section("official clients");
 {
-  const nodeWaitSrc = readFileSync(`${CLIENT_DIR}/ws-wait.mjs`);
-  const nodePollSrc = readFileSync(`${CLIENT_DIR}/ws-poll.mjs`);
-  const pyWaitSrc = readFileSync(`${CLIENT_DIR}/ws_wait.py`);
-  const pyPollSrc = readFileSync(`${CLIENT_DIR}/ws_poll.py`);
-  c.check(nodeWaitSrc.equals(nodePollSrc), "node poll client is the wait client selected by filename");
-  c.check(pyWaitSrc.equals(pyPollSrc), "python poll client is the wait client selected by filename");
+  const nodeSrc = readFileSync(`${CLIENT_DIR}/cli.mjs`);
+  const pySrc = readFileSync(`${CLIENT_DIR}/cli.py`);
+  let legacy = false;
+  try {
+    readFileSync(`${CLIENT_DIR}/ws-wait.mjs`);
+    legacy = true;
+  } catch {
+    legacy = false;
+  }
+  c.check(!legacy, "retired one-shot client is not shipped");
   for (const [name, src] of [
-    ["node", nodeWaitSrc.toString("utf8")],
-    ["python", pyWaitSrc.toString("utf8")],
+    ["node", nodeSrc.toString("utf8")],
+    ["python", pySrc.toString("utf8")],
   ] as const) {
-    c.check(src.includes('kind') && src.includes('"agent"'), `${name} joins as kind agent`);
+    c.check(src.includes("create_room") && src.includes("join_room"), `${name} has create_room and join_room`);
+    c.check(src.includes("kind") && src.includes('"agent"'), `${name} joins as kind agent`);
     c.check(!src.includes("minimax") && !src.includes("mcts") && !src.includes("Math.random"), `${name} has no move search`);
     c.check(!src.includes("legalActions[0]") && !src.includes("random.choice"), `${name} does not pick a legal action`);
     c.check(!src.includes("from websockets") && !src.includes('require("ws")'), `${name} has no third-party websocket package`);
   }
-  c.check(pyWaitSrc.toString("utf8").includes("hashlib"), "python client speaks websocket with the standard library");
+  c.check(pySrc.toString("utf8").includes("hashlib"), "python client speaks websocket with the standard library");
 
-  const nodeHelp = await runClient(process.execPath, [`${CLIENT_DIR}/ws-wait.mjs`, "--help"]);
+  const nodeHelp = await runClient(process.execPath, [`${CLIENT_DIR}/cli.mjs`, "--help"]);
   c.check(nodeHelp.code === 0 && nodeHelp.stdout.includes("no chess strength"), "node help");
-  const pyHelp = await runClient("python3", [`${CLIENT_DIR}/ws_wait.py`, "--help"]);
+  c.check(nodeHelp.stdout.includes("create_room") && nodeHelp.stdout.includes("join_room"), "node help shows the commands");
+  const pyHelp = await runClient("python3", [`${CLIENT_DIR}/cli.py`, "--help"]);
   c.check(pyHelp.code === 0 && pyHelp.stdout.includes("no chess strength"), "python help");
-  const nodeUsage = await runClient(process.execPath, [`${CLIENT_DIR}/ws-wait.mjs`, "--player-id", "agent-1"]);
+  const nodeUsage = await runClient(process.execPath, [`${CLIENT_DIR}/cli.mjs`, "--player-id", "agent-1"]);
   const nodeUsageJson = JSON.parse(nodeUsage.stdout) as { ok?: boolean; error?: string };
-  c.check(nodeUsage.code === 1 && nodeUsageJson.ok === false && (nodeUsageJson.error ?? "").includes("--url"), "node usage error is json");
+  c.check(nodeUsage.code === 1 && nodeUsageJson.ok === false && (nodeUsageJson.error ?? "").includes("create_room"), "node usage error is json");
+  const nodeJoin = await runClient(process.execPath, [`${CLIENT_DIR}/cli.mjs`, "--origin", "http://127.0.0.1:9", "join_room"]);
+  const nodeJoinJson = JSON.parse(nodeJoin.stdout) as { error?: string };
+  c.check(nodeJoin.code === 1 && (nodeJoinJson.error ?? "").includes("-c"), "join_room requires a code");
+  const nodeMove = await runClient(process.execPath, [
+    `${CLIENT_DIR}/cli.mjs`,
+    "--origin",
+    "http://127.0.0.1:9",
+    "--move",
+    "1,1",
+    "join_room",
+    "-c",
+    "abc",
+  ]);
+  const nodeMoveJson = JSON.parse(nodeMove.stdout) as { error?: string };
+  c.check(nodeMove.code === 1 && (nodeMoveJson.error ?? "").includes("--poll"), "interactive client rejects a one-shot --move");
 
-  const nodeUrl = (port: number) => `ws://127.0.0.1:${port}/ws/explosive-chess:abc`;
-  const common = (port: number) => ["--url", nodeUrl(port), "--player-id", "agent-1", "--name", "Agent", "--timeout", "5"];
+  const base = (port: number) => ["--origin", `http://127.0.0.1:${port}`, "--player-id", "agent-1", "--name", "Agent", "--timeout", "5"];
 
   {
     const mock = await listenMock((msg, send) => {
@@ -622,15 +730,45 @@ c.section("official clients");
         send(joinedMessage());
         send(yourTurnMessage());
       }
+      if (msg.type === "move" && msg.payload?.row === 1) {
+        send({
+          type: "move_applied",
+          payload: { action: { type: "move", row: 1, col: 1 }, by: { playerId: "agent-1" }, gameOver: false },
+        });
+        setTimeout(() => {
+          send({
+            type: "move_applied",
+            payload: { action: { type: "move", row: 2, col: 3 }, by: { playerId: "human-1" }, gameOver: false },
+          });
+          send(yourTurnMessage([{ type: "move", row: 0, col: 2 }]));
+        }, 200);
+      }
+      if (msg.type === "move" && msg.payload?.row === 0) {
+        send({ type: "game_over", payload: { winner: 2, winnerColor: "blue", winReason: "steps" } });
+      }
     });
+    const session = startSession(process.execPath, [`${CLIENT_DIR}/cli.mjs`, ...base(mock.port), "join_room", "-c", "abc"]);
     try {
-      const result = await runClient(process.execPath, [`${CLIENT_DIR}/ws-wait.mjs`, ...common(mock.port)]);
-      const json = JSON.parse(result.stdout) as { ok?: boolean; event?: string; legalActions?: unknown[]; yourTurn?: boolean };
-      c.check(result.code === 0 && json.event === "your_turn" && json.ok === true, "node wait returns your_turn", result.stderr);
-      c.check(Array.isArray(json.legalActions) && json.legalActions.length === 2 && json.yourTurn === true, "node wait copies every legal action");
-      c.check(mock.inbound.every((msg) => msg.type !== "move"), "node wait without --move does not send a move");
+      await session.waitFor((rows) => rows.some((row) => row.event === "your_turn"));
+      const first = session.lines.find((row) => row.event === "your_turn");
+      c.check(session.lines[0]?.event === "joined", "node prints joined before the turn");
+      c.check(first != null && !("board" in first), "node your_turn omits the board");
+      c.check((first?.legalActions ?? []).length === 2, "node copies every legal action");
+      c.check(mock.inbound.every((msg) => msg.type !== "move"), "node does not send a move before stdin");
       c.check(mock.inbound.some((msg) => msg.payload?.kind === "agent"), "node join kind is agent");
+      c.check(!session.exited(), "node stays up after your_turn");
+      const started = Date.now();
+      session.write("1,1");
+      await session.waitFor((rows) => rows.filter((row) => row.event === "your_turn").length >= 2);
+      c.check(Date.now() - started >= 150, "node blocked until the opponent push");
+      const opponent = session.lines.find((row) => row.event === "opponent");
+      c.check(opponent?.lastOpponentMove?.row === 2 && opponent.lastOpponentMove?.col === 3, "node prints the opponent update");
+      session.write('{"row":0,"col":2}');
+      const done = await session.untilExit();
+      const over = session.lines.find((row) => row.event === "game_over");
+      c.check(done.code === 0 && over?.result?.winnerColor === "blue", "node exits only on game_over", session.stderr());
     } finally {
+      await session.close();
       await mock.close();
     }
   }
@@ -643,43 +781,18 @@ c.section("official clients");
       }
       if (msg.type === "move") send({ type: "error", payload: { message: "Invalid move" } });
     });
+    const session = startSession(process.execPath, [`${CLIENT_DIR}/cli.mjs`, ...base(mock.port), "join_room", "-c", "abc"]);
     try {
-      const result = await runClient(process.execPath, [`${CLIENT_DIR}/ws-wait.mjs`, ...common(mock.port), "--move", "1,1"]);
-      const json = JSON.parse(result.stdout) as { event?: string; error?: string; legalActions?: Array<{ row?: number }> };
-      const rejected = result.code === 1 && json.event === "error" && (json.error ?? "").includes("Invalid move");
-      c.check(rejected, "node wait surfaces a rejected move", rejected ? "" : result.stdout);
-      c.check((json.legalActions ?? []).length === 2, "rejected move still returns the legal actions");
+      await session.waitFor((rows) => rows.some((row) => row.event === "your_turn"));
+      session.write("1,1");
+      await session.waitFor((rows) => rows.some((row) => row.event === "error"));
+      const rejected = session.lines.find((row) => row.event === "error");
+      c.check((rejected?.error ?? "").includes("Invalid move"), "node surfaces a rejected move", session.stderr());
+      c.check((rejected?.legalActions ?? []).length === 2, "rejected move still lists the legal actions");
+      c.check(!session.exited(), "a rejected move does not end the session");
       c.check(mock.inbound.some((msg) => msg.type === "move" && msg.payload?.row === 1 && msg.payload?.col === 1), "node sends the chosen cell");
     } finally {
-      await mock.close();
-    }
-  }
-
-  {
-    const mock = await listenMock((msg, send) => {
-      if (msg.type === "join") send(joinedMessage());
-      if (msg.type === "move") {
-        send({
-          type: "move_applied",
-          payload: { action: { type: "move", row: 1, col: 1 }, by: { playerId: "agent-1" }, gameOver: false },
-        });
-        setTimeout(() => {
-          send({
-            type: "move_applied",
-            payload: { action: { type: "move", row: 2, col: 3 }, by: { playerId: "human-1" }, gameOver: false },
-          });
-          send(yourTurnMessage([{ type: "move", row: 0, col: 2 }]));
-        }, 300);
-      }
-    });
-    try {
-      const started = Date.now();
-      const result = await runClient(process.execPath, [`${CLIENT_DIR}/ws-wait.mjs`, ...common(mock.port), "--move", "1,1"]);
-      const json = JSON.parse(result.stdout) as { event?: string; lastOpponentMove?: { row?: number; col?: number } };
-      c.check(result.code === 0 && json.event === "your_turn", "node wait blocks until the next your_turn", result.stderr);
-      c.check(json.lastOpponentMove?.row === 2 && json.lastOpponentMove?.col === 3, "node wait reports the opponent move");
-      c.check(Date.now() - started >= 250, "node wait did not return before the opponent push");
-    } finally {
+      await session.close();
       await mock.close();
     }
   }
@@ -692,18 +805,83 @@ c.section("official clients");
         setTimeout(() => send(yourTurnMessage()), 40);
       }
     });
+    const session = startSession(process.execPath, [
+      `${CLIENT_DIR}/cli.mjs`,
+      ...base(mock.port),
+      "--config",
+      '{"boardSize":9,"winMode":"steps","winParam":4,"hostColor":"red"}',
+      "create_room",
+      "-c",
+      "abc",
+    ]);
     try {
-      const result = await runClient(process.execPath, [
-        `${CLIENT_DIR}/ws-wait.mjs`,
-        ...common(mock.port),
-        "--config",
-        '{"boardSize":9,"winMode":"steps","winParam":4,"hostColor":"red"}',
-      ]);
-      const json = JSON.parse(result.stdout) as { event?: string };
-      c.check(result.code === 0 && json.event === "your_turn", "node host config then waits", result.stderr);
+      await session.waitFor((rows) => rows.some((row) => row.event === "your_turn"));
       c.check(mock.inbound.some((msg) => msg.type === "set_config"), "node host sends set_config");
-      c.check(mock.inbound.every((msg) => msg.type !== "move"), "node host config run does not invent a move");
+      c.check(mock.inbound.every((msg) => msg.type !== "move"), "node host does not invent a move");
+      c.check(!session.exited(), "node host stays up after config");
     } finally {
+      await session.close();
+      await mock.close();
+    }
+  }
+
+  {
+    const mock = await listenMock((msg, send) => {
+      if (msg.type === "join") {
+        send(joinedMessage());
+        send(yourTurnMessage());
+      }
+    });
+    const session = startSession(process.execPath, [`${CLIENT_DIR}/cli.mjs`, ...base(mock.port), "--verbose", "join_room", "-c", "abc"]);
+    try {
+      await session.waitFor((rows) => rows.some((row) => row.event === "your_turn"));
+      const turn = session.lines.find((row) => row.event === "your_turn");
+      c.check(Array.isArray(turn?.board), "verbose your_turn includes the board");
+    } finally {
+      await session.close();
+      await mock.close();
+    }
+  }
+
+  {
+    const mock = await listenMock((msg, send, path) => {
+      if (msg.type === "join") {
+        const code = (path.split(":").pop() || "").split("?")[0];
+        send({
+          type: "joined",
+          payload: {
+            roomCode: code,
+            phase: "lobby",
+            reclaimed: false,
+            you: { ...seat, role: "host", seat: "red", color: "red" },
+          },
+        });
+        send(yourTurnMessage());
+      }
+    });
+    const session = startSession(process.execPath, [`${CLIENT_DIR}/cli.mjs`, ...base(mock.port), "create_room"]);
+    try {
+      await session.waitFor((rows) => rows.some((row) => row.event === "joined"));
+      const path = (mock.paths[0] || "").split("?")[0];
+      const code = path.split(":").pop() || "";
+      c.check(/^\/ws\/explosive-chess:[a-z0-9]{6}$/.test(path), "create_room without -c opens a generated code", path);
+      c.check(session.lines[0]?.roomCode === code, "joined line reports that generated code");
+    } finally {
+      await session.close();
+      await mock.close();
+    }
+  }
+
+  {
+    const mock = await listenMock((msg, send) => {
+      if (msg.type === "join") send(joinedMessage("host"));
+    });
+    const session = startSession(process.execPath, [`${CLIENT_DIR}/cli.mjs`, ...base(mock.port), "create_room", "-c", "Ab12CD"]);
+    try {
+      await session.waitFor((rows) => rows.some((row) => row.event === "joined"));
+      c.check((mock.paths[0] || "").split("?")[0] === "/ws/explosive-chess:ab12cd", "create_room -c uses that code", mock.paths[0] || "");
+    } finally {
+      await session.close();
       await mock.close();
     }
   }
@@ -732,7 +910,7 @@ c.section("official clients");
       }
     });
     try {
-      const result = await runClient(process.execPath, [`${CLIENT_DIR}/ws-poll.mjs`, ...common(mock.port), "--move", "0,2"]);
+      const result = await runClient(process.execPath, [`${CLIENT_DIR}/cli.mjs`, ...base(mock.port), "--poll", "join_room", "-c", "abc", "--move", "0,2"]);
       const json = JSON.parse(result.stdout) as { event?: string; mode?: string; yourTurn?: boolean };
       c.check(result.code === 0 && json.event === "observation" && json.mode === "poll", "node poll returns without waiting for your_turn", result.stderr);
       c.check(json.yourTurn === false, "node poll reports that it is not your turn");
@@ -748,15 +926,22 @@ c.section("official clients");
         send(joinedMessage());
         send(yourTurnMessage());
       }
+      if (msg.type === "move") {
+        send({ type: "game_over", payload: { winner: 1, winnerColor: "red", winReason: "steps" } });
+      }
     });
+    const session = startSession("python3", [`${CLIENT_DIR}/cli.py`, ...base(mock.port), "join_room", "-c", "abc"]);
     try {
-      const result = await runClient("python3", [`${CLIENT_DIR}/ws_wait.py`, ...common(mock.port)]);
-      const json = JSON.parse(result.stdout) as { event?: string; legalActions?: unknown[] };
-      const pyWaitOk = result.code === 0 && json.event === "your_turn";
-      c.check(pyWaitOk, "python wait returns your_turn", pyWaitOk ? "" : `${result.stderr}\n${result.stdout}`);
-      c.check((json.legalActions ?? []).length === 2, "python wait copies every legal action");
-      c.check(mock.inbound.every((msg) => msg.type !== "move"), "python wait without --move does not send a move");
+      await session.waitFor((rows) => rows.some((row) => row.event === "your_turn"));
+      c.check((session.lines.find((row) => row.event === "your_turn")?.legalActions ?? []).length === 2, "python copies every legal action");
+      c.check(mock.inbound.every((msg) => msg.type !== "move"), "python does not send a move before stdin");
+      c.check(!session.exited(), "python stays up after your_turn");
+      session.write("3,4");
+      const done = await session.untilExit();
+      c.check(done.code === 0 && session.lines.some((row) => row.event === "game_over"), "python exits on game_over", session.stderr());
+      c.check(mock.inbound.some((msg) => msg.type === "move" && msg.payload?.row === 3 && msg.payload?.col === 4), "python sends the typed cell");
     } finally {
+      await session.close();
       await mock.close();
     }
   }
@@ -785,15 +970,11 @@ c.section("official clients");
       }
     });
     try {
-      const result = await runClient("python3", [`${CLIENT_DIR}/ws_poll.py`, ...common(mock.port), "--move", "3,4"]);
+      const result = await runClient("python3", [`${CLIENT_DIR}/cli.py`, ...base(mock.port), "--poll", "join_room", "-c", "abc", "--move", "3,4"]);
       const json = JSON.parse(result.stdout) as { event?: string; mode?: string; yourTurn?: boolean };
       const pyPollOk = result.code === 0 && json.event === "observation" && json.mode === "poll";
       c.check(pyPollOk, "python poll returns an observation", pyPollOk ? "" : `${result.stderr}\n${result.stdout}`);
       c.check(json.yourTurn === false, "python poll does not claim the turn");
-      c.check(
-        mock.inbound.some((msg) => msg.type === "move" && msg.payload?.row === 3 && msg.payload?.col === 4),
-        "python sends the chosen cell",
-      );
     } finally {
       await mock.close();
     }
