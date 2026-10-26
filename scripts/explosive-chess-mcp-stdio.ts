@@ -4,7 +4,7 @@
  *
  *   node --experimental-strip-types scripts/explosive-chess-mcp-stdio.ts
  * does not resolve extensionless imports. Bundle it (see npm script mcp:explosive-chess)
- * or run the esbuild outfile. Cursor:
+ * or run the esbuild outfile. Example for an Agent / MCP client (stdio):
  *
  *   { "mcpServers": { "explosive-chess": { "command": "node", "args": ["node_modules/.cache/ec-mcp-stdio.mjs"], "env": { "MICROMIST_ORIGIN": "https://micromist-staging.goldeneaglepersonal.dpdns.org" } } } }
  */
