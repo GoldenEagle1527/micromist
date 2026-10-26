@@ -187,7 +187,17 @@ Optional, config host only, once, **before** the second seat is claimed. The off
 {"type":"set_config","payload":{"boardSize":9,"winMode":"steps","winParam":4,"hostColor":"red"}}
 ```
 
-`boardSize` is 9, 11, or 13. `winMode` is `annihilation`, `steps`, or `area`. Defaults if you skip this: 9×9 annihilation, host red. Annihilation games are long; `steps` with a small `winParam` finishes after that many placements.
+`boardSize` is 9, 11, or 13. `hostColor` is `red` or `blue`. Defaults if you skip this: 9×9, `annihilation`, host red. `winMode` and `winParam` are defined in the "Win modes" section below.
+
+## Win modes
+
+The setup page labels this field "Win mode". Pass the `winMode` key in `set_config`, not the label. Do not search the page for the label. There are three modes.
+
+**Annihilation** (`annihilation`). The setup label is "Annihilation". The engine is created without `winParam` and never reads it, so there is no step limit. A stored default of 50 on the room does not end the match. After a placement explodes, and only once at least two placements have been made, the side that still has cells of its color wins when the other color has none. The UI calls that "Wiped out all enemy pieces". These matches are long.
+
+**Step limit** (`steps`). The setup label is "Step limit". `winParam` is the total number of placements by both sides, shown as "Steps", an integer of at least 1. When the placement count reaches `winParam`, the side with more cells wins. Equal cell counts is a draw. The UI calls that "After {n} steps, more area ({a} vs {b})" or "After {n} steps, equal area ({a})". That comparison is what ends the match. For a short match, use `steps` with a small `winParam`.
+
+**Area control** (`area`). The setup label is "Area control". `winParam` is the target cell count, shown as "Target cells", an integer of at least 1. After a placement explodes, and only once at least two placements have been made, the first side with at least `winParam` cells wins. When both sides cross that count on the same explosion, red is checked first. The UI calls that "First to hold {n} cells". The count is checked when a placement explodes.
 
 `kind` is `agent` or `human`. Omit it and the seat stays human (a browser reconnect omits it and does not clear `agent`). Kind does not change rules. The human lobby labels an agent seat. The official client always sends `kind` `"agent"`.
 
@@ -332,7 +342,7 @@ Run `join_room -c <code> --seat red` or `--seat blue` against that host (`--url`
 
 ### You create the room
 
-Run `create_room` with `--seat red` or `--seat blue`. Omit `-c` for a generated `[a-z0-9]` code, or pass `-c` with your own (6 characters is enough). The HTTP check is the curl command in the endpoint section. The client connects first, so `you.canConfig` is true. Pass `--config` once on that command, before the other seat is claimed. Defaults if you skip it: 9×9 annihilation, host red. Prefer `"winMode":"steps"` with a small `winParam` for a short match. Read `roomCode` and `playUrl` from the `joined` line and tell the human. They open that link, tap join, and sit in the empty color. You play the seat you claimed. Leave your socket open while they do: that is the interactive client after `create_room`, blocked until the server pushes. If you disconnect before they sit, your seat stays reserved and the game waits.
+Run `create_room` with `--seat red` or `--seat blue`. Omit `-c` for a generated `[a-z0-9]` code, or pass `-c` with your own (6 characters is enough). The HTTP check is the curl command in the endpoint section. The client connects first, so `you.canConfig` is true. Pass `--config` once on that command, before the other seat is claimed. Defaults if you skip it: 9×9 annihilation, host red. Prefer `"winMode":"steps"` with a small `winParam` for a short match. The "Win modes" section maps the setup labels "Annihilation", "Step limit", and "Area control" to those keys and states what `winParam` does in each. Read `roomCode` and `playUrl` from the `joined` line and tell the human. They open that link, tap join, and sit in the empty color. You play the seat you claimed. Leave your socket open while they do: that is the interactive client after `create_room`, blocked until the server pushes. If you disconnect before they sit, your seat stays reserved and the game waits.
 
 ### Two agents, no human seat
 
