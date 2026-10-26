@@ -9,8 +9,10 @@ import {
 import type { AiDifficulty } from "./ai";
 import type { HostColor, Phase, Role, RoomConfig, RoomPlayer, Seat } from "./online";
 import { AgentInvite } from "./AgentInvite";
+import { SeatRoster } from "./SeatRoster";
+import { getOrCreatePlayerId } from "./online";
 import { clearLocalProgress } from "../local-persist";
-import { seatLabel, winModeLabel, youAreLabel } from "./labels";
+import { winModeLabel, youAreLabel } from "./labels";
 import {
   SOLO_PROGRESS_SLUG,
   type RedOwner,
@@ -44,6 +46,7 @@ export type ExplosiveChessSetupProps = {
   setOnlineStatus: Dispatch<SetStateAction<string>>;
   onlinePlayers: RoomPlayer[];
   onlineRole: Role;
+  claimSeat: (seat: "red" | "blue") => void;
   reconnectAttemptsRef: MutableRefObject<number>;
 };
 
@@ -73,6 +76,7 @@ export function ExplosiveChessSetup({
   setOnlineStatus,
   onlinePlayers,
   onlineRole,
+  claimSeat,
   reconnectAttemptsRef,
 }: ExplosiveChessSetupProps) {
   return (
@@ -311,7 +315,7 @@ export function ExplosiveChessSetup({
               ) : null}
             </div>
 
-            {onlineRole === "host" && roomCode && (onlinePhase === "lobby" || onlinePhase === "connecting") ? (
+            {roomCode && (onlinePhase === "lobby" || onlinePhase === "connecting") ? (
               <div className="explosive-room-code">
                 <p className="room-code-line">
                   {ex.roomCode}
@@ -345,16 +349,13 @@ export function ExplosiveChessSetup({
             ) : null}
 
             {onlinePlayers.length > 0 ? (
-              <ul className="explosive-player-list">
-                {onlinePlayers.map((p) => (
-                  <li key={p.playerId}>
-                    {p.name} · {seatLabel(p.seat, ex)} · {p.role}
-                    {p.kind === "agent" ? ` · ${ex.agentMark}` : ""}
-                    {p.rematch ? ` · ${ex.rematchMark}` : ""}
-                    {!p.connected ? ` · ${ex.offline}` : ""}
-                  </li>
-                ))}
-              </ul>
+              <SeatRoster
+                ex={ex}
+                players={onlinePlayers}
+                myPlayerId={getOrCreatePlayerId()}
+                phase={onlinePhase}
+                onClaim={claimSeat}
+              />
             ) : null}
 
           </div>

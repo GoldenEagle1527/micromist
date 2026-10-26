@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 /**
- * Two explosive-chess agents on one room WebSocket.
- * They wait on server pushes (no sleep loop). Host sets a 4-step match so it ends.
- * Both sockets stay open until game_over. Closing the host after join marks that seat offline.
+ * Two explosive-chess agents on one room WebSocket, plus one spectator.
+ * Join is a spectator. Each agent claim_seat. They wait on server pushes (no sleep loop).
+ * The config host sets a 4-step match so it ends.
+ * Both player sockets stay open until game_over. Closing a seat after claim marks it offline.
  *
  *   node scripts/explosive-chess-agent-duel.mjs ws://127.0.0.1:8787
  *   node scripts/explosive-chess-agent-duel.mjs wss://micromist-staging.goldeneaglepersonal.dpdns.org
@@ -164,8 +165,10 @@ const code = roomCode();
 const url = `${base}/ws/explosive-chess:${code}`;
 const idA = crypto.randomUUID();
 const idB = crypto.randomUUID();
+const idC = crypto.randomUUID();
 let alpha = null;
 let beta = null;
+let gamma = null;
 
 try {
   console.log(`room ${code}`);
@@ -178,8 +181,13 @@ try {
     game: "explosive-chess",
   });
   const joinedA = await alpha.waitFor((m) => m.type === "joined", 15000);
-  if (joinedA.payload?.you?.role !== "host" || joinedA.payload?.you?.kind !== "agent") {
-    throw new Error(`host join was ${JSON.stringify(joinedA.payload?.you)}`);
+  if (
+    joinedA.payload?.you?.seat !== "spectator" ||
+    joinedA.payload?.you?.role !== "spectator" ||
+    joinedA.payload?.you?.canConfig !== true ||
+    joinedA.payload?.you?.kind !== "agent"
+  ) {
+    throw new Error(`join was ${JSON.stringify(joinedA.payload?.you)}`);
   }
   if (joinedA.payload?.roomCode !== code) {
     throw new Error(`room code echo ${joinedA.payload?.roomCode}`);
@@ -199,6 +207,12 @@ try {
     throw new Error(`expected lobby after config, got ${configured.payload?.phase}`);
   }
 
+  alpha.send("claim_seat", { seat: "red" });
+  const seatedA = await alpha.waitFor((m) => m.type === "seated", 8000);
+  if (seatedA.payload?.you?.role !== "host" || seatedA.payload?.you?.seat !== "red" || seatedA.payload?.you?.color !== "red") {
+    throw new Error(`red claim was ${JSON.stringify(seatedA.payload?.you)}`);
+  }
+
   beta = await connect(url);
   beta.send("join", {
     playerId: idB,
@@ -206,22 +220,47 @@ try {
     kind: "agent",
     game: "explosive-chess",
   });
+  const joinedB = await beta.waitFor((m) => m.type === "joined", 15000);
+  if (joinedB.payload?.you?.seat !== "spectator" || joinedB.payload?.you?.canConfig === true) {
+    throw new Error(`guest join ${JSON.stringify(joinedB.payload?.you)}`);
+  }
+  beta.send("claim_seat", { seat: "blue" });
 
-  const [opp, joinedB] = await Promise.all([
+  const [opp, seatedB] = await Promise.all([
     alpha.waitFor((m) => m.type === "opponent_joined" && m.payload?.playerId === idB, 15000),
-    beta.waitFor((m) => m.type === "joined", 15000),
+    beta.waitFor((m) => m.type === "seated", 15000),
   ]);
   if (opp.payload?.kind !== "agent" || opp.payload?.seat !== "blue") {
     throw new Error(`opponent_joined ${JSON.stringify(opp.payload)}`);
   }
-  if (joinedB.payload?.you?.role !== "guest" || joinedB.payload?.you?.color !== "blue") {
-    throw new Error(`guest join ${JSON.stringify(joinedB.payload?.you)}`);
+  if (seatedB.payload?.you?.role !== "guest" || seatedB.payload?.you?.color !== "blue") {
+    throw new Error(`blue claim was ${JSON.stringify(seatedB.payload?.you)}`);
   }
 
   await Promise.all([
     alpha.waitFor((m) => m.type === "start" && m.payload?.yourColor === "red" && m.payload?.firstColor === "red", 8000),
     beta.waitFor((m) => m.type === "start" && m.payload?.yourColor === "blue", 8000),
   ]);
+
+  gamma = await connect(url);
+  gamma.send("join", {
+    playerId: idC,
+    name: "Watcher",
+    kind: "agent",
+    game: "explosive-chess",
+  });
+  const joinedC = await gamma.waitFor((m) => m.type === "joined", 15000);
+  if (joinedC.payload?.you?.seat !== "spectator" || joinedC.payload?.reclaimed !== false) {
+    throw new Error(`spectator join ${JSON.stringify(joinedC.payload?.you)}`);
+  }
+  const watched = await gamma.waitFor((m) => m.type === "state" && m.payload?.fullState, 8000);
+  if (watched.payload?.fullState?.gameOver) {
+    throw new Error("spectator joined a finished board");
+  }
+  const startC = gamma.buf.find((m) => m.type === "game_start") || (await gamma.waitFor((m) => m.type === "game_start", 8000));
+  if (startC.payload?.yourColor != null) {
+    throw new Error(`spectator yourColor ${JSON.stringify(startC.payload?.yourColor)}`);
+  }
 
   const [overRed, overBlue] = await Promise.all([
     drive(alpha, idA, "red"),
@@ -246,8 +285,12 @@ try {
   if (!finalState || finalState.payload.fullState.counts?.length !== 81) {
     throw new Error("human state frame did not carry the finished board");
   }
+  if (gamma.buf.some((m) => m.type === "your_turn")) {
+    throw new Error("spectator received your_turn");
+  }
   console.log(`game_over ${overRed.payload.winnerColor} (${overRed.payload.winReason})`);
 } finally {
   alpha?.close();
   beta?.close();
+  gamma?.close();
 }

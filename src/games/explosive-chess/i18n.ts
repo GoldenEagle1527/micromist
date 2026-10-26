@@ -2,7 +2,7 @@ export type ExplosiveDict = Record<string, string>;
 
 export const explosiveEn: ExplosiveDict = {
     setupTitle: "Match setup",
-    setupHint: "Pick mode and rules, then enter the board. Online starts when both players join.",
+    setupHint: "Pick mode and rules, then enter the board. Online: you join as a spectator and sit to play. The match starts when both seats are filled.",
     mode: "Mode",
     solo: "Solo",
     online: "Online",
@@ -31,7 +31,7 @@ export const explosiveEn: ExplosiveDict = {
     onlineLobby: "Online room",
     onlineConfigLocked: "Set board, rules, and your color below, then create the room. Config is read-only afterward — make a new room to change it.",
     onlineHint:
-      "Create a room, share the link; the other player opens it and joins. Game starts when both are seated.",
+      "Create a room and share the link. Everyone joins as a spectator. Sit as Red or Blue to play. The match starts when both seats are filled. Others can watch.",
     youAreRed: "You are Red.",
     youAreBlue: "You are Blue.",
     youAreSpectator: "You are spectating.",
@@ -52,7 +52,7 @@ export const explosiveEn: ExplosiveDict = {
     surrender: "Surrender",
     rematch: "Rematch",
     tipClick: "Tap a cell to place",
-    tipWaitJoin: "Waiting for opponent. Red always moves first.",
+    tipWaitJoin: "Waiting for both seats. Red always moves first.",
     tipOnline: "Online match",
     tipYourTurn: "Your turn",
     tipOppTurn: "Opponent's turn",
@@ -106,11 +106,16 @@ export const explosiveEn: ExplosiveDict = {
     reasonStepsMore: "After {n} steps, more area ({a} vs {b})",
     reasonStepsDraw: "After {n} steps, equal area ({a})",
     reasonSurrender: "Opponent resigned",
+    seatEmpty: "Empty",
+    sitRed: "Sit as Red",
+    sitBlue: "Sit as Blue",
+    spectatorsLabel: "Spectators",
+    rosterTitle: "Seats",
 };
 
 export const explosiveZh: ExplosiveDict = {
     setupTitle: "对局设置",
-    setupHint: "先选好模式与规则，再进入棋盘。联机需两人到齐后自动开局。",
+    setupHint: "先选好模式与规则，再进入棋盘。联机先以旁观加入，入座后才下棋。红蓝都有人后才开局。",
     mode: "模式",
     solo: "单人",
     online: "联机",
@@ -139,7 +144,7 @@ export const explosiveZh: ExplosiveDict = {
     onlineLobby: "联机房间",
     onlineConfigLocked: "先在下方选好棋盘、规则和你的颜色，再创建房间；建房后配置只读，改规则请新建房间。",
     onlineHint:
-      "点「创建房间」后分享链接给对方；对方打开链接后点「加入此房间」。两人到齐后自动开局。",
+      "创建房间后分享链接。所有人都先以旁观加入。点「坐红方」或「坐蓝方」才下棋。红蓝都有人后才开局。其他人可以旁观。",
     youAreRed: "你是红方。",
     youAreBlue: "你是蓝方。",
     youAreSpectator: "你是旁观。",
@@ -160,7 +165,7 @@ export const explosiveZh: ExplosiveDict = {
     surrender: "投降",
     rematch: "再来一局",
     tipClick: "点击格子落子",
-    tipWaitJoin: "等待对手加入，两人到齐后自动开局。红方永远先手。",
+    tipWaitJoin: "等待红蓝两个座位都有人。红方永远先手。",
     tipOnline: "联机对局中",
     tipYourTurn: "轮到你落子",
     tipOppTurn: "等待对手落子",
@@ -214,4 +219,9 @@ export const explosiveZh: ExplosiveDict = {
     reasonStepsMore: "{n} 步后占据更多面积 ({a} vs {b})",
     reasonStepsDraw: "{n} 步后双方面积相同 ({a})",
     reasonSurrender: "对手投降",
+    seatEmpty: "空位",
+    sitRed: "坐红方",
+    sitBlue: "坐蓝方",
+    spectatorsLabel: "旁观",
+    rosterTitle: "座位",
 };

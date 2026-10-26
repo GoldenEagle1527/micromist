@@ -65,6 +65,7 @@ export function createExplosiveChessAdapter(host: RoomHost): GameRoomAdapter {
 
   const api: GameRoomAdapter = {
     slug: "explosive-chess",
+    explicitSeating: true,
 
     getPublicConfig: () => ({
       boardSize: config.boardSize,
@@ -94,11 +95,11 @@ export function createExplosiveChessAdapter(host: RoomHost): GameRoomAdapter {
     },
 
     onReclaimSync: (ws, player) => {
-      const yourColor = seatToColor(player.seat);
-      if (!yourColor || !game) return;
+      if (!game) return;
+      const yourColor = player.seat === "red" || player.seat === "blue" ? player.seat : null;
       host.send(ws, "game_start", {
         config: api.getPublicConfig(),
-        yourColor: player.seat === "blue" ? "blue" : "red",
+        yourColor,
       });
       host.send(ws, "state", { fullState: game.getFullState() });
       const observation = observationFor(player);
@@ -110,6 +111,11 @@ export function createExplosiveChessAdapter(host: RoomHost): GameRoomAdapter {
       if (canMove(player.seat)) {
         host.send(ws, "your_turn", { observation });
       }
+    },
+
+    onSeatClaimed: (ws, player, info) => {
+      if (!info.changed || !isSeatedSeat(player.seat)) return;
+      notifyOpponents(ws, player, false);
     },
 
     onSetConfig: (ws, _session, payload) => {
@@ -129,17 +135,7 @@ export function createExplosiveChessAdapter(host: RoomHost): GameRoomAdapter {
         next.hostColor = payload.hostColor;
       }
       config = next;
-
-      const hostPlayer = host.hostId ? host.players.get(host.hostId) : null;
-      const guest = [...host.players.values()].find((p) => p.role === "guest");
-      if (hostPlayer && isSeatedSeat(hostPlayer.seat)) {
-        hostPlayer.seat = next.hostColor;
-        host.refreshAttachmentSeat(hostPlayer.playerId, hostPlayer.seat);
-      }
-      if (guest && isSeatedSeat(guest.seat)) {
-        guest.seat = next.hostColor === "red" ? "blue" : "red";
-        host.refreshAttachmentSeat(guest.playerId, guest.seat);
-      }
+      // Seats are claimed explicitly. hostColor is a preference, not an assignment.
       configFrozen = true;
       host.broadcastRoom();
       void host.persist();
@@ -147,8 +143,11 @@ export function createExplosiveChessAdapter(host: RoomHost): GameRoomAdapter {
     },
 
     tryStartGame: () => {
+      if (host.phase !== "lobby") return;
       const seated = host.seatedPlayers({ connectedOnly: true });
-      if (seated.length < 2) return;
+      const red = seated.find((p) => p.seat === "red");
+      const blue = seated.find((p) => p.seat === "blue");
+      if (!red || !blue) return;
 
       const winParam =
         config.winMode === WIN_MODE_ANNIHILATION ? undefined : config.winParam;
@@ -165,10 +164,11 @@ export function createExplosiveChessAdapter(host: RoomHost): GameRoomAdapter {
       }
 
       for (const [ws, session] of host.sessions) {
-        if (!isSeatedSeat(session.seat)) continue;
+        if (!session.playerId) continue;
+        const yourColor = session.seat === "red" || session.seat === "blue" ? session.seat : null;
         host.send(ws, "game_start", {
           config: api.getPublicConfig(),
-          yourColor: session.seat,
+          yourColor,
         });
       }
 
@@ -397,6 +397,7 @@ export function createExplosiveChessAdapter(host: RoomHost): GameRoomAdapter {
       role: player.role,
       kind: normalizePlayerKind(player.kind),
       color,
+      canConfig: host.hostId === player.playerId,
     };
   }
 
