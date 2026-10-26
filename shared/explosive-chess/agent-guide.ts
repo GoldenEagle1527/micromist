@@ -1,21 +1,106 @@
 /**
  * Public explosive-chess Agent Guide.
- * Protocol body: docs/agent-ws-explosive-chess.md (the Worker imports that file).
- * This module only adds the live host banner, HTML page, and HTTP negotiation.
+ * Protocol bodies: docs/agent-ws-explosive-chess.md and docs/agent-ws-explosive-chess.zh.md.
+ * This module adds the live host banner, locale selection, HTML page, and HTTP negotiation.
  */
 
 export const EXPLOSIVE_CHESS_AGENT_GUIDE_PATH = "/agent-guide/explosive-chess";
 
+export const EXPLOSIVE_CHESS_CLIENT_DIR = "/agent-clients/explosive-chess";
+
+export const explosiveChessClients = {
+  nodeWait: `${EXPLOSIVE_CHESS_CLIENT_DIR}/ws-wait.mjs`,
+  nodePoll: `${EXPLOSIVE_CHESS_CLIENT_DIR}/ws-poll.mjs`,
+  pythonWait: `${EXPLOSIVE_CHESS_CLIENT_DIR}/ws_wait.py`,
+  pythonPoll: `${EXPLOSIVE_CHESS_CLIENT_DIR}/ws_poll.py`,
+} as const;
+
+export type AgentLocale = "zh" | "en";
+
 export type AgentGuideMatch = "page" | "markdown" | "index" | "unknown" | null;
 
+export type AgentGuideProtocols = {
+  en: string;
+  zh: string;
+};
+
+function stripTrailingSlash(pathname: string): string {
+  if (pathname.length > 1 && pathname.endsWith("/")) return pathname.slice(0, -1);
+  return pathname;
+}
+
 export function matchAgentGuidePath(pathname: string): AgentGuideMatch {
-  let path = pathname;
-  if (path.length > 1 && path.endsWith("/")) path = path.slice(0, -1);
+  const path = stripTrailingSlash(pathname);
   if (path === "/agent-guide") return "index";
-  if (path === EXPLOSIVE_CHESS_AGENT_GUIDE_PATH) return "page";
-  if (path === `${EXPLOSIVE_CHESS_AGENT_GUIDE_PATH}.md`) return "markdown";
+  if (
+    path === EXPLOSIVE_CHESS_AGENT_GUIDE_PATH ||
+    path === `${EXPLOSIVE_CHESS_AGENT_GUIDE_PATH}/zh` ||
+    path === `${EXPLOSIVE_CHESS_AGENT_GUIDE_PATH}/en`
+  ) {
+    return "page";
+  }
+  if (
+    path === `${EXPLOSIVE_CHESS_AGENT_GUIDE_PATH}.md` ||
+    path === `${EXPLOSIVE_CHESS_AGENT_GUIDE_PATH}/zh.md` ||
+    path === `${EXPLOSIVE_CHESS_AGENT_GUIDE_PATH}/en.md`
+  ) {
+    return "markdown";
+  }
   if (path.startsWith("/agent-guide/")) return "unknown";
   return null;
+}
+
+export function localeFromGuidePath(pathname: string): AgentLocale | null {
+  const path = stripTrailingSlash(pathname);
+  if (path === `${EXPLOSIVE_CHESS_AGENT_GUIDE_PATH}/zh` || path === `${EXPLOSIVE_CHESS_AGENT_GUIDE_PATH}/zh.md`) {
+    return "zh";
+  }
+  if (path === `${EXPLOSIVE_CHESS_AGENT_GUIDE_PATH}/en` || path === `${EXPLOSIVE_CHESS_AGENT_GUIDE_PATH}/en.md`) {
+    return "en";
+  }
+  return null;
+}
+
+function localeToken(value: string): AgentLocale | null {
+  const token = value.trim().toLowerCase();
+  if (token === "zh" || token.startsWith("zh-")) return "zh";
+  if (token === "en" || token.startsWith("en-")) return "en";
+  return null;
+}
+
+/** Highest-q zh or en tag. Anything else, including `*`, falls through to English. */
+export function localeFromAcceptLanguage(header: string | null): AgentLocale {
+  if (!header) return "en";
+  let best: AgentLocale = "en";
+  let bestQ = -1;
+  let saw = false;
+  for (const part of header.split(",")) {
+    const [rawType, ...params] = part
+      .trim()
+      .toLowerCase()
+      .split(";")
+      .map((s) => s.trim());
+    if (!rawType) continue;
+    const qParam = params.find((p) => p.startsWith("q="));
+    const q = qParam ? Number(qParam.slice(2)) : 1;
+    if (!Number.isFinite(q)) continue;
+    const locale = localeToken(rawType);
+    if (!locale) continue;
+    saw = true;
+    if (q > bestQ) {
+      best = locale;
+      bestQ = q;
+    }
+  }
+  return saw ? best : "en";
+}
+
+export function resolveAgentGuideLocale(url: URL, acceptLanguage: string | null): AgentLocale {
+  const fromPath = localeFromGuidePath(url.pathname);
+  if (fromPath) return fromPath;
+  const query = localeToken(url.searchParams.get("lang") ?? url.searchParams.get("locale") ?? "");
+  if (query) return query;
+  return localeFromAcceptLanguage(acceptLanguage);
 }
 
 export function wsOriginFromHttp(origin: string): {
@@ -32,8 +117,12 @@ export function wsOriginFromHttp(origin: string): {
   };
 }
 
-export function explosiveChessGuideUrl(origin: string): string {
-  return `${wsOriginFromHttp(origin).httpOrigin}${EXPLOSIVE_CHESS_AGENT_GUIDE_PATH}`;
+export function explosiveChessGuideUrl(origin: string, locale: AgentLocale = "en"): string {
+  return `${wsOriginFromHttp(origin).httpOrigin}${EXPLOSIVE_CHESS_AGENT_GUIDE_PATH}/${locale}`;
+}
+
+export function explosiveChessClientUrl(origin: string, path: string): string {
+  return `${wsOriginFromHttp(origin).httpOrigin}${path}`;
 }
 
 /** `wss://<host>/ws/explosive-chess:<code>` — colon stays literal so agents can paste it. */
@@ -49,40 +138,80 @@ export type ExplosiveRoomEndpoints = {
   roomCode: string;
 };
 
-export function explosiveChessRoomEndpoints(origin: string, roomCode: string): ExplosiveRoomEndpoints {
+export function explosiveChessRoomEndpoints(
+  origin: string,
+  roomCode: string,
+  locale: AgentLocale = "en",
+): ExplosiveRoomEndpoints {
   const ends = wsOriginFromHttp(origin);
   const code = roomCode.trim().toLowerCase();
   return {
     origin: ends.httpOrigin,
-    guideUrl: `${ends.httpOrigin}${EXPLOSIVE_CHESS_AGENT_GUIDE_PATH}`,
+    guideUrl: explosiveChessGuideUrl(ends.httpOrigin, locale),
     wsUrl: `${ends.wsOrigin}/ws/explosive-chess:${code}`,
     roomCode: code,
   };
 }
 
-/** Prepend the host that actually served this response. The protocol body is unchanged. */
-export function composeAgentGuide(origin: string, protocolMarkdown: string): string {
+function clientLines(httpOrigin: string): string[] {
+  return [
+    `- node wait: ${httpOrigin}${explosiveChessClients.nodeWait}`,
+    `- node poll: ${httpOrigin}${explosiveChessClients.nodePoll}`,
+    `- python wait: ${httpOrigin}${explosiveChessClients.pythonWait}`,
+    `- python poll: ${httpOrigin}${explosiveChessClients.pythonPoll}`,
+  ];
+}
+
+/** Prepend the host that actually served this response. The protocol body is one language. */
+export function composeAgentGuide(
+  origin: string,
+  protocolMarkdown: string,
+  locale: AgentLocale = "en",
+): string {
   const ends = wsOriginFromHttp(origin);
-  const guideUrl = `${ends.httpOrigin}${EXPLOSIVE_CHESS_AGENT_GUIDE_PATH}`;
-  const banner = [
-    "# 当前站点 / This host",
-    "",
-    "下面的 origin 就是**这份响应**所在的环境（staging、production 或 local）。WebSocket 用同一 host。爆炸棋设置页（`/play/explosive-chess`）上的提示会让你先读这份指南，再问人类：对下、由你建房，还是已有房间码。若提示里已经写了 `wss://…/ws/explosive-chess:<code>`，以那个 URL 为准。",
-    "",
-    "The origin below is the deployment that served this Agent Guide. Open the WebSocket on the same host. The prompt on the explosive-chess setup page (`/play/explosive-chess`) tells you to read this guide, then ask the human whether to play them, create a room, or use a room code they already have. If the pasted prompt already contains a `wss://…/ws/explosive-chess:<code>` URL, use that exact URL. Room id prefix: `explosive-chess:`.",
-    "",
-    `- origin: ${ends.httpOrigin}`,
-    `- host: ${ends.host}`,
-    `- agent guide: ${guideUrl}`,
-    `- markdown: ${guideUrl}.md`,
-    `- websocket: ${ends.wsOrigin}/ws/explosive-chess:<code>`,
-    "- Upgrade: websocket",
-    "- no MCP",
-    "",
-    "---",
-    "",
-  ].join("\n");
-  return `${banner}${protocolMarkdown.trim()}\n`;
+  const guideUrl = explosiveChessGuideUrl(ends.httpOrigin, locale);
+  const clients = clientLines(ends.httpOrigin);
+  const banner =
+    locale === "zh"
+      ? [
+          "# 当前站点",
+          "",
+          "下面的 origin 就是这份响应所在的环境（staging、production 或 local）。WebSocket 和官方客户端下载都用同一 host。这是中文指南。爆炸棋设置页（`/play/explosive-chess`）上的提示会让你先读与界面语言一致的指南，再问人类：对下、由你建房，还是已有房间码。若提示里已经写了 WebSocket URL，以那个 URL 为准。房间前缀是 `explosive-chess:`。",
+          "",
+          "每一手都由你自己决定。官方客户端只负责连接、发送你选定的着法、等待服务器推送。它们没有棋力。没有 MCP。",
+          "",
+          `- origin: ${ends.httpOrigin}`,
+          `- host: ${ends.host}`,
+          `- agent guide: ${guideUrl}`,
+          `- markdown: ${guideUrl}.md`,
+          ...clients,
+          `- websocket: ${ends.wsOrigin}/ws/explosive-chess:<code>`,
+          "- Upgrade: websocket",
+          "- 没有 MCP",
+          "",
+          "---",
+          "",
+        ]
+      : [
+          "# This host",
+          "",
+          "The origin below is the deployment that served this Agent Guide. Use the same host for the WebSocket and the official client downloads. This page is English. The prompt on the explosive-chess setup page (`/play/explosive-chess`) tells you to read this guide, then ask the human whether to play them, create a room, or use a room code they already have. If the pasted prompt already contains a websocket URL, use that exact URL. Room id prefix: `explosive-chess:`.",
+          "",
+          "You choose every move. The official clients only connect, send the move you chose, and wait for the server push. They have no chess strength. There is no MCP.",
+          "",
+          `- origin: ${ends.httpOrigin}`,
+          `- host: ${ends.host}`,
+          `- agent guide: ${guideUrl}`,
+          `- markdown: ${guideUrl}.md`,
+          ...clients,
+          `- websocket: ${ends.wsOrigin}/ws/explosive-chess:<code>`,
+          "- Upgrade: websocket",
+          "- no MCP",
+          "",
+          "---",
+          "",
+        ];
+  return `${banner.join("\n")}${protocolMarkdown.trim()}\n`;
 }
 
 /**
@@ -209,16 +338,31 @@ export function renderMarkdown(markdown: string): string {
   return out.join("\n");
 }
 
-export function renderAgentGuideHtml(markdown: string, rawUrl: string): string {
+export function renderAgentGuideHtml(
+  markdown: string,
+  rawUrl: string,
+  locale: AgentLocale = "en",
+  alternateUrl?: string,
+): string {
   const body = renderMarkdown(markdown);
   const raw = escAttr(rawUrl);
+  const lang = locale === "zh" ? "zh-Hans" : "en";
+  const title = locale === "zh" ? "爆炸棋 Agent Guide" : "explosive-chess Agent Guide";
+  const description =
+    locale === "zh"
+      ? "爆炸棋 WebSocket Agent 指南：kind agent、your_turn、legalActions。没有 MCP。"
+      : "explosive-chess WebSocket agent guide: join kind agent, your_turn, legalActions. No MCP.";
+  const otherLabel = locale === "zh" ? "English" : "中文";
+  const otherLink = alternateUrl
+    ? ` · <a href="${escAttr(alternateUrl)}">${escText(otherLabel)}</a>`
+    : "";
   return `<!DOCTYPE html>
-<html lang="zh-Hans">
+<html lang="${lang}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>爆炸棋 Agent Guide · explosive-chess</title>
-<meta name="description" content="explosive-chess WebSocket agent guide: join kind agent, your_turn, legalActions. No MCP.">
+<title>${escText(title)}</title>
+<meta name="description" content="${escAttr(description)}">
 <link rel="alternate" type="text/markdown" href="${raw}">
 <style>
   :root { color-scheme: light dark; }
@@ -240,7 +384,7 @@ export function renderAgentGuideHtml(markdown: string, rawUrl: string): string {
 </head>
 <body>
 <main>
-<p class="banner">Agent Guide · explosive-chess · <a href="${raw}">text/markdown</a> · no MCP</p>
+<p class="banner">Agent Guide · explosive-chess · <a href="${raw}">text/markdown</a>${otherLink} · no MCP</p>
 ${body}
 </main>
 </body>
@@ -259,7 +403,7 @@ function guideHeaders(contentType: string): Headers {
   headers.set("content-type", contentType);
   headers.set("cache-control", "public, max-age=60");
   headers.set("x-content-type-options", "nosniff");
-  headers.set("vary", "Accept");
+  headers.set("vary", "Accept, Accept-Language");
   return headers;
 }
 
@@ -267,7 +411,7 @@ function guideHeaders(contentType: string): Headers {
  * Response for `/agent-guide…`, or null when the path is not an agent guide
  * (caller continues with WebSocket / asset routing).
  */
-export function agentGuideHttpResponse(request: Request, protocolMarkdown: string): Response | null {
+export function agentGuideHttpResponse(request: Request, protocols: AgentGuideProtocols): Response | null {
   const url = new URL(request.url);
   const kind = matchAgentGuidePath(url.pathname);
   if (kind === null) return null;
@@ -286,27 +430,39 @@ export function agentGuideHttpResponse(request: Request, protocolMarkdown: strin
 
   if (kind === "unknown") {
     const headers = guideHeaders("text/plain; charset=utf-8");
-    const body = `No agent guide at this path.\nexplosive-chess: ${url.origin}${EXPLOSIVE_CHESS_AGENT_GUIDE_PATH}\n`;
+    const body = [
+      "No agent guide at this path.",
+      `explosive-chess (en): ${url.origin}${EXPLOSIVE_CHESS_AGENT_GUIDE_PATH}/en`,
+      `explosive-chess (zh): ${url.origin}${EXPLOSIVE_CHESS_AGENT_GUIDE_PATH}/zh`,
+      "",
+    ].join("\n");
     return new Response(request.method === "HEAD" ? null : body, { status: 404, headers });
   }
 
   if (kind === "index") {
     const headers = guideHeaders("text/plain; charset=utf-8");
     const body = [
-      `explosive-chess agent guide: ${url.origin}${EXPLOSIVE_CHESS_AGENT_GUIDE_PATH}`,
-      `markdown: ${url.origin}${EXPLOSIVE_CHESS_AGENT_GUIDE_PATH}.md`,
+      `explosive-chess agent guide (en): ${url.origin}${EXPLOSIVE_CHESS_AGENT_GUIDE_PATH}/en`,
+      `explosive-chess agent guide (zh): ${url.origin}${EXPLOSIVE_CHESS_AGENT_GUIDE_PATH}/zh`,
+      `markdown (en): ${url.origin}${EXPLOSIVE_CHESS_AGENT_GUIDE_PATH}/en.md`,
+      `markdown (zh): ${url.origin}${EXPLOSIVE_CHESS_AGENT_GUIDE_PATH}/zh.md`,
+      `clients: ${url.origin}${EXPLOSIVE_CHESS_CLIENT_DIR}/`,
       "",
     ].join("\n");
     return new Response(request.method === "HEAD" ? null : body, { status: 200, headers });
   }
 
-  const markdown = composeAgentGuide(url.origin, protocolMarkdown);
-  const rawUrl = `${url.origin}${EXPLOSIVE_CHESS_AGENT_GUIDE_PATH}.md`;
+  const locale = resolveAgentGuideLocale(url, request.headers.get("accept-language"));
+  const protocol = locale === "zh" ? protocols.zh : protocols.en;
+  const markdown = composeAgentGuide(url.origin, protocol, locale);
+  const rawUrl = `${url.origin}${EXPLOSIVE_CHESS_AGENT_GUIDE_PATH}/${locale}.md`;
+  const other: AgentLocale = locale === "zh" ? "en" : "zh";
+  const alternateUrl = `${url.origin}${EXPLOSIVE_CHESS_AGENT_GUIDE_PATH}/${other}`;
   const wantHtml =
     kind === "page" && prefersHtml(request.headers.get("accept"), url.searchParams.get("format"));
   if (wantHtml) {
     const headers = guideHeaders("text/html; charset=utf-8");
-    const html = renderAgentGuideHtml(markdown, rawUrl);
+    const html = renderAgentGuideHtml(markdown, rawUrl, locale, alternateUrl);
     return new Response(request.method === "HEAD" ? null : html, { status: 200, headers });
   }
   const headers = guideHeaders("text/markdown; charset=utf-8");

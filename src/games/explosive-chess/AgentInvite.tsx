@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { promptInviteAgent } from "../../../shared/explosive-chess/agent-handoff";
+import { promptInviteAgent, type AgentLocale } from "../../../shared/explosive-chess/agent-handoff";
 
 type CopyPhase = "idle" | "ok" | "fail";
 
@@ -35,12 +35,13 @@ export type AgentInviteProps = {
   line: string;
   copiedLabel: string;
   failedLabel: string;
+  locale: AgentLocale;
 };
 
 /** One clickable row at the bottom of explosive-chess match setup. The prompt is copied, not shown. */
-export function AgentInvite({ line, copiedLabel, failedLabel }: AgentInviteProps) {
+export function AgentInvite({ line, copiedLabel, failedLabel, locale }: AgentInviteProps) {
   const origin = typeof window !== "undefined" ? window.location.origin : "http://localhost";
-  const prompt = promptInviteAgent(origin);
+  const prompt = promptInviteAgent(origin, locale);
   const [phase, setPhase] = useState<CopyPhase>("idle");
   const timer = useRef<number | null>(null);
 
