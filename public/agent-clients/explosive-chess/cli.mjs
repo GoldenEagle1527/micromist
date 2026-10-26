@@ -6,16 +6,19 @@
  * line per event, and sends the move you type on stdin. It never picks a move.
  * It exits when event is game_over, or on a fatal disconnect.
  *
- *   node cli.mjs --origin https://HOST create_room
- *   node cli.mjs --origin https://HOST create_room -c CODE
- *   node cli.mjs --origin https://HOST join_room -c CODE
- *   node cli.mjs --url wss://HOST/ws/explosive-chess:CODE join_room
+ *   node cli.mjs --origin https://HOST --seat red create_room
+ *   node cli.mjs --origin https://HOST --seat red create_room -c CODE
+ *   node cli.mjs --origin https://HOST --seat blue join_room -c CODE
+ *   node cli.mjs --url wss://HOST/ws/explosive-chess:CODE --seat red claim_seat -c CODE
  *
  * Node 22+ (global WebSocket). On older Node, use cli.py.
  * Stdout is one JSON object per line. Diagnostics go to stderr.
  * --poll is the one-shot fallback for environments that cannot hold this session.
  */
 
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import readline from "node:readline";
 
 const HELP = `explosive-chess official interactive client (no chess strength)
@@ -26,25 +29,32 @@ moves. It exits when event is game_over, or on a fatal disconnect.
 Do not wrap it in a solver, search tree, or auto-play loop.
 The one-shot client that exited after a single your_turn is retired.
 
-  node cli.mjs --origin https://HOST create_room
-  node cli.mjs --origin https://HOST create_room -c CODE
-  node cli.mjs --origin https://HOST join_room -c CODE
-  node cli.mjs --url wss://HOST/ws/explosive-chess:CODE join_room
+  node cli.mjs --origin https://HOST --seat red create_room
+  node cli.mjs --origin https://HOST --seat red create_room -c CODE
+  node cli.mjs --origin https://HOST --seat blue join_room -c CODE
+  node cli.mjs --url wss://HOST/ws/explosive-chess:CODE --seat red claim_seat -c CODE
 
-  create_room   Open a room. -c is optional. Omit -c for a generated code.
-  join_room     Sit in a room. -c CODE is required unless --url has the code.
+  create_room   Open a room and join as a spectator. -c is optional.
+  join_room     Join a room as a spectator. -c CODE is required unless --url has the code.
+  claim_seat    Join, then claim --seat red or blue. -c CODE is required unless --url has it.
   -c, --code    Room code [a-z0-9]
   --origin      http(s) origin of the game host
   --url         Exact websocket URL. Used as-is when present.
-  --player-id   Seat id to join and reclaim (default: a fresh agent id)
+  --seat        red or blue. Sent as claim_seat after join. Omit to watch.
+  --player-id   This process's id. Omit to reuse the id stored on this machine.
   --name        Display name (default Agent)
-  --config      JSON object. Sent as set_config only if you are host and the room is still a lobby
+  --config      JSON object. Sent as set_config when you.canConfig is true (or you.role is host) and the room is still a lobby
   --verbose     Include board on each JSON line
   --timeout     Seconds to block for one server push. Omit to wait until game_over
   --poll        One-shot fallback. Prints one JSON line and exits. Accepts --move ROW,COL
   --move        Poll only. ROW,COL you already chose. Interactive play types this on stdin
   --help
 
+Join does not take a seat. Pass --seat red or --seat blue to play.
+The same playerId reclaims red, blue, or spectator. A new id is a new person.
+Omit --player-id to use ~/.config/micromist/explosive-chess-player-id
+(or $XDG_CONFIG_HOME/micromist/explosive-chess-player-id). Passing --player-id
+does not replace that file. A second agent on this machine passes its own id.
 Interactive stdin is ROW,COL or {"row":ROW,"col":COL}.
 Stdout is one JSON object per line. Diagnostics go to stderr.
 Node 22+ for global WebSocket. Otherwise use cli.py.
@@ -70,6 +80,8 @@ function parseArgs(argv) {
     timeout: null,
     command: "",
     code: "",
+    seat: "",
+    playerIdFromFlag: false,
   };
   const take = (i, flag) => {
     const value = argv[i + 1];
@@ -91,6 +103,10 @@ function parseArgs(argv) {
       i += 1;
     } else if (flag === "--player-id") {
       args.playerId = take(i, flag);
+      args.playerIdFromFlag = true;
+      i += 1;
+    } else if (flag === "--seat") {
+      args.seat = take(i, flag).trim().toLowerCase();
       i += 1;
     } else if (flag === "--name") {
       args.name = take(i, flag);
@@ -107,8 +123,8 @@ function parseArgs(argv) {
     } else if (flag === "-c" || flag === "--code") {
       args.code = take(i, flag).trim().toLowerCase();
       i += 1;
-    } else if (flag === "create_room" || flag === "join_room") {
-      if (args.command) throw new CliError("only one of create_room or join_room");
+    } else if (flag === "create_room" || flag === "join_room" || flag === "claim_seat") {
+      if (args.command) throw new CliError("only one of create_room, join_room, or claim_seat");
       args.command = flag;
     } else {
       throw new CliError(`unknown argument ${flag}`);
@@ -159,6 +175,38 @@ function parseStdinMove(text) {
   return parseCell(trimmed, "stdin move");
 }
 
+function playerIdFile() {
+  const base = process.env.XDG_CONFIG_HOME || path.join(os.homedir(), ".config");
+  return path.join(base, "micromist", "explosive-chess-player-id");
+}
+
+function validPlayerId(value) {
+  return /^[A-Za-z0-9._:-]{1,80}$/.test(value);
+}
+
+/** Local id for this machine. An explicit --player-id is not written back. */
+function loadOrCreatePlayerId() {
+  const file = playerIdFile();
+  try {
+    const existing = fs.readFileSync(file, "utf8").trim();
+    if (validPlayerId(existing)) {
+      console.error(`playerId ${existing} loaded from ${file}`);
+      return existing;
+    }
+  } catch {
+    /* first run, or the file is not readable */
+  }
+  const id = `agent-${token(8)}`;
+  try {
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, `${id}\n`, { encoding: "utf8", mode: 0o600 });
+    console.error(`playerId ${id} stored at ${file}`);
+  } catch (err) {
+    console.error(`could not store playerId at ${file}: ${err instanceof Error ? err.message : err}`);
+  }
+  return id;
+}
+
 function token(size) {
   const alphabet = "abcdefghijklmnopqrstuvwxyz0123456789";
   const bytes = new Uint8Array(size);
@@ -204,14 +252,19 @@ function httpOriginFrom(args) {
 }
 
 function normalize(args) {
-  if (!args.command) throw new CliError("missing command create_room or join_room");
+  if (!args.command) throw new CliError("missing command create_room, join_room, or claim_seat");
   if (args.timeout != null && (!Number.isFinite(args.timeout) || args.timeout < 0)) {
     throw new CliError("--timeout must be a non-negative number of seconds");
+  }
+  if (args.seat && args.seat !== "red" && args.seat !== "blue") {
+    throw new CliError("--seat must be red or blue");
+  }
+  if (args.command === "claim_seat" && !args.seat) {
+    throw new CliError("claim_seat requires --seat red or --seat blue");
   }
   if (args.code && !/^[a-z0-9]+$/.test(args.code)) {
     throw new CliError("room code must be [a-z0-9]");
   }
-  if (!args.playerId.trim()) args.playerId = `agent-${token(8)}`;
   if (args.command === "create_room" && !args.code && !args.url) args.code = token(6);
   let fromUrl = "";
   if (args.url) fromUrl = codeFromWsUrl(args.url);
@@ -220,7 +273,7 @@ function normalize(args) {
   }
   if (!args.code) args.code = fromUrl;
   if (!args.code) {
-    throw new CliError(args.command === "join_room" ? "join_room requires -c CODE" : "missing room code");
+    throw new CliError(args.command === "create_room" ? "missing room code" : `${args.command} requires -c CODE`);
   }
   if (!/^[a-z0-9]+$/.test(args.code)) throw new CliError("room code must be [a-z0-9]");
   if (!args.url) {
@@ -232,6 +285,14 @@ function normalize(args) {
   }
   args.move = args.moveText == null ? null : parseCell(args.moveText, "--move");
   args.budgetMs = args.timeout == null ? (args.poll ? 20000 : 0) : Math.min(Math.round(args.timeout * 1000), 3600 * 1000);
+  if (!args.playerId.trim()) {
+    if (args.playerIdFromFlag) throw new CliError("--player-id must not be empty");
+    args.playerId = loadOrCreatePlayerId();
+  }
+  if (!validPlayerId(args.playerId.trim())) {
+    throw new CliError("--player-id must be 1-80 characters of letters, digits, dot, underscore, colon, or dash");
+  }
+  args.playerId = args.playerId.trim();
 }
 
 async function textOf(data) {
@@ -506,14 +567,20 @@ async function connectAndJoin(args) {
   throw lastErr instanceof Error ? lastErr : new CliError("join failed");
 }
 
+function canConfigure(you, phase) {
+  if (!you || typeof you !== "object") return false;
+  if (phase && phase !== "lobby") return false;
+  return you.canConfig === true || you.role === "host";
+}
+
 async function maybeConfig(sock, joined, config) {
   if (!config) return;
   const you = joined.payload && joined.payload.you;
-  if (!you || you.role !== "host") {
-    console.error("not host; ignoring --config");
+  const phase = joined.payload && joined.payload.phase;
+  if (!canConfigure(you, phase)) {
+    console.error("not the config host; ignoring --config");
     return;
   }
-  if (joined.payload.phase && joined.payload.phase !== "lobby") return;
   sock.buf = sock.buf.filter((msg) => msg.type !== "room");
   sock.send("set_config", config);
   const msg = await sock.waitFor((item) => item.type === "room" || item.type === "error", 15000);
@@ -521,6 +588,30 @@ async function maybeConfig(sock, joined, config) {
     const message = String((msg.payload && msg.payload.message) || "");
     if (!/locked/i.test(message)) throw new CliError(message || "set_config failed");
   }
+}
+
+async function maybeClaim(sock, args, state, quiet = false) {
+  if (!args.seat) return;
+  const timeoutMs = args.budgetMs > 0 ? args.budgetMs : 15000;
+  sock.send("claim_seat", { seat: args.seat });
+  const msg = await sock.waitFor(
+    (item) => item.type === "seated" || item.type === "error",
+    timeoutMs,
+  );
+  if (msg.type === "error") {
+    const message = String((msg.payload && msg.payload.message) || "claim_seat failed");
+    throw new CliError(message);
+  }
+  const payload = msg.payload || {};
+  if (payload.you && typeof payload.you === "object") state.you = payload.you;
+  else if (state.you && typeof state.you === "object") {
+    state.you = { ...state.you, seat: payload.seat, role: payload.role, color: payload.seat };
+  }
+  if (!quiet) emit(args, state, "seated", { ok: true });
+}
+
+function isSpectator(state) {
+  return !state.you || state.you.seat === "spectator" || state.you.seat == null;
 }
 
 function stateFromJoined(args, joined) {
@@ -676,16 +767,12 @@ async function runInteractive(args) {
 async function interactiveSession(sock, lines, args, state, joined) {
   try {
     emit(args, state, "joined", { ok: true });
-    const you = state.you;
-    if (you && you.seat === "spectator") {
-      emit(args, state, "spectator", {
-        ok: false,
-        error: "Room is full. This connection is a spectator and will not receive your_turn.",
-      });
-      return { sock, lines, code: 1 };
-    }
     await maybeConfig(sock, joined, args.config);
+    await maybeClaim(sock, args, state);
     await sock.idle();
+    if (isSpectator(state)) {
+      emit(args, state, "spectator", { ok: true });
+    }
     while (true) {
       let msg;
       try {
@@ -725,6 +812,11 @@ async function interactiveSession(sock, lines, args, state, joined) {
           state.lastOpponentMove = opponentMove(sock.seen, args.playerId) ?? state.lastOpponentMove;
           emit(args, state, "game_over", { ok: true });
           return { sock, lines, code: 0 };
+        }
+        if (isSpectator(state)) {
+          state.lastOpponentMove = payload.action ?? state.lastOpponentMove;
+          emit(args, state, "watch", { ok: true });
+          continue;
         }
         if (typeof by === "string" && by !== args.playerId) emit(args, state, "opponent", { ok: true });
         continue;
@@ -772,18 +864,17 @@ function pollLine(args, state, event, extra = {}) {
 async function runPoll(args) {
   const { sock, joined } = await connectAndJoin(args);
   const state = stateFromJoined(args, joined);
-  const you = state.you;
-  if (you && you.seat === "spectator") {
+  await maybeConfig(sock, joined, args.config);
+  await maybeClaim(sock, args, state, true);
+  await sock.idle();
+  if (isSpectator(state)) {
     pollLine(args, state, "spectator", {
-      ok: false,
+      ok: true,
       mode: "poll",
       yourTurn: false,
-      error: "Room is full. This connection is a spectator and will not receive your_turn.",
     });
-    return { sock, code: 1 };
+    return { sock, code: 0 };
   }
-  await maybeConfig(sock, joined, args.config);
-  await sock.idle();
   const ackMs = Math.min(args.budgetMs > 0 ? args.budgetMs : 20000, 20000);
   if (!args.move) {
     const mark = sock.highWater();

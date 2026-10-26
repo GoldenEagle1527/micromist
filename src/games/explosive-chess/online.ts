@@ -26,7 +26,7 @@ export type RoomConfig = {
 export type ServerHandlers = {
   onWelcome?: CommonHandlers["onWelcome"];
   onRoom?: (payload: { players: RoomPlayer[]; config: RoomConfig; phase: Phase }) => void;
-  onGameStart?: (payload: { config: RoomConfig; yourColor: HostColor }) => void;
+  onGameStart?: (payload: { config: RoomConfig; yourColor: HostColor | null }) => void;
   onState?: (payload: {
     fullState: FullState;
     lastMove?: { row: number; col: number };
@@ -115,6 +115,10 @@ export class ExplosiveOnlineClient {
 
   move(row: number, col: number): boolean {
     return this.inner.send("move", { row, col });
+  }
+
+  claimSeat(seat: "red" | "blue"): boolean {
+    return this.inner.send("claim_seat", { seat });
   }
 
   surrender(): boolean {
