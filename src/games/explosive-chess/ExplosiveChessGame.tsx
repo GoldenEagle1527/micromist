@@ -52,7 +52,7 @@ import { ExplosiveChessPlay } from "./ExplosiveChessPlay";
 import { ExplosiveChessSetup } from "./ExplosiveChessSetup";
 
 export function ExplosiveChessGame() {
-  const { t } = useLocale();
+  const { locale, t } = useLocale();
   const ex = t.explosive;
   const tRef = useRef(t);
   tRef.current = t;
@@ -842,6 +842,7 @@ export function ExplosiveChessGame() {
   if (screen === "setup") {
     return (
       <ExplosiveChessSetup
+        locale={locale}
         ex={ex}
         settings={settings}
         setSettings={setSettings}
