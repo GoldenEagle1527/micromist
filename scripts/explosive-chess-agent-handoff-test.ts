@@ -103,6 +103,8 @@ c.section("served guide");
   c.check(composed.includes("--poll"), "banner names the poll fallback");
   c.check(composed.includes("create_room"), "guide documents create_room");
   c.check(composed.includes("join_room"), "guide documents join_room");
+  c.check(composed.includes("claim_seat"), "guide documents claim_seat");
+  c.check(composed.includes("explosive-chess-player-id"), "guide documents the local playerId file");
   c.check(composed.includes("stdin"), "guide reads moves from stdin");
   c.check(composed.includes("retired"), "one-shot client is retired in the guide");
   c.check(composed.includes("your_turn"), "protocol your_turn kept");
@@ -611,6 +613,7 @@ type EventLine = {
   roomCode?: string;
   board?: unknown;
   result?: { winnerColor?: string };
+  you?: { seat?: string; role?: string };
 };
 
 function startSession(command: string, args: string[]) {
@@ -690,7 +693,8 @@ c.section("official clients");
     ["node", nodeSrc.toString("utf8")],
     ["python", pySrc.toString("utf8")],
   ] as const) {
-    c.check(src.includes("create_room") && src.includes("join_room"), `${name} has create_room and join_room`);
+    c.check(src.includes("create_room") && src.includes("join_room") && src.includes("claim_seat"), `${name} has create_room, join_room, and claim_seat`);
+    c.check(src.includes("explosive-chess-player-id"), `${name} stores playerId locally`);
     c.check(src.includes("kind") && src.includes('"agent"'), `${name} joins as kind agent`);
     c.check(!src.includes("minimax") && !src.includes("mcts") && !src.includes("Math.random"), `${name} has no move search`);
     c.check(!src.includes("legalActions[0]") && !src.includes("random.choice"), `${name} does not pick a legal action`);
@@ -700,9 +704,10 @@ c.section("official clients");
 
   const nodeHelp = await runClient(process.execPath, [`${CLIENT_DIR}/cli.mjs`, "--help"]);
   c.check(nodeHelp.code === 0 && nodeHelp.stdout.includes("no chess strength"), "node help");
-  c.check(nodeHelp.stdout.includes("create_room") && nodeHelp.stdout.includes("join_room"), "node help shows the commands");
+  c.check(nodeHelp.stdout.includes("create_room") && nodeHelp.stdout.includes("join_room") && nodeHelp.stdout.includes("claim_seat"), "node help shows the commands");
   const pyHelp = await runClient("python3", [`${CLIENT_DIR}/cli.py`, "--help"]);
   c.check(pyHelp.code === 0 && pyHelp.stdout.includes("no chess strength"), "python help");
+  c.check(pyHelp.stdout.includes("claim_seat") && pyHelp.stdout.includes("explosive-chess-player-id"), "python help shows claim_seat and the local playerId");
   const nodeUsage = await runClient(process.execPath, [`${CLIENT_DIR}/cli.mjs`, "--player-id", "agent-1"]);
   const nodeUsageJson = JSON.parse(nodeUsage.stdout) as { ok?: boolean; error?: string };
   c.check(nodeUsage.code === 1 && nodeUsageJson.ok === false && (nodeUsageJson.error ?? "").includes("create_room"), "node usage error is json");
@@ -721,6 +726,9 @@ c.section("official clients");
   ]);
   const nodeMoveJson = JSON.parse(nodeMove.stdout) as { error?: string };
   c.check(nodeMove.code === 1 && (nodeMoveJson.error ?? "").includes("--poll"), "interactive client rejects a one-shot --move");
+  const nodeClaim = await runClient(process.execPath, [`${CLIENT_DIR}/cli.mjs`, "--origin", "http://127.0.0.1:9", "--player-id", "agent-1", "claim_seat", "-c", "abc"]);
+  const nodeClaimJson = JSON.parse(nodeClaim.stdout) as { error?: string };
+  c.check(nodeClaim.code === 1 && (nodeClaimJson.error ?? "").includes("--seat"), "claim_seat requires --seat");
 
   const base = (port: number) => ["--origin", `http://127.0.0.1:${port}`, "--player-id", "agent-1", "--name", "Agent", "--timeout", "5"];
 
@@ -819,6 +827,76 @@ c.section("official clients");
       c.check(mock.inbound.some((msg) => msg.type === "set_config"), "node host sends set_config");
       c.check(mock.inbound.every((msg) => msg.type !== "move"), "node host does not invent a move");
       c.check(!session.exited(), "node host stays up after config");
+    } finally {
+      await session.close();
+      await mock.close();
+    }
+  }
+
+  {
+    const mock = await listenMock((msg, send) => {
+      if (msg.type === "join") {
+        send({
+          type: "joined",
+          payload: {
+            roomCode: "abc",
+            phase: "lobby",
+            reclaimed: false,
+            you: {
+              playerId: "agent-1",
+              name: "Agent",
+              seat: "spectator",
+              role: "spectator",
+              kind: "agent",
+              color: null,
+              canConfig: true,
+            },
+          },
+        });
+      }
+      if (msg.type === "set_config") send({ type: "room", payload: { phase: "lobby" } });
+      if (msg.type === "claim_seat") {
+        send({
+          type: "seated",
+          payload: {
+            seat: msg.payload?.seat,
+            role: "host",
+            changed: true,
+            you: {
+              playerId: "agent-1",
+              name: "Agent",
+              seat: "red",
+              role: "host",
+              kind: "agent",
+              color: "red",
+              canConfig: true,
+            },
+          },
+        });
+        setTimeout(() => send(yourTurnMessage()), 30);
+      }
+    });
+    const session = startSession(process.execPath, [
+      `${CLIENT_DIR}/cli.mjs`,
+      ...base(mock.port),
+      "--config",
+      '{"boardSize":9,"winMode":"steps","winParam":4,"hostColor":"red"}',
+      "--seat",
+      "red",
+      "claim_seat",
+      "-c",
+      "abc",
+    ]);
+    try {
+      await session.waitFor((rows) => rows.some((row) => row.event === "seated") && rows.some((row) => row.event === "your_turn"));
+      const types = mock.inbound.map((msg) => msg.type);
+      c.check(
+        types.indexOf("join") < types.indexOf("set_config") && types.indexOf("set_config") < types.indexOf("claim_seat"),
+        "node sends join, then set_config, then claim_seat",
+      );
+      c.check(mock.inbound.some((msg) => msg.type === "claim_seat" && msg.payload?.seat === "red"), "node claim_seat asks for red");
+      const seated = session.lines.find((row) => row.event === "seated");
+      c.check(seated?.you?.seat === "red" && seated.you.role === "host", "seated line reports the claimed seat");
     } finally {
       await session.close();
       await mock.close();

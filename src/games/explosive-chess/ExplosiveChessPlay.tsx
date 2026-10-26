@@ -1,11 +1,11 @@
 import type { MutableRefObject, RefObject } from "react";
 import type { GameInstance, MoveResult, PlayerColor } from "./engine";
-import type { Phase } from "./online";
 import type { BoardRenderer } from "./boardRenderer";
 import { clearLocalProgress } from "../local-persist";
 import { colorLabel, formatWinReason, winnerLabel } from "./labels";
+import { SeatRoster } from "./SeatRoster";
+import { getOrCreatePlayerId, type ExplosiveOnlineClient, type Phase, type RoomPlayer } from "./online";
 import { SOLO_PROGRESS_SLUG, type Settings, type SoloPersist } from "./settings";
-import type { ExplosiveOnlineClient } from "./online";
 
 export type ExplosiveChessPlayProps = {
   ex: Record<string, string>;
@@ -38,6 +38,8 @@ export type ExplosiveChessPlayProps = {
   setScreen: (s: "setup" | "playing") => void;
   destroyBoard: () => void;
   handlePointer: (x: number, y: number) => void;
+  onlinePlayers: RoomPlayer[];
+  claimSeat: (seat: "red" | "blue") => void;
 };
 
 export function ExplosiveChessPlay(p: ExplosiveChessPlayProps) {
@@ -72,6 +74,8 @@ export function ExplosiveChessPlay(p: ExplosiveChessPlayProps) {
     setScreen,
     destroyBoard,
     handlePointer,
+    onlinePlayers,
+    claimSeat,
   } = p;
   const t = { explosive: tExplosive };
   return (
@@ -97,6 +101,8 @@ export function ExplosiveChessPlay(p: ExplosiveChessPlayProps) {
             <span>
               {ex.you}：{colorLabel(myColor, ex)}
             </span>
+          ) : settings.opponent === "online" ? (
+            <span>{ex.youAreSpectator}</span>
           ) : null}
         </div>
         <p className="hint" style={{ marginTop: "0.5rem" }}>
@@ -131,12 +137,12 @@ export function ExplosiveChessPlay(p: ExplosiveChessPlayProps) {
               {ex.reconnect}
             </button>
           ) : null}
-          {settings.opponent === "online" && onlinePhase === "playing" ? (
+          {settings.opponent === "online" && onlinePhase === "playing" && myColor != null ? (
             <button type="button" className="ghost" onClick={() => clientRef.current?.surrender()}>
               {ex.surrender}
             </button>
           ) : null}
-          {settings.opponent === "online" && onlinePhase === "over" ? (
+          {settings.opponent === "online" && onlinePhase === "over" && myColor != null ? (
             <button
               type="button"
               className="primary"
@@ -150,6 +156,15 @@ export function ExplosiveChessPlay(p: ExplosiveChessPlayProps) {
             </button>
           ) : null}
         </div>
+        {settings.opponent === "online" && onlinePlayers.length > 0 ? (
+          <SeatRoster
+            ex={ex}
+            players={onlinePlayers}
+            myPlayerId={getOrCreatePlayerId()}
+            phase={onlinePhase}
+            onClaim={claimSeat}
+          />
+        ) : null}
       </div>
 
       <div className="explosive-board glass">
