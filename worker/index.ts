@@ -1,6 +1,6 @@
 import { parseRoomId } from "../shared/multiplayer";
 import { handleAgentGuide } from "./agent-guide";
-import { routeExplosiveChessMcp, ExplosiveChessMcp } from "./explosive-chess-mcp";
+import { ExplosiveChessMcp } from "./explosive-chess-mcp";
 import { GameRoom } from "./game-room";
 
 export { GameRoom, ExplosiveChessMcp };
@@ -29,11 +29,20 @@ export default {
       if (guide) return guide;
     }
 
-    // Explosive-chess MCP facade. GameRoom remains the room protocol.
-    // chroma-slide and any other slug 404 here.
+    // Former explosive-chess MCP path. The session class stays exported for the
+    // existing Durable Object migration, but this host does not serve MCP.
+    // Keep the path on run_worker_first so the SPA shell is not returned here.
     if (url.pathname === "/mcp" || url.pathname.startsWith("/mcp/")) {
-      const mcp = await routeExplosiveChessMcp(request, env);
-      if (mcp) return mcp;
+      return new Response(
+        "No MCP server on this host.\nExplosive-chess agents use the official clients linked from /agent-guide/explosive-chess.\n",
+        {
+          status: 404,
+          headers: {
+            "content-type": "text/plain; charset=utf-8",
+            "cache-control": "no-store",
+          },
+        },
+      );
     }
 
     const roomId = roomIdFromPath(url.pathname);

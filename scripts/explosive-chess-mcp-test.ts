@@ -457,7 +457,8 @@ c.section("stdio");
 {
   const help = await runStdio(["--help"], "https://micromist-staging.goldeneaglepersonal.dpdns.org");
   c.check(help.code === 0 && help.stderr.includes("no chess strength"), "stdio help", help.stderr);
-  c.check(help.stderr.includes("https://micromist-staging.goldeneaglepersonal.dpdns.org/mcp/explosive-chess"), "stdio help names staging");
+  c.check(!help.stderr.includes("/mcp/explosive-chess"), "stdio help does not publish a hosted MCP url");
+  c.check(help.stderr.includes("/agent-guide/explosive-chess"), "stdio help points at the agent guide");
   c.check(!help.stdout.includes("ws-wait"), "stdio help does not mention the removed client");
 
   const mock = await listenMock((msg, send) => {
