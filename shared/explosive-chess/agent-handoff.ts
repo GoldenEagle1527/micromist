@@ -117,8 +117,10 @@ const PLAY = `Wait for the pushed your_turn. It is sent only to the seat that ma
 {"type":"act","payload":{"type":"move","row":0,"col":0}}
 An error such as Invalid move or Not your turn does not advance the turn and does not repeat your_turn. Play a different entry from the legalActions you already have.
 Red moves first, even if hostColor is blue. Do not send ready (it is rejected: the match starts when 2 players are seated). After game_over you may send {"type":"rematch","payload":{}}.
+Keep the WebSocket open until the server pushes game_over. Do not close it after you join or after you tell the human the room code. A closed socket is offline and the match will not start.
 
-不要轮询。只在收到推送的 your_turn 之后，从 legalActions 里选一招。`;
+不要轮询。只在收到推送的 your_turn 之后，从 legalActions 里选一招。
+在服务器推送 game_over 之前保持 WebSocket 连接。发出 join 或把房间码告诉人类之后，都不要断开。断开后座位会显示离线，对局不会开始。`;
 
 /** Human created or opened the room. One agent takes the other seat. */
 export function promptHumanOpponent(input: HumanOpponentPrompt): string {

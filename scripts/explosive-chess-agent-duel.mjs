@@ -2,6 +2,7 @@
 /**
  * Two explosive-chess agents on one room WebSocket.
  * They wait on server pushes (no sleep loop). Host sets a 4-step match so it ends.
+ * Both sockets stay open until game_over. Closing the host after join marks that seat offline.
  *
  *   node scripts/explosive-chess-agent-duel.mjs ws://127.0.0.1:8787
  *   node scripts/explosive-chess-agent-duel.mjs wss://micromist-staging.goldeneaglepersonal.dpdns.org

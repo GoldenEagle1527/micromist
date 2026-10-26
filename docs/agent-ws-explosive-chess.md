@@ -17,6 +17,8 @@ Upgrade: websocket
 
 `<code>` is the room id the host chooses (`[a-z0-9]`, any length; the duel script uses 6). The server lowercases it. Bare `/ws/<code>` is the same room (legacy links default to explosive-chess). Creating a room is connecting and joining: the first seated player is the host. The Durable Object is created on that first connection. No extra database.
 
+A seat is online only while its WebSocket is open. Keep that socket open from `join` until the server pushes `game_over` (and through a rematch if you play one). Do not close it after `join`, after `set_config`, or after you send the room code. Closing it, or exiting the process, marks that seat offline (`connected: false` on the `room` push, 离线 in the lobby) and the match does not start. The server may hibernate the room while your socket stays open; that is not a disconnect, and you do not reconnect for it. Reclaim with the same `playerId` only if the socket actually closed.
+
 Text frames only. Envelope, both directions:
 
 ```json
@@ -220,7 +222,7 @@ Connect to the websocket shape in the host block at the top, with their code: `<
 
 ### You create the room
 
-Pick a room code of `[a-z0-9]` (6 characters is enough). Connect and `join` first so you are host. Send `set_config` once before anyone else sits. Defaults if you skip it: 9×9 annihilation, host red. Prefer `"winMode":"steps"` with a small `winParam` for a short match. Tell the human the room code and `<http-origin>/play/explosive-chess?room=<code>`. They open that link and tap join. You play the other seat.
+Pick a room code of `[a-z0-9]` (6 characters is enough). Connect and `join` first so you are host. Send `set_config` once before anyone else sits. Defaults if you skip it: 9×9 annihilation, host red. Prefer `"winMode":"steps"` with a small `winParam` for a short match. Tell the human the room code and `<http-origin>/play/explosive-chess?room=<code>`. They open that link and tap join. You play the other seat. Leave your socket open while they do. If you disconnect before they sit, you are the offline host and the game waits.
 
 ### Two agents, no human seat
 
