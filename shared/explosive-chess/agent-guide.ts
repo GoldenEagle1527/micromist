@@ -6,14 +6,13 @@
 
 export const EXPLOSIVE_CHESS_AGENT_GUIDE_PATH = "/agent-guide/explosive-chess";
 
-export const EXPLOSIVE_CHESS_CLIENT_DIR = "/agent-clients/explosive-chess";
+/** Streamable HTTP MCP. The session behind this URL holds the room WebSocket. */
+export const EXPLOSIVE_CHESS_MCP_PATH = "/mcp/explosive-chess";
 
-export const explosiveChessClients = {
-  nodeWait: `${EXPLOSIVE_CHESS_CLIENT_DIR}/ws-wait.mjs`,
-  nodePoll: `${EXPLOSIVE_CHESS_CLIENT_DIR}/ws-poll.mjs`,
-  pythonWait: `${EXPLOSIVE_CHESS_CLIENT_DIR}/ws_wait.py`,
-  pythonPoll: `${EXPLOSIVE_CHESS_CLIENT_DIR}/ws_poll.py`,
-} as const;
+/** Legacy HTTP+SSE entry. Same session as the Streamable HTTP path. */
+export const EXPLOSIVE_CHESS_MCP_SSE_PATH = "/mcp/explosive-chess/sse";
+
+export type ExplosiveChessMcpPath = "stream" | "sse";
 
 export type AgentLocale = "zh" | "en";
 
@@ -121,14 +120,35 @@ export function explosiveChessGuideUrl(origin: string, locale: AgentLocale = "en
   return `${wsOriginFromHttp(origin).httpOrigin}${EXPLOSIVE_CHESS_AGENT_GUIDE_PATH}/${locale}`;
 }
 
-export function explosiveChessClientUrl(origin: string, path: string): string {
-  return `${wsOriginFromHttp(origin).httpOrigin}${path}`;
+export function explosiveChessMcpUrl(origin: string): string {
+  return `${wsOriginFromHttp(origin).httpOrigin}${EXPLOSIVE_CHESS_MCP_PATH}`;
+}
+
+export function explosiveChessPlayUrl(origin: string, roomCode: string): string {
+  const code = roomCode.trim().toLowerCase();
+  return `${wsOriginFromHttp(origin).httpOrigin}/play/explosive-chess?room=${code}`;
 }
 
 /** `wss://<host>/ws/explosive-chess:<code>` — colon stays literal so agents can paste it. */
 export function explosiveChessWsUrl(origin: string, roomCode: string): string {
   const code = roomCode.trim().toLowerCase();
   return `${wsOriginFromHttp(origin).wsOrigin}/ws/explosive-chess:${code}`;
+}
+
+/**
+ * HTTP URL of the same room path. Workers dial it with `Upgrade: websocket`
+ * (fetch does not take the `ws:` scheme). Node's WebSocket uses `explosiveChessWsUrl`.
+ */
+export function explosiveChessRoomHttpUrl(origin: string, roomCode: string): string {
+  const code = roomCode.trim().toLowerCase();
+  return `${wsOriginFromHttp(origin).httpOrigin}/ws/explosive-chess:${code}`;
+}
+
+export function matchExplosiveChessMcpPath(pathname: string): ExplosiveChessMcpPath | null {
+  const path = stripTrailingSlash(pathname);
+  if (path === EXPLOSIVE_CHESS_MCP_PATH) return "stream";
+  if (path === EXPLOSIVE_CHESS_MCP_SSE_PATH) return "sse";
+  return null;
 }
 
 export type ExplosiveRoomEndpoints = {
@@ -153,15 +173,6 @@ export function explosiveChessRoomEndpoints(
   };
 }
 
-function clientLines(httpOrigin: string): string[] {
-  return [
-    `- node wait: ${httpOrigin}${explosiveChessClients.nodeWait}`,
-    `- node poll: ${httpOrigin}${explosiveChessClients.nodePoll}`,
-    `- python wait: ${httpOrigin}${explosiveChessClients.pythonWait}`,
-    `- python poll: ${httpOrigin}${explosiveChessClients.pythonPoll}`,
-  ];
-}
-
 /** Prepend the host that actually served this response. The protocol body is one language. */
 export function composeAgentGuide(
   origin: string,
@@ -170,24 +181,23 @@ export function composeAgentGuide(
 ): string {
   const ends = wsOriginFromHttp(origin);
   const guideUrl = explosiveChessGuideUrl(ends.httpOrigin, locale);
-  const clients = clientLines(ends.httpOrigin);
+  const mcpUrl = explosiveChessMcpUrl(ends.httpOrigin);
   const banner =
     locale === "zh"
       ? [
           "# 当前站点",
           "",
-          "下面的 origin 就是这份响应所在的环境（staging、production 或 local）。WebSocket 和官方客户端下载都用同一 host。这是中文指南。爆炸棋设置页（`/play/explosive-chess`）上的提示会让你先读与界面语言一致的指南，再问人类：对下、由你建房，还是已有房间码。若提示里已经写了 WebSocket URL，以那个 URL 为准。房间前缀是 `explosive-chess:`。",
+          "下面的 origin 就是这份响应所在的环境（staging、production 或 local）。MCP 和房间都用同一 host。这是中文指南。爆炸棋设置页（`/play/explosive-chess`）上的提示会让你先读与界面语言一致的指南，连接 MCP，再问人类：对下、由你建房，还是已有房间码。房间前缀是 `explosive-chess:`。chroma-slide 没有 MCP。",
           "",
-          "每一手都由你自己决定。官方客户端只负责连接、发送你选定的着法、等待服务器推送。它们没有棋力。没有 MCP。",
+          "每一手都由你自己决定。MCP 只是房间 WebSocket 上的薄封装：它握着连接、发送你选定的着法、等待服务器推送。它没有棋力。不要自己编写 WebSocket 客户端。",
           "",
           `- origin: ${ends.httpOrigin}`,
           `- host: ${ends.host}`,
           `- agent guide: ${guideUrl}`,
           `- markdown: ${guideUrl}.md`,
-          ...clients,
-          `- websocket: ${ends.wsOrigin}/ws/explosive-chess:<code>`,
-          "- Upgrade: websocket",
-          "- 没有 MCP",
+          `- mcp: ${mcpUrl}`,
+          `- mcp sse: ${ends.httpOrigin}${EXPLOSIVE_CHESS_MCP_SSE_PATH}`,
+          `- websocket (MCP holds it): ${ends.wsOrigin}/ws/explosive-chess:<code>`,
           "",
           "---",
           "",
@@ -195,18 +205,17 @@ export function composeAgentGuide(
       : [
           "# This host",
           "",
-          "The origin below is the deployment that served this Agent Guide. Use the same host for the WebSocket and the official client downloads. This page is English. The prompt on the explosive-chess setup page (`/play/explosive-chess`) tells you to read this guide, then ask the human whether to play them, create a room, or use a room code they already have. If the pasted prompt already contains a websocket URL, use that exact URL. Room id prefix: `explosive-chess:`.",
+          "The origin below is the deployment that served this Agent Guide. Use the same host for MCP. This page is English. The prompt on the explosive-chess setup page (`/play/explosive-chess`) tells you to read this guide, connect MCP, then ask the human whether to play them, create a room, or use a room code they already have. Room id prefix: `explosive-chess:`. chroma-slide has no MCP.",
           "",
-          "You choose every move. The official clients only connect, send the move you chose, and wait for the server push. They have no chess strength. There is no MCP.",
+          "You choose every move. MCP is a thin facade over the room WebSocket: it holds the socket, sends the move you chose, and waits for the server push. It has no chess strength. Do not write your own WebSocket client.",
           "",
           `- origin: ${ends.httpOrigin}`,
           `- host: ${ends.host}`,
           `- agent guide: ${guideUrl}`,
           `- markdown: ${guideUrl}.md`,
-          ...clients,
-          `- websocket: ${ends.wsOrigin}/ws/explosive-chess:<code>`,
-          "- Upgrade: websocket",
-          "- no MCP",
+          `- mcp: ${mcpUrl}`,
+          `- mcp sse: ${ends.httpOrigin}${EXPLOSIVE_CHESS_MCP_SSE_PATH}`,
+          `- websocket (MCP holds it): ${ends.wsOrigin}/ws/explosive-chess:<code>`,
           "",
           "---",
           "",
@@ -350,8 +359,8 @@ export function renderAgentGuideHtml(
   const title = locale === "zh" ? "爆炸棋 Agent Guide" : "explosive-chess Agent Guide";
   const description =
     locale === "zh"
-      ? "爆炸棋 WebSocket Agent 指南：kind agent、your_turn、legalActions。没有 MCP。"
-      : "explosive-chess WebSocket agent guide: join kind agent, your_turn, legalActions. No MCP.";
+      ? "爆炸棋 Agent MCP：create_room、join_room、wait_for_turn、take_turn。着法来自 legalActions。"
+      : "explosive-chess agent MCP: create_room, join_room, wait_for_turn, take_turn. Moves come from legalActions.";
   const otherLabel = locale === "zh" ? "English" : "中文";
   const otherLink = alternateUrl
     ? ` · <a href="${escAttr(alternateUrl)}">${escText(otherLabel)}</a>`
@@ -384,7 +393,7 @@ export function renderAgentGuideHtml(
 </head>
 <body>
 <main>
-<p class="banner">Agent Guide · explosive-chess · <a href="${raw}">text/markdown</a>${otherLink} · no MCP</p>
+<p class="banner">Agent Guide · explosive-chess · <a href="${raw}">text/markdown</a>${otherLink} · MCP</p>
 ${body}
 </main>
 </body>
@@ -446,7 +455,7 @@ export function agentGuideHttpResponse(request: Request, protocols: AgentGuidePr
       `explosive-chess agent guide (zh): ${url.origin}${EXPLOSIVE_CHESS_AGENT_GUIDE_PATH}/zh`,
       `markdown (en): ${url.origin}${EXPLOSIVE_CHESS_AGENT_GUIDE_PATH}/en.md`,
       `markdown (zh): ${url.origin}${EXPLOSIVE_CHESS_AGENT_GUIDE_PATH}/zh.md`,
-      `clients: ${url.origin}${EXPLOSIVE_CHESS_CLIENT_DIR}/`,
+      `mcp: ${url.origin}${EXPLOSIVE_CHESS_MCP_PATH}`,
       "",
     ].join("\n");
     return new Response(request.method === "HEAD" ? null : body, { status: 200, headers });
