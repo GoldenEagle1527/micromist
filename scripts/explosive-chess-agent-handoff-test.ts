@@ -140,6 +140,7 @@ c.section("served guide");
     composed.includes("reusedRoom") && composed.includes("you.canConfig") && composed.includes("websocket closed"),
     "english guide covers an existing room, canConfig, and reconnect",
   );
+  c.check(composed.includes("effects") && !composed.includes("only with `--verbose`"), "english guide shows board and effects without --verbose");
   c.check(composed.includes("/wait?event=your_turn"), "english guide waits with curl /wait");
   c.check(composed.includes('POST /move'), "english guide sends moves with POST /move");
 
@@ -168,6 +169,7 @@ c.section("served guide");
     composedZh.includes("reusedRoom") && composedZh.includes("websocket closed") && composedZh.includes("/wait?event=your_turn"),
     "chinese guide covers an existing room, reconnect, and curl /wait",
   );
+  c.check(composedZh.includes("effects") && !composedZh.includes("--verbose"), "chinese guide shows board and effects without --verbose");
 
   const html = renderAgentGuideHtml(composed, `${origin}/agent-guide/explosive-chess/en.md`, "en", `${origin}/agent-guide/explosive-chess/zh`);
   const text = html.replace(/<[^>]+>/g, " ");
@@ -670,7 +672,8 @@ type EventLine = {
   lastOpponentMove?: { row?: number; col?: number } | null;
   mode?: string;
   roomCode?: string;
-  board?: unknown;
+  board?: Array<Array<{ count?: number; color?: string }>> | null;
+  effects?: Array<{ exploded?: { row?: number; col?: number }; spread?: Array<{ row?: number; col?: number }> }>;
   result?: { winnerColor?: string };
   canConfig?: boolean;
   reusedRoom?: boolean;
@@ -856,7 +859,7 @@ c.section("official clients");
       c.check(session.lines.findIndex((row) => row.event === "joined") < session.lines.findIndex((row) => row.event === "listening"), "node prints listening after join");
       await session.waitFor((rows) => rows.some((row) => row.event === "your_turn"));
       const turnLine = session.lines.find((row) => row.event === "your_turn");
-      c.check(turnLine != null && !("board" in turnLine), "node your_turn omits the board");
+      c.check(Array.isArray(turnLine?.board) && Array.isArray(turnLine?.effects), "node your_turn includes board and effects");
       c.check((session.lines.find((row) => row.event === "your_turn")?.legalActions ?? []).length === 2, "node copies every legal action");
       c.check(mock.inbound.every((msg) => msg.type !== "move"), "node does not send a move before /move");
       c.check(mock.inbound.some((msg) => msg.payload?.kind === "agent"), "node join kind is agent");
@@ -1163,6 +1166,103 @@ c.section("official clients");
       await mock.close();
     }
   }
+
+  function cornerExplosionBoard() {
+    const rows: Array<Array<{ row: number; col: number; count: number; color: string; capacity: number }>> = [];
+    for (let row = 0; row < 9; row++) {
+      const line = [];
+      for (let col = 0; col < 9; col++) {
+        const edge = row === 0 || row === 8 || col === 0 || col === 8;
+        const corner = (row === 0 || row === 8) && (col === 0 || col === 8);
+        line.push({ row, col, count: 0, color: "empty", capacity: corner ? 2 : edge ? 3 : 4 });
+      }
+      rows.push(line);
+    }
+    rows[8]![0] = { row: 8, col: 0, count: 0, color: "blue", capacity: 2 };
+    rows[7]![0] = { row: 7, col: 0, count: 1, color: "blue", capacity: 3 };
+    rows[8]![1] = { row: 8, col: 1, count: 1, color: "blue", capacity: 3 };
+    return rows;
+  }
+
+  async function runExplosion(command: string, script: string, label: string, mode: "frames" | "field") {
+    const board = cornerExplosionBoard();
+    const effect = {
+      exploded: { row: 8, col: 0 },
+      spread: [
+        { row: 7, col: 0 },
+        { row: 8, col: 1 },
+      ],
+    };
+    const mock = await listenMock((msg, send) => {
+      if (msg.type !== "join") return;
+      send(joinedMessage());
+      send(yourTurnMessage());
+      if (mode === "frames") {
+        send({
+          type: "state",
+          payload: {
+            fullState: { counts: Array.from({ length: 81 }, () => 0) },
+            lastMove: { row: 8, col: 0 },
+            animationFrames: [{ explodedCell: 72, affectedCells: [63, 73] }],
+          },
+        });
+      }
+      send({
+        type: "move_applied",
+        payload: {
+          action: { type: "move", row: 8, col: 0 },
+          by: { playerId: "human-1" },
+          publicState: { turn: "blue", board },
+          ...(mode === "field" ? { effects: [effect] } : {}),
+          gameOver: false,
+        },
+      });
+      send({
+        type: "your_turn",
+        payload: {
+          observation: {
+            phase: "playing",
+            you: seat,
+            publicState: { turn: "blue", board },
+            legalActions: [{ type: "move", row: 0, col: 0 }],
+            ...(mode === "field" ? { effects: [effect] } : {}),
+          },
+        },
+      });
+    });
+    const session = startSession(command, [script, ...base(mock.port), "join_room", "-c", "abc"]);
+    try {
+      await session.waitFor((rows) => rows.filter((row) => row.event === "your_turn").length >= 2);
+      const turn = session.lines.filter((row) => row.event === "your_turn").at(-1);
+      const opponent = session.lines.find((row) => row.event === "opponent");
+      c.check(opponent?.lastOpponentMove?.row === 8 && opponent.lastOpponentMove?.col === 0, `${label} lastOpponentMove is the placement`);
+      const seen = turn?.effects?.[0];
+      c.check(seen?.exploded?.row === 8 && seen?.exploded?.col === 0, `${label} your_turn names the exploded cell`);
+      const spread = seen?.spread ?? [];
+      c.check(
+        spread.some((cell) => cell.row === 7 && cell.col === 0) && spread.some((cell) => cell.row === 8 && cell.col === 1),
+        `${label} spread lists 7,0 and 8,1`,
+      );
+      c.check(turn?.board?.[8]?.[0]?.count === 0 && turn.board?.[8]?.[0]?.color === "blue", `${label} board shows the corner emptied but still blue`);
+      c.check(turn?.board?.[7]?.[0]?.count === 1 && turn.board?.[7]?.[0]?.color === "blue", `${label} board shows 7,0`);
+      c.check(turn?.board?.[8]?.[1]?.count === 1 && turn.board?.[8]?.[1]?.color === "blue", `${label} board shows 8,1`);
+      c.check(opponent?.effects?.[0]?.exploded?.row === 8 && opponent.effects?.[0]?.exploded?.col === 0, `${label} opponent line includes the explosion`);
+      const api = session.lines.find((row) => row.event === "listening")?.base ?? "";
+      const state = await httpJson(api, "/state");
+      c.check(
+        state.status === 200 && state.body.board?.[8]?.[0]?.count === 0 && state.body.effects?.[0]?.exploded?.col === 0,
+        `${label} GET /state includes the post-explosion board`,
+      );
+    } finally {
+      await session.close();
+      await mock.close();
+    }
+  }
+
+  await runExplosion(process.execPath, `${CLIENT_DIR}/server.mjs`, "node frames", "frames");
+  await runExplosion("python3", `${CLIENT_DIR}/server.py`, "python frames", "frames");
+  await runExplosion(process.execPath, `${CLIENT_DIR}/server.mjs`, "node effects", "field");
+  await runExplosion("python3", `${CLIENT_DIR}/server.py`, "python effects", "field");
 
   {
     const mock = await listenMock((msg, send, path) => {
