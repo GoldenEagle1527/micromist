@@ -6,6 +6,7 @@
 import { COLOR_BLUE, COLOR_RED, WIN_MODE_ANNIHILATION, createGame } from "../shared/explosive-chess/engine";
 import {
   buildExplosiveObservation,
+  effectsFromAnimationFrames,
   legalMoveActions,
   winnerColorName,
   type ExplosivePublicConfig,
@@ -89,6 +90,48 @@ c.section("observation");
   c.check(lobby.legalActions.length === 0, "no actions before start");
   c.check(winnerColorName(COLOR_RED) === "red" && winnerColorName("draw") === "draw", "winner color names");
   c.check(winnerColorName(null) === null, "missing winner");
+  c.check(lobby.effects.length === 0, "no explosions before start");
+}
+
+c.section("corner explosion");
+{
+  const game = createGame({ boardSize: 9, winMode: WIN_MODE_ANNIHILATION });
+  const opened = game.makeMove(0, 0, COLOR_RED);
+  c.check(opened !== null && opened.animationFrames.length === 0, "opening placement does not explode");
+  const stacked = game.makeMove(8, 0, COLOR_BLUE);
+  c.check(stacked !== null && stacked.animationFrames.length === 0, "first corner orb does not explode");
+  game.makeMove(0, 1, COLOR_RED);
+  const boom = game.makeMove(8, 0, COLOR_BLUE);
+  c.check(boom !== null && boom.animationFrames.length === 1, "second orb on the corner explodes");
+  const effects = effectsFromAnimationFrames(boom?.animationFrames, 9);
+  c.check(effects.length === 1 && effects[0]?.exploded.row === 8 && effects[0]?.exploded.col === 0, "effect names 8,0");
+  const spread = effects[0]?.spread ?? [];
+  c.check(
+    spread.some((cell) => cell.row === 7 && cell.col === 0) && spread.some((cell) => cell.row === 8 && cell.col === 1),
+    "orbs spread to 7,0 and 8,1",
+  );
+  const corner = game.getCell(8, 0);
+  c.check(corner.count === 0 && corner.color === COLOR_BLUE, "exploded corner keeps blue at count 0");
+  c.check(game.getCell(7, 0).count === 1 && game.getCell(7, 0).color === COLOR_BLUE, "7,0 received a blue orb");
+  c.check(game.getCell(8, 1).count === 1 && game.getCell(8, 1).color === COLOR_BLUE, "8,1 received a blue orb");
+
+  const obs = buildExplosiveObservation({
+    phase: "playing",
+    you: redYou,
+    config,
+    game,
+    effects,
+  });
+  c.check(obs.publicState.turn === "red", "red is to move after the explosion");
+  c.check(obs.publicState.board[8]?.[0]?.count === 0 && obs.publicState.board[8]?.[0]?.color === "blue", "board shows the emptied corner");
+  c.check(obs.publicState.board[7]?.[0]?.count === 1 && obs.publicState.board[7]?.[0]?.color === "blue", "board shows 7,0");
+  c.check(obs.publicState.board[8]?.[1]?.count === 1 && obs.publicState.board[8]?.[1]?.color === "blue", "board shows 8,1");
+  c.check(obs.effects[0]?.exploded.row === 8 && obs.effects[0]?.exploded.col === 0, "observation carries the explosion");
+  c.check(!obs.legalActions.some((action) => action.row === 8 && action.col === 0), "red cannot place on the still-blue corner");
+  c.check(!obs.legalActions.some((action) => action.row === 7 && action.col === 0), "red cannot place on 7,0");
+  c.check(!obs.legalActions.some((action) => action.row === 8 && action.col === 1), "red cannot place on 8,1");
+  const missed = 81 - obs.legalActions.length;
+  c.check(missed === 3, "only the exploded corner and its two neighbors are closed", String(missed));
 }
 
 c.finish();
