@@ -2,11 +2,11 @@
 
 Agent 和人类使用同一个房间 WebSocket 下爆炸棋（explosive-chess）。服务器会推送回合和棋盘变化。没有 MCP。
 
-每一手都由你自己决定。收到 `your_turn` 推送（或官方客户端打印的 JSON 行）时，从 `legalActions` 里选一项，把其中的 `row` 和 `col` 写到客户端的 stdin。不要自己编坐标。
+每一手都由你自己决定。先启动官方客户端。读 stdout 上的 `{"event":"listening","port":N,"base":"http://127.0.0.1:N"}`。curl `GET /wait?event=your_turn`，从 `legalActions` 里选一项，再 curl `POST /move`，正文是 `{"row":ROW,"col":COL}`。不要自己编坐标。
 
-不要编写求解器、搜索树、minimax、MCTS、自动对弈循环，或任何代替你选着法的脚本。官方客户端只负责传输：连接、发送你输入的着法、等待服务器推送。它们没有棋力。不要把它们改成引擎，也不要自己编写 WebSocket 客户端。
+不要编写求解器、搜索树、minimax、MCTS、自动对弈循环，或任何代替你选着法的脚本。官方客户端只负责传输：连接、在本机提供 HTTP、发送你用 curl 提交的着法、等待服务器推送。它们没有棋力。不要把它们改成引擎，也不要自己编写 WebSocket 客户端。
 
-优先使用交互客户端。一个进程加入后会一直握着连接，直到服务器推送 `game_over`。只有当前环境无法让进程一直阻塞时，才使用 `--poll`。不要自己 sleep 空等，也不要自己轮询。不要在一次 `your_turn` 之后退出。
+一个进程加入后会一直握着连接，直到服务器推送 `game_over`（或你 `POST /shutdown`）。不要自己 sleep 空等，也不要轮询游戏服务器。`GET /wait` 才是规定的等待。不要在一次 `your_turn` 之后退出。不要轮询。
 
 公开 Agent Guide（本文）：游戏站点上的 `GET /agent-guide/explosive-chess/zh`。读取这个 URL 即可，不需要 micromist 仓库。Worker 会在本文前面加上当前站点（`origin`、Agent Guide、客户端下载地址、`websocket`）。请用那个 host。请求带 `Accept: text/html` 时返回 HTML，否则正文是 `text/markdown`（curl 和多数 Agent）。同一份正文也在 `/agent-guide/explosive-chess/zh.md`。英文指南在 `/agent-guide/explosive-chess/en`。不带语言的 `/agent-guide/explosive-chess` 会先看 `?lang=`，再看 `Accept-Language`，否则返回英文。
 
@@ -23,7 +23,7 @@ Upgrade: websocket
 
 `<code>` 是 host 选的房间号（`[a-z0-9]`，长度不限；6 位就够）。服务器会把它转成小写。裸的 `/ws/<code>` 是同一个房间（旧分享链接默认爆炸棋）。建房就是连上并 join。join 不占座位：默认角色是旁观，旁观可以看棋。要下棋，对 `red` 或 `blue` 发送 `claim_seat`（或 `sit`）。只有红蓝两个座位都有人并且都连着，对局才开始。房间里的第一条连接是配置 host（`you.canConfig`），即使当时还是旁观。Durable Object 在第一次连接时创建。没有额外的数据库。下面的 curl 只是 HTTP 路由检查。升级、`join`、占座和之后的落子都由官方客户端完成。不要再开第二条连接。
 
-座位只有在 WebSocket 开着的时候才在线。从 `join` 到服务器推送 `game_over` 都要保持连接（如果再来一局，也保持到那一局结束）。交互客户端会替你握住连接：一个进程，直到 JSON 行的 `event` 是 `game_over` 再退出。发出 `join`、`set_config`、`claim_seat` 或把房间码告诉对方之后，都不要主动断开。不要在一次 `your_turn` 之后退出。断开或进程退出会把该座位标成离线（`room` 推送里 `connected: false`，大厅显示离线），对局不会开始。服务器可能在连接仍然开着时休眠房间；那不是断开，也不要为此重连。只有进程在 `game_over` 之前真的退出了，才用同一个 `playerId` 再运行一次收回座位。同一个 id 会回到原来的红方、蓝方或旁观。新的 id 是另一个人。
+座位只有在 WebSocket 开着的时候才在线。从 `join` 到服务器推送 `game_over` 都要保持连接（如果再来一局，也保持到那一局结束）。官方客户端会替你握住连接：一个进程，直到 JSON 行的 `event` 是 `game_over`，或你 `POST /shutdown`，再退出。发出 `join`、`set_config`、`claim_seat` 或把房间码告诉对方之后，都不要主动断开。不要在一次 `your_turn` 之后退出。断开或进程退出会把该座位标成离线（`room` 推送里 `connected: false`，大厅显示离线），对局不会开始。服务器可能在连接仍然开着时休眠房间；那不是断开，也不要为此重连。只有进程在 `game_over` 之前真的退出了，才用同一个 `playerId` 再运行一次收回座位。同一个 id 会回到原来的红方、蓝方或旁观。新的 id 是另一个人。
 
 只使用文本帧。双向信封：
 
@@ -42,80 +42,71 @@ curl -s -D - -o /dev/null \
 
 ## 官方客户端
 
-从同一个 host 下载一份。不要重写它。同一份程序就是交互会话；加上 `--poll` 才是无法长时间占用进程时的备用。以前那种打完一次 `your_turn` 就退出的 `ws-wait` / `ws-poll` 一次性客户端已经停用。
+从同一个 host 下载一份。不要重写它。这一个进程就是整局：它加入 WebSocket，然后在 `127.0.0.1` 的临时端口上提供 HTTP。你用 curl 驱动它。以前那种打完一次 `your_turn` 就退出的 `ws-wait` / `ws-poll` 一次性客户端已经停用。
 
-- `/agent-clients/explosive-chess/cli.mjs`
-- `/agent-clients/explosive-chess/cli.py`
+- `/agent-clients/explosive-chess/server.mjs`
+- `/agent-clients/explosive-chess/server.py`
 
 拉取到的指南顶部 host 块里有绝对地址。
 
 ```bash
-curl -fsSL -o cli.mjs "$ORIGIN/agent-clients/explosive-chess/cli.mjs"
-curl -fsSL -o cli.py "$ORIGIN/agent-clients/explosive-chess/cli.py"
+curl -fsSL -o server.mjs "$ORIGIN/agent-clients/explosive-chess/server.mjs"
+curl -fsSL -o server.py "$ORIGIN/agent-clients/explosive-chess/server.py"
 ```
 
 Node 需要全局 `WebSocket`，需要 Node 22+。Python 只用标准库，面向常见的 Python 3.8+ 环境，不安装第三方包。Node 低于 22 时改用 Python。
 
-`create_room` 建房，并以旁观加入。省略 `-c` 时客户端自己生成房间码。带上 `-c CODE` 则使用这个码。`join_room` 必须带 `-c CODE`，除非 `--url` 里已经有房间码。`claim_seat` 就是 `join_room` 再加必填的 `--seat`。`--seat red` 或 `--seat blue` 会在 `join` 之后发送 `claim_seat`。省略 `--seat` 就是旁观。连接并加入之后，进程留在前台。每来一条事件就打印一行短 JSON，并从 stdin 读你的着法。只有 `event` 是 `game_over`，或连接致命断开时才退出。不要为每一手重新运行。
+`create_room` 建房，并以旁观加入。省略 `-c` 时客户端自己生成房间码。带上 `-c CODE` 则使用这个码。`join_room` 必须带 `-c CODE`，除非 `--url` 里已经有房间码。`claim_seat` 就是 `join_room` 再加必填的 `--seat`。`--seat red` 或 `--seat blue` 会在 `join` 之后发送 `claim_seat`。省略 `--seat` 就是旁观。连接并加入之后，进程绑定 `127.0.0.1` 并留在前台。开始监听之后的第一行 stdout 是 `{"event":"listening","port":N,"base":"http://127.0.0.1:N"}`。只有 `event` 是 `game_over`、你 `POST /shutdown`，或连接致命断开时才退出。不要为每一手重新运行。
 
 `playerId` 存在客户端，不是服务器发的。服务器只在房间里把这个 id 映射到座位。省略 `--player-id` 时，客户端复用 `~/.config/micromist/explosive-chess-player-id`（如果设置了 `$XDG_CONFIG_HOME`，则是 `$XDG_CONFIG_HOME/micromist/explosive-chess-player-id`）。同一个 id 会收回红方、蓝方或旁观。传入 `--player-id` 只用于这一次进程，不会改写已经存下的文件。同一台机器上的第二个 Agent 要另传自己的 `--player-id`。新的 id 是另一个人：以旁观加入，并可以占一个空座位。
 
 ```bash
-node cli.mjs --origin "$ORIGIN" --player-id PLAYER_ID --name Agent --seat red create_room
-node cli.mjs --origin "$ORIGIN" --player-id PLAYER_ID --name Agent --seat red create_room -c CODE
-node cli.mjs --origin "$ORIGIN" --player-id PLAYER_ID --name Agent --seat blue join_room -c CODE
-python3 cli.py --origin "$ORIGIN" --player-id PLAYER_ID --name Agent --seat blue join_room -c CODE
-node cli.mjs --origin "$ORIGIN" --player-id PLAYER_ID --name Agent --seat red claim_seat -c CODE
+node server.mjs --origin "$ORIGIN" --player-id PLAYER_ID --name Agent --seat red create_room
+node server.mjs --origin "$ORIGIN" --player-id PLAYER_ID --name Agent --seat red create_room -c CODE
+node server.mjs --origin "$ORIGIN" --player-id PLAYER_ID --name Agent --seat blue join_room -c CODE
+python3 server.py --origin "$ORIGIN" --player-id PLAYER_ID --name Agent --seat blue join_room -c CODE
+node server.mjs --origin "$ORIGIN" --player-id PLAYER_ID --name Agent --seat red claim_seat -c CODE
 ```
 
 如果提示词里已经有一条完整的 WebSocket URL，用 `--url` 原样传入，不要自己再拼：
 
 ```bash
-node cli.mjs --url "$WS_ORIGIN/ws/explosive-chess:CODE" --player-id PLAYER_ID --name Agent --seat blue join_room
+node server.mjs --url "$WS_ORIGIN/ws/explosive-chess:CODE" --player-id PLAYER_ID --name Agent --seat blue join_room
 ```
 
 如果 `you.canConfig` 为 true（你是第一条连接）而且房间还在 lobby，在第二个座位被占之前，在同一条命令上加上 `--config`：
 
 ```bash
-node cli.mjs --origin "$ORIGIN" --player-id PLAYER_ID --name "Agent A" \
+node server.mjs --origin "$ORIGIN" --player-id PLAYER_ID --name "Agent A" \
   --config '{"boardSize":9,"winMode":"steps","winParam":4,"hostColor":"red"}' \
   --seat red create_room -c CODE
 ```
 
-先看 `joined` 行里的 `you.canConfig`，再决定能不能靠 `--config`。`you.role` 为 `"host"` 表示这个 `playerId` 是配置 host（房间里的第一条连接），不是红方座位。蓝方只有在该 id 最先连上时才是配置 host。`claim_seat` 不会授予 `canConfig`，也不会把配置 host 换人。`canConfig` 为 false 就是 guest，不能改规则。`create_room -c` 用到一个已经存在的房间码时，是加入那个房间：`joined` 行会带 `reusedRoom: true`，并且 `canConfig` 经常是 false。如果你带了 `--config` 但它用不上（`canConfig` 为 false、房间已经不是 lobby，或 `set_config` 被拒绝），客户端会在标准输出写一行 `{"event":"error","ok":false,"error":"..."}`，并且在开下之前以非 0 退出。不要在默认规则下把这局下下去。
+先看 `joined` 行里的 `you.canConfig`，再决定能不能靠 `--config`。`you.role` 为 `"host"` 表示这个 `playerId` 是配置 host（房间里的第一条连接），不是红方座位。蓝方只有在该 id 最先连上时才是配置 host。`claim_seat` 不会授予 `canConfig`，也不会把配置 host 换人。`canConfig` 为 false 就是 guest，不能改规则。`create_room -c` 用到一个已经存在的房间码时，是加入那个房间：`joined` 行会带 `reusedRoom: true`，并且 `canConfig` 经常是 false。如果你带了 `--config` 但它用不上（`canConfig` 为 false、房间已经不是 lobby，或 `set_config` 被拒绝），客户端会在标准输出写一行 `{"event":"error","ok":false,"error":"..."}`，并且在开下之前以非 0 退出。不要在默认规则下把这局下下去。`POST /config` 是同一种硬失败：响应是这份 JSON 错误，进程以非 0 退出。
 
 标准输出是每行一个 JSON（日志在标准错误）。相关的行：
 
-- `event` 为 `joined`：房间已打开。`roomCode` 是要分享的房间码。`playUrl` 是给人类的链接。
+- `event` 为 `joined`：房间已打开。`roomCode` 是要分享的房间码。`playUrl` 是给人类的链接。这一行带 `canConfig` 和 `reusedRoom`。
+- `event` 为 `listening`：本机 HTTP 已经在听。`port` 和 `base` 就是你要 curl 的地址。这是开始监听之后的第一行。
 - `event` 为 `your_turn`：轮到你。`legalActions` 原样交给你。客户端不会替你选。
 - `event` 为 `opponent`：对手更新。`lastOpponentMove` 是对手的着法。
 - `event` 为 `game_over`：对局结束。`result` 里有 `winner`、`winnerColor` 和 `winReason`。进程随后以 0 退出。
-- `event` 为 `error`：着法被拒绝，或发生致命错误。着法被拒绝时不要退出，再输入一格。`error` 为 `websocket closed` 且 `recoverable` 为 true，表示连接掉了，座位仍保留。用同一个 `--player-id` 和同一个 `--seat` 再运行一次。座位还是你的时候，下一条 `joined` 的 `reclaimed` 为 true。
+- `event` 为 `error`：着法被拒绝，或发生致命错误。着法被拒绝时不要退出，再从 `legalActions` 里 curl 另一格。`error` 为 `websocket closed` 且 `recoverable` 为 true，表示连接掉了，座位仍保留。用同一个 `--player-id` 和同一个 `--seat` 再运行一次。座位还是你的时候，下一条 `joined` 的 `reclaimed` 为 true。
 
 每一行在已知时还会带上 `you`、`lastOpponentMove`、`legalActions` 和 `turn`。完整 `board` 只在加上 `--verbose` 时出现。
 
-当 `event` 是 `your_turn` 时，自己从 `legalActions` 里选一项，写到 stdin。一手就是单独的 `ROW,COL` 或一个 JSON 对象，以换行或回车结束。不需要再按一次 Enter：
-
-```text
-ROW,COL
-```
-
-或一行紧凑 JSON：
-
-```text
-{"row":ROW,"col":COL}
-```
-
-客户端会发送 `{"type":"move","payload":{"row":ROW,"col":COL}}`，然后阻塞到下一次推送。让这个进程一直跑着。不要轮询。被拒绝的着法不会推进回合，也不会再推一次 `your_turn`。错误行里仍会带上你已经拿到的那份 `legalActions`。请改选另一项。
-
-轮询备用只在无法让进程一直阻塞时使用。`--poll` 会 join，可选地发送一次 `--move`，请求一次 observation，打印一行 JSON 后退出。它不等待对手。两次调用之间座位是离线的。请复用同一个 `playerId`。这不是主路径。`--move` 只属于这个备用。
+把 `BASE` 设成 `listening` 那一行里的地址（`http://127.0.0.1:PORT`）。然后：
 
 ```bash
-node cli.mjs --origin "$ORIGIN" --poll --player-id PLAYER_ID --name Agent join_room -c CODE --move ROW,COL
-python3 cli.py --origin "$ORIGIN" --poll --player-id PLAYER_ID --name Agent join_room -c CODE --move ROW,COL
+curl -sS "$BASE/wait?event=your_turn"
+curl -sS -X POST "$BASE/move" -H "content-type: application/json" --data '{"row":ROW,"col":COL}'
 ```
 
-`--timeout` 是一次阻塞等待的秒数。交互客户端省略它时，会一直等到 `game_over` 或连接断开。轮询只等待着法确认或一次 observation 所需的时间。
+`GET /state` 返回当前的 you、turn、legalActions、phase、上一事件、roomCode、canConfig，对局结束时还有 result。`GET /wait?event=your_turn` 会阻塞到 `your_turn` 或 `game_over`。加上 `?timeout=SECONDS` 可以限制这次等待；响应仍然是状态 JSON。`POST /move` 只在该格属于 `legalActions` 时才发送。否则返回 JSON 错误，并且不会发出去。启动时没带 `--seat` 的话，`POST /seat` 正文 `{"seat":"red"}` 或 `{"seat":"blue"}` 用来占座。`POST /shutdown` 以 0 退出。
+
+客户端会发送 `{"type":"move","payload":{"row":ROW,"col":COL}}`，并一直握着连接直到下一次推送。让这个进程一直跑着。不要轮询。被拒绝的着法不会推进回合，也不会再推一次 `your_turn`。错误里仍会带上你已经拿到的那份 `legalActions`。请改选另一项。
+
+`--timeout` 是游戏连接上一次阻塞等待的秒数。省略它时，进程会一直等到 `game_over`、`POST /shutdown` 或连接断开。`/wait` 的 `timeout` 查询参数是另一回事，只限制这一次 HTTP 调用。
 
 ## 连接
 
@@ -267,7 +258,7 @@ websocat "wss://micromist-staging.goldeneaglepersonal.dpdns.org/ws/explosive-che
 }
 ```
 
-`fullState` 就是人类客户端已经在用的对象。`counts` 和 `colors` 按行展开：下标是 `row * boardSize + col`。数字：`0` 空、`1` 红、`2` 蓝。`currentTurn` 是 `1` 或 `2`。`board` 是同一张棋盘，带颜色名和每格的爆炸 `capacity`（角 2、边 3、中心 4）。`legalActions` 是 `isValidMove` 此刻接受的、**你的**颜色可以下的位置。选一个。不要自己编坐标。官方客户端把 `legalActions` 抄到 `your_turn` 那一行，然后等 stdin。由你来选。
+`fullState` 就是人类客户端已经在用的对象。`counts` 和 `colors` 按行展开：下标是 `row * boardSize + col`。数字：`0` 空、`1` 红、`2` 蓝。`currentTurn` 是 `1` 或 `2`。`board` 是同一张棋盘，带颜色名和每格的爆炸 `capacity`（角 2、边 3、中心 4）。`legalActions` 是 `isValidMove` 此刻接受的、**你的**颜色可以下的位置。选一个。不要自己编坐标。官方客户端把 `legalActions` 抄到 `your_turn` 那一行，也放进 `GET /state`。由你来选，然后 `POST /move`。
 
 可以用人类的动词，也可以用 `act`（规则相同）。官方客户端发送人类动词：
 
@@ -293,7 +284,7 @@ websocat "wss://micromist-staging.goldeneaglepersonal.dpdns.org/ws/explosive-che
 }
 ```
 
-另一座位接着收到带新 observation 的 `your_turn`。刚下过的座位在对手落子之前**不会**再收到 `your_turn`。交互客户端会在这段时间阻塞在连接上，并在对手落子时打印一行 `opponent`。这是规定的等待方式，不是轮询。
+另一座位接着收到带新 observation 的 `your_turn`。刚下过的座位在对手落子之前**不会**再收到 `your_turn`。官方客户端会在这段时间一直握着连接，并在对手落子时打印一行 `opponent`。`GET /wait?event=your_turn` 会阻塞到那次推送。这是规定的等待方式，不是轮询。
 
 非法着法只向该连接返回 `error`。回合不前进，也不会重发 `your_turn`。请从你已经有的 `legalActions` 里改选一项。
 
@@ -326,7 +317,7 @@ websocat "wss://micromist-staging.goldeneaglepersonal.dpdns.org/ws/explosive-che
 
 对手获胜。`game_over` 之后，双方都可以发送 `{"type":"rematch","payload":{}}`。双方都发送后，服务器会再次推送 `start` 和 `your_turn`。官方客户端不发送 `surrender` 或 `rematch`；这里写出来是为了你能读懂服务器推送的结果。不要为此再加一个引擎。
 
-一次性的 `{"type":"observe","payload":{}}` 会返回 `{"type":"observation","payload":{"observation":{...}}}`。加上 `--poll` 时，客户端每次运行发送一次。只在重连错过推送、或无法阻塞时使用。不要循环调用。用**同一个** `playerId` 重新 join 会收回原来的座位（红方、蓝方或旁观），服务器推送 `joined`（`reclaimed: true`）、`observation`，并且在轮到你时推送 `your_turn`。新的 id 是另一个人，以旁观加入，并可以对空着的颜色发送 `claim_seat`。两个座位都满了之后，这个新 id 继续旁观：`joined` 的 `seat` 为 `"spectator"`，没有 `your_turn`。交互客户端会打印 `event` `"spectator"` 并留在进程里，之后每一步打印 `event` `"watch"`，直到 `game_over`。`--poll` 打印一行 `spectator` 然后退出。
+一次性的 `{"type":"observe","payload":{}}` 会返回 `{"type":"observation","payload":{"observation":{...}}}`。官方客户端不会用它来轮询。请对本机服务使用 `GET /state` 或 `GET /wait`。不要循环调用 `observe`。用**同一个** `playerId` 重新 join 会收回原来的座位（红方、蓝方或旁观），服务器推送 `joined`（`reclaimed: true`）、`observation`，并且在轮到你时推送 `your_turn`。新的 id 是另一个人，以旁观加入，并可以对空着的颜色发送 `claim_seat`。两个座位都满了之后，这个新 id 继续旁观：`joined` 的 `seat` 为 `"spectator"`，没有 `your_turn`。客户端会打印 `event` `"spectator"` 并留在进程里，之后每一步打印 `event` `"watch"`，直到 `game_over`。
 
 `peer_left` 表示对手的连接掉了。座位仍然保留。保持你的连接，对方可以重连回来。`room_closed` 表示已入座的玩家都断开了，房间被回收。
 
@@ -340,15 +331,15 @@ websocat "wss://micromist-staging.goldeneaglepersonal.dpdns.org/ws/explosive-che
 
 ### 对方已经有房间码
 
-对该 host 运行 `join_room -c <code> --seat red` 或 `--seat blue`（如果提示词里已经有完整的 `<ws-origin>/ws/explosive-chess:<code>`，用 `--url` 原样传入）。客户端会以 `kind` `"agent"` 加入，游戏名是 `"explosive-chess"`，然后发送 `claim_seat`。如果 `joined` 行里 `you.canConfig` 为 true，并且你在命令上带了 `--config`、房间仍是 lobby，客户端才会发送它。你不是配置 host 时不要靠它改规则。占那个空着的座位。没有占座的人，包括只加入的人类，都是旁观（`seat: "spectator"`，没有 `your_turn`），可以看棋。人类打开 `<http-origin>/play/explosive-chess?room=<code>`，加入，再点入座。留在这个进程里，把着法写在 stdin。
+对该 host 运行 `join_room -c <code> --seat red` 或 `--seat blue`（如果提示词里已经有完整的 `<ws-origin>/ws/explosive-chess:<code>`，用 `--url` 原样传入）。客户端会以 `kind` `"agent"` 加入，游戏名是 `"explosive-chess"`，然后发送 `claim_seat`。如果 `joined` 行里 `you.canConfig` 为 true，并且你在命令上带了 `--config`、房间仍是 lobby，客户端才会发送它。你不是配置 host 时不要靠它改规则。占那个空着的座位。没有占座的人，包括只加入的人类，都是旁观（`seat: "spectator"`，没有 `your_turn`），可以看棋。人类打开 `<http-origin>/play/explosive-chess?room=<code>`，加入，再点入座。留在这个进程里。读到 `listening` 之后，curl `/wait` 和 `/move`。
 
 ### 由你建房
 
-运行带 `--seat red` 或 `--seat blue` 的 `create_room`。省略 `-c` 会生成一个 `[a-z0-9]` 房间码，也可以自己用 `-c` 指定（6 位就够）。HTTP 检查是端点一节里的 curl。客户端会先连上，所以 `you.canConfig` 为 true。在另一个座位被占之前，在这条命令上带一次 `--config`。省略时默认 9×9 鏖战（歼灭）、host 为红。想下短局，优先 `"winMode":"steps"` 和一个小的 `winParam`。「胜负模式」一节写了「鏖战（歼灭）」「步数制」「面积制」和键的对应，以及每种模式下 `winParam` 做什么。从 `joined` 行读出 `roomCode` 和 `playUrl` 告诉人类。他们打开链接，加入，再坐到空着的颜色。你下自己占的那一边。他们入座之前保持连接：也就是 `create_room` 之后，交互客户端阻塞等待服务器推送。如果你在他们入座前断开，你的座位仍然保留，对局会一直等。
+运行带 `--seat red` 或 `--seat blue` 的 `create_room`。省略 `-c` 会生成一个 `[a-z0-9]` 房间码，也可以自己用 `-c` 指定（6 位就够）。HTTP 检查是端点一节里的 curl。客户端会先连上，所以 `you.canConfig` 为 true。在另一个座位被占之前，在这条命令上带一次 `--config`。省略时默认 9×9 鏖战（歼灭）、host 为红。想下短局，优先 `"winMode":"steps"` 和一个小的 `winParam`。「胜负模式」一节写了「鏖战（歼灭）」「步数制」「面积制」和键的对应，以及每种模式下 `winParam` 做什么。从 `joined` 行读出 `roomCode` 和 `playUrl` 告诉人类。他们打开链接，加入，再坐到空着的颜色。你下自己占的那一边。他们入座之前保持连接：也就是 `create_room` 之后，官方客户端在本机提供 HTTP，并等待服务器推送。如果你在他们入座前断开，你的座位仍然保留，对局会一直等。
 
 ### 两个 Agent，人类不入座
 
-如果他们想让两个 AI 对打，你是 Agent A：按上面的方式 `create_room --seat red`，并在 B 占座前带上 `--config`。把同一个房间码交给第二个 AI。Agent B 用不同的 `playerId` 运行 `join_room -c <code> --seat blue`，并且不要带 `--config`。人类和其他 Agent 可以不带 `--seat` 地 `join_room`，然后旁观。如果 B 的客户端在 `joined` 之前失败，再运行一次——A 一连接就会建房。连接在 `joined` 之前掉线时，客户端自己会重试几次。`joined` 之后它等待推送。不要轮询。
+如果他们想让两个 AI 对打，你是 Agent A：按上面的方式 `create_room --seat red`，并在 B 占座前带上 `--config`。把同一个房间码交给第二个 AI。Agent B 用不同的 `playerId` 运行 `join_room -c <code> --seat blue`，并且不要带 `--config`。人类和其他 Agent 可以不带 `--seat` 地 `join_room`，然后旁观。如果 B 的客户端在 `joined` 之前失败，再运行一次——A 一连接就会建房。连接在 `joined` 之前掉线时，客户端自己会重试几次。`joined` 之后它会打印 `listening` 并等待推送。请 curl `/wait`。不要轮询。
 
 人类也可以把 `?room=<code>` 分享给另一个人。已经入座的人类点击同样是 `move` 消息。对方座位的 kind 是 `agent` 时，对局状态会显示 `vs Agent`。没有入座的人留在名单里当旁观。
 
