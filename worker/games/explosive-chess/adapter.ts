@@ -14,7 +14,10 @@ import {
 } from "../../../shared/explosive-chess/engine";
 import {
   buildExplosiveObservation,
+  effectsFromAnimationFrames,
+  readExplosionEffects,
   winnerColorName,
+  type ExplosionEffect,
   type ExplosiveObservation,
   type ExplosiveYou,
 } from "../../../shared/explosive-chess/observe";
@@ -35,6 +38,8 @@ type Serialized = {
   config: RoomConfig;
   fullState: FullState | null;
   configFrozen?: boolean;
+  /** Explosions from the placement that produced `fullState`. */
+  effects?: ExplosionEffect[];
 };
 
 const DEFAULT_CONFIG: RoomConfig = {
@@ -62,6 +67,7 @@ export function createExplosiveChessAdapter(host: RoomHost): GameRoomAdapter {
   let config: RoomConfig = { ...DEFAULT_CONFIG };
   let game: GameInstance | null = null;
   let configFrozen = false;
+  let lastEffects: ExplosionEffect[] = [];
 
   const api: GameRoomAdapter = {
     slug: "explosive-chess",
@@ -78,6 +84,7 @@ export function createExplosiveChessAdapter(host: RoomHost): GameRoomAdapter {
 
     onRecycle: () => {
       game = null;
+      lastEffects = [];
       config = { ...DEFAULT_CONFIG };
       configFrozen = false;
     },
@@ -165,6 +172,7 @@ export function createExplosiveChessAdapter(host: RoomHost): GameRoomAdapter {
         winParam,
       };
       game = createGame(gameConfig);
+      lastEffects = [];
       host.setPhase("playing");
       for (const p of seated) {
         p.ready = false;
@@ -218,6 +226,7 @@ export function createExplosiveChessAdapter(host: RoomHost): GameRoomAdapter {
       config,
       fullState: game ? game.getFullState() : null,
       configFrozen,
+      effects: lastEffects,
     }),
 
     hydrate: (blob: unknown) => {
@@ -240,8 +249,10 @@ export function createExplosiveChessAdapter(host: RoomHost): GameRoomAdapter {
           winParam,
         });
         game.loadFullState(data.fullState as FullState);
+        lastEffects = readExplosionEffects(data.effects);
       } else {
         game = null;
+        lastEffects = [];
       }
     },
   };
@@ -310,6 +321,7 @@ export function createExplosiveChessAdapter(host: RoomHost): GameRoomAdapter {
     }
 
     if (result.gameOver) host.setPhase("over");
+    lastEffects = effectsFromAnimationFrames(result.animationFrames, game.boardSize);
     const view = observationFor(player);
     host.broadcast("state", {
       fullState: game.getFullState(),
@@ -320,6 +332,7 @@ export function createExplosiveChessAdapter(host: RoomHost): GameRoomAdapter {
       action: { type: "move", row, col },
       by: view.you,
       publicState: view.publicState,
+      effects: lastEffects,
       gameOver: result.gameOver,
     });
 
@@ -387,6 +400,7 @@ export function createExplosiveChessAdapter(host: RoomHost): GameRoomAdapter {
         p.ready = false;
       }
       game = null;
+      lastEffects = [];
       host.setPhase("lobby");
       host.broadcastRoom();
       api.tryStartGame();
@@ -415,6 +429,7 @@ export function createExplosiveChessAdapter(host: RoomHost): GameRoomAdapter {
       you: youFrom(player),
       config,
       game,
+      effects: lastEffects,
     });
   }
 

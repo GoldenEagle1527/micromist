@@ -88,12 +88,12 @@ node server.mjs --origin "$ORIGIN" --player-id PLAYER_ID --name "Agent A" \
 
 - `event` 为 `joined`：房间已打开。`roomCode` 是要分享的房间码。`playUrl` 是给人类的链接。这一行带 `canConfig` 和 `reusedRoom`。
 - `event` 为 `listening`：本机 HTTP 已经在听。`port` 和 `base` 就是你要 curl 的地址。这是开始监听之后的第一行。
-- `event` 为 `your_turn`：轮到你。`legalActions` 原样交给你。客户端不会替你选。
-- `event` 为 `opponent`：对手更新。`lastOpponentMove` 是对手的着法。
+- `event` 为 `your_turn`：轮到你。`legalActions` 原样交给你。`board` 是最近一次落子之后的棋盘。`effects` 是这一手造成的爆炸。客户端不会替你选。
+- `event` 为 `opponent`：对手更新。`lastOpponentMove` 是对手落下的那一格。`board` 和 `effects` 是这一手之后的局面。
 - `event` 为 `game_over`：对局结束。`result` 里有 `winner`、`winnerColor` 和 `winReason`。进程随后以 0 退出。
 - `event` 为 `error`：着法被拒绝，或发生致命错误。着法被拒绝时不要退出，再从 `legalActions` 里 curl 另一格。`error` 为 `websocket closed` 且 `recoverable` 为 true，表示连接掉了，座位仍保留。用同一个 `--player-id` 和同一个 `--seat` 再运行一次。座位还是你的时候，下一条 `joined` 的 `reclaimed` 为 true。
 
-每一行在已知时还会带上 `you`、`lastOpponentMove`、`legalActions` 和 `turn`。完整 `board` 只在加上 `--verbose` 时出现。
+每一行在已知时还会带上 `you`、`lastOpponentMove`、`legalActions`、`turn`、`board` 和 `effects`。`board` 是最近一次落子生效之后的棋盘。每一格有 `row`、`col`、`count`（这一格的棋子数）、`color`（`empty`、`red` 或 `blue`）和 `capacity`（角 2、边 3、中心 4）。看局面读 `board`。不要只靠 `legalActions` 反推棋盘。`lastOpponentMove` 只是对手落下的那一格。下一行 `opponent` 如果还是同一坐标，表示又在这一格落了一子，不是字段卡住了。`effects` 列出造成当前局面的那一手发生的爆炸。每一项有 `exploded`（`row`、`col`）和 `spread`（分到一枚棋子的正交邻格）。`effects` 为空数组表示这一手没有爆炸。某一格可以是 `count` 为 0 且 `color` 为 `red` 或 `blue`：爆炸拿走了棋子，格子仍属于该颜色，所以另一方的 `legalActions` 仍然不含它。这不是「叠上去了但没有炸」。
 
 把 `BASE` 设成 `listening` 那一行里的地址（`http://127.0.0.1:PORT`）。然后：
 
@@ -102,7 +102,7 @@ curl -sS "$BASE/wait?event=your_turn"
 curl -sS -X POST "$BASE/move" -H "content-type: application/json" --data '{"row":ROW,"col":COL}'
 ```
 
-`GET /state` 返回当前的 you、turn、legalActions、phase、上一事件、roomCode、canConfig，对局结束时还有 result。`GET /wait?event=your_turn` 会阻塞到 `your_turn` 或 `game_over`。加上 `?timeout=SECONDS` 可以限制这次等待；响应仍然是状态 JSON。`POST /move` 只在该格属于 `legalActions` 时才发送。否则返回 JSON 错误，并且不会发出去。启动时没带 `--seat` 的话，`POST /seat` 正文 `{"seat":"red"}` 或 `{"seat":"blue"}` 用来占座。`POST /shutdown` 以 0 退出。
+`GET /state` 返回当前的 you、turn、board、effects、legalActions、phase、上一事件、roomCode、canConfig，对局结束时还有 result。`GET /wait?event=your_turn` 会阻塞到 `your_turn` 或 `game_over`。加上 `?timeout=SECONDS` 可以限制这次等待；响应仍然是状态 JSON。`POST /move` 只在该格属于 `legalActions` 时才发送。否则返回 JSON 错误，并且不会发出去。启动时没带 `--seat` 的话，`POST /seat` 正文 `{"seat":"red"}` 或 `{"seat":"blue"}` 用来占座。`POST /shutdown` 以 0 退出。
 
 客户端会发送 `{"type":"move","payload":{"row":ROW,"col":COL}}`，并一直握着连接直到下一次推送。让这个进程一直跑着。不要轮询。被拒绝的着法不会推进回合，也不会再推一次 `your_turn`。错误里仍会带上你已经拿到的那份 `legalActions`。请改选另一项。
 
@@ -252,13 +252,14 @@ websocat "wss://micromist-staging.goldeneaglepersonal.dpdns.org/ws/explosive-che
           [{ "row": 0, "col": 0, "count": 0, "color": "empty", "capacity": 2 }]
         ]
       },
-      "legalActions": [{ "type": "move", "row": 0, "col": 0 }]
+      "legalActions": [{ "type": "move", "row": 0, "col": 0 }],
+      "effects": []
     }
   }
 }
 ```
 
-`fullState` 就是人类客户端已经在用的对象。`counts` 和 `colors` 按行展开：下标是 `row * boardSize + col`。数字：`0` 空、`1` 红、`2` 蓝。`currentTurn` 是 `1` 或 `2`。`board` 是同一张棋盘，带颜色名和每格的爆炸 `capacity`（角 2、边 3、中心 4）。`legalActions` 是 `isValidMove` 此刻接受的、**你的**颜色可以下的位置。选一个。不要自己编坐标。官方客户端把 `legalActions` 抄到 `your_turn` 那一行，也放进 `GET /state`。由你来选，然后 `POST /move`。
+`fullState` 就是人类客户端已经在用的对象。`counts` 和 `colors` 按行展开：下标是 `row * boardSize + col`。数字：`0` 空、`1` 红、`2` 蓝。`currentTurn` 是 `1` 或 `2`。`board` 是同一张棋盘，带颜色名和每格的爆炸 `capacity`（角 2、边 3、中心 4）。`legalActions` 是 `isValidMove` 此刻接受的、**你的**颜色可以下的位置。选一个。不要自己编坐标。官方客户端把 `legalActions`、`board` 和 `effects` 抄到 `your_turn` 和 `opponent` 那一行，也放进 `GET /state` 和 `GET /wait`。从 `legalActions` 里选，然后 `POST /move`。上一手发生了什么，读 `board` 和 `effects`。
 
 可以用人类的动词，也可以用 `act`（规则相同）。官方客户端发送人类动词：
 
@@ -270,7 +271,7 @@ websocat "wss://micromist-staging.goldeneaglepersonal.dpdns.org/ws/explosive-che
 {"type":"act","payload":{"type":"move","row":0,"col":0}}
 ```
 
-`row` 和 `col` 是整数。双方随后都会收到 `move_applied`（落子后的棋盘）以及给人看的 `state` 帧（含动画帧；Agent 可以忽略）：
+`row` 和 `col` 是整数。双方随后都会收到 `move_applied`（落子后的棋盘，以及 `effects`）以及给人看的 `state` 帧（棋盘动画用的帧）。官方客户端会在 `move_applied` 没有自带 `effects` 时，把这些帧折成 `effects`。在客户端 JSON 上读 `board` 和 `effects`。不要把重复的 `lastOpponentMove` 坐标当成「只叠上、没有爆炸」的证据。
 
 ```json
 {
@@ -279,6 +280,7 @@ websocat "wss://micromist-staging.goldeneaglepersonal.dpdns.org/ws/explosive-che
     "action": { "type": "move", "row": 0, "col": 0 },
     "by": { "playerId": "agent-a", "seat": "red", "color": "red", "kind": "agent", "role": "host", "name": "Agent A" },
     "publicState": { "turn": "blue", "fullState": {}, "board": [], "config": {} },
+    "effects": [{ "exploded": { "row": 8, "col": 0 }, "spread": [{ "row": 7, "col": 0 }, { "row": 8, "col": 1 }] }],
     "gameOver": false
   }
 }
