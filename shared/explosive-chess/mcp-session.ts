@@ -7,6 +7,12 @@
  */
 import { generateRoomCode } from "../multiplayer";
 import { explosiveChessWsUrl } from "./agent-guide";
+import {
+  boardSizeFromCounts,
+  effectsFromAnimationFrames,
+  readExplosionEffects,
+  type ExplosionEffect,
+} from "./observe";
 
 function explosiveChessPlayUrl(origin: string, roomCode: string): string {
   const code = roomCode.trim().toLowerCase();
@@ -214,6 +220,7 @@ export class ExplosiveChessMcpSession {
   private pendingEvent: ToolBody | null = null;
   private lastError: string | null = null;
   private lastOpponentMove: LegalAction | null = null;
+  private effects: ExplosionEffect[] = [];
   private configSent = false;
   private configAck = false;
   private awaitingConfig = false;
@@ -579,6 +586,7 @@ export class ExplosiveChessMcpSession {
     this.pendingEvent = null;
     this.lastError = null;
     this.lastOpponentMove = null;
+    this.effects = [];
     this.joined = false;
     this.roomClosed = false;
     this.ourMoveAck = false;
@@ -689,7 +697,17 @@ export class ExplosiveChessMcpSession {
         this.observeAck = true;
         break;
       }
+      case "state": {
+        if (Array.isArray(body.animationFrames)) {
+          const counts = asRecord(body.fullState)?.counts;
+          const fromCounts = boardSizeFromCounts(counts);
+          const size = fromCounts || this.boardSize();
+          this.effects = effectsFromAnimationFrames(body.animationFrames, size);
+        }
+        break;
+      }
       case "move_applied": {
+        if ("effects" in body) this.effects = readExplosionEffects(body.effects);
         const by = asRecord(body.by);
         const action = asRecord(body.action);
         const byId = typeof by?.playerId === "string" ? by.playerId : "";
@@ -734,6 +752,7 @@ export class ExplosiveChessMcpSession {
           winnerColor: body.winnerColor ?? null,
           winReason: typeof body.winReason === "string" ? body.winReason : "",
           lastOpponentMove: opponent,
+          effects: this.effects,
           heldSocket: this.socketOpen,
         };
         break;
@@ -759,6 +778,14 @@ export class ExplosiveChessMcpSession {
     const publicState = asRecord(observation.publicState);
     if (publicState) this.notePublicState(publicState);
     this.legalActions = readLegalActions(observation.legalActions);
+    if ("effects" in observation) this.effects = readExplosionEffects(observation.effects);
+  }
+
+  private boardSize(): number {
+    const board = this.publicStateSnap?.board;
+    if (Array.isArray(board) && board.length > 0) return board.length;
+    const full = asRecord(this.publicStateSnap?.fullState);
+    return boardSizeFromCounts(full?.counts);
   }
 
   private notePublicState(publicState: Record<string, unknown>): void {
@@ -785,6 +812,7 @@ export class ExplosiveChessMcpSession {
       roomCode: this.roomCode,
       turn: this.publicStateSnap?.turn ?? null,
       lastOpponentMove: opponent,
+      effects: this.effects,
       heldSocket: this.socketOpen,
     };
   }

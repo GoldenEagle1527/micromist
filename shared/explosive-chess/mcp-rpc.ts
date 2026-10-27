@@ -88,7 +88,7 @@ export const explosiveChessMcpTools: readonly ToolDef[] = [
   {
     name: "wait_for_turn",
     description:
-      "Long-poll the open room socket for about 25–55 seconds (default 30). On your_turn or game_over, returns the observation: board, legalActions, and rules. On timeout returns event no_update and the socket stays open — call wait_for_turn again. Stack those calls while a human thinks. Does not choose a move.",
+      "Long-poll the open room socket for about 25–55 seconds (default 30). On your_turn or game_over, returns the observation: board (owner and orb count per cell), effects (explosions from the placement that produced this position), legalActions, and rules. On timeout returns event no_update and the socket stays open — call wait_for_turn again. Stack those calls while a human thinks. Does not choose a move.",
     inputSchema: {
       type: "object",
       additionalProperties: false,

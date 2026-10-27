@@ -88,12 +88,12 @@ Stdout is one JSON object per line (logs go to stderr). Relevant lines:
 
 - `event` `joined` — the room is open. `roomCode` is the code to share. `playUrl` is the human link. `canConfig` and `reusedRoom` are on this line.
 - `event` `listening` — the local HTTP server is up. `port` and `base` are how you curl it. This is the first line after listen.
-- `event` `your_turn` — it is your turn. `legalActions` is copied through. The client does not select one.
-- `event` `opponent` — the opponent update. `lastOpponentMove` is their action.
+- `event` `your_turn` — it is your turn. `legalActions` is copied through. `board` is the grid after the latest placement. `effects` lists explosions from that placement. The client does not select one.
+- `event` `opponent` — the opponent update. `lastOpponentMove` is the cell they placed on. `board` and `effects` are the position after that placement.
 - `event` `game_over` — the match is over. `result` has `winner`, `winnerColor`, and `winReason`. The process then exits 0.
 - `event` `error` — a rejected move, or a fatal failure. A rejected move does not exit. Curl a different cell from `legalActions`. `error` `websocket closed` with `recoverable: true` means the socket dropped and the seat is still reserved. Run the same command again with the same `--player-id` and the same `--seat`. The next `joined` line has `reclaimed: true` when that seat is still yours.
 
-Each line also includes `you`, `lastOpponentMove`, `legalActions`, and `turn` when they are known. The full `board` is included only with `--verbose`.
+Each line also includes `you`, `lastOpponentMove`, `legalActions`, `turn`, `board`, and `effects` when they are known. `board` is the grid after the latest applied placement. Each cell has `row`, `col`, `count` (orbs on that cell), `color` (`empty`, `red`, or `blue`), and `capacity` (corner 2, edge 3, center 4). Read `board` for the position. Do not reconstruct the position from `legalActions` alone. `lastOpponentMove` is only the cell the opponent placed on. The same coordinates on the next opponent line are another placement on that cell, not a stuck value. `effects` lists the explosions caused by the placement that produced this position. Each entry has `exploded` (`row`, `col`) and `spread` (the orthogonal neighbors that received one orb). An empty `effects` array means that placement did not explode. A cell may show `count` 0 with `color` `red` or `blue`: the explosion removed the orbs and the cell still belongs to that color, so the other color's `legalActions` still omit it. That cell is not a stack that failed to explode.
 
 Set `BASE` from the `listening` line (`http://127.0.0.1:PORT`). Then:
 
@@ -102,7 +102,7 @@ curl -sS "$BASE/wait?event=your_turn"
 curl -sS -X POST "$BASE/move" -H "content-type: application/json" --data '{"row":ROW,"col":COL}'
 ```
 
-`GET /state` returns the current you, turn, legalActions, phase, last event, roomCode, canConfig, and result when the match is over. `GET /wait?event=your_turn` blocks until `your_turn` or `game_over`. Add `?timeout=SECONDS` to bound that wait; the response is still the state JSON. `POST /move` sends the cell only when it is in `legalActions`. Anything else is a JSON error and is not sent. `POST /seat` with `{"seat":"red"}` or `{"seat":"blue"}` claims a seat if you did not pass `--seat` at startup. `POST /shutdown` exits 0.
+`GET /state` returns the current you, turn, board, effects, legalActions, phase, last event, roomCode, canConfig, and result when the match is over. `GET /wait?event=your_turn` blocks until `your_turn` or `game_over`. Add `?timeout=SECONDS` to bound that wait; the response is still the state JSON. `POST /move` sends the cell only when it is in `legalActions`. Anything else is a JSON error and is not sent. `POST /seat` with `{"seat":"red"}` or `{"seat":"blue"}` claims a seat if you did not pass `--seat` at startup. `POST /shutdown` exits 0.
 
 The client sends `{"type":"move","payload":{"row":ROW,"col":COL}}` and keeps the socket open until the next push. Leave that process running. Do not poll. A rejected move does not advance the turn and does not repeat `your_turn`. The error still includes the `legalActions` you already had. Pick a different entry.
 
@@ -252,13 +252,14 @@ Red always moves first, even when `hostColor` is `blue`. Wait for `your_turn`. I
           [{ "row": 0, "col": 0, "count": 0, "color": "empty", "capacity": 2 }]
         ]
       },
-      "legalActions": [{ "type": "move", "row": 0, "col": 0 }]
+      "legalActions": [{ "type": "move", "row": 0, "col": 0 }],
+      "effects": []
     }
   }
 }
 ```
 
-`fullState` is the object human clients already apply. `counts` and `colors` are row-major: index `row * boardSize + col`. Numbers: `0` empty, `1` red, `2` blue. `currentTurn` is `1` or `2`. `board` is that same grid with color names and the explosion `capacity` of each cell (corner 2, edge 3, center 4). `legalActions` are the placements `isValidMove` accepts for **your** color right now. Pick one. Do not invent coordinates. The official client copies `legalActions` onto the `your_turn` line and into `GET /state`. You choose, then `POST /move`.
+`fullState` is the object human clients already apply. `counts` and `colors` are row-major: index `row * boardSize + col`. Numbers: `0` empty, `1` red, `2` blue. `currentTurn` is `1` or `2`. `board` is that same grid with color names and the explosion `capacity` of each cell (corner 2, edge 3, center 4). `legalActions` are the placements `isValidMove` accepts for **your** color right now. Pick one. Do not invent coordinates. The official client copies `legalActions`, `board`, and `effects` onto the `your_turn` and `opponent` lines and into `GET /state` and `GET /wait`. You choose from `legalActions`, then `POST /move`. Read `board` and `effects` to see what the last placement did.
 
 Act with either the human verb or `act` (same rules). The official client sends the human verb:
 
@@ -270,7 +271,7 @@ Act with either the human verb or `act` (same rules). The official client sends 
 {"type":"act","payload":{"type":"move","row":0,"col":0}}
 ```
 
-`row` and `col` are integers. Both players then receive `move_applied` (the board after the placement) and the human `state` frame (includes animation frames; agents can ignore it):
+`row` and `col` are integers. Both players then receive `move_applied` (the board after the placement, plus `effects`) and the human `state` frame (animation frames for the board UI). The official client folds those frames into `effects` when `move_applied` does not already include them. Read `board` and `effects` on the client JSON. Do not treat a repeated `lastOpponentMove` coordinate as proof that the cell only stacked.
 
 ```json
 {
@@ -279,6 +280,7 @@ Act with either the human verb or `act` (same rules). The official client sends 
     "action": { "type": "move", "row": 0, "col": 0 },
     "by": { "playerId": "agent-a", "seat": "red", "color": "red", "kind": "agent", "role": "host", "name": "Agent A" },
     "publicState": { "turn": "blue", "fullState": {}, "board": [], "config": {} },
+    "effects": [{ "exploded": { "row": 8, "col": 0 }, "spread": [{ "row": 7, "col": 0 }, { "row": 8, "col": 1 }] }],
     "gameOver": false
   }
 }
