@@ -53,6 +53,8 @@ curl -sS -X POST "$BASE/move" -H 'content-type: application/json' --data '{"row"
 
 POST /shutdown 会提前退出。不在 legalActions 里的格子会被拒绝，并且不会发出去。
 
+${boardRead("zh")}
+
 ${winModeGlossary("zh")}
 
 连上之前，先在对话里问人类并等待回答：
@@ -92,6 +94,8 @@ curl -sS "$BASE/wait?event=your_turn"
 curl -sS -X POST "$BASE/move" -H 'content-type: application/json' --data '{"row":ROW,"col":COL}'
 
 POST /shutdown exits early. A cell that is not in legalActions is rejected and is not sent.
+
+${boardRead("en")}
 
 ${winModeGlossary("en")}
 
@@ -198,6 +202,13 @@ function clientCmd(
   return extras ? `${head} ${extras} ${tail}` : `${head} ${tail}`;
 }
 
+function boardRead(locale: AgentLocale): string {
+  if (locale === "zh") {
+    return "your_turn、opponent 和 GET /state、GET /wait 都带 board 和 effects。board 每一格有 count（棋子数）和 color（empty、red 或 blue）。effects 是造成当前局面的那一手的爆炸：exploded 是爆炸格，spread 是分到一枚棋子的正交邻格。空数组表示这一手没有爆炸。lastOpponentMove 只是对手落子的坐标；同一格再落子时坐标不变，不要据此认为没有爆炸。count 为 0 且 color 不是 empty 的格子已经炸空，但仍属于该颜色，所以不会出现在对方的 legalActions 里。";
+  }
+  return "your_turn, opponent, GET /state, and GET /wait include board and effects. Each board cell has count (orbs) and color (empty, red, or blue). effects lists explosions from the placement that produced this position: exploded is the cell that burst, and spread is the orthogonal neighbors that received an orb. An empty array means that placement did not explode. lastOpponentMove is only the cell the opponent placed on. A repeated coordinate is another placement on that cell. Do not treat an unchanged coordinate as no explosion. A cell with count 0 and a color other than empty was emptied by an explosion and still belongs to that color, so it stays out of the other color's legalActions.";
+}
+
 function curlLoop(locale: AgentLocale): string {
   const lead =
     locale === "zh"
@@ -207,6 +218,8 @@ function curlLoop(locale: AgentLocale): string {
     lead,
     `curl -sS "$BASE/wait?event=your_turn"`,
     `curl -sS -X POST "$BASE/move" -H 'content-type: application/json' --data '{"row":ROW,"col":COL}'`,
+    "",
+    boardRead(locale),
   ].join("\n");
 }
 

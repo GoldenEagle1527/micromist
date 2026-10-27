@@ -70,7 +70,7 @@ The one-shot client that exited after a single your_turn is retired.
   --player-id   This process's id. Omit to reuse the id stored on this machine.
   --name        Display name (default Agent)
   --config      JSON object. Sent as set_config only when you.canConfig is true and the room is still a lobby. If it cannot apply, stdout gets an error JSON line and the process exits before play
-  --verbose     Include board on each JSON line and on HTTP state
+  --verbose     Accepted for older commands. board and effects are always included
   --timeout     Seconds to block for one server push. Omit to wait until game_over
   --help
 
@@ -85,7 +85,7 @@ Replace BASE with that base:
   curl -sS -X POST "$BASE/config" -H "content-type: application/json" --data '{"boardSize":9,"winMode":"steps","winParam":4,"hostColor":"red"}'
   curl -sS -X POST "$BASE/shutdown"
 
-GET /state is you, turn, legalActions, phase, the last event, roomCode, canConfig, and result when the match is over.
+GET /state is you, turn, board, effects, legalActions, phase, the last event, roomCode, canConfig, and result when the match is over.
 GET /wait blocks until your_turn or game_over. ?timeout=SECONDS returns the state. Omit timeout to wait until the match ends.
 POST /move sends {"row":n,"col":n} only when that cell is in legalActions.
 POST /config is set_config when canConfig is true and the room is still a lobby. If it cannot apply, the response is an error and the process exits non-zero.
@@ -696,6 +696,7 @@ def blank_state(args):
         "legalActions": [],
         "lastOpponentMove": None,
         "board": None,
+        "effects": [],
         "phase": None,
         "reclaimed": None,
         "reusedRoom": False,
@@ -783,6 +784,65 @@ def apply_public(state, public):
         state["board"] = public.get("board")
 
 
+def _board_size(state, payload):
+    board = state.get("board")
+    if isinstance(board, list) and len(board) > 0:
+        return len(board)
+    full = payload.get("fullState") if isinstance(payload, dict) else None
+    counts = full.get("counts") if isinstance(full, dict) else None
+    if isinstance(counts, list) and len(counts) > 0:
+        size = int(round(len(counts) ** 0.5))
+        if size * size == len(counts):
+            return size
+    public = payload.get("publicState") if isinstance(payload, dict) else None
+    pub_board = public.get("board") if isinstance(public, dict) else None
+    if isinstance(pub_board, list) and len(pub_board) > 0:
+        return len(pub_board)
+    return 0
+
+
+def _coord_from_index(index, board_size):
+    if not _is_int(index) or board_size <= 0:
+        return None
+    if index < 0 or index >= board_size * board_size:
+        return None
+    return {"row": index // board_size, "col": index % board_size}
+
+
+def effects_from_frames(frames, board_size):
+    if not isinstance(frames, list) or board_size <= 0:
+        return []
+    effects = []
+    for frame in frames:
+        if not isinstance(frame, dict):
+            continue
+        exploded = _coord_from_index(frame.get("explodedCell"), board_size)
+        if exploded is None:
+            continue
+        spread = []
+        affected = frame.get("affectedCells")
+        if isinstance(affected, list):
+            for idx in affected:
+                cell = _coord_from_index(idx, board_size)
+                if cell is not None:
+                    spread.append(cell)
+        effects.append({"exploded": exploded, "spread": spread})
+    return effects
+
+
+def apply_effects(state, effects):
+    if isinstance(effects, list):
+        state["effects"] = effects
+
+
+def observation_fields(state):
+    effects = state.get("effects")
+    return {
+        "board": state.get("board"),
+        "effects": effects if isinstance(effects, list) else [],
+    }
+
+
 def apply_observation(state, obs):
     if not isinstance(obs, dict):
         return
@@ -794,6 +854,7 @@ def apply_observation(state, obs):
     legal = obs.get("legalActions")
     state["legalActions"] = legal if isinstance(legal, list) else []
     apply_public(state, obs.get("publicState"))
+    apply_effects(state, obs.get("effects"))
 
 
 def our_apply_seq(seen, player_id, mark):
@@ -899,8 +960,7 @@ class Session(object):
             line["hint"] = extra["hint"]
         if extra.get("ok") is False:
             line["ok"] = False
-        if args.verbose:
-            line["board"] = state.get("board")
+        line.update(observation_fields(state))
         write_line(line)
         self.cond.notify_all()
 
@@ -930,8 +990,7 @@ class Session(object):
             body["recoverable"] = True
         if self.state.get("hint"):
             body["hint"] = self.state.get("hint")
-        if self.args.verbose:
-            body["board"] = self.state.get("board")
+        body.update(observation_fields(self.state))
         return body
 
     def _matched(self, target):
@@ -1104,6 +1163,12 @@ class Session(object):
         kind = msg.get("type")
         payload = msg.get("payload") if isinstance(msg.get("payload"), dict) else {}
         seq = msg.get("_seq", 0)
+        if kind == "state":
+            with self.lock:
+                frames = payload.get("animationFrames")
+                if isinstance(frames, list):
+                    self.state["effects"] = effects_from_frames(frames, _board_size(self.state, payload))
+            return
         if kind == "room":
             with self.lock:
                 if isinstance(payload.get("phase"), str):
@@ -1149,6 +1214,10 @@ class Session(object):
                 self._fill_result(msg)
                 with self.lock:
                     self.state["awaitingAck"] = False
+                    if isinstance(player, str) and player != self.args.player_id:
+                        self.state["lastOpponentMove"] = payload.get("action")
+                    apply_public(self.state, payload.get("publicState"))
+                    apply_effects(self.state, payload.get("effects"))
                     found = opponent_move(self.client.seen, self.args.player_id)
                     if found is not None:
                         self.state["lastOpponentMove"] = found
@@ -1164,6 +1233,7 @@ class Session(object):
                 if isinstance(player, str) and player != self.args.player_id:
                     self.state["lastOpponentMove"] = payload.get("action")
                 apply_public(self.state, payload.get("publicState"))
+                apply_effects(self.state, payload.get("effects"))
                 box = self._take_pending("move", seq) if ours else None
                 if box:
                     self.state["awaitingAck"] = False
@@ -1493,8 +1563,7 @@ def startup_emit(args, state, event, extra=None):
         line["hint"] = extra["hint"]
     if extra.get("ok") is False:
         line["ok"] = False
-    if args.verbose:
-        line["board"] = state.get("board")
+    line.update(observation_fields(state))
     write_line(line)
 
 

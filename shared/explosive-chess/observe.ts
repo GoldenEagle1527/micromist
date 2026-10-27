@@ -6,6 +6,7 @@
 import {
   COLOR_BLUE,
   COLOR_RED,
+  type AnimationFrame,
   type FullState,
   type GameInstance,
   type PlayerColor,
@@ -62,6 +63,17 @@ export type ExplosiveYou = {
   canConfig?: boolean;
 };
 
+export type CellCoord = {
+  row: number;
+  col: number;
+};
+
+/** One cell that burst, and the orthogonal neighbors that received an orb. */
+export type ExplosionEffect = {
+  exploded: CellCoord;
+  spread: CellCoord[];
+};
+
 export type ExplosiveObservation = {
   game: "explosive-chess";
   phase: Phase;
@@ -73,6 +85,12 @@ export type ExplosiveObservation = {
    * Surrender is allowed during play but is not listed here.
    */
   legalActions: MoveAction[];
+  /**
+   * Explosions from the placement that produced this position.
+   * Empty when that placement did not explode, or before any placement.
+   * A cell with count 0 and color red or blue was emptied and still belongs to that color.
+   */
+  effects: ExplosionEffect[];
 };
 
 export function colorName(color: number): CellColorName {
@@ -147,11 +165,78 @@ export function buildPublicState(
   };
 }
 
+function coordFromIndex(index: unknown, boardSize: number): CellCoord | null {
+  if (typeof index !== "number" || !Number.isInteger(index) || !Number.isInteger(boardSize) || boardSize <= 0) {
+    return null;
+  }
+  if (index < 0 || index >= boardSize * boardSize) return null;
+  return { row: Math.floor(index / boardSize), col: index % boardSize };
+}
+
+export function boardSizeFromCounts(counts: unknown): number {
+  if (!Array.isArray(counts) || counts.length === 0) return 0;
+  const size = Math.round(Math.sqrt(counts.length));
+  return size * size === counts.length ? size : 0;
+}
+
+/** Row/col view of engine animation frames. Indices outside the board are dropped. */
+export function effectsFromAnimationFrames(frames: unknown, boardSize: number): ExplosionEffect[] {
+  if (!Array.isArray(frames) || boardSize <= 0) return [];
+  const effects: ExplosionEffect[] = [];
+  for (const frame of frames) {
+    if (!frame || typeof frame !== "object") continue;
+    const rec = frame as Partial<AnimationFrame>;
+    const exploded = coordFromIndex(rec.explodedCell, boardSize);
+    if (!exploded) continue;
+    const spread: CellCoord[] = [];
+    if (Array.isArray(rec.affectedCells)) {
+      for (const idx of rec.affectedCells) {
+        const cell = coordFromIndex(idx, boardSize);
+        if (cell) spread.push(cell);
+      }
+    }
+    effects.push({ exploded, spread });
+  }
+  return effects;
+}
+
+function isCoord(value: unknown): value is CellCoord {
+  if (!value || typeof value !== "object") return false;
+  const rec = value as { row?: unknown; col?: unknown };
+  return (
+    typeof rec.row === "number" &&
+    typeof rec.col === "number" &&
+    Number.isInteger(rec.row) &&
+    Number.isInteger(rec.col) &&
+    rec.row >= 0 &&
+    rec.col >= 0
+  );
+}
+
+export function readExplosionEffects(value: unknown): ExplosionEffect[] {
+  if (!Array.isArray(value)) return [];
+  const effects: ExplosionEffect[] = [];
+  for (const item of value) {
+    if (!item || typeof item !== "object") continue;
+    const rec = item as { exploded?: unknown; spread?: unknown };
+    if (!isCoord(rec.exploded)) continue;
+    const spread: CellCoord[] = [];
+    if (Array.isArray(rec.spread)) {
+      for (const cell of rec.spread) {
+        if (isCoord(cell)) spread.push({ row: cell.row, col: cell.col });
+      }
+    }
+    effects.push({ exploded: { row: rec.exploded.row, col: rec.exploded.col }, spread });
+  }
+  return effects;
+}
+
 export function buildExplosiveObservation(input: {
   phase: Phase;
   you: ExplosiveYou;
   config: ExplosivePublicConfig;
   game: GameInstance | null;
+  effects?: ExplosionEffect[];
 }): ExplosiveObservation {
   return {
     game: "explosive-chess",
@@ -159,5 +244,6 @@ export function buildExplosiveObservation(input: {
     you: input.you,
     publicState: buildPublicState(input.config, input.game),
     legalActions: legalMoveActions(input.game, input.you.color, input.phase),
+    effects: input.effects ?? [],
   };
 }
