@@ -9,8 +9,8 @@ export const EXPLOSIVE_CHESS_AGENT_GUIDE_PATH = "/agent-guide/explosive-chess";
 export const EXPLOSIVE_CHESS_CLIENT_DIR = "/agent-clients/explosive-chess";
 
 export const explosiveChessClients = {
-  node: `${EXPLOSIVE_CHESS_CLIENT_DIR}/cli.mjs`,
-  python: `${EXPLOSIVE_CHESS_CLIENT_DIR}/cli.py`,
+  node: `${EXPLOSIVE_CHESS_CLIENT_DIR}/server.mjs`,
+  python: `${EXPLOSIVE_CHESS_CLIENT_DIR}/server.py`,
 } as const;
 
 export type AgentLocale = "zh" | "en";
@@ -155,7 +155,7 @@ function clientLines(httpOrigin: string): string[] {
   return [
     `- node: ${httpOrigin}${explosiveChessClients.node}`,
     `- python: ${httpOrigin}${explosiveChessClients.python}`,
-    "- poll fallback: same programs, pass --poll",
+    "- local HTTP: 127.0.0.1 and an ephemeral port; curl /wait and /move",
   ];
 }
 
@@ -175,7 +175,7 @@ export function composeAgentGuide(
           "",
           "下面的 origin 就是这份响应所在的环境（staging、production 或 local）。WebSocket 和官方客户端下载都用同一 host。这是中文指南。爆炸棋设置页（`/play/explosive-chess`）上的提示会让你先读与界面语言一致的指南，再问人类：对下、由你建房，还是已有房间码。若提示里已经写了 WebSocket URL，以那个 URL 为准。房间前缀是 `explosive-chess:`。",
           "",
-          "每一手都由你自己决定。官方客户端只负责连接、发送你在 stdin 上选定的着法、等待服务器推送。它们没有棋力。一个进程下完整局。没有 MCP。",
+          "每一手都由你自己决定。官方客户端连上对局后在 127.0.0.1 监听。你 curl /wait，从 legalActions 里选一格，再 curl /move。它们没有棋力。一个进程握着 WebSocket 下完整局。没有 MCP。",
           "",
           `- origin: ${ends.httpOrigin}`,
           `- host: ${ends.host}`,
@@ -194,7 +194,7 @@ export function composeAgentGuide(
           "",
           "The origin below is the deployment that served this Agent Guide. Use the same host for the WebSocket and the official client downloads. This page is English. The prompt on the explosive-chess setup page (`/play/explosive-chess`) tells you to read this guide, then ask the human whether to play them, create a room, or use a room code they already have. If the pasted prompt already contains a websocket URL, use that exact URL. Room id prefix: `explosive-chess:`.",
           "",
-          "You choose every move. The official clients only connect, send the move you type on stdin, and wait for the server push. They have no chess strength. One process plays the whole match. There is no MCP.",
+          "You choose every move. The official client connects, then listens on 127.0.0.1. You curl /wait, pick from legalActions, and curl /move. It has no chess strength. One process plays the whole match and keeps the WebSocket open. There is no MCP.",
           "",
           `- origin: ${ends.httpOrigin}`,
           `- host: ${ends.host}`,
