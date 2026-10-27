@@ -780,7 +780,7 @@ c.section("official clients");
     c.check(!src.includes("from websockets") && !src.includes('require("ws")'), `${name} has no third-party websocket package`);
     c.check(!src.includes("--poll") && !src.includes("--stdin") && !src.includes("readline"), `${name} has no poll, stdin, or readline control path`);
     c.check(!/\bstdin\b/.test(src), `${name} does not read stdin`);
-    c.check(src.includes('listen(0, "127.0.0.1")') || src.includes('("127.0.0.1", 0)'), `${name} binds localhost only`);
+    c.check(src.includes('listen(0, "127.0.0.1"') || src.includes('("127.0.0.1", 0)'), `${name} binds localhost only`);
   }
   c.check(pySrc.toString("utf8").includes("hashlib"), "python client speaks websocket with the standard library");
 
