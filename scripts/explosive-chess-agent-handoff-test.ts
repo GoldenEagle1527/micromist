@@ -101,12 +101,15 @@ c.section("served guide");
   );
   c.check(composed.includes(`${origin}${explosiveChessClients.node}`), "banner names the node client");
   c.check(composed.includes(`${origin}${explosiveChessClients.python}`), "banner names the python client");
-  c.check(composed.includes("--poll"), "banner names the poll fallback");
+  c.check(composed.includes("127.0.0.1"), "banner names the local HTTP bind");
+  c.check(composed.includes("/wait"), "banner names /wait");
+  c.check(!composed.includes("--poll"), "guide does not document --poll");
   c.check(composed.includes("create_room"), "guide documents create_room");
   c.check(composed.includes("join_room"), "guide documents join_room");
   c.check(composed.includes("claim_seat"), "guide documents claim_seat");
   c.check(composed.includes("explosive-chess-player-id"), "guide documents the local playerId file");
-  c.check(composed.includes("stdin"), "guide reads moves from stdin");
+  c.check(composed.includes('{"event":"listening"'), "guide documents the listening line");
+  c.check(!composed.includes("stdin"), "guide does not read moves from stdin");
   c.check(composed.includes("retired"), "one-shot client is retired in the guide");
   c.check(composed.includes("your_turn"), "protocol your_turn kept");
   c.check(composed.includes("legalActions"), "protocol legalActions kept");
@@ -137,7 +140,8 @@ c.section("served guide");
     composed.includes("reusedRoom") && composed.includes("you.canConfig") && composed.includes("websocket closed"),
     "english guide covers an existing room, canConfig, and reconnect",
   );
-  c.check(composed.includes("A second Enter is not required"), "english guide says one stdin line is one move");
+  c.check(composed.includes("/wait?event=your_turn"), "english guide waits with curl /wait");
+  c.check(composed.includes('POST /move'), "english guide sends moves with POST /move");
 
   const composedZh = composeAgentGuide(origin, protocolZh, "zh");
   c.check(composedZh.startsWith("# 当前站点"), "chinese guide starts with the host block");
@@ -161,8 +165,8 @@ c.section("served guide");
     "chinese guide does not use english mode labels",
   );
   c.check(
-    composedZh.includes("reusedRoom") && composedZh.includes("websocket closed") && composedZh.includes("不需要再按一次 Enter"),
-    "chinese guide covers an existing room, reconnect, and one-line stdin",
+    composedZh.includes("reusedRoom") && composedZh.includes("websocket closed") && composedZh.includes("/wait?event=your_turn"),
+    "chinese guide covers an existing room, reconnect, and curl /wait",
   );
 
   const html = renderAgentGuideHtml(composed, `${origin}/agent-guide/explosive-chess/en.md`, "en", `${origin}/agent-guide/explosive-chess/zh`);
@@ -333,9 +337,10 @@ c.section("copy prompts");
       c.check(text.includes('"explosive-chess"'), `${label} join names the game`);
       c.check(text.includes(`${origin}${explosiveChessClients.node}`), `${label} downloads the node client`);
       c.check(text.includes(`${origin}${explosiveChessClients.python}`), `${label} downloads the python client`);
-      c.check(text.includes("--poll"), `${label} names the poll fallback`);
-      c.check(text.includes("--move ROW,COL"), `${label} shows the poll move flag`);
-      c.check(text.includes("stdin"), `${label} reads moves from stdin`);
+      c.check(text.includes("/wait?event=your_turn"), `${label} waits with curl /wait`);
+      c.check(text.includes('"$BASE/move"'), `${label} posts /move`);
+      c.check(text.includes("listening"), `${label} reads the listening line`);
+      c.check(!text.includes("stdin") && !text.includes("--poll"), `${label} does not document stdin or --poll`);
       c.check(text.includes("create_room") || text.includes("join_room"), `${label} uses an interactive command`);
       c.check(!text.includes("ws-wait"), `${label} does not document the retired one-shot client`);
       c.check(text.includes("minimax"), `${label} forbids a search engine`);
@@ -388,7 +393,9 @@ c.section("setup invite");
   c.check(inviteZh.includes(`${origin}${explosiveChessClients.python}`), "chinese invite downloads the python client");
   c.check(invite.includes("create_room") && invite.includes("join_room"), "english invite shows both commands");
   c.check(inviteZh.includes("create_room") && inviteZh.includes("join_room"), "chinese invite shows both commands");
-  c.check(invite.includes("stdin"), "english invite types moves on stdin");
+  c.check(invite.includes('{"event":"listening"'), "english invite reads the listening line");
+  c.check(invite.includes("/wait?event=your_turn"), "english invite curls /wait");
+  c.check(!invite.includes("stdin") && !inviteZh.includes("stdin"), "invite does not document stdin");
   c.check(!invite.includes("ws-wait") && !inviteZh.includes("ws-wait"), "invite does not document the retired client");
   c.check(invite.includes("Do not write a solver"), "english invite forbids a solver");
   c.check(inviteZh.includes("不要编写求解器"), "chinese invite forbids a solver");
@@ -669,7 +676,24 @@ type EventLine = {
   reusedRoom?: boolean;
   recoverable?: boolean;
   you?: { seat?: string; role?: string; canConfig?: boolean };
+  port?: number;
+  base?: string;
+  phase?: string;
 };
+
+async function httpJson(base: string, path: string, init?: RequestInit): Promise<{ status: number; body: EventLine }> {
+  const res = await fetch(`${base}${path}`, init);
+  const body = (await res.json()) as EventLine;
+  return { status: res.status, body };
+}
+
+function postJson(path: string, payload: unknown): RequestInit {
+  return {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(payload),
+  };
+}
 
 function startSession(command: string, args: string[]) {
   const child = spawn(command, args, { stdio: ["pipe", "pipe", "pipe"] });
@@ -704,9 +728,6 @@ function startSession(command: string, args: string[]) {
     stderr: () => stderr,
     exited: () => exited,
     write(text: string) {
-      child.stdin.write(text.endsWith("\n") ? text : `${text}\n`);
-    },
-    writeRaw(text: string) {
       child.stdin.write(text);
     },
     async waitFor(pred: (rows: EventLine[]) => boolean, ms = 4000) {
@@ -737,8 +758,8 @@ function startSession(command: string, args: string[]) {
 
 c.section("official clients");
 {
-  const nodeSrc = readFileSync(`${CLIENT_DIR}/cli.mjs`);
-  const pySrc = readFileSync(`${CLIENT_DIR}/cli.py`);
+  const nodeSrc = readFileSync(`${CLIENT_DIR}/server.mjs`);
+  const pySrc = readFileSync(`${CLIENT_DIR}/server.py`);
   let legacy = false;
   try {
     readFileSync(`${CLIENT_DIR}/ws-wait.mjs`);
@@ -757,23 +778,28 @@ c.section("official clients");
     c.check(!src.includes("minimax") && !src.includes("mcts") && !src.includes("Math.random"), `${name} has no move search`);
     c.check(!src.includes("legalActions[0]") && !src.includes("random.choice"), `${name} does not pick a legal action`);
     c.check(!src.includes("from websockets") && !src.includes('require("ws")'), `${name} has no third-party websocket package`);
+    c.check(!src.includes("--poll") && !src.includes("--stdin") && !src.includes("readline"), `${name} has no poll, stdin, or readline control path`);
+    c.check(!/\bstdin\b/.test(src), `${name} does not read stdin`);
+    c.check(src.includes('listen(0, "127.0.0.1"') || src.includes('("127.0.0.1", 0)'), `${name} binds localhost only`);
   }
   c.check(pySrc.toString("utf8").includes("hashlib"), "python client speaks websocket with the standard library");
 
-  const nodeHelp = await runClient(process.execPath, [`${CLIENT_DIR}/cli.mjs`, "--help"]);
+  const nodeHelp = await runClient(process.execPath, [`${CLIENT_DIR}/server.mjs`, "--help"]);
   c.check(nodeHelp.code === 0 && nodeHelp.stdout.includes("no chess strength"), "node help");
   c.check(nodeHelp.stdout.includes("create_room") && nodeHelp.stdout.includes("join_room") && nodeHelp.stdout.includes("claim_seat"), "node help shows the commands");
-  const pyHelp = await runClient("python3", [`${CLIENT_DIR}/cli.py`, "--help"]);
+  c.check(nodeHelp.stdout.includes('"$BASE/move"') && !nodeHelp.stdout.includes("stdin") && !nodeHelp.stdout.includes("--poll"), "node help is the curl API");
+  const pyHelp = await runClient("python3", [`${CLIENT_DIR}/server.py`, "--help"]);
   c.check(pyHelp.code === 0 && pyHelp.stdout.includes("no chess strength"), "python help");
   c.check(pyHelp.stdout.includes("claim_seat") && pyHelp.stdout.includes("explosive-chess-player-id"), "python help shows claim_seat and the local playerId");
-  const nodeUsage = await runClient(process.execPath, [`${CLIENT_DIR}/cli.mjs`, "--player-id", "agent-1"]);
+  c.check(pyHelp.stdout.includes('"$BASE/move"') && !pyHelp.stdout.includes("stdin") && !pyHelp.stdout.includes("--poll"), "python help is the curl API");
+  const nodeUsage = await runClient(process.execPath, [`${CLIENT_DIR}/server.mjs`, "--player-id", "agent-1"]);
   const nodeUsageJson = JSON.parse(nodeUsage.stdout) as { ok?: boolean; error?: string };
   c.check(nodeUsage.code === 1 && nodeUsageJson.ok === false && (nodeUsageJson.error ?? "").includes("create_room"), "node usage error is json");
-  const nodeJoin = await runClient(process.execPath, [`${CLIENT_DIR}/cli.mjs`, "--origin", "http://127.0.0.1:9", "join_room"]);
+  const nodeJoin = await runClient(process.execPath, [`${CLIENT_DIR}/server.mjs`, "--origin", "http://127.0.0.1:9", "join_room"]);
   const nodeJoinJson = JSON.parse(nodeJoin.stdout) as { error?: string };
   c.check(nodeJoin.code === 1 && (nodeJoinJson.error ?? "").includes("-c"), "join_room requires a code");
   const nodeMove = await runClient(process.execPath, [
-    `${CLIENT_DIR}/cli.mjs`,
+    `${CLIENT_DIR}/server.mjs`,
     "--origin",
     "http://127.0.0.1:9",
     "--move",
@@ -783,8 +809,16 @@ c.section("official clients");
     "abc",
   ]);
   const nodeMoveJson = JSON.parse(nodeMove.stdout) as { error?: string };
-  c.check(nodeMove.code === 1 && (nodeMoveJson.error ?? "").includes("--poll"), "interactive client rejects a one-shot --move");
-  const nodeClaim = await runClient(process.execPath, [`${CLIENT_DIR}/cli.mjs`, "--origin", "http://127.0.0.1:9", "--player-id", "agent-1", "claim_seat", "-c", "abc"]);
+  c.check(nodeMove.code === 1 && (nodeMoveJson.error ?? "").includes("unknown argument"), "client rejects a one-shot --move");
+  for (const flag of ["--stdin", "--poll"]) {
+    const rejected = await runClient(process.execPath, [`${CLIENT_DIR}/server.mjs`, flag, "join_room", "-c", "abc"]);
+    const rejectedJson = JSON.parse(rejected.stdout) as { error?: string };
+    c.check(rejected.code === 1 && (rejectedJson.error ?? "").includes("unknown argument"), `node rejects ${flag}`);
+    const rejectedPy = await runClient("python3", [`${CLIENT_DIR}/server.py`, flag, "join_room", "-c", "abc"]);
+    const rejectedPyJson = JSON.parse(rejectedPy.stdout) as { error?: string };
+    c.check(rejectedPy.code === 1 && (rejectedPyJson.error ?? "").includes("unknown argument"), `python rejects ${flag}`);
+  }
+  const nodeClaim = await runClient(process.execPath, [`${CLIENT_DIR}/server.mjs`, "--origin", "http://127.0.0.1:9", "--player-id", "agent-1", "claim_seat", "-c", "abc"]);
   const nodeClaimJson = JSON.parse(nodeClaim.stdout) as { error?: string };
   c.check(nodeClaim.code === 1 && (nodeClaimJson.error ?? "").includes("--seat"), "claim_seat requires --seat");
 
@@ -813,26 +847,39 @@ c.section("official clients");
         send({ type: "game_over", payload: { winner: 2, winnerColor: "blue", winReason: "steps" } });
       }
     });
-    const session = startSession(process.execPath, [`${CLIENT_DIR}/cli.mjs`, ...base(mock.port), "join_room", "-c", "abc"]);
+    const session = startSession(process.execPath, [`${CLIENT_DIR}/server.mjs`, ...base(mock.port), "join_room", "-c", "abc"]);
     try {
-      await session.waitFor((rows) => rows.some((row) => row.event === "your_turn"));
-      const first = session.lines.find((row) => row.event === "your_turn");
+      await session.waitFor((rows) => rows.some((row) => row.event === "listening"));
+      const listening = session.lines.find((row) => row.event === "listening");
       c.check(session.lines[0]?.event === "joined", "node prints joined before the turn");
-      c.check(first != null && !("board" in first), "node your_turn omits the board");
-      c.check((first?.legalActions ?? []).length === 2, "node copies every legal action");
-      c.check(mock.inbound.every((msg) => msg.type !== "move"), "node does not send a move before stdin");
+      c.check(listening?.base === `http://127.0.0.1:${listening?.port}`, "node listening line names the local base");
+      c.check(session.lines.findIndex((row) => row.event === "joined") < session.lines.findIndex((row) => row.event === "listening"), "node prints listening after join");
+      await session.waitFor((rows) => rows.some((row) => row.event === "your_turn"));
+      const turnLine = session.lines.find((row) => row.event === "your_turn");
+      c.check(turnLine != null && !("board" in turnLine), "node your_turn omits the board");
+      c.check((session.lines.find((row) => row.event === "your_turn")?.legalActions ?? []).length === 2, "node copies every legal action");
+      c.check(mock.inbound.every((msg) => msg.type !== "move"), "node does not send a move before /move");
       c.check(mock.inbound.some((msg) => msg.payload?.kind === "agent"), "node join kind is agent");
       c.check(!session.exited(), "node stays up after your_turn");
+      const api = listening?.base ?? "";
+      const state = await httpJson(api, "/state");
+      c.check(state.status === 200 && state.body.roomCode === "abc" && state.body.event === "your_turn", "GET /state returns the turn");
+      const blocked = await httpJson(api, "/move", postJson("/move", { row: 9, col: 9 }));
+      c.check(blocked.status === 400 && (blocked.body.error ?? "").includes("legalActions"), "POST /move rejects a cell outside legalActions");
+      c.check((blocked.body.legalActions ?? []).length === 2, "rejected /move still lists legalActions");
+      c.check(mock.inbound.every((msg) => msg.type !== "move"), "a move outside legalActions is not sent");
       const started = Date.now();
-      session.write("1,1");
-      await session.waitFor((rows) => rows.filter((row) => row.event === "your_turn").length >= 2);
-      c.check(Date.now() - started >= 150, "node blocked until the opponent push");
+      const played = await httpJson(api, "/move", postJson("/move", { row: 1, col: 1 }));
+      c.check(played.status === 200 && played.body.ok === true, "POST /move accepts a legal cell", session.stderr());
+      const next = await httpJson(api, "/wait?event=your_turn&timeout=5");
+      c.check(Date.now() - started >= 150, "GET /wait blocks until the opponent push");
+      c.check(next.status === 200 && next.body.event === "your_turn" && next.body.legalActions?.[0]?.row === 0, "GET /wait returns the next your_turn");
       const opponent = session.lines.find((row) => row.event === "opponent");
       c.check(opponent?.lastOpponentMove?.row === 2 && opponent.lastOpponentMove?.col === 3, "node prints the opponent update");
-      session.write('{"row":0,"col":2}');
+      const finished = await httpJson(api, "/move", postJson("/move", { row: 0, col: 2 }));
       const done = await session.untilExit();
       const over = session.lines.find((row) => row.event === "game_over");
-      c.check(done.code === 0 && over?.result?.winnerColor === "blue", "node exits only on game_over", session.stderr());
+      c.check(done.code === 0 && over?.result?.winnerColor === "blue" && finished.body.event === "game_over", "node exits only on game_over", session.stderr());
     } finally {
       await session.close();
       await mock.close();
@@ -847,12 +894,14 @@ c.section("official clients");
       }
       if (msg.type === "move") send({ type: "error", payload: { message: "Invalid move" } });
     });
-    const session = startSession(process.execPath, [`${CLIENT_DIR}/cli.mjs`, ...base(mock.port), "join_room", "-c", "abc"]);
+    const session = startSession(process.execPath, [`${CLIENT_DIR}/server.mjs`, ...base(mock.port), "join_room", "-c", "abc"]);
     try {
-      await session.waitFor((rows) => rows.some((row) => row.event === "your_turn"));
-      session.write("1,1");
+      await session.waitFor((rows) => rows.some((row) => row.event === "listening" && rows.some((row) => row.event === "your_turn")));
+      const api = session.lines.find((row) => row.event === "listening")?.base ?? "";
+      const rejectedHttp = await httpJson(api, "/move", postJson("/move", { row: 1, col: 1 }));
       await session.waitFor((rows) => rows.some((row) => row.event === "error"));
       const rejected = session.lines.find((row) => row.event === "error");
+      c.check(rejectedHttp.status === 400 && (rejectedHttp.body.error ?? "").includes("Invalid move"), "POST /move returns the server rejection");
       c.check((rejected?.error ?? "").includes("Invalid move"), "node surfaces a rejected move", session.stderr());
       c.check((rejected?.legalActions ?? []).length === 2, "rejected move still lists the legal actions");
       c.check(!session.exited(), "a rejected move does not end the session");
@@ -872,7 +921,7 @@ c.section("official clients");
       }
     });
     const session = startSession(process.execPath, [
-      `${CLIENT_DIR}/cli.mjs`,
+      `${CLIENT_DIR}/server.mjs`,
       ...base(mock.port),
       "--config",
       '{"boardSize":9,"winMode":"steps","winParam":4,"hostColor":"red"}',
@@ -935,7 +984,7 @@ c.section("official clients");
       }
     });
     const session = startSession(process.execPath, [
-      `${CLIENT_DIR}/cli.mjs`,
+      `${CLIENT_DIR}/server.mjs`,
       ...base(mock.port),
       "--config",
       '{"boardSize":9,"winMode":"steps","winParam":4,"hostColor":"red"}',
@@ -996,8 +1045,8 @@ c.section("official clients");
       "abc",
     ];
     for (const [name, command, file] of [
-      ["node", process.execPath, `${CLIENT_DIR}/cli.mjs`],
-      ["python", "python3", `${CLIENT_DIR}/cli.py`],
+      ["node", process.execPath, `${CLIENT_DIR}/server.mjs`],
+      ["python", "python3", `${CLIENT_DIR}/server.py`],
     ] as const) {
       const session = startSession(command, [file, ...args]);
       try {
@@ -1037,7 +1086,7 @@ c.section("official clients");
       if (msg.type === "set_config") send({ type: "error", payload: { message: "Config locked after start" } });
     });
     const session = startSession(process.execPath, [
-      `${CLIENT_DIR}/cli.mjs`,
+      `${CLIENT_DIR}/server.mjs`,
       ...base(mock.port),
       "--config",
       '{"boardSize":9,"winMode":"steps","winParam":8,"hostColor":"red"}',
@@ -1083,7 +1132,7 @@ c.section("official clients");
         });
       }
     });
-    const session = startSession(process.execPath, [`${CLIENT_DIR}/cli.mjs`, ...base(mock.port), "--seat", "blue", "claim_seat", "-c", "abc"]);
+    const session = startSession(process.execPath, [`${CLIENT_DIR}/server.mjs`, ...base(mock.port), "--seat", "blue", "claim_seat", "-c", "abc"]);
     try {
       await session.waitFor((rows) => rows.some((row) => row.event === "seated"));
       const seated = session.lines.find((row) => row.event === "seated");
@@ -1104,7 +1153,7 @@ c.section("official clients");
         send(yourTurnMessage());
       }
     });
-    const session = startSession(process.execPath, [`${CLIENT_DIR}/cli.mjs`, ...base(mock.port), "--verbose", "join_room", "-c", "abc"]);
+    const session = startSession(process.execPath, [`${CLIENT_DIR}/server.mjs`, ...base(mock.port), "--verbose", "join_room", "-c", "abc"]);
     try {
       await session.waitFor((rows) => rows.some((row) => row.event === "your_turn"));
       const turn = session.lines.find((row) => row.event === "your_turn");
@@ -1131,7 +1180,7 @@ c.section("official clients");
         send(yourTurnMessage());
       }
     });
-    const session = startSession(process.execPath, [`${CLIENT_DIR}/cli.mjs`, ...base(mock.port), "create_room"]);
+    const session = startSession(process.execPath, [`${CLIENT_DIR}/server.mjs`, ...base(mock.port), "create_room"]);
     try {
       await session.waitFor((rows) => rows.some((row) => row.event === "joined"));
       const path = (mock.paths[0] || "").split("?")[0];
@@ -1148,7 +1197,7 @@ c.section("official clients");
     const mock = await listenMock((msg, send) => {
       if (msg.type === "join") send(joinedMessage("host"));
     });
-    const session = startSession(process.execPath, [`${CLIENT_DIR}/cli.mjs`, ...base(mock.port), "create_room", "-c", "Ab12CD"]);
+    const session = startSession(process.execPath, [`${CLIENT_DIR}/server.mjs`, ...base(mock.port), "create_room", "-c", "Ab12CD"]);
     try {
       await session.waitFor((rows) => rows.some((row) => row.event === "joined"));
       c.check((mock.paths[0] || "").split("?")[0] === "/ws/explosive-chess:ab12cd", "create_room -c uses that code", mock.paths[0] || "");
@@ -1160,34 +1209,23 @@ c.section("official clients");
 
   {
     const mock = await listenMock((msg, send) => {
-      if (msg.type === "join") send(joinedMessage());
-      if (msg.type === "move") {
-        send({
-          type: "move_applied",
-          payload: { action: { type: "move", row: 0, col: 2 }, by: { playerId: "agent-1" }, gameOver: false },
-        });
-      }
-      if (msg.type === "observe") {
-        send({
-          type: "observation",
-          payload: {
-            observation: {
-              phase: "playing",
-              you: seat,
-              publicState: { turn: "red", fullState: { gameOver: false } },
-              legalActions: [],
-            },
-          },
-        });
+      if (msg.type === "join") {
+        send(joinedMessage());
+        send(yourTurnMessage());
       }
     });
+    const session = startSession(process.execPath, [`${CLIENT_DIR}/server.mjs`, ...base(mock.port), "join_room", "-c", "abc"]);
     try {
-      const result = await runClient(process.execPath, [`${CLIENT_DIR}/cli.mjs`, ...base(mock.port), "--poll", "join_room", "-c", "abc", "--move", "0,2"]);
-      const json = JSON.parse(result.stdout) as { event?: string; mode?: string; yourTurn?: boolean };
-      c.check(result.code === 0 && json.event === "observation" && json.mode === "poll", "node poll returns without waiting for your_turn", result.stderr);
-      c.check(json.yourTurn === false, "node poll reports that it is not your turn");
-      c.check(mock.inbound.some((msg) => msg.type === "observe"), "node poll sends one observe");
+      await session.waitFor((rows) => rows.some((row) => row.event === "listening" && rows.some((line) => line.event === "your_turn")));
+      const api = session.lines.find((row) => row.event === "listening")?.base ?? "";
+      const state = await httpJson(api, "/state");
+      c.check(state.status === 200 && state.body.legalActions?.length === 2 && state.body.phase === "playing", "GET /state returns the turn", session.stderr());
+      c.check(mock.inbound.every((msg) => msg.type !== "move"), "GET /state does not send a move");
+      const stopped = await httpJson(api, "/shutdown", { method: "POST" });
+      const done = await session.untilExit();
+      c.check(stopped.body.ok === true && stopped.body.event === "shutdown" && done.code === 0, "POST /shutdown exits 0", session.stderr());
     } finally {
+      await session.close();
       await mock.close();
     }
   }
@@ -1202,16 +1240,23 @@ c.section("official clients");
         send({ type: "game_over", payload: { winner: 1, winnerColor: "red", winReason: "steps" } });
       }
     });
-    const session = startSession("python3", [`${CLIENT_DIR}/cli.py`, ...base(mock.port), "join_room", "-c", "abc"]);
+    const session = startSession("python3", [`${CLIENT_DIR}/server.py`, ...base(mock.port), "join_room", "-c", "abc"]);
     try {
-      await session.waitFor((rows) => rows.some((row) => row.event === "your_turn"));
+      await session.waitFor((rows) => rows.some((row) => row.event === "listening" && rows.some((line) => line.event === "your_turn")));
       c.check((session.lines.find((row) => row.event === "your_turn")?.legalActions ?? []).length === 2, "python copies every legal action");
-      c.check(mock.inbound.every((msg) => msg.type !== "move"), "python does not send a move before stdin");
+      c.check(mock.inbound.every((msg) => msg.type !== "move"), "python does not send a move before /move");
       c.check(!session.exited(), "python stays up after your_turn");
-      session.write("3,4");
+      const api = session.lines.find((row) => row.event === "listening")?.base ?? "";
+      session.write("3,4\n0,2\r");
+      await new Promise((resolve) => setTimeout(resolve, 150));
+      c.check(mock.inbound.every((msg) => msg.type !== "move"), "python ignores ROW,COL on stdin");
+      const blocked = await httpJson(api, "/move", postJson("/move", { row: 3, col: 4 }));
+      c.check(blocked.status === 400 && (blocked.body.error ?? "").includes("legalActions"), "python POST /move rejects a cell outside legalActions");
+      c.check(mock.inbound.every((msg) => msg.type !== "move"), "python does not send a move outside legalActions");
+      const played = await httpJson(api, "/move", postJson("/move", { row: 4, col: 5 }));
       const done = await session.untilExit();
-      c.check(done.code === 0 && session.lines.some((row) => row.event === "game_over"), "python exits on game_over", session.stderr());
-      c.check(mock.inbound.some((msg) => msg.type === "move" && msg.payload?.row === 3 && msg.payload?.col === 4), "python sends the typed cell");
+      c.check(done.code === 0 && played.body.event === "game_over" && session.lines.some((row) => row.event === "game_over"), "python exits on game_over", session.stderr());
+      c.check(mock.inbound.some((msg) => msg.type === "move" && msg.payload?.row === 4 && msg.payload?.col === 5), "python sends the posted cell");
     } finally {
       await session.close();
       await mock.close();
@@ -1219,7 +1264,7 @@ c.section("official clients");
   }
 
   {
-    const oneLine = async (label: string, command: string, file: string, raw: string) => {
+    const posted = async (label: string, command: string, file: string) => {
       const mock = await listenMock((msg, send) => {
         if (msg.type === "join") {
           send(joinedMessage());
@@ -1231,54 +1276,60 @@ c.section("official clients");
       });
       const session = startSession(command, [file, ...base(mock.port), "join_room", "-c", "abc"]);
       try {
-        await session.waitFor((rows) => rows.some((row) => row.event === "your_turn"));
-        session.writeRaw(raw);
+        await session.waitFor((rows) => rows.some((row) => row.event === "listening" && rows.some((line) => line.event === "your_turn")));
+        const api = session.lines.find((row) => row.event === "listening")?.base ?? "";
+        session.write("0,0\r");
+        await new Promise((resolve) => setTimeout(resolve, 80));
+        c.check(mock.inbound.every((msg) => msg.type !== "move"), `${label} ignores a move written to stdin`);
+        const played = await httpJson(api, "/move", postJson("/move", { row: 0, col: 0 }));
         const done = await session.untilExit();
         const sent = mock.inbound.some((msg) => msg.type === "move" && msg.payload?.row === 0 && msg.payload?.col === 0);
-        c.check(done.code === 0 && sent, label, session.stderr());
+        c.check(done.code === 0 && sent && played.body.event === "game_over", label, session.stderr());
       } finally {
         await session.close();
         await mock.close();
       }
     };
-    await oneLine("node accepts one CR-terminated move", process.execPath, `${CLIENT_DIR}/cli.mjs`, "0,0\r");
-    await oneLine("python accepts one CR-terminated move", "python3", `${CLIENT_DIR}/cli.py`, "0,0\r");
-    await oneLine("node accepts one bare pipe move", process.execPath, `${CLIENT_DIR}/cli.mjs`, "0,0");
-    await oneLine("python accepts one bare pipe move", "python3", `${CLIENT_DIR}/cli.py`, "0,0");
+    await posted("node POST /move reaches the server", process.execPath, `${CLIENT_DIR}/server.mjs`);
+    await posted("python POST /move reaches the server", "python3", `${CLIENT_DIR}/server.py`);
   }
 
   {
     const mock = await listenMock((msg, send) => {
-      if (msg.type === "join") send(joinedMessage());
-      if (msg.type === "move") {
+      if (msg.type === "join") {
         send({
-          type: "move_applied",
-          payload: { action: { type: "move", row: 3, col: 4 }, by: { playerId: "agent-1" }, gameOver: false },
-        });
-      }
-      if (msg.type === "observe") {
-        send({
-          type: "observation",
+          type: "joined",
           payload: {
-            observation: {
-              phase: "playing",
-              you: seat,
-              publicState: { turn: "red", fullState: { gameOver: false } },
-              legalActions: [],
-            },
+            roomCode: "abc",
+            phase: "lobby",
+            reclaimed: false,
+            you: { ...seat, seat: "spectator", role: "spectator", color: null, canConfig: false },
           },
         });
       }
+      if (msg.type === "set_config") send({ type: "room", payload: { phase: "lobby" } });
     });
-    try {
-      const result = await runClient("python3", [`${CLIENT_DIR}/cli.py`, ...base(mock.port), "--poll", "join_room", "-c", "abc", "--move", "3,4"]);
-      const json = JSON.parse(result.stdout) as { event?: string; mode?: string; yourTurn?: boolean };
-      const pyPollOk = result.code === 0 && json.event === "observation" && json.mode === "poll";
-      c.check(pyPollOk, "python poll returns an observation", pyPollOk ? "" : `${result.stderr}\n${result.stdout}`);
-      c.check(json.yourTurn === false, "python poll does not claim the turn");
-    } finally {
-      await mock.close();
+    for (const [name, command, file] of [
+      ["node", process.execPath, `${CLIENT_DIR}/server.mjs`],
+      ["python", "python3", `${CLIENT_DIR}/server.py`],
+    ] as const) {
+      const session = startSession(command, [file, ...base(mock.port), "join_room", "-c", "abc"]);
+      try {
+        await session.waitFor((rows) => rows.some((row) => row.event === "listening"));
+        const api = session.lines.find((row) => row.event === "listening")?.base ?? "";
+        const denied = await httpJson(api, "/config", postJson("/config", { boardSize: 9, winMode: "steps", winParam: 8, hostColor: "red" }));
+        const done = await session.untilExit();
+        c.check(
+          denied.status === 409 && (denied.body.error ?? "").includes("not the config host") && done.code === 1,
+          `${name} POST /config hard-fails when canConfig is false`,
+          session.stderr(),
+        );
+        c.check(!mock.inbound.some((msg) => msg.type === "set_config"), `${name} POST /config does not send set_config when it cannot apply`);
+      } finally {
+        await session.close();
+      }
     }
+    await mock.close();
   }
 }
 
