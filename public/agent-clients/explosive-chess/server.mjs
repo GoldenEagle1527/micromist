@@ -47,7 +47,7 @@ The one-shot client that exited after a single your_turn is retired.
   --player-id   This process's id. Omit to reuse the id stored on this machine.
   --name        Display name (default Agent)
   --config      JSON object. Sent as set_config only when you.canConfig is true and the room is still a lobby. If it cannot apply, stdout gets an error JSON line and the process exits before play
-  --verbose     Include board on each JSON line and on HTTP state
+  --verbose     Accepted for older commands. board and effects are always included
   --timeout     Seconds to block for one server push. Omit to wait until game_over
   --help
 
@@ -62,7 +62,7 @@ Replace BASE with that base:
   curl -sS -X POST "$BASE/config" -H "content-type: application/json" --data "{\\"boardSize\\":9,\\"winMode\\":\\"steps\\",\\"winParam\\":4,\\"hostColor\\":\\"red\\"}"
   curl -sS -X POST "$BASE/shutdown"
 
-GET /state is you, turn, legalActions, phase, the last event, roomCode, canConfig, and result when the match is over.
+GET /state is you, turn, board, effects, legalActions, phase, the last event, roomCode, canConfig, and result when the match is over.
 GET /wait blocks until your_turn or game_over. ?timeout=SECONDS returns the state. Omit timeout to wait until the match ends.
 POST /move sends {"row":n,"col":n} only when that cell is in legalActions.
 POST /config is set_config when canConfig is true and the room is still a lobby. If it cannot apply, the response is an error and the process exits non-zero.
@@ -465,6 +465,7 @@ function blankState(args) {
     legalActions: [],
     lastOpponentMove: null,
     board: null,
+    effects: [],
     phase: null,
     reclaimed: null,
     reusedRoom: false,
@@ -513,7 +514,8 @@ function emit(args, state, event, extra = {}) {
   if (extra.error) line.error = extra.error;
   if (extra.recoverable === true) line.recoverable = true;
   if (extra.hint) line.hint = extra.hint;
-  if (args.verbose) line.board = state.board ?? null;
+  line.board = state.board ?? null;
+  line.effects = Array.isArray(state.effects) ? state.effects : [];
   writeLine(line);
   notifyWaiters();
 }
@@ -524,12 +526,54 @@ function applyPublic(state, publicState) {
   if ("board" in publicState) state.board = publicState.board;
 }
 
+function boardSizeOf(state, payload) {
+  const board = state.board;
+  if (Array.isArray(board) && board.length > 0) return board.length;
+  const counts = payload && payload.fullState && payload.fullState.counts;
+  if (Array.isArray(counts) && counts.length > 0) {
+    const size = Math.round(Math.sqrt(counts.length));
+    if (size * size === counts.length) return size;
+  }
+  const pubBoard = payload && payload.publicState && payload.publicState.board;
+  if (Array.isArray(pubBoard) && pubBoard.length > 0) return pubBoard.length;
+  return 0;
+}
+
+function coordFromIndex(index, boardSize) {
+  if (!Number.isInteger(index) || boardSize <= 0) return null;
+  if (index < 0 || index >= boardSize * boardSize) return null;
+  return { row: Math.floor(index / boardSize), col: index % boardSize };
+}
+
+function effectsFromFrames(frames, boardSize) {
+  if (!Array.isArray(frames) || boardSize <= 0) return [];
+  const effects = [];
+  for (const frame of frames) {
+    if (!frame || typeof frame !== "object") continue;
+    const exploded = coordFromIndex(frame.explodedCell, boardSize);
+    if (!exploded) continue;
+    const spread = [];
+    const affected = Array.isArray(frame.affectedCells) ? frame.affectedCells : [];
+    for (const idx of affected) {
+      const cell = coordFromIndex(idx, boardSize);
+      if (cell) spread.push(cell);
+    }
+    effects.push({ exploded, spread });
+  }
+  return effects;
+}
+
+function applyEffects(state, effects) {
+  if (Array.isArray(effects)) state.effects = effects;
+}
+
 function applyObservation(state, obs) {
   if (!obs || typeof obs !== "object") return;
   if (obs.you && typeof obs.you === "object") state.you = obs.you;
   if (typeof obs.phase === "string") state.phase = obs.phase;
   state.legalActions = Array.isArray(obs.legalActions) ? obs.legalActions : [];
   applyPublic(state, obs.publicState);
+  applyEffects(state, obs.effects);
 }
 
 function ourApplySeq(seen, playerId, mark) {
@@ -733,7 +777,8 @@ function snapshot(args, state, ok, extra = {}) {
   if (extra.error || (!body.ok && state.errorText)) body.error = extra.error || state.errorText;
   if (state.recoverable) body.recoverable = true;
   if (state.hint) body.hint = state.hint;
-  if (args.verbose) body.board = state.board ?? null;
+  body.board = state.board ?? null;
+  body.effects = Array.isArray(state.effects) ? state.effects : [];
   return body;
 }
 
@@ -1024,6 +1069,12 @@ async function applyMessage(session, msg) {
   const { args, state, sock } = session;
   const type = msg.type;
   const payload = msg.payload || {};
+  if (type === "state") {
+    if (Array.isArray(payload.animationFrames)) {
+      state.effects = effectsFromFrames(payload.animationFrames, boardSizeOf(state, payload));
+    }
+    return;
+  }
   if (type === "room") {
     if (typeof payload.phase === "string") state.phase = payload.phase;
     if (session.pendingConfig && msg._seq > session.pendingConfig.mark) {
@@ -1080,6 +1131,7 @@ async function applyMessage(session, msg) {
     const ours = typeof by === "string" && by === args.playerId;
     if (typeof by === "string" && by !== args.playerId) state.lastOpponentMove = payload.action ?? null;
     applyPublic(state, payload.publicState);
+    applyEffects(state, payload.effects);
     if (payload.gameOver === true) {
       await fillResult(sock, state, msg);
       state.awaitingAck = false;
