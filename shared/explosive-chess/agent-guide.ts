@@ -335,20 +335,30 @@ export function renderMarkdown(markdown: string): string {
   return out.join("\n");
 }
 
+export type AgentGuideHtmlMeta = {
+  title: string;
+  description: string;
+  banner: string;
+};
+
 export function renderAgentGuideHtml(
   markdown: string,
   rawUrl: string,
   locale: AgentLocale = "en",
   alternateUrl?: string,
+  meta?: AgentGuideHtmlMeta,
 ): string {
   const body = renderMarkdown(markdown);
   const raw = escAttr(rawUrl);
   const lang = locale === "zh" ? "zh-Hans" : "en";
-  const title = locale === "zh" ? "爆炸棋 Agent Guide" : "explosive-chess Agent Guide";
+  const title = meta?.title ?? (locale === "zh" ? "爆炸棋 Agent Guide" : "explosive-chess Agent Guide");
   const description =
-    locale === "zh"
+    meta?.description ??
+    (locale === "zh"
       ? "爆炸棋 WebSocket Agent 指南：kind agent、your_turn、legalActions。没有 MCP。"
-      : "explosive-chess WebSocket agent guide: join kind agent, your_turn, legalActions. No MCP.";
+      : "explosive-chess WebSocket agent guide: join kind agent, your_turn, legalActions. No MCP.");
+  const banner =
+    meta?.banner ?? "Agent Guide · explosive-chess · <a href=\"" + raw + "\">text/markdown</a>";
   const otherLabel = locale === "zh" ? "English" : "中文";
   const otherLink = alternateUrl
     ? ` · <a href="${escAttr(alternateUrl)}">${escText(otherLabel)}</a>`
@@ -381,7 +391,7 @@ export function renderAgentGuideHtml(
 </head>
 <body>
 <main>
-<p class="banner">Agent Guide · explosive-chess · <a href="${raw}">text/markdown</a>${otherLink} · no MCP</p>
+<p class="banner">${meta ? banner : `Agent Guide · explosive-chess · <a href="${raw}">text/markdown</a>`}${otherLink} · no MCP</p>
 ${body}
 </main>
 </body>
@@ -431,6 +441,8 @@ export function agentGuideHttpResponse(request: Request, protocols: AgentGuidePr
       "No agent guide at this path.",
       `explosive-chess (en): ${url.origin}${EXPLOSIVE_CHESS_AGENT_GUIDE_PATH}/en`,
       `explosive-chess (zh): ${url.origin}${EXPLOSIVE_CHESS_AGENT_GUIDE_PATH}/zh`,
+      `chroma-slide (en): ${url.origin}/agent-guide/chroma-slide/en`,
+      `chroma-slide (zh): ${url.origin}/agent-guide/chroma-slide/zh`,
       "",
     ].join("\n");
     return new Response(request.method === "HEAD" ? null : body, { status: 404, headers });
@@ -444,6 +456,11 @@ export function agentGuideHttpResponse(request: Request, protocols: AgentGuidePr
       `markdown (en): ${url.origin}${EXPLOSIVE_CHESS_AGENT_GUIDE_PATH}/en.md`,
       `markdown (zh): ${url.origin}${EXPLOSIVE_CHESS_AGENT_GUIDE_PATH}/zh.md`,
       `clients: ${url.origin}${EXPLOSIVE_CHESS_CLIENT_DIR}/`,
+      `chroma-slide agent guide (en): ${url.origin}/agent-guide/chroma-slide/en`,
+      `chroma-slide agent guide (zh): ${url.origin}/agent-guide/chroma-slide/zh`,
+      `markdown (en): ${url.origin}/agent-guide/chroma-slide/en.md`,
+      `markdown (zh): ${url.origin}/agent-guide/chroma-slide/zh.md`,
+      `clients: ${url.origin}/agent-clients/chroma-slide/`,
       "",
     ].join("\n");
     return new Response(request.method === "HEAD" ? null : body, { status: 200, headers });

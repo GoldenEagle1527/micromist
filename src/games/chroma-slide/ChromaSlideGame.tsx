@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "react-router";
 import "./chroma-slide.css";
 import { useLocale } from "../../i18n";
+import { AgentInvite } from "./AgentInvite";
+import { ChromaSlideRoom } from "./ChromaSlideRoom";
 import { clearLocalProgress, useLocalGamePersist } from "../local-persist";
 import {
   EMPTY,
@@ -68,7 +71,16 @@ function HistoryRow({
 }
 
 export function ChromaSlideGame() {
-  const { t } = useLocale();
+  const [searchParams] = useSearchParams();
+  const roomCode = (searchParams.get("room") ?? "").trim().toLowerCase();
+  if (/^[a-z0-9]+$/.test(roomCode)) {
+    return <ChromaSlideRoom roomCode={roomCode} />;
+  }
+  return <ChromaSlideLocal />;
+}
+
+function ChromaSlideLocal() {
+  const { t, locale } = useLocale();
   const ch = t.chroma;
 
   const [screen, setScreen] = useState<Screen>("setup");
@@ -262,6 +274,12 @@ export function ChromaSlideGame() {
               {ch.start}
             </button>
           </div>
+          <AgentInvite
+            locale={locale}
+            line={ch.agentInviteLine}
+            copiedLabel={ch.agentInviteCopied}
+            failedLabel={ch.agentInviteFailed}
+          />
         </div>
 
         <section className="chroma-history" aria-label={ch.historyTitle}>
