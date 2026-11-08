@@ -34,7 +34,7 @@ export default {
     // Keep the path on run_worker_first so the SPA shell is not returned here.
     if (url.pathname === "/mcp" || url.pathname.startsWith("/mcp/")) {
       return new Response(
-        "No MCP server on this host.\nExplosive-chess agents use the official clients linked from /agent-guide/explosive-chess.\nChroma-slide agents use the official clients linked from /agent-guide/chroma-slide.\n",
+        "No MCP server on this host.\nExplosive-chess agents use the official clients linked from /agent-guide/explosive-chess.\nChroma-slide agents use the official clients linked from /agent-guide/chroma-slide.\nFrontline Tide agents use the official clients linked from /agent-guide/frontline-tide.\n",
         {
           status: 404,
           headers: {
