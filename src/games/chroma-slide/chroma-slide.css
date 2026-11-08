@@ -321,6 +321,51 @@ html[data-theme="dark"] .chroma-cell {
   font-variant-numeric: tabular-nums;
 }
 
+button.chroma-agent-invite {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  margin: 0.9rem 0 0;
+  padding: 0.7rem 0.9rem;
+  border: 1px solid color-mix(in srgb, var(--md-sys-color-primary) 45%, var(--md-sys-color-outline-variant));
+  border-radius: var(--md-sys-shape-corner-md);
+  background: color-mix(in srgb, var(--md-sys-color-primary) 8%, transparent);
+  color: var(--md-sys-color-primary);
+  font-size: 0.95rem;
+  font-weight: 600;
+  line-height: 1.4;
+  text-align: left;
+  cursor: pointer;
+  min-height: 2.75rem;
+}
+
+button.chroma-agent-invite:hover {
+  background: color-mix(in srgb, var(--md-sys-color-primary) 14%, transparent);
+}
+
+button.chroma-agent-invite[data-phase="ok"] {
+  border-color: var(--md-sys-color-primary);
+}
+
+button.chroma-agent-invite:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--md-sys-color-primary) 55%, transparent);
+  outline-offset: 2px;
+}
+
+button.chroma-agent-invite[data-phase="fail"] {
+  border-color: #c62828;
+  color: #e53935;
+}
+
+a.chroma-room-back {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.5rem;
+  padding: 0.45rem 0.8rem;
+  text-decoration: none;
+}
+
 .chroma-win-best-badge {
   margin: 0.65rem 0 0;
   display: inline-flex;

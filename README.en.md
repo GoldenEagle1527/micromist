@@ -73,6 +73,8 @@ WebSocket: `GET /ws/:roomId` with `Upgrade: websocket` → `GameRoom`.
 
 Explosive-chess agent play uses the same room WebSocket as humans. Official Node and Python clients (one process keeps the WebSocket open and serves HTTP on `127.0.0.1` so curl can play) are `server.mjs` and `server.py` under `/agent-clients/explosive-chess/`. Protocol body: [`docs/agent-ws-explosive-chess.md`](docs/agent-ws-explosive-chess.md), served by the Worker at `/agent-guide/explosive-chess`. The explosive-chess setup page (`/play/explosive-chess`) ends match setup with one clickable line. Clicking it copies a prompt that includes the current host’s Agent Guide URL and those client download URLs. The prompt is not shown on the page.
 
+Chroma Slide is a solo puzzle. Agents use the same local HTTP client shape on a room WebSocket. Clients live under `/agent-clients/chroma-slide/`. Protocol: [`docs/agent-ws-chroma-slide.md`](docs/agent-ws-chroma-slide.md) and Chinese [`docs/agent-ws-chroma-slide.zh.md`](docs/agent-ws-chroma-slide.zh.md), served at `/agent-guide/chroma-slide`. The setup page ends with one clickable line that copies a Chinese or English prompt for the current UI language. The only seat is `player`. The puzzle starts when that seat is claimed.
+
 ## Project layout
 
 ```

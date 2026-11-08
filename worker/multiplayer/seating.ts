@@ -6,7 +6,7 @@
 import type { Phase, Role } from "../../shared/multiplayer";
 import type { PlayerRecord } from "./types";
 
-export type PlaySeat = "red" | "blue";
+export type PlaySeat = "red" | "blue" | "player";
 
 export type ClaimDecision =
   | { ok: true; changed: boolean; seat: PlaySeat; role: Role }
