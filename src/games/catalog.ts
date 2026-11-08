@@ -64,7 +64,18 @@ export const games: GameMeta[] = [
       en: "Swim as a diver through an endless marching-cubes cavern sea; the seed shapes the world. Deep-sea exploration; watch your battery.",
     },
     badge: { zh: "3D", en: "3D" },
-  }
+  },
+  {
+    slug: "frontline-tide",
+    mode: "single",
+    audience: "staging",
+    title: { zh: "前线潮汐", en: "Frontline Tide" },
+    blurb: {
+      zh: "白天交换三种潮印攒工事点，在潮路上放下潮栅，邻接三座同阶会升一阶。入夜潮噬沿潮线咬向心岸，守住后前线挪一格。",
+      en: "Swap three tide marks by day to fund groynes — three of a tier merge up. At night, biters march the front line toward your hearts, then the line shifts one cell.",
+    },
+    badge: { zh: "单机", en: "Offline" },
+  },
 ];
 
 function audienceAllows(audience: GameAudience | undefined, kind: SiteKind): boolean {
