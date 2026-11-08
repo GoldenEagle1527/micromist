@@ -425,8 +425,14 @@ export class GameRoom extends DurableObject<Env> {
     const session = this.requireJoined(ws);
     if (!session) return;
     const raw = typeof payload.seat === "string" ? payload.seat.trim().toLowerCase() : "";
-    if (raw !== "red" && raw !== "blue") {
-      this.send(ws, "error", { message: "seat must be red or blue" });
+    const allowed = this.adapter?.playSeats ?? (["red", "blue"] as const);
+    if (!allowed.includes(raw as PlaySeat)) {
+      this.send(ws, "error", {
+        message:
+          allowed.length === 2 && allowed[0] === "red" && allowed[1] === "blue"
+            ? "seat must be red or blue"
+            : `seat must be ${allowed.join(" or ")}`,
+      });
       return;
     }
     const seat = raw as PlaySeat;

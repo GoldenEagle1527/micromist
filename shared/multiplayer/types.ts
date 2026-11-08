@@ -3,7 +3,7 @@
  * Game-specific payloads (state, config) stay in each game module.
  */
 
-export type Seat = "red" | "blue" | "spectator";
+export type Seat = "red" | "blue" | "player" | "spectator";
 export type Role = "host" | "guest" | "spectator";
 export type Phase = "lobby" | "playing" | "over";
 
@@ -23,11 +23,11 @@ export function playerKindFromJoin(value: unknown, previous?: PlayerKind): Playe
   return normalizePlayerKind(previous);
 }
 
-/** Default 2p seats; spectators are never "seated" for recycle. */
+/** Default 2p seats. `player` is the solo solver seat (chroma-slide). Spectators are never seated for recycle. */
 export const SEATED_SEATS: readonly Seat[] = ["red", "blue"];
 
 export function isSeatedSeat(seat: Seat): boolean {
-  return seat === "red" || seat === "blue";
+  return seat === "red" || seat === "blue" || seat === "player";
 }
 
 export type RoomPlayer = {
