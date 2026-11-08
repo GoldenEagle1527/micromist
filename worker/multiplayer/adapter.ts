@@ -3,6 +3,7 @@
  * Lifecycle (WS, join, recycle) stays in the shell; rules live here.
  */
 import type { Phase, Role, Seat } from "../../shared/multiplayer";
+import type { PlaySeat } from "./seating";
 import type { PlayerRecord, SessionAttachment } from "./types";
 
 /** Narrow API adapters use to talk to the room shell. */
@@ -31,6 +32,11 @@ export type GameRoomAdapter = {
    * `claim_seat` / `sit` fills an empty seat. The same playerId reclaims its seat.
    */
   readonly explicitSeating?: boolean;
+  /**
+   * Seats `claim_seat` may take. Omit for the default red and blue pair.
+   * A solo puzzle lists one seat, for example `["player"]`.
+   */
+  readonly playSeats?: readonly PlaySeat[];
   getPublicConfig: () => Record<string, unknown>;
   hostSeat: () => Seat;
   onRecycle: () => void;
