@@ -10,9 +10,10 @@ import { rngInt, type RngState } from "./rng";
  * into one defense of the next tier, on the cell just placed. T3 does not
  * promote. Cleared cells refill with gems. New groynes only sit on the tide road.
  *
- * Milestones players can feel: day 10 washes two columns and the first biter
- * rushes; day 25 allows only sideways swaps and half the wave rushes; day 50
- * flips the tide road onto the opposite row. There is still no last day.
+ * Milestones players can feel: day 10 washes two columns; day 25 allows only
+ * sideways swaps; day 50 flips the tide road, thickens biters, and sends two
+ * rushers. Bite damage stays at 1, and biter HP holds at 8 until that flip,
+ * so a full road can reach the later rules. There is still no last day.
  */
 export const frontlineTideConfig = {
   boardSize: 8,
@@ -30,12 +31,13 @@ export const frontlineTideConfig = {
   enemyHpEveryDays: 4,
   enemyHpCap: 12,
   enemyDamage: 1,
-  /** Day 10 bite 2, day 25 bite 3, then flat. */
-  enemyDamageDay10: 2,
-  enemyDamageDay25: 3,
   enemyHeartDamage: 1,
-  /** Index by tier. 0 is unused. */
-  defenseHp: [0, 5, 8, 14] as const,
+  /**
+   * Index by tier. 0 is unused.
+   * T1 is high enough that a full road of stakes and gates still stands
+   * after a day-10..49 night, so the later rule changes are reachable.
+   */
+  defenseHp: [0, 8, 12, 18] as const,
   defenseDamage: [0, 1, 2, 3] as const,
   maxTier: 3 as const,
   /** Row the single tide road uses. */

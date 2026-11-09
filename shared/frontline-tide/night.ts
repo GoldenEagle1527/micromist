@@ -18,21 +18,25 @@ export function nightEnemyCount(day: number): number {
 
 export function enemyHpForDay(day: number): number {
   const steps = Math.floor(Math.max(0, day - 1) / frontlineTideConfig.enemyHpEveryDays);
-  return Math.min(frontlineTideConfig.enemyHpCap, frontlineTideConfig.enemyHp + steps);
+  const grown = frontlineTideConfig.enemyHp + steps;
+  // Hold the cap at 8 until the road flips. A full stake road can keep up
+  // with that bite; day 50 is when thicker biters arrive.
+  const cap = day >= 50 ? frontlineTideConfig.enemyHpCap : Math.min(8, frontlineTideConfig.enemyHpCap);
+  return Math.min(cap, grown);
 }
 
-export function enemyDamageForDay(day: number): number {
-  if (day >= 25) return frontlineTideConfig.enemyDamageDay25;
-  if (day >= 10) return frontlineTideConfig.enemyDamageDay10;
+/** Bite does not scale. Day 50 pressure is thicker biters, two rushers, and the road flip. */
+export function enemyDamageForDay(_day: number): number {
   return frontlineTideConfig.enemyDamage;
 }
 
-/** Rushers step every tick. One from day 10, half from day 25, all but one from day 50. */
+/**
+ * Rushers step every tick. None before day 50, so the double wash and the
+ * shear rule are reachable. Two rush from the day the road flips.
+ */
 export function rusherCount(day: number, total: number): number {
-  if (total <= 0 || day < 10) return 0;
-  if (day >= 50) return Math.max(0, total - 1);
-  if (day >= 25) return Math.ceil(total / 2);
-  return 1;
+  if (total <= 0 || day < 50) return 0;
+  return Math.min(2, total);
 }
 
 export function seaColumn(boardSize: number): number {

@@ -7,7 +7,7 @@ import { findMatches, hasMove, resolveSwap, scoreClear } from "../src/games/fron
 import { makeDefense, placeDefense, resolveMerges } from "../src/games/frontline-tide/build";
 import { frontlineTideConfig, shearSwaps, washWidthForDay } from "../src/games/frontline-tide/config";
 import { completeFrontShift, createGame, enterBuild, enterNight } from "../src/games/frontline-tide/engine";
-import { enemyHpForDay, nightEnemyCount, nightGate, pathRowFor, stepNight } from "../src/games/frontline-tide/night";
+import { enemyDamageForDay, enemyHpForDay, nightEnemyCount, nightGate, pathRowFor, rusherCount, stepNight } from "../src/games/frontline-tide/night";
 import type { Cell, GameState, GemColor, Pos } from "../src/games/frontline-tide/types";
 import { games, isGameListed } from "../src/games/catalog";
 import { createChecker } from "./lib/checks";
@@ -242,8 +242,11 @@ c.section("night and shift");
   const later = completeFrontShift({ ...late, phase: "front_shift" });
   c.check(later.day === 51 && later.phase === "day_match", "play continues past day 50");
   c.check(enemyHpForDay(50) === frontlineTideConfig.enemyHpCap, "hp growth is capped");
+  c.check(enemyHpForDay(20) === 8 && enemyHpForDay(49) === 8, "hp holds at 8 until the road flips");
   c.check(nightEnemyCount(50) === frontlineTideConfig.nightEnemyCap, "wave size is capped");
   c.check(enemyHpForDay(5) > enemyHpForDay(1), "enemy hp is higher by day 5");
+  c.check(enemyDamageForDay(10) === 1 && enemyDamageForDay(25) === 1 && enemyDamageForDay(50) === 1, "bite damage stays flat");
+  c.check(rusherCount(15, 7) === 0 && rusherCount(25, 7) === 0 && rusherCount(50, 7) === 2, "rushers wait until day 50");
   c.check(nightEnemyCount(15) > nightEnemyCount(1), "the wave is larger by day 15");
   c.check(pathRowFor(8, 1) === 3 && pathRowFor(8, 49) === 3, "the road stays on row 3 before day 50");
   c.check(pathRowFor(8, 50) === 4, "day 50 flips the road");
@@ -298,26 +301,19 @@ function playSerious(seed: number, days: number): { brokeOn: number; heartsByDay
     }
     state = enterBuild(state);
     let placed = 0;
-    while (state.points >= frontlineTideConfig.t1Cost && placed < 16) {
-      let best: GameState | null = null;
-      let bestScore = -1;
-      const n = state.board.length;
-      for (let r = 0; r < n; r++) {
-        for (let col = 0; col < n; col++) {
-          const res = placeDefense(state, r, col);
-          if (!res.ok) continue;
-          const cell = res.state.board[r]![col]!;
-          const tier = cell.kind === "defense" ? cell.tier : 1;
-          const onRoad = r === frontlineTideConfig.pathRow && col >= 2 && col <= 5 ? 80 : 0;
-          const score = tier * 30 + onRoad - col;
-          if (score > bestScore) {
-            bestScore = score;
-            best = res.state;
-          }
+    while (state.points >= frontlineTideConfig.t1Cost && placed < 40) {
+      const row = pathRowFor(state.board.length, state.day);
+      let spot = -1;
+      for (let col = 0; col < state.board.length; col++) {
+        if (state.board[row]![col]!.kind !== "defense") {
+          spot = col;
+          break;
         }
       }
-      if (!best) break;
-      state = best;
+      if (spot < 0) break;
+      const res = placeDefense(state, row, spot);
+      if (!res.ok) break;
+      state = res.state;
       placed += 1;
     }
     state = enterNight(state);
@@ -335,22 +331,23 @@ function playSerious(seed: number, days: number): { brokeOn: number; heartsByDay
 
 c.section("pacing");
 {
-  const seeds = [21, 4, 9, 15, 28];
+  const seeds = [20261109, 42, 7, 99, 2026, 12345, 888, 31415, 555, 777];
   let survivedFirst = 0;
-  let reachedDay5 = 0;
-  let pressuredOn5 = 0;
+  let reachedDay25 = 0;
+  let reachedDay50 = 0;
   for (const seed of seeds) {
-    const run = playSerious(seed, 20);
+    const run = playSerious(seed, 55);
     const day1 = run.heartsByDay[0] ?? 0;
-    const day15 = run.heartsByDay[14];
+    const day25 = run.heartsByDay[24];
+    const day50 = run.heartsByDay[49];
     if (day1 > 0) survivedFirst += 1;
-    if (day15 !== undefined && day15 > 0) reachedDay5 += 1;
-    if (day15 !== undefined && day15 < frontlineTideConfig.hearts) pressuredOn5 += 1;
-    console.log(`  seed ${seed} broke=${run.brokeOn || "-"} hearts=${run.heartsByDay.join(",")}`);
+    if (day25 !== undefined && day25 > 0) reachedDay25 += 1;
+    if (day50 !== undefined && day50 > 0) reachedDay50 += 1;
+    console.log(`  seed ${seed} broke=${run.brokeOn || "-"} d25=${day25 ?? "-"} d50=${day50 ?? "-"}`);
   }
   c.check(survivedFirst === seeds.length, "builders survive day 1", `${survivedFirst}/${seeds.length}`);
-  c.check(reachedDay5 >= 3, "most builders are alive on day 15", `${reachedDay5}/${seeds.length}`);
-  c.check(pressuredOn5 >= 1, "day 15 has cost someone hearts", `${pressuredOn5}/${seeds.length}`);
+  c.check(reachedDay25 === seeds.length, "full roads reach the day 25 shear", `${reachedDay25}/${seeds.length}`);
+  c.check(reachedDay50 === seeds.length, "full roads reach the day 50 road flip", `${reachedDay50}/${seeds.length}`);
 }
 
 c.finish();
