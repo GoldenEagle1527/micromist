@@ -2,7 +2,6 @@ import type { BladeDict } from "../games/blade-break/i18n";
 import type { DeepMarchDict } from "../games/deep-march/i18n";
 import type { ChromaDict } from "../games/chroma-slide/i18n";
 import type { ExplosiveDict } from "../games/explosive-chess/i18n";
-import type { FrontlineDict } from "../games/frontline-tide/i18n";
 
 export type Locale = "zh" | "en";
 
@@ -65,7 +64,6 @@ export type Dict = {
   chroma: ChromaDict;
   blade: BladeDict;
   deepMarch: DeepMarchDict;
-  frontline: FrontlineDict;
 };
 
 export type GameLocaleFields = {
