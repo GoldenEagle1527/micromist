@@ -3,8 +3,8 @@
  * The board is the same one a human sees. This module does not choose an action.
  */
 import { swapWouldMatch } from "./board";
-import { frontlineTideConfig, swapsForDay } from "./config";
-import { pathRowFor, seaColumn } from "./night";
+import { frontlineTideConfig, shearSwaps, swapsForDay, washWidthForDay } from "./config";
+import { nightGate, pathRowFor, roadGaps, seaColumn, washColumnsFor } from "./night";
 import type { GameState, Phase as TidePhase, Terrain } from "./types";
 import type { Phase, PlayerKind, Role, Seat } from "../multiplayer";
 import type { TideAction, TideEffect } from "./actions";
@@ -35,6 +35,15 @@ export type TidePublicState = {
   washColumn: number | null;
   seaColumn: number | null;
   pathRow: number | null;
+  /** Columns the tide scrubs tonight. `washColumn` stays the outer edge. */
+  washColumns: number[];
+  washWidth: number;
+  /** Tide-road columns with no defense. Night is withheld while these remain and points cover `t1Cost`. */
+  openRoadCols: number[];
+  /** Road columns the last wash opened. Patch these before the next night. */
+  scrubbedRoad: number[];
+  /** Day 25+: only horizontal swaps are legal. */
+  shear: boolean;
   bands: Terrain[];
   board: TideCell[][];
   t1Cost: number;
@@ -93,6 +102,7 @@ export function legalActionsFor(state: GameState | null, seat: Seat, phase: Phas
         ];
         for (const next of neighbors) {
           if (next.row >= n || next.col >= n) continue;
+          if (shearSwaps(state.day) && next.row !== r) continue;
           if (!swapWouldMatch(state.board, state.bands, { r, c }, { r: next.row, c: next.col })) continue;
           actions.push({ type: "swap", row: r, col: c, row2: next.row, col2: next.col });
         }
@@ -103,15 +113,13 @@ export function legalActionsFor(state: GameState | null, seat: Seat, phase: Phas
   }
   if (state.phase === "day_build") {
     if (state.points >= frontlineTideConfig.t1Cost) {
-      const n = state.board.length;
-      for (let r = 0; r < n; r++) {
-        for (let c = 0; c < n; c++) {
-          if (state.board[r]![c]!.kind === "defense") continue;
-          actions.push({ type: "place", row: r, col: c });
-        }
+      const row = pathRowFor(state.board.length, state.day);
+      for (let c = 0; c < state.board.length; c++) {
+        if (state.board[row]![c]!.kind === "defense") continue;
+        actions.push({ type: "place", row, col: c });
       }
     }
-    actions.push({ type: "end_phase" });
+    if (nightGate(state) !== "patch") actions.push({ type: "end_phase" });
   }
   return actions;
 }
@@ -128,6 +136,11 @@ export function buildPublicState(state: GameState | null): TidePublicState {
       washColumn: null,
       seaColumn: null,
       pathRow: null,
+      washColumns: [],
+      washWidth: 1,
+      openRoadCols: [],
+      scrubbedRoad: [],
+      shear: false,
       bands: [],
       board: [],
       t1Cost: frontlineTideConfig.t1Cost,
@@ -143,7 +156,12 @@ export function buildPublicState(state: GameState | null): TidePublicState {
     frontDir: state.frontDir,
     washColumn: state.frontCol,
     seaColumn: seaColumn(state.board.length),
-    pathRow: pathRowFor(state.board.length),
+    pathRow: pathRowFor(state.board.length, state.day),
+    washColumns: washColumnsFor(state.board.length, state.frontDir, state.day),
+    washWidth: washWidthForDay(state.day),
+    openRoadCols: roadGaps(state).map((gap) => gap.c),
+    scrubbedRoad: (state.scrubbedRoad ?? []).slice(),
+    shear: shearSwaps(state.day),
     bands: state.bands.slice(),
     board: boardGrid(state),
     t1Cost: frontlineTideConfig.t1Cost,

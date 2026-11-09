@@ -1,4 +1,4 @@
-import { frontlineTideConfig } from "./config";
+import { frontlineTideConfig, shearSwaps } from "./config";
 import { rngInt, type RngState } from "./rng";
 import type {
   CascadeStep,
@@ -188,12 +188,13 @@ export function swapWouldMatch(board: Cell[][], bands: Terrain[], a: Pos, b: Pos
   return findMatches(withSwapped(board, a, b), bands).length > 0;
 }
 
-export function hasMove(board: Cell[][], bands: Terrain[]): boolean {
+export function hasMove(board: Cell[][], bands: Terrain[], day = 1): boolean {
   const n = board.length;
+  const shear = shearSwaps(day);
   for (let r = 0; r < n; r++) {
     for (let c = 0; c < n; c++) {
       if (c + 1 < n && swapWouldMatch(board, bands, { r, c }, { r, c: c + 1 })) return true;
-      if (r + 1 < n && swapWouldMatch(board, bands, { r, c }, { r: r + 1, c })) return true;
+      if (!shear && r + 1 < n && swapWouldMatch(board, bands, { r, c }, { r: r + 1, c })) return true;
     }
   }
   return false;
@@ -217,7 +218,12 @@ export function scoreClear(bands: Terrain[], cleared: Pos[], chain: number): num
   return points;
 }
 
-function reshuffleGems(board: Cell[][], bands: Terrain[], rng: RngState): { board: Cell[][]; rng: RngState } {
+function reshuffleGems(
+  board: Cell[][],
+  bands: Terrain[],
+  rng: RngState,
+  day: number,
+): { board: Cell[][]; rng: RngState } {
   const n = board.length;
   const spots: Pos[] = [];
   const gems: GemCell[] = [];
@@ -247,7 +253,7 @@ function reshuffleGems(board: Cell[][], bands: Terrain[], rng: RngState): { boar
       next[p.r][p.c] = bag[i]!;
     }
     best = next;
-    if (findMatches(next, bands).length === 0 && hasMove(next, bands)) return { board: next, rng: cursor };
+    if (findMatches(next, bands).length === 0 && hasMove(next, bands, day)) return { board: next, rng: cursor };
   }
   return { board: best, rng: cursor };
 }
@@ -257,10 +263,11 @@ export function ensurePlayable(
   board: Cell[][],
   bands: Terrain[],
   rng: RngState,
+  day = 1,
 ): { board: Cell[][]; rng: RngState } {
   const filled = refillEmpties(board, bands, rng);
-  if (findMatches(filled.board, bands).length === 0 && hasMove(filled.board, bands)) return filled;
-  return reshuffleGems(filled.board, bands, filled.rng);
+  if (findMatches(filled.board, bands).length === 0 && hasMove(filled.board, bands, day)) return filled;
+  return reshuffleGems(filled.board, bands, filled.rng, day);
 }
 
 export function fillFreshBoard(
@@ -290,6 +297,7 @@ export function resolveSwap(state: GameState, a: Pos, b: Pos): SwapResult {
   if (state.board[a.r][a.c].kind !== "gem" || state.board[b.r][b.c].kind !== "gem") {
     return { ok: false, reason: "not-gem" };
   }
+  if (shearSwaps(state.day) && a.r !== b.r) return { ok: false, reason: "shear" };
 
   let board = withSwapped(state.board, a, b);
   if (findMatches(board, state.bands).length === 0) return { ok: false, reason: "no-match" };
@@ -316,8 +324,8 @@ export function resolveSwap(state: GameState, a: Pos, b: Pos): SwapResult {
     rng = collapsed.rng;
   }
 
-  if (state.swapsLeft - 1 > 0 && !hasMove(board, state.bands)) {
-    const fixed = reshuffleGems(board, state.bands, rng);
+  if (state.swapsLeft - 1 > 0 && !hasMove(board, state.bands, state.day)) {
+    const fixed = reshuffleGems(board, state.bands, rng, state.day);
     board = fixed.board;
     rng = fixed.rng;
     if (steps.length > 0) steps[steps.length - 1] = { ...steps[steps.length - 1]!, boardAfter: board };

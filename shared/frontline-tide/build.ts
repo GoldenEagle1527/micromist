@@ -1,5 +1,6 @@
-import { cloneBoard, inBounds } from "./board";
+import { cloneBoard, inBounds, refillEmpties } from "./board";
 import { frontlineTideConfig } from "./config";
+import { pathRowFor } from "./night";
 import type { Cell, DefenseCell, DefenseTier, GameState, MergeEvent, PlaceResult, Pos } from "./types";
 
 const DIRS: readonly Pos[] = [
@@ -65,19 +66,28 @@ export function placeDefense(state: GameState, r: number, c: number): PlaceResul
   if (state.phase !== "day_build") return { ok: false, reason: "phase" };
   const pos = { r, c };
   if (!inBounds(state.board, pos)) return { ok: false, reason: "bounds" };
+  if (r !== pathRowFor(state.board.length, state.day)) return { ok: false, reason: "off-road" };
   if (state.board[r][c].kind === "defense") return { ok: false, reason: "occupied" };
   if (state.points < frontlineTideConfig.t1Cost) return { ok: false, reason: "poor" };
 
-  const board = cloneBoard(state.board);
+  let board = cloneBoard(state.board);
   board[r][c] = makeDefense(1);
   const merges = resolveMerges(board, pos);
+  let rng = state.rng;
+  if (merges.length > 0) {
+    const filled = refillEmpties(board, state.bands, rng);
+    board = filled.board;
+    rng = filled.rng;
+  }
   return {
     ok: true,
     merges,
     state: {
       ...state,
       board,
+      rng,
       points: state.points - frontlineTideConfig.t1Cost,
+      scrubbedRoad: (state.scrubbedRoad ?? []).filter((col) => col !== c),
     },
   };
 }

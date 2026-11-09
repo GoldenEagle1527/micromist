@@ -1,6 +1,6 @@
 import { cloneBoard, ensurePlayable, fillFreshBoard, spawnGemAvoiding } from "./board";
-import { frontlineTideConfig, openingBands, rollTerrain, swapsForDay } from "./config";
-import { nextFront, nightEnemyCount } from "./night";
+import { frontlineTideConfig, openingBands, rollTerrain, swapsForDay, washWidthForDay } from "./config";
+import { nextFront, nightEnemyCount, pathRowFor } from "./night";
 import type { Cell, FrontDir, GameState, Terrain } from "./types";
 
 export function createGame(seed: number = (Date.now() ^ (Math.random() * 0x7fffffff)) >>> 0): GameState {
@@ -25,6 +25,7 @@ export function createGame(seed: number = (Date.now() ^ (Math.random() * 0x7ffff
     nextEnemyId: 1,
     clock: 0,
     rng: filled.rng,
+    scrubbedRoad: [],
   };
 }
 
@@ -51,33 +52,42 @@ function shiftColumns(
   dir: FrontDir,
   day: number,
   rng: GameState["rng"],
-): { board: Cell[][]; bands: Terrain[]; rng: GameState["rng"] } {
+): { board: Cell[][]; bands: Terrain[]; rng: GameState["rng"]; freshCols: number[] } {
   const n = board.length;
+  const width = Math.min(Math.max(1, washWidthForDay(day)), Math.max(1, n - 1));
   const next = cloneBoard(board);
   const shifted: Terrain[] = bands.slice();
-  const rolled = rollTerrain(rng, day);
+  let cursor = rng;
+  const freshTerrains: Terrain[] = [];
+  for (let i = 0; i < width; i++) {
+    const rolled = rollTerrain(cursor, day);
+    cursor = rolled.rng;
+    freshTerrains.push(rolled.terrain);
+  }
+  const freshCols = dir < 0
+    ? Array.from({ length: width }, (_, i) => n - width + i)
+    : Array.from({ length: width }, (_, i) => i);
   if (dir < 0) {
     for (let r = 0; r < n; r++) {
-      for (let c = 0; c < n - 1; c++) next[r]![c] = board[r]![c + 1]!;
+      for (let c = 0; c < n - width; c++) next[r]![c] = board[r]![c + width]!;
+      for (const col of freshCols) next[r]![col] = { kind: "empty" };
     }
-    for (let c = 0; c < n - 1; c++) shifted[c] = bands[c + 1] ?? "shoal";
-    shifted[n - 1] = rolled.terrain;
-    for (let r = 0; r < n; r++) next[r]![n - 1] = { kind: "empty" };
+    for (let c = 0; c < n - width; c++) shifted[c] = bands[c + width] ?? "shoal";
   } else {
     for (let r = 0; r < n; r++) {
-      for (let c = n - 1; c > 0; c--) next[r]![c] = board[r]![c - 1]!;
+      for (let c = n - 1; c >= width; c--) next[r]![c] = board[r]![c - width]!;
+      for (const col of freshCols) next[r]![col] = { kind: "empty" };
     }
-    for (let c = n - 1; c > 0; c--) shifted[c] = bands[c - 1] ?? "shoal";
-    shifted[0] = rolled.terrain;
-    for (let r = 0; r < n; r++) next[r]![0] = { kind: "empty" };
+    for (let c = n - 1; c >= width; c--) shifted[c] = bands[c - width] ?? "shoal";
   }
-  const freshCol = dir < 0 ? n - 1 : 0;
-  let cursor = rolled.rng;
-  for (let r = 0; r < n; r++) {
-    const spawned = spawnGemAvoiding(next, shifted, r, freshCol, cursor);
-    cursor = spawned.rng;
+  for (let i = 0; i < width; i++) shifted[freshCols[i]!] = freshTerrains[i] ?? "shoal";
+  for (const col of freshCols) {
+    for (let r = 0; r < n; r++) {
+      const spawned = spawnGemAvoiding(next, shifted, r, col, cursor);
+      cursor = spawned.rng;
+    }
   }
-  return { board: next, bands: shifted, rng: cursor };
+  return { board: next, bands: shifted, rng: cursor, freshCols };
 }
 
 /**
@@ -89,7 +99,11 @@ export function completeFrontShift(state: GameState): GameState {
   const nextDay = state.day + 1;
   const shifted = nextFront(state);
   const scrolled = shiftColumns(state.board, state.bands, state.frontDir, nextDay, state.rng);
-  const playable = ensurePlayable(scrolled.board, scrolled.bands, scrolled.rng);
+  const playable = ensurePlayable(scrolled.board, scrolled.bands, scrolled.rng, nextDay);
+  const rowChanged = pathRowFor(state.board.length, state.day) !== pathRowFor(state.board.length, nextDay);
+  const scrubbedRoad = rowChanged
+    ? Array.from({ length: state.board.length }, (_, col) => col)
+    : scrolled.freshCols;
   return {
     ...state,
     phase: "day_match",
@@ -103,5 +117,6 @@ export function completeFrontShift(state: GameState): GameState {
     enemies: [],
     spawnLeft: 0,
     spawnCooldown: 0,
+    scrubbedRoad,
   };
 }

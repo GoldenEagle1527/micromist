@@ -8,7 +8,7 @@ import { swapWouldMatch, resolveSwap } from "./board";
 import { placeDefense } from "./build";
 import { frontlineTideConfig, swapsForDay } from "./config";
 import { completeFrontShift, createGame, enterBuild, enterNight } from "./engine";
-import { nextFront, nightEnemyCount, pathRowFor, stepNight } from "./night";
+import { nextFront, nightEnemyCount, nightGate, pathRowFor, roadGaps, stepNight, washColumnsFor } from "./night";
 import type { CSSProperties } from "react";
 import type { Cell, DefenseTier, GameState, Pos } from "./types";
 
@@ -20,6 +20,10 @@ type NoteKey =
   | "occupied"
   | "need-tool"
   | "night"
+  | "off-road"
+  | "patch"
+  | "night-gap"
+  | "shear"
   | "placed"
   | "merged";
 
@@ -102,6 +106,7 @@ function FrontlineTideLocal() {
   const [floaters, setFloaters] = useState<Floater[]>([]);
   const [pulse, setPulse] = useState(0);
   const [hurt, setHurt] = useState(0);
+  const [nightArmed, setNightArmed] = useState(false);
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
   const runId = useRef(0);
@@ -143,8 +148,13 @@ function FrontlineTideLocal() {
   }, [game.phase]);
 
   const board = fx && fx.kind !== "nudge" && fx.kind === "clear" ? fx.board : game.board;
-  const pathRow = pathRowFor(board.length);
+  const pathRow = pathRowFor(board.length, game.day);
+  const tideDay = game.phase === "front_shift" ? game.day + 1 : game.day;
+  const washCols = washColumnsFor(board.length, game.frontDir, tideDay);
   const upcoming = game.phase === "front_shift" ? nextFront(game) : null;
+  const nextWash = upcoming ? washColumnsFor(board.length, upcoming.frontDir, tideDay) : [];
+  const scrubbed = new Set(game.scrubbedRoad ?? []);
+  const gate = game.phase === "day_build" ? nightGate(game) : "ok";
   const shownPoints = hud?.points ?? game.points;
   const shownSwaps = hud?.swaps ?? game.swapsLeft;
   const wave =
@@ -185,6 +195,7 @@ function FrontlineTideLocal() {
     setSelected(null);
     setTool(false);
     setNote(null);
+    setNightArmed(false);
     setFloaters([]);
     setGame(createGame());
   }
@@ -243,16 +254,21 @@ function FrontlineTideLocal() {
     }
     const result = placeDefense(game, r, c);
     if (!result.ok) {
-      setNote({ key: result.reason === "poor" ? "poor" : "occupied" });
+      const key = result.reason === "poor" ? "poor" : result.reason === "off-road" ? "off-road" : "occupied";
+      setNote({ key });
       return;
     }
     const merged = result.merges.at(-1);
     setGame(result.state);
+    setNightArmed(false);
     setFx({ kind: "pop", at: { r, c } });
     window.setTimeout(() => setFx(null), motionMs(280) || 160);
+    const stillOpen = roadGaps(result.state).length > 0;
     if (merged) {
-      setNote({ key: "merged", tier: merged.tier });
+      setNote(stillOpen ? { key: "patch", tier: merged.tier } : { key: "merged", tier: merged.tier });
       pushFloater(fl.defenseName(merged.tier), r, c);
+    } else if (stillOpen && scrubbed.has(c)) {
+      setNote({ key: "patch" });
     } else {
       setNote({ key: "placed" });
     }
@@ -292,6 +308,7 @@ function FrontlineTideLocal() {
     const result = resolveSwap(game, selected, target);
     if (!result.ok) {
       if (result.reason === "no-match") void playDeny(selected, target);
+      else if (result.reason === "shear") setNote({ key: "shear" });
       else setNote({ key: result.reason === "no-swaps" ? "no-swaps" : "not-gem" });
       if (result.reason !== "no-match") setSelected(null);
       return;
@@ -304,11 +321,27 @@ function FrontlineTideLocal() {
     setGame(enterBuild(game));
     setTool(true);
     setSelected(null);
-    setNote(null);
+    setBanner(null);
+    setNightArmed(false);
+    const open = roadGaps(game);
+    const washed = (game.scrubbedRoad ?? []).some((col) => open.some((gap) => gap.c === col));
+    setNote(open.length > 0 && (washed || game.day === 1) ? { key: "patch" } : null);
   }
 
   function goNight() {
     if (busyRef.current || game.phase !== "day_build") return;
+    const ready = nightGate(game);
+    if (ready === "patch") {
+      setNightArmed(false);
+      setNote({ key: "patch" });
+      return;
+    }
+    if (ready === "warn" && !nightArmed) {
+      setNightArmed(true);
+      setNote({ key: "night-gap" });
+      return;
+    }
+    setNightArmed(false);
     setGame(enterNight(game));
     setTool(false);
     setSelected(null);
@@ -343,7 +376,15 @@ function FrontlineTideLocal() {
                   ? fl.noteNeedTool
                   : note.key === "night"
                     ? fl.noteNight
-                    : fl.notePlaced
+                    : note.key === "off-road"
+                      ? fl.noteOffRoad
+                      : note.key === "patch"
+                        ? `${note.tier ? `${fl.noteMerged(fl.defenseName(note.tier))} ` : ""}${fl.notePatchRoad}`
+                        : note.key === "night-gap"
+                          ? fl.noteNightGap
+                          : note.key === "shear"
+                            ? fl.noteShear
+                            : fl.notePlaced
     : null;
 
   const n = board.length;
@@ -353,6 +394,7 @@ function FrontlineTideLocal() {
     <div className={`frontline-tide${game.phase === "day_build" ? " ft-build" : ""}`} data-phase={game.phase}>
       <p className="ft-live" aria-live="polite">
         {phaseLine}
+        {game.day === 1 ? ` ${fl.teachBite(pathRow + 1)} ${fl.teachWash}` : ""}
         {noteLine ? ` ${noteLine}` : ""}
       </p>
       <header className="ft-hud">
@@ -380,9 +422,12 @@ function FrontlineTideLocal() {
           <span className={`ft-stat ft-points${pulse ? " pulse" : ""}`} key={pulse}>
             <strong>{fl.points(shownPoints)}</strong>
           </span>
+          <span className="ft-stat ft-road-stat">
+            <strong>{fl.roadStat(pathRow + 1)}</strong>
+          </span>
           <span className="ft-stat">
             <strong>{game.frontDir < 0 ? fl.dirShore : fl.dirSea}</strong>
-            <span>{fl.front(game.frontCol + 1)}</span>
+            <span>{fl.wash(washCols.map((col) => col + 1))}</span>
           </span>
           <span className="ft-stat">
             <strong>{game.phase === "night" ? fl.remaining(wave) : fl.tonight(wave)}</strong>
@@ -390,8 +435,16 @@ function FrontlineTideLocal() {
         </div>
       </header>
       <div className="ft-rules">
-        <p>{fl.ruleMerge}</p>
+        {game.day === 1 ? (
+          <p className="ft-teach">
+            {fl.teachBite(pathRow + 1)} {fl.teachWash}
+          </p>
+        ) : null}
+        {game.day >= 10 ? <p className={game.day === 10 ? "ft-milestone" : ""}>{fl.ruleDay10}</p> : null}
+        {game.day >= 25 ? <p className={game.day === 25 ? "ft-milestone" : ""}>{fl.ruleDay25}</p> : null}
+        {game.day >= 50 ? <p className={game.day === 50 ? "ft-milestone" : ""}>{fl.ruleDay50(pathRow + 1)}</p> : null}
         <p>{fl.ruleRoad}</p>
+        <p>{fl.ruleMerge}</p>
         <p>{fl.terrainRule}</p>
         <p className="ft-legend">
           <span className="ft-swatch shoal">{fl.terrainShoal}</span>
@@ -410,10 +463,15 @@ function FrontlineTideLocal() {
                 const classes = ["ft-cell"];
                 classes.push(`ft-band-${game.bands[c] ?? "shoal"}`);
                 if (r === pathRow) classes.push("ft-road");
-                if (c === game.frontCol) classes.push("ft-front");
+                if (game.phase === "day_build" && r !== pathRow) classes.push("ft-offroad");
+                if (r === pathRow && cell.kind !== "defense" && (game.phase === "day_build" || scrubbed.has(c))) {
+                  classes.push("ft-road-gap");
+                }
+                if (r === pathRow && scrubbed.has(c) && cell.kind !== "defense") classes.push("ft-road-scrub");
+                if (washCols.includes(c)) classes.push("ft-front");
                 if (c === n - 1) classes.push("ft-sea-edge");
-                if (upcoming && c === upcoming.frontCol) classes.push("ft-front-next");
-                if (game.phase === "night" && c > game.frontCol) classes.push("ft-flood");
+                if (nextWash.includes(c)) classes.push("ft-front-next");
+                if (game.phase === "night" && c > game.frontCol && r !== pathRow) classes.push("ft-flood");
                 if (selected && same(selected, { r, c })) classes.push("ft-selected");
                 if (previews.has(`${r},${c}`)) classes.push("ft-preview");
                 if (fx?.kind === "nudge") {
@@ -438,7 +496,8 @@ function FrontlineTideLocal() {
                     aria-label={label}
                     onClick={() => onCell(r, c)}
                   >
-                    {c === game.frontCol && r === 0 ? <span className="ft-flag">{fl.flag}</span> : null}
+                    {washCols.includes(c) && r === 0 ? <span className="ft-flag">{fl.flag}</span> : null}
+                    {r === pathRow && c === n - 1 ? <span className="ft-road-flag">←</span> : null}
                     {cell.kind === "gem" ? (
                       <span className="ft-piece">
                         <i className="ft-gem" data-color={cell.color} />
@@ -501,8 +560,12 @@ function FrontlineTideLocal() {
             >
               {fl.place(frontlineTideConfig.t1Cost)}
             </button>
-            <button type="button" className="primary" onClick={goNight}>
-              {fl.toNight}
+            <button
+              type="button"
+              className={gate === "patch" ? "ghost" : nightArmed ? "primary ft-urge" : "primary"}
+              onClick={goNight}
+            >
+              {nightArmed ? fl.confirmNight : fl.toNight}
             </button>
           </>
         ) : null}
