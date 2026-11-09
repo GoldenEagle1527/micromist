@@ -45,6 +45,7 @@ export function FrontlineTideRoom({ roomCode }: { roomCode: string }) {
   const [effects, setEffects] = useState<TideEffect[]>([]);
   const [error, setError] = useState("");
   const [pick, setPick] = useState<{ row: number; col: number } | null>(null);
+  const [nightArmed, setNightArmed] = useState(false);
 
   useEffect(() => {
     const room = new OnlineRoomClient("frontline-tide");
@@ -87,6 +88,8 @@ export function FrontlineTideRoom({ roomCode }: { roomCode: string }) {
   function send(action: TideAction) {
     client?.send("move", action);
     setPick(null);
+    setNightArmed(false);
+    setError("");
   }
 
   function onCell(row: number, col: number) {
@@ -94,6 +97,7 @@ export function FrontlineTideRoom({ roomCode }: { roomCode: string }) {
     if (pub.tidePhase === "day_build") {
       const place = actions.find((action) => action.type === "place" && action.row === row && action.col === col);
       if (place) send(place);
+      else if (row !== pub.pathRow) setError(fl.noteOffRoad);
       return;
     }
     if (pub.tidePhase !== "day_match") return;
@@ -116,9 +120,14 @@ export function FrontlineTideRoom({ roomCode }: { roomCode: string }) {
   }
 
   const night = effects.find((effect) => effect.type === "night");
+  const building = pub?.tidePhase === "day_build";
+  const scrubbed = new Set(pub?.scrubbedRoad ?? []);
+  const washCols = new Set(pub?.washColumns ?? (pub?.washColumn == null ? [] : [pub.washColumn]));
+  const openRoad = pub?.openRoadCols ?? [];
+  const canNight = actions.some((action) => action.type === "end_phase");
 
   return (
-    <div className="frontline-tide">
+    <div className={`frontline-tide${building ? " ft-build" : ""}`}>
       <header className="ft-hud">
         <div className="ft-hud-top">
           <span className="ft-day">{pub ? fl.day(pub.day) : roomCode}</span>
@@ -129,13 +138,27 @@ export function FrontlineTideRoom({ roomCode }: { roomCode: string }) {
             <span className="ft-stat"><strong>{fl.hearts(pub.hearts, pub.hearts)}</strong></span>
             <span className="ft-stat"><strong>{fl.swaps(pub.swapsLeft)}</strong></span>
             <span className="ft-stat"><strong>{fl.points(pub.points)}</strong></span>
+            <span className="ft-stat ft-road-stat">
+              <strong>{pub.pathRow == null ? "" : fl.roadStat(pub.pathRow + 1)}</strong>
+            </span>
             <span className="ft-stat">
               <strong>{pub.frontDir === -1 ? fl.dirShore : fl.dirSea}</strong>
+              <span>{fl.wash((pub.washColumns.length ? pub.washColumns : [pub.washColumn ?? 0]).map((col) => col + 1))}</span>
             </span>
           </div>
         ) : null}
       </header>
       {error ? <p className="ft-note">{error}</p> : null}
+      {pub && pub.day === 1 && pub.pathRow != null ? (
+        <p className="ft-rules ft-teach">
+          {fl.teachBite(pub.pathRow + 1)} {fl.teachWash}
+        </p>
+      ) : null}
+      {pub && pub.day >= 10 ? <p className={pub.day === 10 ? "ft-rules ft-milestone" : "ft-rules"}>{fl.ruleDay10}</p> : null}
+      {pub && pub.day >= 25 ? <p className={pub.day === 25 ? "ft-rules ft-milestone" : "ft-rules"}>{fl.ruleDay25}</p> : null}
+      {pub && pub.day >= 50 && pub.pathRow != null ? (
+        <p className={pub.day === 50 ? "ft-rules ft-milestone" : "ft-rules"}>{fl.ruleDay50(pub.pathRow + 1)}</p>
+      ) : null}
       {night && night.type === "night" ? (
         <p className="ft-rules">{fl.day(night.day)} · {fl.hearts(night.hearts, night.hearts)}</p>
       ) : null}
@@ -151,10 +174,25 @@ export function FrontlineTideRoom({ roomCode }: { roomCode: string }) {
                 <button
                   key={`${cell.row}-${cell.col}`}
                   type="button"
-                  className={`ft-cell ft-band-${cell.terrain}${cell.row === pub.pathRow ? " ft-road" : ""}${cell.col === pub.washColumn ? " ft-front" : ""}`}
+                  className={[
+                    "ft-cell",
+                    `ft-band-${cell.terrain}`,
+                    cell.row === pub.pathRow ? "ft-road" : "",
+                    building && cell.row !== pub.pathRow ? "ft-offroad" : "",
+                    cell.row === pub.pathRow && cell.kind !== "defense" && (building || scrubbed.has(cell.col))
+                      ? "ft-road-gap"
+                      : "",
+                    cell.row === pub.pathRow && scrubbed.has(cell.col) && cell.kind !== "defense" ? "ft-road-scrub" : "",
+                    washCols.has(cell.col) ? "ft-front" : "",
+                    cell.row === pub.pathRow && cell.col === row.length - 1 ? "ft-sea-edge" : "",
+                  ]
+                    .filter(Boolean)
+                    .join(" ")}
                   onClick={() => onCell(cell.row, cell.col)}
                   disabled={!playing}
                 >
+                  {washCols.has(cell.col) && cell.row === 0 ? <span className="ft-flag">{fl.flag}</span> : null}
+                  {cell.row === pub.pathRow && cell.col === row.length - 1 ? <span className="ft-road-flag">←</span> : null}
                   {cell.kind === "gem" ? <i className="ft-gem" data-color={cell.color ?? 0} /> : null}
                   {cell.kind === "defense" ? <i className="ft-defense" data-tier={cell.tier ?? 1} /> : null}
                   {cell.kind === "empty" ? <i className="ft-hole" /> : null}
@@ -173,15 +211,28 @@ export function FrontlineTideRoom({ roomCode }: { roomCode: string }) {
             {fl.sit}
           </button>
         ) : null}
-        {playing && actions.some((action) => action.type === "end_phase") ? (
-          <button
-            type="button"
-            className="primary"
-            onClick={() => send({ type: "end_phase" })}
-          >
-            {pub?.tidePhase === "day_build" ? fl.toNight : fl.toBuild}
+        {playing && pub?.tidePhase === "day_match" && canNight ? (
+          <button type="button" className="primary" onClick={() => send({ type: "end_phase" })}>
+            {fl.toBuild}
           </button>
         ) : null}
+        {playing && building && canNight ? (
+          <button
+            type="button"
+            className={openRoad.length > 0 && !nightArmed ? "ghost" : "primary"}
+            onClick={() => {
+              if (openRoad.length > 0 && !nightArmed) {
+                setNightArmed(true);
+                setError(fl.noteNightGap);
+                return;
+              }
+              send({ type: "end_phase" });
+            }}
+          >
+            {nightArmed && openRoad.length > 0 ? fl.confirmNight : fl.toNight}
+          </button>
+        ) : null}
+        {playing && building && !canNight ? <p className="ft-note">{fl.notePatchRoad}</p> : null}
       </div>
     </div>
   );

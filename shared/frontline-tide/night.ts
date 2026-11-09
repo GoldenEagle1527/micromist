@@ -1,5 +1,5 @@
 import { cloneBoard } from "./board";
-import { frontlineTideConfig } from "./config";
+import { frontlineTideConfig, washWidthForDay } from "./config";
 import type {
   Cell,
   Enemy,
@@ -22,16 +22,16 @@ export function enemyHpForDay(day: number): number {
 }
 
 export function enemyDamageForDay(day: number): number {
-  if (day >= 32) return frontlineTideConfig.enemyDamageDay25;
-  if (day >= 16) return frontlineTideConfig.enemyDamageDay10;
+  if (day >= 25) return frontlineTideConfig.enemyDamageDay25;
+  if (day >= 10) return frontlineTideConfig.enemyDamageDay10;
   return frontlineTideConfig.enemyDamage;
 }
 
 /** Rushers step every tick. One from day 10, half from day 25, all but one from day 50. */
 export function rusherCount(day: number, total: number): number {
-  if (total <= 0 || day < 12) return 0;
+  if (total <= 0 || day < 10) return 0;
   if (day >= 50) return Math.max(0, total - 1);
-  if (day >= 28) return Math.ceil(total / 2);
+  if (day >= 25) return Math.ceil(total / 2);
   return 1;
 }
 
@@ -39,8 +39,45 @@ export function seaColumn(boardSize: number): number {
   return boardSize - 1;
 }
 
-export function pathRowFor(boardSize: number): number {
-  return Math.min(boardSize - 2, Math.max(1, frontlineTideConfig.pathRow));
+/**
+ * The row biters walk. Day 50 flips it to the opposite row so yesterday's
+ * groynes stop blocking. 0-indexed.
+ */
+export function pathRowFor(boardSize: number, day = 1): number {
+  const base = Math.min(boardSize - 2, Math.max(1, frontlineTideConfig.pathRow));
+  if (day < 50 || boardSize < 3) return base;
+  const flipped = boardSize - 1 - base;
+  if (flipped !== base && flipped >= 1 && flipped <= boardSize - 2) return flipped;
+  return Math.min(boardSize - 2, base + 1);
+}
+
+/** Columns this day's tide will scrub. `frontDir` -1 scrubs the shore edge. */
+export function washColumnsFor(boardSize: number, frontDir: FrontDir, day: number): number[] {
+  const width = Math.min(Math.max(1, washWidthForDay(day)), Math.max(1, boardSize - 1));
+  if (frontDir < 0) return Array.from({ length: width }, (_, i) => i);
+  return Array.from({ length: width }, (_, i) => boardSize - width + i);
+}
+
+/** Tide-road cells with no groyne. Gems and holes both count: biters walk them. */
+export function roadGaps(state: Pick<GameState, "board" | "day">): Pos[] {
+  const row = pathRowFor(state.board.length, state.day);
+  const gaps: Pos[] = [];
+  for (let c = 0; c < state.board.length; c++) {
+    if (state.board[row]![c]!.kind !== "defense") gaps.push({ r: row, c });
+  }
+  return gaps;
+}
+
+/**
+ * `patch` — night is refused until the road is built or the points run out.
+ * `warn` — the road is still open but another groyne cannot be paid for.
+ */
+export type NightGate = "ok" | "patch" | "warn";
+
+export function nightGate(state: Pick<GameState, "board" | "day" | "points">): NightGate {
+  if (roadGaps(state).length === 0) return "ok";
+  if (state.points >= frontlineTideConfig.t1Cost) return "patch";
+  return "warn";
 }
 
 /** The push after this night. Direction flips; the wash column follows the new arrow. */
@@ -82,7 +119,7 @@ export function stepNight(state: GameState): NightStep {
   const cfg = frontlineTideConfig;
   const events: NightEvent[] = [];
   const board = cloneBoard(state.board);
-  const pathRow = pathRowFor(board.length);
+  const pathRow = pathRowFor(board.length, state.day);
   let enemies = state.enemies.map((e) => ({ ...e }));
   let spawnLeft = state.spawnLeft;
   let spawnCooldown = state.spawnCooldown;

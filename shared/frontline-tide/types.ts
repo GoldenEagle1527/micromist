@@ -61,6 +61,11 @@ export type GameState = {
   /** Increments on every night tick so the view can pace itself. */
   clock: number;
   rng: RngState;
+  /**
+   * Columns on the tide road whose defense the last wash removed.
+   * Absent on rooms saved before this field existed.
+   */
+  scrubbedRoad?: number[];
 };
 
 export type CascadeStep = {
@@ -72,7 +77,7 @@ export type CascadeStep = {
   boardAfter: Cell[][];
 };
 
-export type SwapFail = "phase" | "no-swaps" | "not-adjacent" | "not-gem" | "no-match";
+export type SwapFail = "phase" | "no-swaps" | "not-adjacent" | "not-gem" | "no-match" | "shear";
 
 export type SwapResult =
   | { ok: false; reason: SwapFail }
@@ -84,7 +89,7 @@ export type MergeEvent = {
   consumed: Pos[];
 };
 
-export type PlaceFail = "phase" | "occupied" | "poor" | "bounds";
+export type PlaceFail = "phase" | "occupied" | "poor" | "bounds" | "off-road";
 
 export type PlaceResult =
   | { ok: false; reason: PlaceFail }

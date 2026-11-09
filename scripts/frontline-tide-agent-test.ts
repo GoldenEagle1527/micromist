@@ -5,6 +5,7 @@
 import { readFileSync } from "node:fs";
 import { applyAction } from "../shared/frontline-tide/actions";
 import { matchFrontlineGuidePath } from "../shared/frontline-tide/agent-guide";
+import { frontlineTideConfig } from "../shared/frontline-tide/config";
 import { createGame, enterBuild } from "../shared/frontline-tide/engine";
 import { legalActionsFor } from "../shared/frontline-tide/observe";
 import { createChecker } from "./lib/checks";
@@ -25,8 +26,17 @@ c.section("legal actions");
     c.check(applied.ok && applied.state.swapsLeft === game.swapsLeft - 1, "a legal swap spends one");
     c.check(applied.ok && applied.effects.some((effect) => effect.type === "clear"), "swap effects list the clear");
   }
-  const built = applyAction(enterBuild({ ...game, points: 9 }), { type: "place", row: 3, col: 2 });
-  c.check(built.ok && built.state.points === 6, "place spends points");
+  const rich = enterBuild({ ...game, points: 9 });
+  const richActions = legalActionsFor(rich, "player", "playing");
+  c.check(
+    richActions.filter((action) => action.type === "place").every((action) => action.type === "place" && action.row === 3),
+    "places stay on the tide road",
+  );
+  c.check(!richActions.some((action) => action.type === "end_phase"), "night waits while the road can still be patched");
+  const built = applyAction(enterBuild({ ...game, points: frontlineTideConfig.t1Cost }), { type: "place", row: 3, col: 2 });
+  c.check(built.ok && built.state.points === 0, "place spends points");
+  const offRoad = applyAction(rich, { type: "place", row: 0, col: 2 });
+  c.check(!offRoad.ok, "off-road place is rejected");
   const night = applyAction(built.ok ? built.state : game, { type: "end_phase" });
   c.check(night.ok, "ending the build resolves the night");
   if (night.ok) {

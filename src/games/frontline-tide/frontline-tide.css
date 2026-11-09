@@ -222,10 +222,13 @@
     rgba(40, 120, 160, 0.22);
 }
 
-.ft-road.ft-band-shoal,
-.ft-road.ft-band-reef,
-.ft-road.ft-band-rip {
-  box-shadow: inset 0 0 0 1px rgba(190, 236, 214, 0.45);
+.ft-cell.ft-road {
+  background-color: rgba(92, 118, 230, 0.42);
+  box-shadow: inset 0 0 0 2px #c4c8ff;
+}
+
+.ft-road-stat strong {
+  color: #d7dcff;
 }
 
 .ft-legend {
@@ -246,12 +249,29 @@
 .ft-swatch.rip { background: rgba(40, 120, 160, 0.45); }
 
 .ft-road {
-  outline: 1px solid rgba(190, 236, 214, 0.35);
-  outline-offset: -2px;
+  outline: 2px solid rgba(198, 204, 255, 0.95);
+  outline-offset: -3px;
+}
+
+.ft-build .ft-offroad {
+  filter: grayscale(1);
+  opacity: 0.4;
+}
+
+.ft-build .ft-offroad:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.ft-road-gap {
+  animation: ft-gap 1.05s ease-in-out infinite;
+}
+
+.ft-road-scrub {
+  box-shadow: inset 0 0 0 2px #f2cc8f;
 }
 
 .ft-front {
-  box-shadow: inset 3px 0 0 #7fd0de;
+  box-shadow: inset 4px 0 0 #f0b429;
 }
 
 .ft-front-next {
@@ -273,15 +293,38 @@
   outline-offset: 1px;
 }
 
-.ft-flag {
+.ft-flag,
+.ft-road-flag {
   position: absolute;
-  top: 1px;
-  left: 2px;
   font-size: 0.62rem;
   font-weight: 750;
-  color: #d8f6ff;
   letter-spacing: 0;
   pointer-events: none;
+  line-height: 1;
+}
+
+.ft-flag {
+  top: 1px;
+  left: 2px;
+  color: #ffe08a;
+}
+
+.ft-road-flag {
+  right: 1px;
+  bottom: 1px;
+  color: #eef1ff;
+}
+
+.ft-teach,
+.ft-milestone {
+  color: var(--md-sys-color-on-surface);
+  font-weight: 750;
+}
+
+.ft-milestone {
+  background: color-mix(in srgb, #f2cc8f 28%, transparent);
+  border-radius: var(--md-sys-shape-corner-sm);
+  padding: 0.2rem 0.45rem;
 }
 
 .ft-piece {
@@ -366,8 +409,8 @@
   box-sizing: border-box;
 }
 
-.ft-build .ft-cell:not(:disabled):hover {
-  background: rgba(255, 255, 255, 0.1);
+.ft-build .ft-cell:not(:disabled):not(.ft-offroad):hover {
+  background: rgba(255, 255, 255, 0.12);
 }
 
 .ft-nudge-e .ft-piece { animation: ft-slide-e 180ms ease; z-index: 2; }
@@ -595,6 +638,10 @@ button.ft-agent-invite[data-phase="fail"] {
   50% { transform: translateY(-1px); }
 }
 
+@keyframes ft-gap {
+  50% { box-shadow: inset 0 0 0 3px #ffe08a; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .ft-enemy,
   .ft-nudge-e .ft-piece,
@@ -610,7 +657,8 @@ button.ft-agent-invite[data-phase="fail"] {
   .ft-floater,
   .ft-hurt .ft-heart,
   .ft-urge,
-  .ft-points.pulse strong {
+  .ft-points.pulse strong,
+  .ft-road-gap {
     animation: none;
     transition: none;
   }

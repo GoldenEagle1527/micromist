@@ -6,9 +6,13 @@ import { rngInt, type RngState } from "./rng";
  * Flow code reads these fields on each action. Change numbers here;
  * day_match → day_build → night → front_shift → day_match stays put.
  *
- * Merge rule (frozen for this slice): three orthogonally connected defenses
- * of the same tier collapse into one defense of the next tier, on the cell
- * just placed. T3 does not promote.
+ * Merge rule: three orthogonally connected defenses of the same tier collapse
+ * into one defense of the next tier, on the cell just placed. T3 does not
+ * promote. Cleared cells refill with gems. New groynes only sit on the tide road.
+ *
+ * Milestones players can feel: day 10 washes two columns and the first biter
+ * rushes; day 25 allows only sideways swaps and half the wave rushes; day 50
+ * flips the tide road onto the opposite row. There is still no last day.
  */
 export const frontlineTideConfig = {
   boardSize: 8,
@@ -49,6 +53,8 @@ export const frontlineTideConfig = {
   ripYield: 2,
   /** Days 1–9 use dailySwaps. Day 10 drops one. Day 25 drops another. Never below 3. */
   swapFloor: 3,
+  /** Nights before day 10 scrub one column. Day 10 and after scrub two. */
+  washWidthFromDay10: 2,
   /**
    * Night pacing. With enemyMoveEvery 3 and spawnGapTicks 5, an unblocked
    * day-1 wave of 3 lasts a little over 20s. Later nights run longer while
@@ -75,6 +81,16 @@ export function swapsForDay(day: number): number {
   const base = frontlineTideConfig.dailySwaps;
   const drop = day >= 25 ? 2 : day >= 10 ? 1 : 0;
   return Math.max(frontlineTideConfig.swapFloor, base - drop);
+}
+
+/** How many columns the tide scrubs when this day begins, and at the end of it. */
+export function washWidthForDay(day: number): number {
+  return day >= 10 ? frontlineTideConfig.washWidthFromDay10 : 1;
+}
+
+/** Day 25 shears the tide: marks may only swap sideways. */
+export function shearSwaps(day: number): boolean {
+  return day >= 25;
 }
 
 /** How the next column is dealt. Reef and rip take over as the days run on. */

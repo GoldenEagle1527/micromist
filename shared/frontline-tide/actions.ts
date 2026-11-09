@@ -1,7 +1,7 @@
 import { resolveSwap } from "./board";
 import { placeDefense } from "./build";
 import { completeFrontShift, enterBuild, enterNight } from "./engine";
-import { stepNight } from "./night";
+import { nightGate, stepNight } from "./night";
 import type { GameState, Phase, Terrain } from "./types";
 
 export type TideAction =
@@ -93,6 +93,7 @@ export function applyAction(state: GameState, action: TideAction): ActionResult 
     return { ok: true, state: enterBuild(state), effects: [] };
   }
   if (state.phase === "day_build") {
+    if (nightGate(state) === "patch") return { ok: false, reason: "patch-road" };
     const night = resolveNight(state);
     return { ok: true, state: night.state, effects: night.effects };
   }

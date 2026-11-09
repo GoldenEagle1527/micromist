@@ -2,11 +2,12 @@
  * Frontline Tide vertical slice: match → build/merge → night → front shift → day 2.
  * Run: npm run test:frontline
  */
+import { applyAction } from "../shared/frontline-tide/actions";
 import { findMatches, hasMove, resolveSwap, scoreClear } from "../src/games/frontline-tide/board";
 import { makeDefense, placeDefense, resolveMerges } from "../src/games/frontline-tide/build";
-import { frontlineTideConfig } from "../src/games/frontline-tide/config";
+import { frontlineTideConfig, shearSwaps, washWidthForDay } from "../src/games/frontline-tide/config";
 import { completeFrontShift, createGame, enterBuild, enterNight } from "../src/games/frontline-tide/engine";
-import { enemyHpForDay, nightEnemyCount, stepNight } from "../src/games/frontline-tide/night";
+import { enemyHpForDay, nightEnemyCount, nightGate, pathRowFor, stepNight } from "../src/games/frontline-tide/night";
 import type { Cell, GameState, GemColor, Pos } from "../src/games/frontline-tide/types";
 import { games, isGameListed } from "../src/games/catalog";
 import { createChecker } from "./lib/checks";
@@ -151,57 +152,48 @@ c.section("build");
   if (d.ok) {
     const at = d.state.board[row]![4]!;
     c.check(at.kind === "defense" && at.tier === 2, "upgrade stays on the placed cell");
-    c.check(d.state.board[row]![2]!.kind === "empty" && d.state.board[row]![3]!.kind === "empty", "the other two cells clear");
+    c.check(d.state.board[row]![2]!.kind === "gem" && d.state.board[row]![3]!.kind === "gem", "merge holes refill with gems");
     const occupied = placeDefense(d.state, row, 4);
     c.check(!occupied.ok && occupied.reason === "occupied", "cannot stack on a defense");
+    const stillRich = { ...d.state, points: frontlineTideConfig.t1Cost };
+    c.check(nightGate(stillRich) === "patch", "an open road you can still afford blocks night");
+    const refused = applyAction(stillRich, { type: "end_phase" });
+    c.check(!refused.ok, "end_phase refuses while the road can still be patched");
   }
 
-  const l0 = placeDefense(base, row, 1);
-  const l1 = l0.ok ? placeDefense(l0.state, row + 1, 1) : l0;
-  c.check(l1.ok && l1.merges.length === 0, "a pair does not merge");
-  const l2 = l1.ok ? placeDefense({ ...l1.state, points: l1.state.points + frontlineTideConfig.t1Cost }, row, 2) : l1;
-  c.check(l2.ok && l2.merges.some((m) => m.tier === 2), "an L of three merges");
+  const off = placeDefense(base, row + 1, 1);
+  c.check(!off.ok && off.reason === "off-road", "off-road placement is rejected");
+  const pairBoard = checkerBoard();
+  pairBoard[row]![1] = makeDefense(1);
+  pairBoard[row + 1]![1] = makeDefense(1);
+  c.check(resolveMerges(pairBoard, { r: row, c: 1 }).length === 0, "a pair does not merge");
+  const lBoard = checkerBoard();
+  lBoard[row]![1] = makeDefense(1);
+  lBoard[row + 1]![1] = makeDefense(1);
+  lBoard[row]![2] = makeDefense(1);
+  c.check(resolveMerges(lBoard, { r: row, c: 2 }).some((m) => m.tier === 2), "an L of three still merges");
 
-  let tower = enterBuild({ ...createGame(2), points: 30 });
-  for (let i = 0; i < 3; i++) {
-    const p1 = placeDefense(tower, 1, i);
-    const p2 = p1.ok ? placeDefense(p1.state, 1, i + 3) : p1;
-    const p3 = p2.ok ? placeDefense(p2.state, 1, i + 6 > 7 ? 0 : i + 6) : p2;
-    if (!p3.ok) break;
-    tower = p3.state;
-  }
   const poor = { ...base, points: frontlineTideConfig.t1Cost - 1 };
   c.check(!placeDefense(poor, row, 1).ok, "cannot place without points");
+  c.check(nightGate(poor) === "warn", "a broke builder may night with gaps");
 
-  let merged = enterBuild({ ...createGame(4), points: 40 });
-  const t2Spots: Pos[][] = [
-    [
-      { r: 6, c: 0 },
-      { r: 6, c: 1 },
-      { r: 6, c: 2 },
-    ],
-    [
-      { r: 6, c: 4 },
-      { r: 5, c: 3 },
-      { r: 6, c: 3 },
-    ],
-    [
-      { r: 6, c: 5 },
-      { r: 5, c: 4 },
-      { r: 6, c: 4 },
-    ],
-  ];
+  let t3 = enterBuild({ ...createGame(4), points: 40 });
+  const t3Order = [2, 1, 0, 3, 2, 1, 4, 3, 2];
   let sawT3 = false;
-  for (const group of t2Spots) {
-    for (const spot of group) {
-      const placed = placeDefense(merged, spot.r, spot.c);
-      c.check(placed.ok, `place ${spot.r},${spot.c}`);
-      if (!placed.ok) continue;
-      merged = placed.state;
-      if (placed.merges.some((m) => m.tier === 3)) sawT3 = true;
-    }
+  for (const col of t3Order) {
+    const placed = placeDefense(t3, row, col);
+    c.check(placed.ok, `road place col ${col}`);
+    if (!placed.ok) break;
+    t3 = placed.state;
+    if (placed.merges.some((m) => m.tier === 3)) sawT3 = true;
   }
-  c.check(sawT3, "three adjacent T2s merge to T3");
+  c.check(sawT3, "three adjacent T2s on the road merge to T3");
+  if (sawT3) {
+    c.check(
+      t3.board[row]!.every((cell) => cell.kind !== "empty"),
+      "the road has no empty holes after the merges",
+    );
+  }
   const capped = checkerBoard();
   capped[0]![0] = makeDefense(3);
   capped[0]![1] = makeDefense(3);
@@ -253,6 +245,21 @@ c.section("night and shift");
   c.check(nightEnemyCount(50) === frontlineTideConfig.nightEnemyCap, "wave size is capped");
   c.check(enemyHpForDay(5) > enemyHpForDay(1), "enemy hp is higher by day 5");
   c.check(nightEnemyCount(15) > nightEnemyCount(1), "the wave is larger by day 15");
+  c.check(pathRowFor(8, 1) === 3 && pathRowFor(8, 49) === 3, "the road stays on row 3 before day 50");
+  c.check(pathRowFor(8, 50) === 4, "day 50 flips the road");
+  c.check(washWidthForDay(9) === 1 && washWidthForDay(10) === 2, "day 10 washes two columns");
+  c.check(shearSwaps(24) === false && shearSwaps(25) === true, "day 25 shears swaps");
+  const sheared = resolveSwap({ ...createGame(7), day: 25 }, { r: 0, c: 0 }, { r: 1, c: 0 });
+  c.check(!sheared.ok && sheared.reason === "shear", "day 25 rejects a vertical swap");
+  const doubled = completeFrontShift({ ...createGame(2), day: 9, phase: "front_shift" });
+  c.check(doubled.day === 10 && doubled.scrubbedRoad?.length === 2, "entering day 10 opens two road cells", JSON.stringify(doubled.scrubbedRoad));
+  const flippedSeed = createGame(3);
+  const flippedBoard = flippedSeed.board.map((line) => line.map((cell) => cell));
+  flippedBoard[3]![0] = makeDefense(3);
+  let flipped = enterNight(enterBuild({ ...flippedSeed, day: 50, points: 0, board: flippedBoard }));
+  flipped = { ...flipped, spawnLeft: 1, enemies: [] };
+  const flippedNight = runNight(flipped);
+  c.check(flippedNight.heartsLost >= 1, "a bastion on the old row does not hold the flipped road");
 
   const ripBands = Array.from({ length: 8 }, () => "shoal" as const);
   const ripBoard = checkerBoard();
