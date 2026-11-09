@@ -4,5 +4,4 @@
  */
 import "./games/explosive-chess/register";
 import "./games/chroma-slide/register";
-import "./games/frontline-tide/register";
 export { GameRoom } from "./multiplayer/base-room";
