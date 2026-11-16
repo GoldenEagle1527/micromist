@@ -1,6 +1,4 @@
 import type { Dict } from "../types";
-import { bladeZh } from "../../games/blade-break/i18n";
-import { deepMarchZh } from "../../games/deep-march/i18n";
 import { chromaZh } from "../../games/chroma-slide/i18n";
 import { explosiveZh } from "../../games/explosive-chess/i18n";
 
@@ -63,6 +61,4 @@ export const zh: Dict = {
   storageLegacyNote: "清除「平台设置」会影响主题与语言等偏好。",
   explosive: explosiveZh,
   chroma: chromaZh,
-  blade: bladeZh,
-  deepMarch: deepMarchZh,
 };

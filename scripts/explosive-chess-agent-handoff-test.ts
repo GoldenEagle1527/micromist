@@ -267,7 +267,7 @@ c.section("served guide");
   c.check(missing?.status === 404, "other slugs 404");
   const missingBody = await missing!.text();
   c.check(missingBody.includes("/agent-guide/explosive-chess"), "404 points at explosive-chess");
-  c.check(!missingBody.toLowerCase().includes("blade-break"), "404 does not advertise other games");
+  c.check(!missingBody.toLowerCase().includes("unlisted-game"), "404 does not advertise other games");
 
   const denied = agentGuideHttpResponse(
     new Request(`${origin}/agent-guide/explosive-chess`, { method: "POST" }),

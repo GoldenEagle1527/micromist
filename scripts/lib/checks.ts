@@ -1,4 +1,4 @@
-/** Tiny PASS/FAIL reporter shared by the deep-march node tests added with the conserve mode. */
+/** Tiny PASS/FAIL reporter shared by micromist node tests. */
 export type Checker = {
   section: (title: string) => void;
   check: (ok: boolean, name: string, detail?: string) => void;

@@ -45,26 +45,6 @@ export const games: GameMeta[] = [
     },
     badge: { zh: "单机", en: "Offline" },
   },
-  {
-    slug: "blade-break",
-    mode: "single",
-    title: { zh: "破阵之刃", en: "Blade Break" },
-    blurb: {
-      zh: "五场对决的破势肉鸽：读意图、削架势、打断致命蓄力。单机本地，进度仅存本标签页。",
-      en: "Five-fight poise duels: read telegraphs, shatter stance, interrupt lethal windups. Solo local; progress stays in this tab.",
-    },
-    badge: { zh: "单机", en: "Offline" },
-  },
-  {
-    slug: "deep-march",
-    mode: "single",
-    title: { zh: "深潜", en: "Deep March" },
-    blurb: {
-      zh: "以潜水员视角游过无尽的 Marching Cubes 海底洞穴，种子决定地形。深海探索，注意电量。",
-      en: "Swim as a diver through an endless marching-cubes cavern sea; the seed shapes the world. Deep-sea exploration; watch your battery.",
-    },
-    badge: { zh: "3D", en: "3D" },
-  },
 ];
 
 function audienceAllows(audience: GameAudience | undefined, kind: SiteKind): boolean {

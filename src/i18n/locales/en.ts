@@ -1,6 +1,4 @@
 import type { Dict } from "../types";
-import { bladeEn } from "../../games/blade-break/i18n";
-import { deepMarchEn } from "../../games/deep-march/i18n";
 import { chromaEn } from "../../games/chroma-slide/i18n";
 import { explosiveEn } from "../../games/explosive-chess/i18n";
 
@@ -63,6 +61,4 @@ export const en: Dict = {
   storageLegacyNote: "Clearing Platform also removes theme and language preferences.",
   explosive: explosiveEn,
   chroma: chromaEn,
-  blade: bladeEn,
-  deepMarch: deepMarchEn,
 };
