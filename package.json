@@ -15,17 +15,6 @@
     "deploy": "npm run build && wrangler deploy",
     "check": "tsc -b --pretty false",
     "typecheck": "tsc -b --pretty false",
-    "test:terrain-info": "esbuild scripts/deep-march-terrain-info-test.ts --bundle --platform=node --outfile=node_modules/.cache/dm-terrain-info-test.cjs --log-level=warning && node node_modules/.cache/dm-terrain-info-test.cjs",
-    "test:collision": "esbuild scripts/deep-march-collision-test.ts --bundle --platform=node --outfile=node_modules/.cache/dm-collision-test.cjs --log-level=warning && node node_modules/.cache/dm-collision-test.cjs",
-    "test:wasm": "esbuild scripts/deep-march-wasm-test.ts --bundle --platform=node --outfile=node_modules/.cache/dm-wasm-test.cjs --log-level=warning && node node_modules/.cache/dm-wasm-test.cjs",
-    "test:streaming": "esbuild scripts/deep-march-streaming-test.ts --bundle --platform=node --outfile=node_modules/.cache/dm-streaming-test.cjs --log-level=error && node node_modules/.cache/dm-streaming-test.cjs",
-    "test:bricks": "esbuild scripts/deep-march-bricks-test.ts --bundle --platform=node --outfile=node_modules/.cache/dm-bricks-test.cjs --log-level=warning && node node_modules/.cache/dm-bricks-test.cjs",
-    "test:detail": "esbuild scripts/deep-march-detail-test.ts --bundle --platform=node --external:@webgpu/glslang --outfile=node_modules/.cache/dm-detail-test.cjs --log-level=warning && node node_modules/.cache/dm-detail-test.cjs",
-    "test:shaders": "esbuild scripts/deep-march-shaders-test.ts --bundle --platform=node --external:@webgpu/glslang --outfile=node_modules/.cache/dm-shaders-test.cjs --log-level=warning && node node_modules/.cache/dm-shaders-test.cjs",
-    "test:fog": "esbuild scripts/deep-march-fog-test.ts --bundle --platform=node --outfile=node_modules/.cache/dm-fog-test.cjs --log-level=warning && node node_modules/.cache/dm-fog-test.cjs",
-    "test:sonar": "esbuild scripts/deep-march-sonar-test.ts --bundle --platform=node --outfile=node_modules/.cache/dm-sonar-test.cjs --log-level=warning && node node_modules/.cache/dm-sonar-test.cjs",
-    "test:refine": "esbuild scripts/deep-march-refine-test.ts --bundle --platform=node --outfile=node_modules/.cache/dm-refine-test.cjs --log-level=warning && node node_modules/.cache/dm-refine-test.cjs",
-    "test:regions": "esbuild scripts/deep-march-regions-test.ts --bundle --platform=node --outfile=node_modules/.cache/dm-regions-test.cjs --log-level=warning && node node_modules/.cache/dm-regions-test.cjs",
     "cf-typegen": "wrangler types --include-runtime false",
     "deploy:staging": "npm run build && node scripts/patch-staging-wrangler.mjs && wrangler deploy"
   },
@@ -33,17 +22,14 @@
     "phaser": "^3.90.0",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
-    "react-router": "^7.8.2",
-    "three": "^0.186.0"
+    "react-router": "^7.8.2"
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "^1.13.0",
     "@cloudflare/workers-types": "^5.20260908.1",
     "@types/react": "^19.1.12",
     "@types/react-dom": "^19.1.9",
-    "@types/three": "^0.185.4",
     "@vitejs/plugin-react": "^5.0.2",
-    "@webgpu/glslang": "^0.0.15",
     "typescript": "~5.9.2",
     "vite": "^7.1.5",
     "wrangler": "^4.37.0"
