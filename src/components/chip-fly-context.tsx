@@ -11,30 +11,32 @@ import {
 } from "react";
 import { useLocation, useNavigate } from "react-router";
 import { getGame } from "../games/catalog";
+import type { GameReveal } from "./GameEmbed";
 import {
   afterTransition,
   chipCenter,
   clearFlyer,
   COLLAPSE_MS,
+  DEEP_REVEAL_MS,
   FLY_MS,
   makeFlyer,
   motionMs,
-  PAGE_MS,
   prefersReducedMotion,
   prepareCollapse,
   prepareExpand,
+  REVEAL_MS,
   wait,
 } from "../lib/chip-fly";
-
-export const preloadPlayPage = () => import("../pages/PlayPage");
 
 export type ChipFlyApi = {
   busy: boolean;
   currentSlug: string | null;
+  embedSlug: string | null;
   ghostSlug: string | null;
   dimOthers: boolean;
   dockReady: boolean;
   dockHot: boolean;
+  reveal: GameReveal;
   homeOut: boolean;
   playIn: boolean;
   wellRef: RefObject<HTMLButtonElement | null>;
@@ -58,6 +60,12 @@ function findCard(slug: string): HTMLElement | null {
   );
 }
 
+function initialRevealFor(game: string | null): GameReveal {
+  if (!game) return "off";
+  if (prefersReducedMotion()) return "printed";
+  return "streaming";
+}
+
 type Props = {
   playSlug: string | undefined;
   isNotFound: boolean;
@@ -76,6 +84,8 @@ export function ChipFlyProvider({
   const busyRef = useRef(false);
   const ownedNavRef = useRef<"open" | "home" | null>(null);
   const currentRef = useRef<string | null>(null);
+  const openedFromLobbyRef = useRef(false);
+  const revealTimerRef = useRef<number | null>(null);
 
   const initialGame =
     playSlug && getGame(playSlug) ? playSlug : null;
@@ -83,10 +93,14 @@ export function ChipFlyProvider({
 
   const [busy, setBusy] = useState(false);
   const [currentSlug, setCurrentSlug] = useState<string | null>(initialGame);
+  const [embedSlug, setEmbedSlug] = useState<string | null>(initialGame);
   const [ghostSlug, setGhostSlug] = useState<string | null>(initialGame);
   const [dimOthers, setDimOthers] = useState(Boolean(initialGame));
   const [dockReady, setDockReady] = useState(Boolean(initialGame));
   const [dockHot, setDockHot] = useState(Boolean(initialGame));
+  const [reveal, setReveal] = useState<GameReveal>(() =>
+    initialRevealFor(initialGame),
+  );
   const [homeOut, setHomeOut] = useState(initialPlayVisible && !isNotFound);
   const [playIn, setPlayIn] = useState(initialPlayVisible);
 
@@ -102,26 +116,57 @@ export function ChipFlyProvider({
     flyerRef.current = null;
   };
 
+  const clearRevealTimer = () => {
+    if (revealTimerRef.current != null) {
+      window.clearTimeout(revealTimerRef.current);
+      revealTimerRef.current = null;
+    }
+  };
+
+  const startReveal = useCallback((mode: "full" | "short") => {
+    clearRevealTimer();
+    if (prefersReducedMotion()) {
+      setReveal("printed");
+      return Promise.resolve();
+    }
+    setReveal("streaming");
+    const ms = motionMs(mode === "short" ? DEEP_REVEAL_MS : REVEAL_MS);
+    return new Promise<void>((resolve) => {
+      revealTimerRef.current = window.setTimeout(() => {
+        revealTimerRef.current = null;
+        setReveal("printed");
+        resolve();
+      }, ms);
+    });
+  }, []);
+
   const snapToGame = useCallback((slug: string) => {
     dropFlyer();
     currentRef.current = slug;
+    openedFromLobbyRef.current = false;
     setCurrentSlug(slug);
+    setEmbedSlug(slug);
     setGhostSlug(slug);
     setDimOthers(true);
     setDockReady(true);
     setDockHot(true);
     setHomeOut(true);
     setPlayIn(true);
-  }, []);
+    void startReveal("short");
+  }, [startReveal]);
 
   const snapToHome = useCallback(() => {
     dropFlyer();
+    clearRevealTimer();
     currentRef.current = null;
+    openedFromLobbyRef.current = false;
     setCurrentSlug(null);
+    setEmbedSlug(null);
     setGhostSlug(null);
     setDimOthers(false);
     setDockReady(false);
     setDockHot(false);
+    setReveal("off");
     setHomeOut(false);
     setPlayIn(false);
   }, []);
@@ -161,6 +206,7 @@ export function ChipFlyProvider({
     return () => {
       clearFlyer(flyerRef.current);
       flyerRef.current = null;
+      clearRevealTimer();
     };
   }, []);
 
@@ -169,13 +215,16 @@ export function ChipFlyProvider({
       if (busyRef.current) return;
       if (currentRef.current === slug) return;
       setBusyBoth(true);
-      void preloadPlayPage();
       setDimOthers(true);
+      setEmbedSlug(slug);
+      setReveal("off");
 
       const finishOpen = () => {
         currentRef.current = slug;
+        openedFromLobbyRef.current = true;
         setCurrentSlug(slug);
         setGhostSlug(slug);
+        setEmbedSlug(slug);
         setDockReady(true);
         setDockHot(true);
         ownedNavRef.current = "open";
@@ -186,6 +235,7 @@ export function ChipFlyProvider({
         finishOpen();
         setHomeOut(true);
         setPlayIn(true);
+        setReveal("printed");
         setBusyBoth(false);
         return;
       }
@@ -195,6 +245,7 @@ export function ChipFlyProvider({
         finishOpen();
         setHomeOut(true);
         setPlayIn(true);
+        await startReveal("short");
         setBusyBoth(false);
         return;
       }
@@ -206,7 +257,6 @@ export function ChipFlyProvider({
         const dest = chipCenter(well);
         const collapse = motionMs(COLLAPSE_MS);
         const flyMs = motionMs(FLY_MS);
-        const pageMs = motionMs(PAGE_MS);
 
         void fly.offsetWidth;
         fly.classList.add("is-collapsing");
@@ -226,16 +276,17 @@ export function ChipFlyProvider({
 
         dropFlyer();
         finishOpen();
-        await wait(pageMs);
+        await startReveal("full");
       } catch {
         finishOpen();
         setHomeOut(true);
         setPlayIn(true);
+        await startReveal("short");
       } finally {
         setBusyBoth(false);
       }
     },
-    [navigate],
+    [navigate, startReveal],
   );
 
   const goHome = useCallback(async () => {
@@ -245,12 +296,19 @@ export function ChipFlyProvider({
 
     setPlayIn(false);
     setHomeOut(false);
+    setReveal("off");
+    clearRevealTimer();
     await wait(prefersReducedMotion() ? 0 : 200);
 
     const finishHome = () => {
+      const fromLobby = openedFromLobbyRef.current;
       ownedNavRef.current = "home";
       snapToHome();
-      navigate("/");
+      if (fromLobby) {
+        navigate(-1);
+      } else {
+        navigate("/");
+      }
     };
 
     const card = findCard(id);
@@ -276,6 +334,7 @@ export function ChipFlyProvider({
 
       setDockReady(false);
       setDockHot(false);
+      setEmbedSlug(null);
       const flyMs = motionMs(FLY_MS);
       const collapse = motionMs(COLLAPSE_MS);
       const dx1 = end.x - (rect.left + originOffset.x);
@@ -304,10 +363,12 @@ export function ChipFlyProvider({
     () => ({
       busy,
       currentSlug,
+      embedSlug,
       ghostSlug,
       dimOthers,
       dockReady,
       dockHot,
+      reveal,
       homeOut,
       playIn,
       wellRef,
@@ -317,10 +378,12 @@ export function ChipFlyProvider({
     [
       busy,
       currentSlug,
+      embedSlug,
       ghostSlug,
       dimOthers,
       dockReady,
       dockHot,
+      reveal,
       homeOut,
       playIn,
       openFromCard,

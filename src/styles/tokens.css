@@ -128,6 +128,28 @@ body {
   background-attachment: fixed;
 }
 
+/* Chrome-less catalog game running inside the lobby iframe. */
+html[data-embed="game"] {
+  height: 100%;
+}
+
+html[data-embed="game"] body {
+  height: 100%;
+  overflow: auto;
+  background: transparent;
+  background-attachment: initial;
+}
+
+html[data-embed="game"] #root {
+  min-height: 100%;
+  height: auto;
+}
+
+.embed-root {
+  min-height: 100%;
+  padding: 0.85rem 1rem calc(1.15rem + var(--safe-bottom));
+}
+
 a {
   color: inherit;
   text-decoration: none;

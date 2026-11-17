@@ -1,9 +1,10 @@
 import { Suspense, useEffect, useId, useRef, useState } from "react";
-import { NavLink, Outlet, useMatch } from "react-router";
+import { NavLink, Outlet, useLocation, useMatch } from "react-router";
 import { getGame } from "../games/catalog";
 import { useLocale } from "../i18n";
 import { ChipIcon } from "./ChipIcon";
 import { ChipFlyProvider, useChipFly } from "./chip-fly-context";
+import { GameEmbed } from "./GameEmbed";
 import { useTheme } from "../hooks/useTheme";
 import {
   isFloatEmbed,
@@ -91,9 +92,17 @@ function ShellFrame() {
   const isPlayRoute = Boolean(playMatch);
   const isNotFound = !isHome && !playMatch;
   const chip = useChipFly();
+  const location = useLocation();
   const playGame = chip.currentSlug
     ? getGame(chip.currentSlug)
     : playGameFromRoute;
+  const catalogSlug =
+    chip.embedSlug && getGame(chip.embedSlug) ? chip.embedSlug : undefined;
+  const isPlaying =
+    !isNotFound && (isPlayRoute || Boolean(chip.currentSlug) || chip.playIn);
+  const embedOnGamePath = Boolean(
+    catalogSlug && location.pathname === `/play/${catalogSlug}`,
+  );
   const themeLabel =
     mode === "system" ? t.themeSystem : mode === "light" ? t.themeLight : t.themeDark;
   const langButtonLabel = locale === "zh" ? "EN" : "中";
@@ -182,7 +191,7 @@ function ShellFrame() {
   }
 
   return (
-    <div className={`shell${isPlayRoute ? " is-playing" : ""}`}>
+    <div className={`shell${isPlaying ? " is-playing" : ""}`}>
       <header className="topbar">
         <NavLink
           to="/"
@@ -206,7 +215,7 @@ function ShellFrame() {
           {locale === "zh" ? <span className="brand-en">{t.brandSub}</span> : null}
         </NavLink>
         <div
-          className={`topbar-game dock${chip.dockReady ? " is-ready" : ""}${chip.dockHot ? " is-hot" : ""}`}
+          className={`topbar-game dock${chip.dockReady ? " is-ready" : ""}${chip.dockHot ? " is-hot" : ""}${chip.reveal === "streaming" ? " is-streaming" : ""}`}
         >
           <button
             ref={chip.wellRef}
@@ -362,20 +371,30 @@ function ShellFrame() {
         </div>
       </nav>
 
-      <main className={`main${isPlayRoute ? " is-playing" : ""}`}>
+      <main className={`main${isPlaying ? " is-playing" : ""}`}>
         <div
           className={`home-layer${chip.homeOut ? " is-out" : ""}${isNotFound ? " is-hidden" : ""}`}
-          inert={chip.dimOthers || chip.homeOut || isNotFound || isPlayRoute ? true : undefined}
+          inert={chip.dimOthers || chip.homeOut || isNotFound || isPlaying ? true : undefined}
         >
           <HomePage />
         </div>
         <div
-          className={`play-layer${chip.playIn || isNotFound ? " is-in" : ""}${isNotFound ? " is-static" : ""}`}
-          hidden={!isPlayRoute && !isNotFound && !chip.playIn}
+          className={`play-layer${chip.playIn || isNotFound ? " is-in" : ""}${isNotFound ? " is-static" : ""}${catalogSlug ? " is-embed" : ""}`}
+          hidden={!isPlayRoute && !isNotFound && !chip.playIn && !catalogSlug}
         >
-          <Suspense fallback={<p className="lede">{t.loading}</p>}>
-            <Outlet />
-          </Suspense>
+          {catalogSlug ? (
+            <GameEmbed
+              key={catalogSlug}
+              slug={catalogSlug}
+              reveal={chip.reveal}
+              initialSearch={embedOnGamePath ? location.search : ""}
+              initialHash={embedOnGamePath ? location.hash : ""}
+            />
+          ) : (
+            <Suspense fallback={<p className="lede">{t.loading}</p>}>
+              <Outlet />
+            </Suspense>
+          )}
         </div>
       </main>
 

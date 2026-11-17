@@ -103,6 +103,18 @@
   transform: none;
 }
 
+.dock.is-streaming .dock-well {
+  border-color: color-mix(in srgb, var(--md-sys-color-primary) 70%, var(--line));
+  box-shadow:
+    inset 0 2px 6px rgba(0, 0, 0, 0.08),
+    0 0 0 1px color-mix(in srgb, var(--md-sys-color-primary) 40%, transparent),
+    0 8px 22px color-mix(in srgb, var(--md-sys-color-primary) 28%, transparent);
+}
+
+.dock.is-streaming .dock-chip {
+  filter: drop-shadow(0 0 8px color-mix(in srgb, var(--md-sys-color-primary) 55%, transparent));
+}
+
 .brand {
   display: flex;
   flex-direction: column;
@@ -668,6 +680,223 @@
 
 .play-layer[hidden] {
   display: none !important;
+}
+
+.play-layer.is-embed {
+  overflow: hidden;
+  transform: none;
+}
+
+.play-layer.is-embed:not(.is-in) {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: none;
+}
+
+.play-layer.is-embed.is-in {
+  opacity: 1;
+  visibility: visible;
+  transition: none;
+}
+
+.game-embed {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.game-embed-frame {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: transparent;
+  color-scheme: inherit;
+  display: block;
+}
+
+.game-embed.is-revealing .game-embed-frame {
+  animation: embed-wipe 820ms var(--ease-out) both;
+}
+
+.game-embed-stream {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  overflow: hidden;
+  opacity: 0;
+}
+
+.game-embed.is-revealing .game-embed-stream {
+  opacity: 1;
+}
+
+.game-embed-beam {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: min(14rem, 46%);
+  height: 0;
+  transform: translateX(-50%);
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--md-sys-color-primary) 70%, transparent) 0%,
+      color-mix(in srgb, var(--md-sys-color-primary) 22%, transparent) 42%,
+      transparent 100%
+    );
+  filter: blur(0.5px);
+  opacity: 0;
+}
+
+.game-embed.is-revealing .game-embed-beam {
+  animation: embed-beam 820ms var(--ease-out) forwards;
+}
+
+.game-embed-bits {
+  position: absolute;
+  inset: 0;
+  background-image:
+    repeating-linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--md-sys-color-primary) 80%, transparent) 0 2px,
+      transparent 2px 11px
+    ),
+    repeating-linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--md-sys-color-primary) 55%, transparent) 0 1px,
+      transparent 1px 9px
+    ),
+    repeating-linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--md-sys-color-primary) 70%, transparent) 0 3px,
+      transparent 3px 15px
+    ),
+    repeating-linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--md-sys-color-primary) 45%, transparent) 0 1px,
+      transparent 1px 13px
+    );
+  background-size: 1px 240px, 1px 190px, 1px 280px, 1px 210px;
+  background-repeat: repeat-y;
+  background-position: 18% 0, 38% 0, 50% 0, 82% 0;
+  -webkit-mask-image: linear-gradient(
+    90deg,
+    transparent 6%,
+    #000 16%,
+    transparent 26%,
+    transparent 34%,
+    #000 38%,
+    transparent 44%,
+    transparent 47%,
+    #000 50%,
+    transparent 53%,
+    transparent 74%,
+    #000 82%,
+    transparent 92%
+  );
+  mask-image: linear-gradient(
+    90deg,
+    transparent 6%,
+    #000 16%,
+    transparent 26%,
+    transparent 34%,
+    #000 38%,
+    transparent 44%,
+    transparent 47%,
+    #000 50%,
+    transparent 53%,
+    transparent 74%,
+    #000 82%,
+    transparent 92%
+  );
+  opacity: 0;
+}
+
+.game-embed.is-revealing .game-embed-bits {
+  animation: embed-bits 820ms linear forwards;
+}
+
+.game-embed-scan {
+  position: absolute;
+  left: 8%;
+  right: 8%;
+  top: 0;
+  height: 2px;
+  border-radius: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in srgb, var(--md-sys-color-primary) 40%, transparent) 18%,
+    var(--md-sys-color-primary) 50%,
+    color-mix(in srgb, var(--md-sys-color-primary) 40%, transparent) 82%,
+    transparent 100%
+  );
+  box-shadow:
+    0 0 10px color-mix(in srgb, var(--md-sys-color-primary) 55%, transparent),
+    0 8px 18px color-mix(in srgb, var(--md-sys-color-primary) 22%, transparent);
+  opacity: 0;
+}
+
+.game-embed.is-revealing .game-embed-scan {
+  animation: embed-scan 820ms var(--ease-out) forwards;
+}
+
+@keyframes embed-wipe {
+  from {
+    clip-path: inset(0 0 100% 0);
+  }
+  to {
+    clip-path: inset(0 0 0 0);
+  }
+}
+
+@keyframes embed-beam {
+  0% {
+    height: 0;
+    opacity: 0.2;
+  }
+  28% {
+    height: 100%;
+    opacity: 0.95;
+  }
+  100% {
+    height: 100%;
+    opacity: 0;
+  }
+}
+
+@keyframes embed-bits {
+  from {
+    background-position: 18% -80px, 38% -40px, 50% -120px, 82% -60px;
+    opacity: 0.15;
+  }
+  30% {
+    opacity: 0.72;
+  }
+  to {
+    background-position: 18% 200px, 38% 260px, 50% 180px, 82% 240px;
+    opacity: 0;
+  }
+}
+
+@keyframes embed-scan {
+  0% {
+    top: 0;
+    opacity: 0;
+  }
+  12% {
+    opacity: 1;
+  }
+  100% {
+    top: 100%;
+    opacity: 0.35;
+  }
 }
 
 .hint {
