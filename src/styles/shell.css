@@ -31,23 +31,76 @@
 }
 
 
-.topbar-game {
+.topbar-game,
+.dock {
   justify-self: center;
-  max-width: min(42vw, 12rem);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  min-height: 2.5rem;
+  min-width: 0;
+}
+
+.dock-well {
+  width: 2.65rem;
+  height: 2.65rem;
+  padding: 0;
+  border-radius: 10px;
+  border: 1px dashed color-mix(in srgb, var(--md-sys-color-primary) 28%, var(--line));
+  background: color-mix(in srgb, var(--md-sys-color-primary) 5%, transparent);
+  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.06);
+  display: grid;
+  place-items: center;
+  cursor: default;
+  color: inherit;
+}
+
+.dock.is-ready .dock-well {
+  cursor: pointer;
+}
+
+.dock.is-hot .dock-well,
+.dock.is-ready .dock-well {
+  border-style: solid;
+  border-color: color-mix(in srgb, var(--md-sys-color-primary) 50%, var(--line));
+  box-shadow:
+    inset 0 2px 6px rgba(0, 0, 0, 0.08),
+    0 0 0 1px color-mix(in srgb, var(--md-sys-color-primary) 28%, transparent);
+}
+
+.dock-chip {
+  width: 2.15rem;
+  height: 2.15rem;
+  display: none;
+  line-height: 0;
+}
+
+.dock-chip .chip-ic {
+  width: 2.15rem;
+  height: 2.15rem;
+}
+
+.dock.is-ready .dock-chip {
+  display: block;
+}
+
+.dock-title {
   font-size: 1.05rem;
   font-weight: 600;
   letter-spacing: 0.08em;
   color: var(--md-sys-color-on-surface);
-  text-align: center;
-  pointer-events: none;
+  max-width: min(42vw, 12rem);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  opacity: 0;
+  transform: translateX(-4px);
+  transition: opacity var(--md-sys-motion), transform var(--md-sys-motion);
 }
 
-.topbar-game-empty {
-  visibility: hidden;
-  min-width: 0;
+.dock.is-ready .dock-title {
+  opacity: 1;
+  transform: none;
 }
 
 .brand {
@@ -311,6 +364,17 @@
   margin: 0;
   padding: 0;
   flex: 1;
+  position: relative;
+  min-height: 0;
+}
+
+.shell.is-playing {
+  height: 100dvh;
+  overflow: hidden;
+}
+
+.main.is-playing {
+  overflow: hidden;
 }
 
 .hero {
@@ -355,6 +419,7 @@
 }
 
 .card {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 0.7rem;
@@ -366,10 +431,14 @@
   backdrop-filter: var(--backdrop);
   -webkit-backdrop-filter: var(--backdrop);
   min-height: 11.5rem;
+  text-align: left;
+  overflow: hidden;
+  cursor: pointer;
   transition:
     transform var(--md-sys-motion),
     border-color var(--md-sys-motion),
-    box-shadow var(--md-sys-motion);
+    box-shadow var(--md-sys-motion),
+    opacity var(--md-sys-motion);
 }
 
 .card:hover {
@@ -385,6 +454,8 @@
   font-size: 1.12rem;
   font-weight: 600;
   letter-spacing: 0.02em;
+  position: relative;
+  z-index: 1;
 }
 
 .badge {
@@ -409,12 +480,194 @@
   color: var(--md-sys-color-on-surface-variant);
   flex: 1;
   font-size: 0.92rem;
+  position: relative;
+  z-index: 1;
 }
 
 .card-cta {
   color: var(--md-sys-color-primary);
   font-size: 0.9rem;
   font-weight: 600;
+  position: relative;
+  z-index: 1;
+}
+
+.card-head {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  position: relative;
+  z-index: 1;
+}
+
+.card-head .badge {
+  align-self: center;
+}
+
+/* sci-fi traces and corner ticks */
+.fx {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.fx .c {
+  position: absolute;
+  width: 11px;
+  height: 11px;
+  border-color: color-mix(in srgb, var(--md-sys-color-primary) 45%, transparent);
+  border-style: solid;
+  border-width: 0;
+}
+
+.fx .c.tl { top: 7px; left: 7px; border-top-width: 1px; border-left-width: 1px; }
+.fx .c.tr { top: 7px; right: 7px; border-top-width: 1px; border-right-width: 1px; }
+.fx .c.bl { bottom: 7px; left: 7px; border-bottom-width: 1px; border-left-width: 1px; }
+.fx .c.br { bottom: 7px; right: 7px; border-bottom-width: 1px; border-right-width: 1px; }
+
+.traces {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  fill: none;
+  stroke: color-mix(in srgb, var(--md-sys-color-primary) 38%, transparent);
+  stroke-width: 1.1;
+  stroke-linecap: square;
+}
+
+.traces path {
+  fill: none;
+}
+
+.traces circle {
+  fill: color-mix(in srgb, var(--md-sys-color-primary) 48%, transparent);
+  stroke: none;
+}
+
+.chip-ic {
+  width: 2.15rem;
+  height: 2.15rem;
+  flex: none;
+  display: block;
+}
+
+.chip-ic .ic-body {
+  fill: color-mix(in srgb, var(--md-sys-color-primary-container) 80%, #fff);
+  stroke: var(--md-sys-color-primary);
+  stroke-width: 1.1;
+}
+
+.chip-ic .ic-die {
+  fill: var(--md-sys-color-primary);
+}
+
+.chip-ic .ic-dot {
+  fill: var(--md-sys-color-primary);
+}
+
+.chip-ic .ic-pads {
+  fill: var(--pad);
+}
+
+.card.is-ghost {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.card.is-away {
+  opacity: 0.38;
+  filter: saturate(0.7);
+  pointer-events: none;
+}
+
+.card.is-fly {
+  position: fixed;
+  margin: 0;
+  z-index: 45;
+  cursor: default;
+  pointer-events: none;
+  will-change: transform, opacity, background, border-color, box-shadow;
+}
+
+.card.is-fly:hover {
+  transform: none;
+}
+
+.card.is-collapsing,
+.card.is-flying {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  overflow: visible;
+}
+
+.card.is-collapsing .fx,
+.card.is-collapsing h2,
+.card.is-collapsing p,
+.card.is-collapsing .badge,
+.card.is-collapsing .card-cta,
+.card.is-flying .fx,
+.card.is-flying h2,
+.card.is-flying p,
+.card.is-flying .badge,
+.card.is-flying .card-cta {
+  opacity: 0;
+}
+
+.card.is-collapsing .chip-ic,
+.card.is-flying .chip-ic,
+.card.is-mid .chip-ic {
+  transform: scale(var(--chip-boost, 1));
+  transform-origin: center center;
+}
+
+.card.is-flying .chip-ic {
+  filter: drop-shadow(0 3px 8px color-mix(in srgb, var(--md-sys-color-primary) 28%, transparent));
+}
+
+.home-layer {
+  transition: opacity 360ms var(--ease-out), transform 360ms var(--ease-out);
+}
+
+.home-layer.is-out {
+  opacity: 0;
+  transform: translateY(10px);
+  pointer-events: none;
+}
+
+.home-layer.is-hidden {
+  display: none !important;
+}
+
+.play-layer {
+  position: absolute;
+  inset: 0;
+  overflow: auto;
+  opacity: 0;
+  transform: translateY(14px);
+  pointer-events: none;
+  transition: opacity 360ms var(--ease-out), transform 360ms var(--ease-out);
+}
+
+.play-layer.is-in {
+  opacity: 1;
+  transform: none;
+  pointer-events: auto;
+}
+
+.play-layer.is-static {
+  position: relative;
+  inset: auto;
+  overflow: visible;
+}
+
+.play-layer[hidden] {
+  display: none !important;
 }
 
 .hint {

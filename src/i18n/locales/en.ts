@@ -34,6 +34,7 @@ export const en: Dict = {
   floatAdBadge: "Ad",
   floatAdTitle: "Sponsored content",
   playCta: "Play",
+  lobbyBack: "Back to lobby",
   notFoundTitle: "Page not found",
   notFoundBody: "Nothing lives at this path.",
   notFoundLink: "Back to home",

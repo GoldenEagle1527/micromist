@@ -1,13 +1,16 @@
-import { useEffect, useId, useRef, useState } from "react";
+import { Suspense, useEffect, useId, useRef, useState } from "react";
 import { NavLink, Outlet, useMatch } from "react-router";
 import { getGame } from "../games/catalog";
 import { useLocale } from "../i18n";
+import { ChipIcon } from "./ChipIcon";
+import { ChipFlyProvider, useChipFly } from "./chip-fly-context";
 import { useTheme } from "../hooks/useTheme";
 import {
   isFloatEmbed,
   openAdDocumentPip,
   supportsDocumentPip,
 } from "../lib/document-pip";
+import { HomePage } from "../pages/HomePage";
 import { LocalDataModal } from "./LocalDataModal";
 import { ensureLocalDbReady } from "../lib/game-store";
 import { siteKind, switchSiteHref } from "../lib/sites";
@@ -58,7 +61,7 @@ function StorageIcon() {
   );
 }
 
-export function Shell() {
+function ShellFrame() {
   const { mode, cycleMode } = useTheme();
   const { locale, t, toggleLocale } = useLocale();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -82,9 +85,15 @@ export function Shell() {
   const closeBtnRef = useRef<HTMLButtonElement | null>(null);
   const playMatch = useMatch("/play/:slug");
   const isHome = useMatch({ path: "/", end: true });
-  const playGame = playMatch?.params.slug
+  const playGameFromRoute = playMatch?.params.slug
     ? getGame(playMatch.params.slug)
     : undefined;
+  const isPlayRoute = Boolean(playMatch);
+  const isNotFound = !isHome && !playMatch;
+  const chip = useChipFly();
+  const playGame = chip.currentSlug
+    ? getGame(chip.currentSlug)
+    : playGameFromRoute;
   const themeLabel =
     mode === "system" ? t.themeSystem : mode === "light" ? t.themeLight : t.themeDark;
   const langButtonLabel = locale === "zh" ? "EN" : "中";
@@ -173,9 +182,19 @@ export function Shell() {
   }
 
   return (
-    <div className="shell">
+    <div className={`shell${isPlayRoute ? " is-playing" : ""}`}>
       <header className="topbar">
-        <NavLink to="/" className="brand" onClick={() => setMenuOpen(false)}>
+        <NavLink
+          to="/"
+          className="brand"
+          onClick={(event) => {
+            setMenuOpen(false);
+            if (chip.currentSlug || chip.busy) {
+              event.preventDefault();
+              void chip.goHome();
+            }
+          }}
+        >
           <span className="brand-title-row">
             <span className="brand-zh">{t.brand}</span>
             {kind === "staging" ? (
@@ -186,13 +205,28 @@ export function Shell() {
           </span>
           {locale === "zh" ? <span className="brand-en">{t.brandSub}</span> : null}
         </NavLink>
-        {playGame ? (
-          <div className="topbar-game" aria-current="page">
-            {playGame.title[locale]}
-          </div>
-        ) : (
-          <div className="topbar-game topbar-game-empty" aria-hidden="true" />
-        )}
+        <div
+          className={`topbar-game dock${chip.dockReady ? " is-ready" : ""}${chip.dockHot ? " is-hot" : ""}`}
+        >
+          <button
+            ref={chip.wellRef}
+            type="button"
+            className="dock-well"
+            aria-label={t.lobbyBack}
+            aria-disabled={!chip.dockReady}
+            tabIndex={chip.dockReady ? 0 : -1}
+            onClick={() => {
+              if (chip.dockReady) void chip.goHome();
+            }}
+          >
+            <span className="dock-chip">
+              <ChipIcon />
+            </span>
+          </button>
+          <span className="dock-title">
+            {chip.dockReady && playGame ? playGame.title[locale] : ""}
+          </span>
+        </div>
         <div className="topbar-actions">
           <button
             type="button"
@@ -328,11 +362,24 @@ export function Shell() {
         </div>
       </nav>
 
-      <main className="main">
-        <Outlet />
+      <main className={`main${isPlayRoute ? " is-playing" : ""}`}>
+        <div
+          className={`home-layer${chip.homeOut ? " is-out" : ""}${isNotFound ? " is-hidden" : ""}`}
+          inert={chip.dimOthers || chip.homeOut || isNotFound || isPlayRoute ? true : undefined}
+        >
+          <HomePage />
+        </div>
+        <div
+          className={`play-layer${chip.playIn || isNotFound ? " is-in" : ""}${isNotFound ? " is-static" : ""}`}
+          hidden={!isPlayRoute && !isNotFound && !chip.playIn}
+        >
+          <Suspense fallback={<p className="lede">{t.loading}</p>}>
+            <Outlet />
+          </Suspense>
+        </div>
       </main>
 
-      {isHome ? (
+      {isHome && !chip.homeOut ? (
         <footer className="footer">
           <span>{t.footer}</span>
           <a href="https://github.com/GoldenEagle1527/micromist">GitHub</a>
@@ -399,5 +446,19 @@ export function Shell() {
         </div>
       ) : null}
     </div>
+  );
+}
+
+export function Shell() {
+  const playMatch = useMatch("/play/:slug");
+  const isHome = useMatch({ path: "/", end: true });
+  const isNotFound = !isHome && !playMatch;
+  return (
+    <ChipFlyProvider
+      playSlug={playMatch?.params.slug}
+      isNotFound={isNotFound}
+    >
+      <ShellFrame />
+    </ChipFlyProvider>
   );
 }

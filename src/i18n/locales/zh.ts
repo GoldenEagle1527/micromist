@@ -34,6 +34,7 @@ export const zh: Dict = {
   floatAdBadge: "广告",
   floatAdTitle: "精选推广",
   playCta: "开始玩",
+  lobbyBack: "返回大厅",
   notFoundTitle: "没有这个页面",
   notFoundBody: "这条路径没有对应的页面。",
   notFoundLink: "回微渺首页",

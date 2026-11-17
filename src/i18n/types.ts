@@ -34,6 +34,7 @@ export type Dict = {
   floatAdBadge: string;
   floatAdTitle: string;
   playCta: string;
+  lobbyBack: string;
   notFoundTitle: string;
   notFoundBody: string;
   notFoundLink: string;
