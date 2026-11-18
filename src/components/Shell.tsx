@@ -387,6 +387,7 @@ function ShellFrame() {
               key={catalogSlug}
               slug={catalogSlug}
               reveal={chip.reveal}
+              revealMs={chip.revealMs}
               initialSearch={embedOnGamePath ? location.search : ""}
               initialHash={embedOnGamePath ? location.hash : ""}
             />

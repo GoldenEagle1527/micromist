@@ -37,6 +37,7 @@ export type ChipFlyApi = {
   dockReady: boolean;
   dockHot: boolean;
   reveal: GameReveal;
+  revealMs: number;
   homeOut: boolean;
   playIn: boolean;
   wellRef: RefObject<HTMLButtonElement | null>;
@@ -101,6 +102,9 @@ export function ChipFlyProvider({
   const [reveal, setReveal] = useState<GameReveal>(() =>
     initialRevealFor(initialGame),
   );
+  const [revealMs, setRevealMs] = useState(() =>
+    initialGame && !prefersReducedMotion() ? DEEP_REVEAL_MS : REVEAL_MS,
+  );
   const [homeOut, setHomeOut] = useState(initialPlayVisible && !isNotFound);
   const [playIn, setPlayIn] = useState(initialPlayVisible);
 
@@ -129,8 +133,9 @@ export function ChipFlyProvider({
       setReveal("printed");
       return Promise.resolve();
     }
-    setReveal("streaming");
     const ms = motionMs(mode === "short" ? DEEP_REVEAL_MS : REVEAL_MS);
+    setRevealMs(ms);
+    setReveal("streaming");
     return new Promise<void>((resolve) => {
       revealTimerRef.current = window.setTimeout(() => {
         revealTimerRef.current = null;
@@ -278,6 +283,8 @@ export function ChipFlyProvider({
 
         dropFlyer();
         finishOpen();
+        setHomeOut(true);
+        setPlayIn(true);
         await startReveal("full");
       } catch {
         finishOpen();
@@ -371,6 +378,7 @@ export function ChipFlyProvider({
       dockReady,
       dockHot,
       reveal,
+      revealMs,
       homeOut,
       playIn,
       wellRef,
@@ -386,6 +394,7 @@ export function ChipFlyProvider({
       dockReady,
       dockHot,
       reveal,
+      revealMs,
       homeOut,
       playIn,
       openFromCard,

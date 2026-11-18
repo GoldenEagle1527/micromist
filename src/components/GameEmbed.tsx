@@ -18,13 +18,14 @@ export type GameReveal = "off" | "streaming" | "printed";
 type Props = {
   slug: string;
   reveal: GameReveal;
+  revealMs?: number;
   /** Search/hash to bake into the iframe src at mount (deep links / rooms). */
   initialSearch?: string;
   initialHash?: string;
 };
 
 const TRACE_COUNT = 22;
-const GLYPH_COLS = 15;
+const GLYPH_COLS = 24;
 
 function mulberry32(seed: number): () => number {
   return () => {
@@ -104,8 +105,7 @@ function StreamFx({ slug }: { slug: string }) {
       return {
         offset: t * 42,
         delay: `${(Math.abs(t) * 0.08 + rng() * 0.06).toFixed(3)}s`,
-        duration: `${(0.85 + rng() * 0.35).toFixed(2)}s`,
-        text: hexColumn(rng, 36),
+        text: hexColumn(rng, 48),
         dim: i % 2 === 0,
       };
     });
@@ -141,20 +141,26 @@ function StreamFx({ slug }: { slug: string }) {
             style={{
               left: `calc(var(--origin-x, 50%) + ${column.offset}%)`,
               animationDelay: column.delay,
-              animationDuration: column.duration,
             }}
           >
             {column.text}
           </span>
         ))}
       </div>
+      <span className="game-embed-veil" />
       <span className="game-embed-head" />
       <span className="game-embed-scan" />
     </div>
   );
 }
 
-export function GameEmbed({ slug, reveal, initialSearch = "", initialHash = "" }: Props) {
+export function GameEmbed({
+  slug,
+  reveal,
+  revealMs = 1800,
+  initialSearch = "",
+  initialHash = "",
+}: Props) {
   const { locale } = useLocale();
   const location = useLocation();
   const navigate = useNavigate();
@@ -208,17 +214,20 @@ export function GameEmbed({ slug, reveal, initialSearch = "", initialHash = "" }
   return (
     <div
       className={`game-embed${reveal === "streaming" ? " is-revealing" : ""}${reveal === "printed" ? " is-printed" : ""}${showing ? " is-on" : ""}`}
+      style={{ ["--reveal-ms" as string]: `${revealMs}ms` }}
       aria-busy={reveal === "streaming"}
     >
       {reveal === "streaming" ? <StreamFx slug={slug} /> : null}
-      <iframe
-        ref={iframeRef}
-        className="game-embed-frame"
-        src={src}
-        title={title}
-        allow="fullscreen; autoplay; clipboard-write"
-        referrerPolicy="same-origin"
-      />
+      <div className="game-embed-clip">
+        <iframe
+          ref={iframeRef}
+          className="game-embed-frame"
+          src={src}
+          title={title}
+          allow="fullscreen; autoplay; clipboard-write"
+          referrerPolicy="same-origin"
+        />
+      </div>
     </div>
   );
 }
