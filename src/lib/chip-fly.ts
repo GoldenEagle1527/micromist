@@ -1,7 +1,7 @@
 export const COLLAPSE_MS = 420;
 export const FLY_MS = 560;
 export const PAGE_MS = 360;
-export const REVEAL_MS = 820;
+export const REVEAL_MS = 1000;
 export const DEEP_REVEAL_MS = 420;
 
 const CONTENT_SEL = ".fx, h2, p, .badge, .card-cta, .chip-ic";
