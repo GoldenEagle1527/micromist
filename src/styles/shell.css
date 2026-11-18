@@ -698,6 +698,9 @@
   opacity: 1;
   visibility: visible;
   transition: none;
+  /* Cover the lobby immediately so the unprinted region is a clean page,
+     not a fading home card showing through the clipped game. */
+  background: var(--page-base);
 }
 
 .game-embed {
