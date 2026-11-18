@@ -265,6 +265,8 @@ export function ChipFlyProvider({
         prepareCollapse(fly, collapse);
         await afterTransition(fly, collapse);
 
+        // Let leftover collapse transitionend events drain first.
+        await wait(0);
         fly.classList.remove("is-collapsing");
         fly.classList.add("is-flying");
         const dx = dest.x - origin.x;

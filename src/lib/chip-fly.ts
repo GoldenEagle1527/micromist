@@ -20,7 +20,11 @@ export function wait(ms: number): Promise<void> {
   });
 }
 
-export function afterTransition(el: HTMLElement, ms: number): Promise<void> {
+export function afterTransition(
+  el: HTMLElement,
+  ms: number,
+  property = "transform",
+): Promise<void> {
   return new Promise((resolve) => {
     if (ms === 0) {
       resolve();
@@ -35,6 +39,9 @@ export function afterTransition(el: HTMLElement, ms: number): Promise<void> {
     };
     const onEnd = (event: TransitionEvent) => {
       if (event.target !== el) return;
+      // Collapse also transitions background/border/box-shadow on the same
+      // element. The first of those events must not end a later fly phase.
+      if (property && event.propertyName !== property) return;
       done();
     };
     el.addEventListener("transitionend", onEnd);
