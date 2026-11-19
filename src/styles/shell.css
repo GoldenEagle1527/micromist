@@ -9,8 +9,6 @@
 }
 
 .shell {
-  --board-shift-x: 0px;
-  --board-shift-y: 0px;
   min-height: 100dvh;
   display: flex;
   flex-direction: column;
@@ -33,11 +31,7 @@
     calc(var(--board-cell) * 4) calc(var(--board-cell) * 4),
     var(--board-cell) var(--board-cell),
     var(--board-cell) var(--board-cell);
-  background-position:
-    var(--board-shift-x) var(--board-shift-y),
-    var(--board-shift-x) var(--board-shift-y),
-    var(--board-shift-x) var(--board-shift-y),
-    var(--board-shift-x) var(--board-shift-y);
+  background-position: 0 0;
 }
 
 .topbar {
@@ -398,15 +392,21 @@
 }
 
 .grid {
-  --card-cols: 9;
+  --board-left: 0px;
+  --board-top: 0px;
+  --board-cols: 1;
+  --board-rows: 1;
+  position: absolute;
+  left: var(--board-left);
+  top: var(--board-top);
+  width: calc(var(--board-cell) * var(--board-cols));
+  height: calc(var(--board-cell) * var(--board-rows));
   display: grid;
-  grid-template-columns: repeat(auto-fit, calc(var(--board-cell) * var(--card-cols)));
-  justify-content: center;
-  align-content: center;
-  gap: calc(var(--board-cell) * 2);
-  padding: var(--board-cell);
-  width: 100%;
-  min-height: 100%;
+  grid-template-columns: repeat(var(--board-cols), var(--board-cell));
+  grid-template-rows: repeat(var(--board-rows), var(--board-cell));
+  gap: 0;
+  padding: 0;
+  margin: 0;
 }
 
 .card {
@@ -414,15 +414,18 @@
   display: flex;
   flex-direction: column;
   gap: 0.7rem;
-  width: 100%;
-  min-height: calc(var(--board-cell) * 8);
+  grid-column: var(--card-col, auto) / span var(--card-w, 11);
+  grid-row: var(--card-row, auto) / span var(--card-h, 9);
+  width: auto;
+  min-width: 0;
+  min-height: 0;
+  height: auto;
   padding: calc(var(--board-cell) * 0.75);
   border-radius: var(--md-sys-shape-corner-sm);
   background: var(--glass-bg-strong);
   border: 1px solid var(--glass-border);
   box-shadow:
     0 1px 0 color-mix(in srgb, var(--md-sys-color-on-surface) 8%, transparent),
-    0 3px 0 color-mix(in srgb, var(--md-sys-color-primary) 22%, var(--glass-border)),
     0 10px 18px color-mix(in srgb, var(--md-sys-color-on-surface) 12%, transparent);
   backdrop-filter: var(--backdrop);
   -webkit-backdrop-filter: var(--backdrop);
@@ -441,7 +444,6 @@
   border-color: color-mix(in srgb, var(--md-sys-color-primary) 50%, var(--glass-border));
   box-shadow:
     0 1px 0 color-mix(in srgb, var(--md-sys-color-on-surface) 8%, transparent),
-    0 3px 0 color-mix(in srgb, var(--md-sys-color-primary) 38%, var(--glass-border)),
     0 12px 22px color-mix(in srgb, var(--md-sys-color-primary) 16%, transparent),
     0 0 0 1px color-mix(in srgb, var(--md-sys-color-primary) 22%, transparent);
 }
@@ -537,7 +539,9 @@
 .card.is-fly {
   position: fixed;
   margin: 0;
-  z-index: 12;
+  grid-column: auto;
+  grid-row: auto;
+  z-index: 40;
   cursor: default;
   pointer-events: none;
   will-change: left, top, width, height, opacity;
@@ -547,25 +551,13 @@
   transform: none;
   box-shadow:
     0 1px 0 color-mix(in srgb, var(--md-sys-color-on-surface) 8%, transparent),
-    0 3px 0 color-mix(in srgb, var(--md-sys-color-primary) 22%, var(--glass-border)),
     0 10px 18px color-mix(in srgb, var(--md-sys-color-on-surface) 12%, transparent);
 }
 
-.card.is-fly.is-expanding .fx,
-.card.is-fly.is-expanding h2,
-.card.is-fly.is-expanding p,
-.card.is-fly.is-expanding .badge,
-.card.is-fly.is-expanding .card-cta {
-  opacity: 0;
-  transition: opacity 420ms var(--ease-out);
-}
-
 .home-layer {
+  position: relative;
   height: 100%;
   min-height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
 }
 
 .home-layer.is-hidden {
@@ -613,7 +605,7 @@
 }
 
 .play-layer.is-expanding {
-  z-index: 13;
+  z-index: 15;
   overflow: hidden;
   will-change: left, top, width, height, opacity;
 }
@@ -829,11 +821,6 @@ button:disabled {
     padding: 1.75rem 1.6rem;
   }
 
-  .grid {
-    --card-cols: 11;
-    gap: calc(var(--board-cell) * 2);
-    padding: calc(var(--board-cell) * 2);
-  }
 }
 
 .modal-backdrop {

@@ -370,7 +370,7 @@ function ShellFrame() {
         <div
           ref={board.playRef}
           className={`play-layer${board.playIn || isNotFound ? " is-in" : ""}${isNotFound ? " is-static" : ""}${catalogSlug ? " is-embed" : ""}${board.expanding ? " is-expanding" : ""}`}
-          hidden={!isPlayRoute && !isNotFound && !board.playIn && !catalogSlug && !board.expanding}
+          aria-hidden={!isPlayRoute && !isNotFound && !board.playIn && !board.expanding}
         >
           {catalogSlug ? (
             <GameEmbed

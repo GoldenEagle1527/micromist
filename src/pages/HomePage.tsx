@@ -10,11 +10,12 @@ import { useLocale } from "../i18n";
 export function HomePage() {
   const { locale, t } = useLocale();
   const { openFromCard, ghostSlug } = useBoardExpand();
-  useBoardGrid();
+  const games = listedGames();
+  const { boardStyle, cardStyle } = useBoardGrid(games.length);
 
   return (
-    <section className="grid">
-      {listedGames().map((game) => {
+    <section className="grid" style={boardStyle}>
+      {games.map((game, index) => {
         const className = [
           "card",
           ghostSlug === game.slug ? "is-ghost" : "",
@@ -27,6 +28,7 @@ export function HomePage() {
             to={`/play/${game.slug}`}
             className={className}
             data-game={game.slug}
+            style={cardStyle(index)}
             onClick={(event) => {
               if (event.defaultPrevented) return;
               if (event.button !== 0) return;

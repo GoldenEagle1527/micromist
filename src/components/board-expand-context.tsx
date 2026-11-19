@@ -7,6 +7,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
   type ReactNode,
   type RefObject,
 } from "react";
@@ -23,12 +24,14 @@ import {
   clearFlyer,
   clearSqueeze,
   findCard,
+  layoutBoard,
   makeFlyer,
   motionMs,
+  nextFrame,
   otherCards,
   playDestRect,
   prefersReducedMotion,
-  wait,
+  type BoardLayout,
 } from "../lib/board-expand";
 
 export type BoardExpandApi = {
@@ -53,34 +56,55 @@ export function useBoardExpand(): BoardExpandApi {
   return value;
 }
 
-export function useBoardGrid(): void {
+export function useBoardGrid(count: number): {
+  boardStyle: CSSProperties;
+  cardStyle: (index: number) => CSSProperties | undefined;
+} {
+  const [layout, setLayout] = useState<BoardLayout | null>(null);
+
   useLayoutEffect(() => {
     const shell = document.querySelector<HTMLElement>(".shell");
-    const grid = document.querySelector<HTMLElement>(".grid");
-    if (!shell || !grid) return;
+    const main = document.querySelector<HTMLElement>(".main");
+    if (!shell || !main) return;
     const sync = () => {
-      const cell =
-        parseFloat(getComputedStyle(shell).getPropertyValue("--board-cell")) ||
-        32;
-      const card = grid.querySelector<HTMLElement>(".card:not(.is-fly)");
-      if (!card) return;
-      const rect = card.getBoundingClientRect();
-      const origin = shell.getBoundingClientRect();
-      const shiftX = ((rect.left - origin.left) % cell + cell) % cell;
-      const shiftY = ((rect.top - origin.top) % cell + cell) % cell;
-      shell.style.setProperty("--board-shift-x", `${shiftX}px`);
-      shell.style.setProperty("--board-shift-y", `${shiftY}px`);
+      setLayout(layoutBoard(shell, main, count));
     };
     sync();
     const observer = new ResizeObserver(sync);
     observer.observe(shell);
-    observer.observe(grid);
+    observer.observe(main);
     window.addEventListener("resize", sync);
     return () => {
       observer.disconnect();
       window.removeEventListener("resize", sync);
     };
-  }, []);
+  }, [count]);
+
+  const boardStyle = useMemo<CSSProperties>(() => {
+    if (!layout) return {};
+    return {
+      ["--board-left" as string]: `${layout.left}px`,
+      ["--board-top" as string]: `${layout.top}px`,
+      ["--board-cols" as string]: String(layout.cols),
+      ["--board-rows" as string]: String(layout.rows),
+    };
+  }, [layout]);
+
+  const cardStyle = useCallback(
+    (index: number): CSSProperties | undefined => {
+      const place = layout?.places[index];
+      if (!place) return undefined;
+      return {
+        ["--card-col" as string]: String(place.column),
+        ["--card-row" as string]: String(place.row),
+        ["--card-w" as string]: String(place.width),
+        ["--card-h" as string]: String(place.height),
+      };
+    },
+    [layout],
+  );
+
+  return { boardStyle, cardStyle };
 }
 
 type Props = {
@@ -98,6 +122,7 @@ export function BoardExpandProvider({
   const location = useLocation();
   const playRef = useRef<HTMLDivElement | null>(null);
   const flyerRef = useRef<HTMLElement | null>(null);
+  const startBoxRef = useRef<DOMRect | null>(null);
   const busyRef = useRef(false);
   const ownedNavRef = useRef<"open" | "home" | null>(null);
   const currentRef = useRef<string | null>(null);
@@ -135,6 +160,7 @@ export function BoardExpandProvider({
     setGhostSlug(slug);
     setExpanding(false);
     setPlayIn(true);
+    startBoxRef.current = null;
     const play = playRef.current;
     if (play) clearFixedBox(play);
   }, []);
@@ -149,16 +175,24 @@ export function BoardExpandProvider({
     setGhostSlug(null);
     setExpanding(false);
     setPlayIn(false);
+    startBoxRef.current = null;
     const play = playRef.current;
     if (play) clearFixedBox(play);
   }, []);
 
+  useLayoutEffect(() => {
+    if (!expanding) return;
+    const play = playRef.current;
+    const box = startBoxRef.current;
+    if (!play || !box) return;
+    applyFixedBox(play, box);
+    play.style.opacity = "1";
+    play.style.transition = "none";
+  }, [expanding]);
+
   useEffect(() => {
-    if (ownedNavRef.current === "open") {
-      ownedNavRef.current = null;
-      return;
-    }
-    if (ownedNavRef.current === "home") {
+    if (busyRef.current) return;
+    if (ownedNavRef.current === "open" || ownedNavRef.current === "home") {
       ownedNavRef.current = null;
       return;
     }
@@ -192,7 +226,6 @@ export function BoardExpandProvider({
       if (currentRef.current === slug) return;
       setBusyBoth(true);
       setEmbedSlug(slug);
-      setGhostSlug(slug);
 
       const finishOpen = () => {
         currentRef.current = slug;
@@ -214,6 +247,7 @@ export function BoardExpandProvider({
 
       try {
         const from = card.getBoundingClientRect();
+        startBoxRef.current = new DOMRect(from.left, from.top, from.width, from.height);
         const dest = playDestRect();
         otherCards(slug).forEach((el) => applySqueeze(el, from, dest));
         const { fly } = makeFlyer(card);
@@ -221,40 +255,42 @@ export function BoardExpandProvider({
 
         currentRef.current = slug;
         openedFromLobbyRef.current = true;
-        setCurrentSlug(slug);
         ownedNavRef.current = "open";
-        navigate(`/play/${slug}`);
-
-        await wait(0);
-        await new Promise<void>((resolve) => {
-          requestAnimationFrame(() => resolve());
-        });
-
-        const play = playRef.current;
-        const radius = getComputedStyle(card).borderRadius;
-        if (play) {
-          applyFixedBox(play, from);
-          play.style.opacity = "1";
-          play.style.borderRadius = radius;
-        }
-
+        setCurrentSlug(slug);
+        setGhostSlug(slug);
         setExpanding(true);
         setPlayIn(true);
+        navigate(`/play/${slug}`);
 
-        await new Promise<void>((resolve) => {
-          requestAnimationFrame(() => resolve());
-        });
+        await nextFrame();
+        await nextFrame();
 
+        const play = playRef.current;
+        const start = startBoxRef.current ?? from;
         const destNow = playDestRect();
+        const radius = getComputedStyle(card).borderRadius;
         const ms = motionMs(EXPAND_MS);
+
         if (play) {
+          applyFixedBox(play, start);
+          play.style.opacity = "1";
+          play.style.borderRadius = radius;
+          play.style.transition = "none";
           void play.offsetWidth;
-          play.style.transition = boxTransition(ms);
+          play.style.transition = boxTransition(ms, 0);
           applyFixedBox(play, destNow);
           play.style.borderRadius = "0px";
         }
 
-        fly.style.transition = boxTransition(ms);
+        fly.style.transition = "none";
+        applyFixedBox(fly, start);
+        fly.style.opacity = "1";
+        void fly.offsetWidth;
+        fly.style.transition = boxTransition(
+          ms,
+          Math.round(ms * 0.72),
+          Math.round(ms * 0.28),
+        );
         fly.classList.add("is-expanding");
         applyFixedBox(fly, destNow);
         fly.style.opacity = "0";
@@ -262,9 +298,7 @@ export function BoardExpandProvider({
 
         await afterTransition(fly, ms, "width");
         dropFlyer();
-        if (play) {
-          clearFixedBox(play);
-        }
+        if (play) clearFixedBox(play);
         setExpanding(false);
       } catch {
         dropFlyer();
@@ -303,6 +337,7 @@ export function BoardExpandProvider({
     try {
       const dest = playDestRect();
       const target = card.getBoundingClientRect();
+      startBoxRef.current = dest;
       const radius = getComputedStyle(card).borderRadius;
       const { fly } = makeFlyer(card);
       flyerRef.current = fly;
@@ -319,9 +354,12 @@ export function BoardExpandProvider({
       void play.offsetWidth;
 
       const ms = motionMs(EXPAND_MS);
-      const transition = boxTransition(ms);
-      play.style.transition = transition;
-      fly.style.transition = transition;
+      play.style.transition = boxTransition(ms, Math.round(ms * 0.7));
+      fly.style.transition = boxTransition(
+        ms,
+        Math.round(ms * 0.7),
+        0,
+      );
 
       applyFixedBox(play, target);
       play.style.opacity = "0";
@@ -333,7 +371,7 @@ export function BoardExpandProvider({
 
       otherCards(id).forEach(clearSqueeze);
 
-      await afterTransition(play, ms, "width");
+      await afterTransition(fly, ms, "width");
       dropFlyer();
       clearFixedBox(play);
     } catch {

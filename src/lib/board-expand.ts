@@ -57,14 +57,14 @@ export function playDestRect(): DOMRect {
 
 export function applyFixedBox(el: HTMLElement, rect: DOMRectReadOnly): void {
   el.style.position = "fixed";
+  el.style.margin = "0";
+  el.style.inset = "unset";
+  el.style.right = "auto";
+  el.style.bottom = "auto";
   el.style.left = `${rect.left}px`;
   el.style.top = `${rect.top}px`;
   el.style.width = `${rect.width}px`;
   el.style.height = `${rect.height}px`;
-  el.style.right = "auto";
-  el.style.bottom = "auto";
-  el.style.inset = "auto";
-  el.style.margin = "0";
 }
 
 export function clearFixedBox(el: HTMLElement): void {
@@ -82,9 +82,13 @@ export function clearFixedBox(el: HTMLElement): void {
   el.style.borderRadius = "";
 }
 
-export function boxTransition(ms: number): string {
+export function boxTransition(
+  ms: number,
+  opacityMs = ms,
+  opacityDelay = 0,
+): string {
   const ease = `${ms}ms var(--ease-soft)`;
-  const fade = `${ms}ms var(--ease-out)`;
+  const fade = `${opacityMs}ms var(--ease-out)${opacityDelay > 0 ? ` ${opacityDelay}ms` : ""}`;
   return [
     `left ${ease}`,
     `top ${ease}`,
@@ -96,6 +100,116 @@ export function boxTransition(ms: number): string {
     `border-color ${fade}`,
     `box-shadow ${fade}`,
   ].join(", ");
+}
+
+export function nextFrame(): Promise<void> {
+  return new Promise((resolve) => {
+    requestAnimationFrame(() => resolve());
+  });
+}
+
+export type BoardPlace = {
+  column: number;
+  row: number;
+  width: number;
+  height: number;
+};
+
+export type BoardLayout = {
+  left: number;
+  top: number;
+  cols: number;
+  rows: number;
+  places: BoardPlace[];
+};
+
+function cellOf(el: Element, fallback = 32): number {
+  const value = parseFloat(getComputedStyle(el).getPropertyValue("--board-cell"));
+  return Number.isFinite(value) && value > 0 ? value : fallback;
+}
+
+function snapLine(value: number, cell: number, mode: "ceil" | "floor"): number {
+  const n = value / cell;
+  const nearest = Math.round(n);
+  if (Math.abs(n - nearest) < 0.02) return nearest * cell;
+  return (mode === "ceil" ? Math.ceil(n) : Math.floor(n)) * cell;
+}
+
+/** Snap a board inside `main` so its edges sit on the shell's grid (origin at shell 0,0). */
+export function measureBoard(shell: HTMLElement, main: HTMLElement): Omit<BoardLayout, "places"> {
+  const cell = cellOf(shell);
+  const shellRect = shell.getBoundingClientRect();
+  const mainRect = main.getBoundingClientRect();
+  const relLeft = mainRect.left - shellRect.left;
+  const relTop = mainRect.top - shellRect.top;
+  const relRight = relLeft + mainRect.width;
+  const relBottom = relTop + mainRect.height;
+  const startX = snapLine(relLeft, cell, "ceil");
+  const startY = snapLine(relTop, cell, "ceil");
+  const endX = snapLine(relRight, cell, "floor");
+  const endY = snapLine(relBottom, cell, "floor");
+  const width = Math.max(cell, endX - startX);
+  const height = Math.max(cell, endY - startY);
+  return {
+    left: startX - relLeft,
+    top: startY - relTop,
+    cols: Math.max(1, Math.round(width / cell)),
+    rows: Math.max(1, Math.round(height / cell)),
+  };
+}
+
+export function placeCards(cols: number, rows: number, count: number): BoardPlace[] {
+  const gap = 2;
+  const n = Math.max(1, count);
+  let cardH = Math.min(10, Math.max(8, rows - 4));
+  const canRow = (width: number): boolean =>
+    n * width + gap * Math.max(0, n - 1) <= cols;
+
+  let stacked = false;
+  let cardW = 11;
+  if (canRow(8)) {
+    cardW = 11;
+    while (!canRow(cardW) && cardW > 6) cardW -= 1;
+  } else {
+    stacked = true;
+    cardW = Math.min(11, Math.max(6, cols - 2));
+    while (n * cardH + gap * Math.max(0, n - 1) > rows && cardH > 6) {
+      cardH -= 1;
+    }
+  }
+
+  const places: BoardPlace[] = [];
+  if (stacked) {
+    const totalH = n * cardH + gap * Math.max(0, n - 1);
+    const startC = Math.max(1, Math.floor((cols - cardW) / 2) + 1);
+    const startR = Math.max(1, Math.floor((rows - totalH) / 2) + 1);
+    for (let i = 0; i < n; i += 1) {
+      places.push({
+        column: startC,
+        row: startR + i * (cardH + gap),
+        width: cardW,
+        height: cardH,
+      });
+    }
+  } else {
+    const totalW = n * cardW + gap * Math.max(0, n - 1);
+    const startC = Math.max(1, Math.floor((cols - totalW) / 2) + 1);
+    const startR = Math.max(1, Math.floor((rows - cardH) / 2) + 1);
+    for (let i = 0; i < n; i += 1) {
+      places.push({
+        column: startC + i * (cardW + gap),
+        row: startR,
+        width: cardW,
+        height: cardH,
+      });
+    }
+  }
+  return places;
+}
+
+export function layoutBoard(shell: HTMLElement, main: HTMLElement, count: number): BoardLayout {
+  const base = measureBoard(shell, main);
+  return { ...base, places: placeCards(base.cols, base.rows, count) };
 }
 
 export type Flyer = {
@@ -155,10 +269,11 @@ export function applySqueeze(
     dx /= len;
     dy /= len;
   }
-  const push = Math.max(dest.width, dest.height) * 0.92;
+  const cell = parseFloat(getComputedStyle(card).getPropertyValue("--board-cell")) || 32;
+  const push = cell * 3.5;
   card.style.setProperty("--squeeze-x", `${dx * push}px`);
   card.style.setProperty("--squeeze-y", `${dy * push}px`);
-  card.style.setProperty("--squeeze-s", "0.78");
+  card.style.setProperty("--squeeze-s", "0.9");
   card.classList.add("is-squeezed");
 }
 
