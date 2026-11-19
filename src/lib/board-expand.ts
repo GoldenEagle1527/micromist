@@ -123,9 +123,19 @@ export type BoardLayout = {
   places: BoardPlace[];
 };
 
+export const BOARD_MAJOR_STEPS = 4;
+export const CARD_MAJOR_WIDTH = 2;
+export const CARD_MAJOR_HEIGHT = 3;
+
 function cellOf(el: Element, fallback = 32): number {
   const value = parseFloat(getComputedStyle(el).getPropertyValue("--board-cell"));
   return Number.isFinite(value) && value > 0 ? value : fallback;
+}
+
+function majorOf(el: Element): number {
+  const value = parseFloat(getComputedStyle(el).getPropertyValue("--board-major"));
+  if (Number.isFinite(value) && value > 0) return value;
+  return cellOf(el) * BOARD_MAJOR_STEPS;
 }
 
 function snapLine(value: number, cell: number, mode: "ceil" | "floor"): number {
@@ -137,44 +147,39 @@ function snapLine(value: number, cell: number, mode: "ceil" | "floor"): number {
 
 /** Snap a board inside `main` so its edges sit on the shell's grid (origin at shell 0,0). */
 export function measureBoard(shell: HTMLElement, main: HTMLElement): Omit<BoardLayout, "places"> {
-  const cell = cellOf(shell);
+  const major = majorOf(shell);
   const shellRect = shell.getBoundingClientRect();
   const mainRect = main.getBoundingClientRect();
   const relLeft = mainRect.left - shellRect.left;
   const relTop = mainRect.top - shellRect.top;
   const relRight = relLeft + mainRect.width;
   const relBottom = relTop + mainRect.height;
-  const startX = snapLine(relLeft, cell, "ceil");
-  const startY = snapLine(relTop, cell, "ceil");
-  const endX = snapLine(relRight, cell, "floor");
-  const endY = snapLine(relBottom, cell, "floor");
-  const width = Math.max(cell, endX - startX);
-  const height = Math.max(cell, endY - startY);
+  const startX = snapLine(relLeft, major, "ceil");
+  const startY = snapLine(relTop, major, "ceil");
+  const endX = snapLine(relRight, major, "floor");
+  const endY = snapLine(relBottom, major, "floor");
+  const width = Math.max(major, endX - startX);
+  const height = Math.max(major, endY - startY);
   return {
     left: startX - relLeft,
     top: startY - relTop,
-    cols: Math.max(1, Math.round(width / cell)),
-    rows: Math.max(1, Math.round(height / cell)),
+    cols: Math.max(1, Math.round(width / major)),
+    rows: Math.max(1, Math.round(height / major)),
   };
 }
 
 export function placeCards(cols: number, rows: number, count: number): BoardPlace[] {
-  const gap = 2;
+  const gap = 1;
   const n = Math.max(1, count);
-  let cardH = Math.min(10, Math.max(8, rows - 4));
-  const canRow = (width: number): boolean =>
-    n * width + gap * Math.max(0, n - 1) <= cols;
-
-  let stacked = false;
-  let cardW = 11;
-  if (canRow(8)) {
-    cardW = 11;
-    while (!canRow(cardW) && cardW > 6) cardW -= 1;
-  } else {
-    stacked = true;
-    cardW = Math.min(11, Math.max(6, cols - 2));
-    while (n * cardH + gap * Math.max(0, n - 1) > rows && cardH > 6) {
-      cardH -= 1;
+  let cardW = Math.min(CARD_MAJOR_WIDTH, cols);
+  let cardH = Math.min(CARD_MAJOR_HEIGHT, rows);
+  const needRow = n * cardW + gap * Math.max(0, n - 1);
+  const stacked = needRow > cols;
+  if (stacked) {
+    const needCol = n * cardH + gap * Math.max(0, n - 1);
+    if (needCol > rows) {
+      const fit = Math.floor((rows - gap * Math.max(0, n - 1)) / n);
+      cardH = Math.max(1, fit);
     }
   }
 
@@ -269,8 +274,8 @@ export function applySqueeze(
     dx /= len;
     dy /= len;
   }
-  const cell = parseFloat(getComputedStyle(card).getPropertyValue("--board-cell")) || 32;
-  const push = cell * 3.5;
+  const major = parseFloat(getComputedStyle(card).getPropertyValue("--board-major")) || 128;
+  const push = major;
   card.style.setProperty("--squeeze-x", `${dx * push}px`);
   card.style.setProperty("--squeeze-y", `${dy * push}px`);
   card.style.setProperty("--squeeze-s", "0.9");
