@@ -421,12 +421,10 @@
   min-height: 0;
   height: auto;
   padding: calc(var(--board-cell) * 0.75);
-  border-radius: var(--md-sys-shape-corner-sm);
+  border-radius: 0;
   background: var(--glass-bg-strong);
   border: 1px solid var(--glass-border);
-  box-shadow:
-    0 1px 0 color-mix(in srgb, var(--md-sys-color-on-surface) 8%, transparent),
-    0 10px 18px color-mix(in srgb, var(--md-sys-color-on-surface) 12%, transparent);
+  box-shadow: none;
   backdrop-filter: var(--backdrop);
   -webkit-backdrop-filter: var(--backdrop);
   text-align: left;
@@ -441,11 +439,8 @@
 }
 
 .card:hover {
-  border-color: color-mix(in srgb, var(--md-sys-color-primary) 50%, var(--glass-border));
-  box-shadow:
-    0 1px 0 color-mix(in srgb, var(--md-sys-color-on-surface) 8%, transparent),
-    0 12px 22px color-mix(in srgb, var(--md-sys-color-primary) 16%, transparent),
-    0 0 0 1px color-mix(in srgb, var(--md-sys-color-primary) 22%, transparent);
+  border-color: color-mix(in srgb, var(--md-sys-color-primary) 55%, var(--glass-border));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--md-sys-color-primary) 28%, transparent);
 }
 
 .card h2 {
@@ -549,9 +544,7 @@
 
 .card.is-fly:hover {
   transform: none;
-  box-shadow:
-    0 1px 0 color-mix(in srgb, var(--md-sys-color-on-surface) 8%, transparent),
-    0 10px 18px color-mix(in srgb, var(--md-sys-color-on-surface) 12%, transparent);
+  box-shadow: none;
 }
 
 .home-layer {
