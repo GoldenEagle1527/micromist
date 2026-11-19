@@ -15,6 +15,7 @@
   --ease-out: cubic-bezier(0.2, 0, 0, 1);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
   --safe-top: env(safe-area-inset-top, 0px);
+  --board-cell: 32px;
   font-family:
     "Roboto",
     "PingFang SC",
@@ -69,6 +70,8 @@ html[data-theme="light"] {
   --mist: var(--md-sys-color-primary);
   --paper: var(--md-sys-color-surface);
   --pad: #c9a45a;
+  --board-line: color-mix(in srgb, var(--md-sys-color-primary) 18%, transparent);
+  --board-line-strong: color-mix(in srgb, var(--md-sys-color-primary) 30%, transparent);
 }
 
 html[data-theme="dark"] {
@@ -109,6 +112,8 @@ html[data-theme="dark"] {
   --mist: var(--md-sys-color-primary);
   --paper: var(--md-sys-color-surface);
   --pad: #d4b36a;
+  --board-line: color-mix(in srgb, var(--md-sys-color-primary) 16%, transparent);
+  --board-line-strong: color-mix(in srgb, var(--md-sys-color-primary) 28%, transparent);
 }
 
 * {

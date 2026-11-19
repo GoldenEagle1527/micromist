@@ -2,8 +2,7 @@ import { Suspense, useEffect, useId, useRef, useState } from "react";
 import { NavLink, Outlet, useLocation, useMatch } from "react-router";
 import { getGame } from "../games/catalog";
 import { useLocale } from "../i18n";
-import { ChipIcon } from "./ChipIcon";
-import { ChipFlyProvider, useChipFly } from "./chip-fly-context";
+import { BoardExpandProvider, useBoardExpand } from "./board-expand-context";
 import { GameEmbed } from "./GameEmbed";
 import { useTheme } from "../hooks/useTheme";
 import {
@@ -91,15 +90,15 @@ function ShellFrame() {
     : undefined;
   const isPlayRoute = Boolean(playMatch);
   const isNotFound = !isHome && !playMatch;
-  const chip = useChipFly();
+  const board = useBoardExpand();
   const location = useLocation();
-  const playGame = chip.currentSlug
-    ? getGame(chip.currentSlug)
+  const playGame = board.currentSlug
+    ? getGame(board.currentSlug)
     : playGameFromRoute;
   const catalogSlug =
-    chip.embedSlug && getGame(chip.embedSlug) ? chip.embedSlug : undefined;
+    board.embedSlug && getGame(board.embedSlug) ? board.embedSlug : undefined;
   const isPlaying =
-    !isNotFound && (isPlayRoute || Boolean(chip.currentSlug) || chip.playIn);
+    !isNotFound && (isPlayRoute || Boolean(board.currentSlug) || board.playIn);
   const embedOnGamePath = Boolean(
     catalogSlug && location.pathname === `/play/${catalogSlug}`,
   );
@@ -198,9 +197,9 @@ function ShellFrame() {
           className="brand"
           onClick={(event) => {
             setMenuOpen(false);
-            if (chip.currentSlug || chip.busy) {
+            if (board.currentSlug || board.busy) {
               event.preventDefault();
-              void chip.goHome();
+              void board.goHome();
             }
           }}
         >
@@ -214,27 +213,17 @@ function ShellFrame() {
           </span>
           {locale === "zh" ? <span className="brand-en">{t.brandSub}</span> : null}
         </NavLink>
-        <div
-          className={`topbar-game dock${chip.dockReady ? " is-ready" : ""}${chip.dockHot ? " is-hot" : ""}${chip.reveal === "streaming" ? " is-streaming" : ""}`}
-        >
-          <button
-            ref={chip.wellRef}
-            type="button"
-            className="dock-well"
-            aria-label={t.lobbyBack}
-            aria-disabled={!chip.dockReady}
-            tabIndex={chip.dockReady ? 0 : -1}
-            onClick={() => {
-              if (chip.dockReady) void chip.goHome();
-            }}
-          >
-            <span className="dock-chip">
-              <ChipIcon />
-            </span>
-          </button>
-          <span className="dock-title">
-            {chip.dockReady && playGame ? playGame.title[locale] : ""}
-          </span>
+        <div className={`topbar-game${board.currentSlug ? " is-ready" : ""}`}>
+          {board.currentSlug && playGame ? (
+            <button
+              type="button"
+              className="topbar-game-title"
+              onClick={() => void board.goHome()}
+              aria-label={t.lobbyBack}
+            >
+              {playGame.title[locale]}
+            </button>
+          ) : null}
         </div>
         <div className="topbar-actions">
           <button
@@ -373,21 +362,20 @@ function ShellFrame() {
 
       <main className={`main${isPlaying ? " is-playing" : ""}`}>
         <div
-          className={`home-layer${chip.homeOut ? " is-out" : ""}${isNotFound ? " is-hidden" : ""}`}
-          inert={chip.dimOthers || chip.homeOut || isNotFound || isPlaying ? true : undefined}
+          className={`home-layer${isNotFound ? " is-hidden" : ""}`}
+          inert={board.playIn || isNotFound || isPlaying ? true : undefined}
         >
           <HomePage />
         </div>
         <div
-          className={`play-layer${chip.playIn || isNotFound ? " is-in" : ""}${isNotFound ? " is-static" : ""}${catalogSlug ? " is-embed" : ""}`}
-          hidden={!isPlayRoute && !isNotFound && !chip.playIn && !catalogSlug}
+          ref={board.playRef}
+          className={`play-layer${board.playIn || isNotFound ? " is-in" : ""}${isNotFound ? " is-static" : ""}${catalogSlug ? " is-embed" : ""}${board.expanding ? " is-expanding" : ""}`}
+          hidden={!isPlayRoute && !isNotFound && !board.playIn && !catalogSlug && !board.expanding}
         >
           {catalogSlug ? (
             <GameEmbed
               key={catalogSlug}
               slug={catalogSlug}
-              reveal={chip.reveal}
-              revealMs={chip.revealMs}
               initialSearch={embedOnGamePath ? location.search : ""}
               initialHash={embedOnGamePath ? location.hash : ""}
             />
@@ -399,7 +387,7 @@ function ShellFrame() {
         </div>
       </main>
 
-      {isHome && !chip.homeOut ? (
+      {isHome && !board.currentSlug && !board.embedSlug ? (
         <footer className="footer">
           <span>{t.footer}</span>
           <a href="https://github.com/GoldenEagle1527/micromist">GitHub</a>
@@ -474,11 +462,11 @@ export function Shell() {
   const isHome = useMatch({ path: "/", end: true });
   const isNotFound = !isHome && !playMatch;
   return (
-    <ChipFlyProvider
+    <BoardExpandProvider
       playSlug={playMatch?.params.slug}
       isNotFound={isNotFound}
     >
       <ShellFrame />
-    </ChipFlyProvider>
+    </BoardExpandProvider>
   );
 }

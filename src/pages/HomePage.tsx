@@ -1,12 +1,16 @@
 import { Link } from "react-router";
-import { CardFx, ChipIcon } from "../components/ChipIcon";
-import { useChipFly } from "../components/chip-fly-context";
+import { CardFx } from "../components/ChipIcon";
+import {
+  useBoardExpand,
+  useBoardGrid,
+} from "../components/board-expand-context";
 import { listedGames } from "../games/catalog";
 import { useLocale } from "../i18n";
 
 export function HomePage() {
   const { locale, t } = useLocale();
-  const { openFromCard, ghostSlug, dimOthers } = useChipFly();
+  const { openFromCard, ghostSlug } = useBoardExpand();
+  useBoardGrid();
 
   return (
     <section className="grid">
@@ -14,7 +18,6 @@ export function HomePage() {
         const className = [
           "card",
           ghostSlug === game.slug ? "is-ghost" : "",
-          dimOthers && ghostSlug !== game.slug ? "is-away" : "",
         ]
           .filter(Boolean)
           .join(" ");
@@ -36,7 +39,6 @@ export function HomePage() {
           >
             <CardFx />
             <span className="card-head">
-              <ChipIcon />
               <span className="badge">{game.badge[locale]}</span>
             </span>
             <h2>{game.title[locale]}</h2>
