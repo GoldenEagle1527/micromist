@@ -5,6 +5,7 @@ import { copyText } from "./copy-text";
 import type {
   ConfirmSpec,
   GamePlayModule,
+  GamePreview,
   GameSession,
   GameSnapshot,
   SessionContext,
@@ -13,7 +14,10 @@ import "./game-shell.css";
 
 type GameShellProps = {
   load: () => Promise<GamePlayModule>;
+  preview: GamePreview;
 };
+
+type SessionCall = (session: GameSession) => void;
 
 function BoardHost({ session, active }: { session: GameSession; active: boolean }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -43,8 +47,8 @@ function useLoadedModule(load: () => Promise<GamePlayModule>): GamePlayModule | 
   return module;
 }
 
-export function GameShell({ load }: GameShellProps) {
-  const { locale, t } = useLocale();
+export function GameShell({ load, preview }: GameShellProps) {
+  const { locale } = useLocale();
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const module = useLoadedModule(load);
@@ -94,7 +98,7 @@ export function GameShell({ load }: GameShellProps) {
   }
   if (!session) snapshotCache.current = null;
 
-  const snapshot: GameSnapshot | null = useSyncExternalStore(
+  const liveSnapshot: GameSnapshot | null = useSyncExternalStore(
     (listener) => {
       if (!session) return () => undefined;
       return session.subscribe(() => {
@@ -105,6 +109,53 @@ export function GameShell({ load }: GameShellProps) {
     () => (session && snapshotCache.current ? snapshotCache.current.value : null),
     () => (session && snapshotCache.current ? snapshotCache.current.value : null),
   );
+
+  const pendingCalls = useRef<SessionCall[]>([]);
+  const [paramOverrides, setParamOverrides] = useState<Record<string, string | number>>({});
+
+  useEffect(() => {
+    if (!session) return;
+    const queued = pendingCalls.current;
+    pendingCalls.current = [];
+    for (const [id, value] of Object.entries(paramOverrides)) {
+      session.setParam(id, value);
+    }
+    if (Object.keys(paramOverrides).length > 0) setParamOverrides({});
+    for (const call of queued) call(session);
+    // Flush only when the session first becomes available.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session]);
+
+  const runSession = (call: SessionCall) => {
+    if (session) {
+      call(session);
+      return;
+    }
+    pendingCalls.current.push(call);
+  };
+
+  const previewSnapshot = useMemo(
+    () => preview(ctxRef.current),
+    [preview, locale, location.pathname, location.search],
+  );
+
+  let snapshot = liveSnapshot ?? previewSnapshot;
+  if (!liveSnapshot && snapshot.params && Object.keys(paramOverrides).length > 0) {
+    snapshot = {
+      ...snapshot,
+      params: {
+        fields: snapshot.params.fields.map((field) => {
+          if (!(field.id in paramOverrides)) return field;
+          const next = paramOverrides[field.id];
+          if (field.type === "number") {
+            const value = typeof next === "number" ? next : Number(next);
+            return { ...field, value: Number.isFinite(value) ? value : field.value };
+          }
+          return { ...field, value: String(next) };
+        }),
+      },
+    };
+  }
 
   useEffect(() => {
     setInvitePhase("idle");
@@ -120,16 +171,12 @@ export function GameShell({ load }: GameShellProps) {
     [],
   );
 
-  if (!module || !session || !snapshot) {
-    return <p className="lede game-shell-loading">{t.loading}</p>;
-  }
-
   const runAction = (id: string, confirm?: ConfirmSpec) => {
     if (confirm) {
       setPendingConfirm({ id, confirm });
       return;
     }
-    session.dispatch({ type: "ui", id });
+    runSession((current) => current.dispatch({ type: "ui", id }));
   };
 
   const dialog = pendingConfirm
@@ -151,7 +198,7 @@ export function GameShell({ load }: GameShellProps) {
 
         {snapshot.menu?.canBack ? (
           <div className="row">
-            <button type="button" className="ghost" onClick={() => session.back()}>
+            <button type="button" className="ghost" onClick={() => runSession((current) => current.back())}>
               {snapshot.menu.backLabel ?? "←"}
             </button>
           </div>
@@ -164,7 +211,7 @@ export function GameShell({ load }: GameShellProps) {
                 key={item.id}
                 type="button"
                 className="game-shell-menu-item"
-                onClick={() => session.choose(item.id)}
+                onClick={() => runSession((current) => current.choose(item.id))}
               >
                 {item.label}
               </button>
@@ -181,7 +228,11 @@ export function GameShell({ load }: GameShellProps) {
                   <select
                     value={field.value}
                     disabled={field.disabled}
-                    onChange={(event) => session.setParam(field.id, event.target.value)}
+                    onChange={(event) => {
+                      const value = event.target.value;
+                      if (!session) setParamOverrides((prev) => ({ ...prev, [field.id]: value }));
+                      runSession((current) => current.setParam(field.id, value));
+                    }}
                   >
                     {field.options.map((option) => (
                       <option key={option.value} value={option.value}>
@@ -198,7 +249,9 @@ export function GameShell({ load }: GameShellProps) {
                     disabled={field.disabled}
                     onChange={(event) => {
                       const next = Number(event.target.value);
-                      session.setParam(field.id, Number.isFinite(next) ? next : field.value);
+                      const value = Number.isFinite(next) ? next : field.value;
+                      if (!session) setParamOverrides((prev) => ({ ...prev, [field.id]: value }));
+                      runSession((current) => current.setParam(field.id, value));
                     }}
                   />
                 ) : (
@@ -206,7 +259,11 @@ export function GameShell({ load }: GameShellProps) {
                     type="text"
                     value={field.value}
                     disabled={field.disabled}
-                    onChange={(event) => session.setParam(field.id, event.target.value)}
+                    onChange={(event) => {
+                      const value = event.target.value;
+                      if (!session) setParamOverrides((prev) => ({ ...prev, [field.id]: value }));
+                      runSession((current) => current.setParam(field.id, value));
+                    }}
                   />
                 )}
               </label>
@@ -278,7 +335,7 @@ export function GameShell({ load }: GameShellProps) {
                       <button
                         type="button"
                         className="ghost"
-                        onClick={() => session.dispatch({ type: "claim-seat", id: seat.id })}
+                        onClick={() => runSession((current) => current.dispatch({ type: "claim-seat", id: seat.id }))}
                       >
                         {seat.label}
                         {seat.detail ? ` · ${seat.detail}` : ""}
@@ -348,7 +405,7 @@ export function GameShell({ load }: GameShellProps) {
         ) : null}
       </div>
 
-      {snapshot.phase === "play" ? (
+      {snapshot.phase === "play" && session ? (
         <div className="game-shell-board">
           <BoardHost session={session} active />
         </div>
@@ -397,7 +454,7 @@ export function GameShell({ load }: GameShellProps) {
                 onClick={() => {
                   const actionId = dialog.actionId;
                   setPendingConfirm(null);
-                  session.dispatch({ type: "ui", id: actionId });
+                  runSession((current) => current.dispatch({ type: "ui", id: actionId }));
                 }}
               >
                 {dialog.ok}

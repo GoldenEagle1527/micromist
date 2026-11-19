@@ -1,6 +1,16 @@
 import type { Locale } from "../i18n";
-import type { GamePlayModule } from "../platform/play";
+import type { GamePlayModule, GamePreview } from "../platform/play";
 import { siteKind, type SiteKind } from "../lib/sites";
+import { preview as previewChromaSlide } from "./chroma-slide/play-preview";
+import { preview as previewExplosiveChess } from "./explosive-chess/play-preview";
+
+function loadOnce(load: () => Promise<GamePlayModule>): () => Promise<GamePlayModule> {
+  let pending: Promise<GamePlayModule> | undefined;
+  return () => {
+    pending ??= load();
+    return pending;
+  };
+}
 
 export type GameMode = "single" | "single-online";
 
@@ -23,7 +33,9 @@ export type GameMeta = {
   audience?: GameAudience;
   /** When false, never listed. Prefer `audience` for env gates. Default true. */
   listed?: boolean;
-  /** Lazy play module. The generic shell loads this; it must not switch on slug. */
+  /** Sync first-paint snapshot. Lives in the main bundle so the shell can paint during expand. */
+  preview: GamePreview;
+  /** Lazy play session runtime. The generic shell loads this; it must not switch on slug. */
   loadPlay: () => Promise<GamePlayModule>;
 };
 
@@ -37,7 +49,8 @@ export const games: GameMeta[] = [
       en: "Place until cells burst and recolor neighbors. Solo vs AI / hotseat, or online via share link.",
     },
     badge: { zh: "单机/联机", en: "Offline / Online" },
-    loadPlay: () => import("./explosive-chess/play").then((m) => m.playModule),
+    preview: previewExplosiveChess,
+    loadPlay: loadOnce(() => import("./explosive-chess/play").then((m) => m.playModule)),
   },
   {
     slug: "chroma-slide",
@@ -48,7 +61,8 @@ export const games: GameMeta[] = [
       en: "Slide colored tiles until each hue forms one solid square. Play locally, or hand the solo puzzle to an Agent.",
     },
     badge: { zh: "单机", en: "Offline" },
-    loadPlay: () => import("./chroma-slide/play").then((m) => m.playModule),
+    preview: previewChromaSlide,
+    loadPlay: loadOnce(() => import("./chroma-slide/play").then((m) => m.playModule)),
   },
 ];
 
@@ -77,4 +91,11 @@ export function getGame(
   kind: SiteKind = siteKind(),
 ): GameMeta | undefined {
   return listedGames(kind).find((game) => game.slug === slug);
+}
+
+/** Start downloading play runtimes after the lobby is on screen. */
+export function prefetchPlayModules(): void {
+  for (const game of listedGames()) {
+    void game.loadPlay();
+  }
 }

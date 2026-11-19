@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { Route, Routes, useLocation, useNavigate } from "react-router";
 import { EmbedBridge } from "./components/EmbedBridge";
 import { Shell } from "./components/Shell";
@@ -12,19 +12,10 @@ import {
 } from "./lib/embed";
 import { ensureLocalDbReady } from "./lib/game-store";
 import { NotFoundPage } from "./pages/NotFoundPage";
-
-const PlayPage = lazy(async () => {
-  const module = await import("./pages/PlayPage");
-  return { default: module.PlayPage };
-});
+import { PlayPage } from "./pages/PlayPage";
 
 function PlayFallback() {
-  const { t } = useLocale();
-  return (
-    <Suspense fallback={<p className="lede">{t.loading}</p>}>
-      <PlayPage />
-    </Suspense>
-  );
+  return <PlayPage />;
 }
 
 function shouldRenderChromeLess(pathname: string, search: string): boolean {

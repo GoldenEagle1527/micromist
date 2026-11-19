@@ -4,6 +4,7 @@ export type {
   DialogState,
   GameAction,
   GamePlayModule,
+  GamePreview,
   GameSession,
   GameSnapshot,
   HudItem,

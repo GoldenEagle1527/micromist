@@ -1,10 +1,11 @@
+import { useEffect } from "react";
 import { Link } from "react-router";
 import { CardFx } from "../components/ChipIcon";
 import {
   useBoardExpand,
   useBoardGrid,
 } from "../components/board-expand-context";
-import { listedGames } from "../games/catalog";
+import { listedGames, prefetchPlayModules } from "../games/catalog";
 import { useLocale } from "../i18n";
 
 export function HomePage() {
@@ -12,6 +13,10 @@ export function HomePage() {
   const { openFromCard, ghostSlug } = useBoardExpand();
   const games = listedGames();
   const { boardStyle, cardStyle } = useBoardGrid(games.length);
+
+  useEffect(() => {
+    prefetchPlayModules();
+  }, []);
 
   return (
     <section className="grid" style={boardStyle}>

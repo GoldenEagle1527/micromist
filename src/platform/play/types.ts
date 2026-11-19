@@ -159,6 +159,8 @@ export type GameSession = {
   destroy: () => void;
 };
 
+export type GamePreview = (ctx: SessionContext) => GameSnapshot;
+
 export type GamePlayModule = {
   createSession: (ctx: SessionContext) => GameSession;
 };

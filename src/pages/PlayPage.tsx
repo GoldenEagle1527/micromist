@@ -20,5 +20,5 @@ export function PlayPage() {
     );
   }
 
-  return <GameShell key={game.slug} load={game.loadPlay} />;
+  return <GameShell key={game.slug} load={game.loadPlay} preview={game.preview} />;
 }

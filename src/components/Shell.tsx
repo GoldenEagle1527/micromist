@@ -367,7 +367,7 @@ function ShellFrame() {
           className={`play-layer${board.playIn || isNotFound ? " is-in" : ""}${isNotFound ? " is-static" : ""}${catalogSlug ? " is-embed" : ""}${board.expanding ? " is-expanding" : ""}`}
           aria-hidden={!isPlayRoute && !isNotFound && !board.playIn && !board.expanding}
         >
-          <Suspense fallback={<p className="lede">{t.loading}</p>}>
+          <Suspense fallback={null}>
             <Outlet />
           </Suspense>
         </div>
