@@ -84,14 +84,26 @@ export function GameShell({ load }: GameShellProps) {
 
   useEffect(() => {
     session?.syncContext();
-  }, [session, locale, location.pathname, searchParams]);
+  }, [session, locale, location.pathname, location.search]);
 
   useEffect(() => () => session?.destroy(), [session]);
 
+  const snapshotCache = useRef<{ session: GameSession; value: GameSnapshot } | null>(null);
+  if (session && snapshotCache.current?.session !== session) {
+    snapshotCache.current = { session, value: session.snapshot() };
+  }
+  if (!session) snapshotCache.current = null;
+
   const snapshot: GameSnapshot | null = useSyncExternalStore(
-    session ? (listener) => session.subscribe(listener) : () => () => undefined,
-    session ? () => session.snapshot() : () => null,
-    session ? () => session.snapshot() : () => null,
+    (listener) => {
+      if (!session) return () => undefined;
+      return session.subscribe(() => {
+        snapshotCache.current = { session, value: session.snapshot() };
+        listener();
+      });
+    },
+    () => (session && snapshotCache.current ? snapshotCache.current.value : null),
+    () => (session && snapshotCache.current ? snapshotCache.current.value : null),
   );
 
   useEffect(() => {
