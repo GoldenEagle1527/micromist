@@ -124,8 +124,8 @@ export type BoardLayout = {
 };
 
 export const BOARD_MAJOR_STEPS = 4;
-export const CARD_MAJOR_WIDTH = 2;
-export const CARD_MAJOR_HEIGHT = 3;
+export const CARD_MAJOR_WIDTH = 3;
+export const CARD_MAJOR_HEIGHT = 2;
 
 function cellOf(el: Element, fallback = 32): number {
   const value = parseFloat(getComputedStyle(el).getPropertyValue("--board-cell"));
