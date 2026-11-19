@@ -1,9 +1,8 @@
 import { Suspense, useEffect, useId, useRef, useState } from "react";
-import { NavLink, Outlet, useLocation, useMatch } from "react-router";
+import { NavLink, Outlet, useMatch } from "react-router";
 import { getGame } from "../games/catalog";
 import { useLocale } from "../i18n";
 import { BoardExpandProvider, useBoardExpand } from "./board-expand-context";
-import { GameEmbed } from "./GameEmbed";
 import { useTheme } from "../hooks/useTheme";
 import {
   isFloatEmbed,
@@ -91,7 +90,6 @@ function ShellFrame() {
   const isPlayRoute = Boolean(playMatch);
   const isNotFound = !isHome && !playMatch;
   const board = useBoardExpand();
-  const location = useLocation();
   const playGame = board.currentSlug
     ? getGame(board.currentSlug)
     : playGameFromRoute;
@@ -99,9 +97,6 @@ function ShellFrame() {
     board.embedSlug && getGame(board.embedSlug) ? board.embedSlug : undefined;
   const isPlaying =
     !isNotFound && (isPlayRoute || Boolean(board.currentSlug) || board.playIn);
-  const embedOnGamePath = Boolean(
-    catalogSlug && location.pathname === `/play/${catalogSlug}`,
-  );
   const themeLabel =
     mode === "system" ? t.themeSystem : mode === "light" ? t.themeLight : t.themeDark;
   const langButtonLabel = locale === "zh" ? "EN" : "中";
@@ -372,18 +367,9 @@ function ShellFrame() {
           className={`play-layer${board.playIn || isNotFound ? " is-in" : ""}${isNotFound ? " is-static" : ""}${catalogSlug ? " is-embed" : ""}${board.expanding ? " is-expanding" : ""}`}
           aria-hidden={!isPlayRoute && !isNotFound && !board.playIn && !board.expanding}
         >
-          {catalogSlug ? (
-            <GameEmbed
-              key={catalogSlug}
-              slug={catalogSlug}
-              initialSearch={embedOnGamePath ? location.search : ""}
-              initialHash={embedOnGamePath ? location.hash : ""}
-            />
-          ) : (
-            <Suspense fallback={<p className="lede">{t.loading}</p>}>
-              <Outlet />
-            </Suspense>
-          )}
+          <Suspense fallback={<p className="lede">{t.loading}</p>}>
+            <Outlet />
+          </Suspense>
         </div>
       </main>
 

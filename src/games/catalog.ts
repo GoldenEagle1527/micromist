@@ -1,4 +1,5 @@
 import type { Locale } from "../i18n";
+import type { GamePlayModule } from "../platform/play";
 import { siteKind, type SiteKind } from "../lib/sites";
 
 export type GameMode = "single" | "single-online";
@@ -22,6 +23,8 @@ export type GameMeta = {
   audience?: GameAudience;
   /** When false, never listed. Prefer `audience` for env gates. Default true. */
   listed?: boolean;
+  /** Lazy play module. The generic shell loads this; it must not switch on slug. */
+  loadPlay: () => Promise<GamePlayModule>;
 };
 
 export const games: GameMeta[] = [
@@ -34,6 +37,7 @@ export const games: GameMeta[] = [
       en: "Place until cells burst and recolor neighbors. Solo vs AI / hotseat, or online via share link.",
     },
     badge: { zh: "单机/联机", en: "Offline / Online" },
+    loadPlay: () => import("./explosive-chess/play").then((m) => m.playModule),
   },
   {
     slug: "chroma-slide",
@@ -44,6 +48,7 @@ export const games: GameMeta[] = [
       en: "Slide colored tiles until each hue forms one solid square. Play locally, or hand the solo puzzle to an Agent.",
     },
     badge: { zh: "单机", en: "Offline" },
+    loadPlay: () => import("./chroma-slide/play").then((m) => m.playModule),
   },
 ];
 
