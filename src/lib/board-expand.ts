@@ -145,19 +145,34 @@ function snapLine(value: number, cell: number, mode: "ceil" | "floor"): number {
   return (mode === "ceil" ? Math.ceil(n) : Math.floor(n)) * cell;
 }
 
-/** Snap a board inside `main` so its edges sit on the shell's grid (origin at shell 0,0). */
+/** Top-left of the visible board: flush under the topbar, at the shell's left edge. */
+export function boardOrigin(shell: HTMLElement, main: HTMLElement): { x: number; y: number } {
+  const shellRect = shell.getBoundingClientRect();
+  const mainRect = main.getBoundingClientRect();
+  return { x: 0, y: mainRect.top - shellRect.top };
+}
+
+export function applyBoardOrigin(shell: HTMLElement, main: HTMLElement): { x: number; y: number } {
+  const origin = boardOrigin(shell, main);
+  shell.style.setProperty("--board-origin-x", `${origin.x}px`);
+  shell.style.setProperty("--board-origin-y", `${origin.y}px`);
+  return origin;
+}
+
+/** Snap a board inside `main` so its edges sit on the visible major grid. */
 export function measureBoard(shell: HTMLElement, main: HTMLElement): Omit<BoardLayout, "places"> {
   const major = majorOf(shell);
+  const origin = applyBoardOrigin(shell, main);
   const shellRect = shell.getBoundingClientRect();
   const mainRect = main.getBoundingClientRect();
   const relLeft = mainRect.left - shellRect.left;
   const relTop = mainRect.top - shellRect.top;
   const relRight = relLeft + mainRect.width;
   const relBottom = relTop + mainRect.height;
-  const startX = snapLine(relLeft, major, "ceil");
-  const startY = snapLine(relTop, major, "ceil");
-  const endX = snapLine(relRight, major, "floor");
-  const endY = snapLine(relBottom, major, "floor");
+  const startX = origin.x + snapLine(relLeft - origin.x, major, "ceil");
+  const startY = origin.y + snapLine(relTop - origin.y, major, "ceil");
+  const endX = origin.x + snapLine(relRight - origin.x, major, "floor");
+  const endY = origin.y + snapLine(relBottom - origin.y, major, "floor");
   const width = Math.max(major, endX - startX);
   const height = Math.max(major, endY - startY);
   return {

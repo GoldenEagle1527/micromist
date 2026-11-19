@@ -9,6 +9,8 @@
 }
 
 .shell {
+  --board-origin-x: 0px;
+  --board-origin-y: 0px;
   min-height: 100dvh;
   display: flex;
   flex-direction: column;
@@ -27,11 +29,12 @@
     linear-gradient(to right, var(--board-line) 1px, transparent 1px),
     linear-gradient(to bottom, var(--board-line) 1px, transparent 1px);
   background-size:
-    calc(var(--board-cell) * 4) calc(var(--board-cell) * 4),
-    calc(var(--board-cell) * 4) calc(var(--board-cell) * 4),
+    var(--board-major) var(--board-major),
+    var(--board-major) var(--board-major),
     var(--board-cell) var(--board-cell),
     var(--board-cell) var(--board-cell);
-  background-position: 0 0;
+  background-position:
+    var(--board-origin-x) var(--board-origin-y);
 }
 
 .topbar {
