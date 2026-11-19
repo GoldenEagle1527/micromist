@@ -89,9 +89,9 @@ export function GameShell({ load }: GameShellProps) {
   useEffect(() => () => session?.destroy(), [session]);
 
   const snapshot: GameSnapshot | null = useSyncExternalStore(
-    session ? session.subscribe : () => () => undefined,
-    session ? session.snapshot : () => null,
-    session ? session.snapshot : () => null,
+    session ? (listener) => session.subscribe(listener) : () => () => undefined,
+    session ? () => session.snapshot() : () => null,
+    session ? () => session.snapshot() : () => null,
   );
 
   useEffect(() => {
