@@ -1,6 +1,7 @@
 import type { Dict } from "../types";
 import { chromaEn } from "../../games/chroma-slide/i18n";
 import { explosiveEn } from "../../games/explosive-chess/i18n";
+import { gomokuEn } from "../../games/gomoku/i18n";
 
 export const en: Dict = {
   brand: "micromist",
@@ -62,4 +63,5 @@ export const en: Dict = {
   storageLegacyNote: "Clearing Platform also removes theme and language preferences.",
   explosive: explosiveEn,
   chroma: chromaEn,
+  gomoku: gomokuEn,
 };

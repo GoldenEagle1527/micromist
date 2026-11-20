@@ -2,6 +2,7 @@ import { Link, useParams } from "react-router";
 import "../styles/play.css";
 import { ExplosiveChessGame } from "../games/explosive-chess/ExplosiveChessGame";
 import { ChromaSlideGame } from "../games/chroma-slide/ChromaSlideGame";
+import { GomokuGame } from "../games/gomoku/GomokuGame";
 import { getGame } from "../games/catalog";
 import { useLocale } from "../i18n";
 
@@ -25,6 +26,7 @@ export function PlayPage() {
     <>
       {game.slug === "explosive-chess" ? <ExplosiveChessGame /> : null}
       {game.slug === "chroma-slide" ? <ChromaSlideGame /> : null}
+      {game.slug === "gomoku" ? <GomokuGame /> : null}
     </>
   );
 }

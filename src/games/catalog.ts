@@ -3,6 +3,7 @@ import type { GamePlayModule, GamePreview } from "../platform/play";
 import { siteKind, type SiteKind } from "../lib/sites";
 import { preview as previewChromaSlide } from "./chroma-slide/play-preview";
 import { preview as previewExplosiveChess } from "./explosive-chess/play-preview";
+import { preview as previewGomoku } from "./gomoku/play-preview";
 
 function loadOnce(load: () => Promise<GamePlayModule>): () => Promise<GamePlayModule> {
   let pending: Promise<GamePlayModule> | undefined;
@@ -51,6 +52,19 @@ export const games: GameMeta[] = [
     badge: { zh: "单机/联机", en: "Offline / Online" },
     preview: previewExplosiveChess,
     loadPlay: loadOnce(() => import("./explosive-chess/play").then((m) => m.playModule)),
+  },
+  {
+    slug: "gomoku",
+    mode: "single",
+    title: { zh: "五子棋", en: "Gomoku" },
+    blurb: {
+      zh: "十五路棋盘，黑先，五子连珠。可热座双人，或对战本机 AI。",
+      en: "A 15×15 board. Black goes first; five in a row wins. Play hotseat or against a built-in AI.",
+    },
+    badge: { zh: "单机", en: "Offline" },
+    audience: "staging",
+    preview: previewGomoku,
+    loadPlay: loadOnce(() => import("./gomoku/play").then((m) => m.playModule)),
   },
   {
     slug: "chroma-slide",

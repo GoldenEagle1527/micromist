@@ -1,6 +1,7 @@
 import type { Dict } from "../types";
 import { chromaZh } from "../../games/chroma-slide/i18n";
 import { explosiveZh } from "../../games/explosive-chess/i18n";
+import { gomokuZh } from "../../games/gomoku/i18n";
 
 export const zh: Dict = {
   brand: "微渺",
@@ -62,4 +63,5 @@ export const zh: Dict = {
   storageLegacyNote: "清除「平台设置」会影响主题与语言等偏好。",
   explosive: explosiveZh,
   chroma: chromaZh,
+  gomoku: gomokuZh,
 };
