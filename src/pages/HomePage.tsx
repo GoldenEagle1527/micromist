@@ -10,7 +10,7 @@ import { useLocale } from "../i18n";
 
 export function HomePage() {
   const { locale, t } = useLocale();
-  const { openFromCard, ghostSlug } = useBoardExpand();
+  const { openFromCard } = useBoardExpand();
   const games = listedGames();
   const { boardStyle, cardStyle } = useBoardGrid(games.length);
 
@@ -21,17 +21,11 @@ export function HomePage() {
   return (
     <section className="grid" style={boardStyle}>
       {games.map((game, index) => {
-        const className = [
-          "card",
-          ghostSlug === game.slug ? "is-ghost" : "",
-        ]
-          .filter(Boolean)
-          .join(" ");
         return (
           <Link
             key={game.slug}
             to={`/play/${game.slug}`}
-            className={className}
+            className="card"
             data-game={game.slug}
             style={cardStyle(index)}
             onClick={(event) => {
@@ -41,7 +35,7 @@ export function HomePage() {
                 return;
               }
               event.preventDefault();
-              openFromCard(game.slug, event.currentTarget);
+              openFromCard(game.slug);
             }}
           >
             <CardFx />

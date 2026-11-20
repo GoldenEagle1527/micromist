@@ -83,20 +83,14 @@ function ShellFrame() {
   const aboutTitleId = useId();
   const closeBtnRef = useRef<HTMLButtonElement | null>(null);
   const playMatch = useMatch("/play/:slug");
-  const isHome = useMatch({ path: "/", end: true });
   const playGameFromRoute = playMatch?.params.slug
     ? getGame(playMatch.params.slug)
     : undefined;
-  const isPlayRoute = Boolean(playMatch);
-  const isNotFound = !isHome && !playMatch;
   const board = useBoardExpand();
   const playGame = board.currentSlug
     ? getGame(board.currentSlug)
     : playGameFromRoute;
-  const catalogSlug =
-    board.embedSlug && getGame(board.embedSlug) ? board.embedSlug : undefined;
-  const isPlaying =
-    !isNotFound && (isPlayRoute || Boolean(board.currentSlug) || board.playIn);
+  const isPlaying = board.showPlay || board.sliding;
   const themeLabel =
     mode === "system" ? t.themeSystem : mode === "light" ? t.themeLight : t.themeDark;
   const langButtonLabel = locale === "zh" ? "EN" : "中";
@@ -356,24 +350,25 @@ function ShellFrame() {
       </nav>
 
       <main className={`main${isPlaying ? " is-playing" : ""}`}>
-        <div
-          className={`home-layer${isNotFound ? " is-hidden" : ""}`}
-          inert={board.playIn || isNotFound || isPlaying ? true : undefined}
-        >
-          <HomePage />
-        </div>
-        <div
-          ref={board.playRef}
-          className={`play-layer${board.playIn || isNotFound ? " is-in" : ""}${isNotFound ? " is-static" : ""}${catalogSlug ? " is-embed" : ""}${board.expanding ? " is-expanding" : ""}`}
-          aria-hidden={!isPlayRoute && !isNotFound && !board.playIn && !board.expanding}
-        >
-          <Suspense fallback={null}>
-            <Outlet />
-          </Suspense>
+        <div className="board-stage">
+          <div className="board-track">
+            {board.showHome ? (
+              <div className="board-page">
+                <HomePage />
+              </div>
+            ) : null}
+            {board.showPlay ? (
+              <div className="board-page">
+                <Suspense fallback={null}>
+                  <Outlet />
+                </Suspense>
+              </div>
+            ) : null}
+          </div>
         </div>
       </main>
 
-      {isHome && !board.currentSlug && !board.embedSlug ? (
+      {board.showHome && !board.showPlay && !board.sliding ? (
         <footer className="footer">
           <span>{t.footer}</span>
           <a href="https://github.com/GoldenEagle1527/micromist">GitHub</a>

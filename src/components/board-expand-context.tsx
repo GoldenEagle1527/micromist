@@ -9,51 +9,62 @@ import {
   useState,
   type CSSProperties,
   type ReactNode,
-  type RefObject,
 } from "react";
 import { useLocation, useNavigate } from "react-router";
 import { getGame } from "../games/catalog";
 import {
-  EXPAND_MS,
+  SLIDE_MS,
   afterTransition,
-  applyFixedBox,
-  applySqueeze,
-  boxTransition,
-  clearAllSqueezes,
-  clearFixedBox,
-  clearFlyer,
-  clearSqueeze,
-  findCard,
+  applyBoardOrigin,
+  boardSlideSpan,
   layoutBoard,
-  makeFlyer,
+  layoutShellBoard,
   motionMs,
   nextFrame,
-  otherCards,
-  playDestRect,
   prefersReducedMotion,
   type BoardLayout,
 } from "../lib/board-expand";
 
-export type BoardExpandApi = {
+export type BoardStageApi = {
   busy: boolean;
   currentSlug: string | null;
-  embedSlug: string | null;
-  ghostSlug: string | null;
-  expanding: boolean;
   playIn: boolean;
-  playRef: RefObject<HTMLDivElement | null>;
-  openFromCard: (slug: string, card: HTMLElement) => void;
+  sliding: boolean;
+  showHome: boolean;
+  showPlay: boolean;
+  openFromCard: (slug: string) => void;
   goHome: () => void;
 };
 
-const BoardExpandContext = createContext<BoardExpandApi | null>(null);
+const BoardStageContext = createContext<BoardStageApi | null>(null);
 
-export function useBoardExpand(): BoardExpandApi {
-  const value = useContext(BoardExpandContext);
+export function useBoardExpand(): BoardStageApi {
+  const value = useContext(BoardStageContext);
   if (!value) {
     throw new Error("useBoardExpand must be used within BoardExpandProvider");
   }
   return value;
+}
+
+function boardStyleOf(layout: BoardLayout | null): CSSProperties {
+  if (!layout) return {};
+  return {
+    ["--board-left" as string]: `${layout.left}px`,
+    ["--board-top" as string]: `${layout.top}px`,
+    ["--board-cols" as string]: String(layout.cols),
+    ["--board-rows" as string]: String(layout.rows),
+  };
+}
+
+function cardStyleOf(layout: BoardLayout | null, index: number): CSSProperties | undefined {
+  const place = layout?.places[index];
+  if (!place) return undefined;
+  return {
+    ["--card-col" as string]: String(place.column),
+    ["--card-row" as string]: String(place.row),
+    ["--card-w" as string]: String(place.width),
+    ["--card-h" as string]: String(place.height),
+  };
 }
 
 export function useBoardGrid(count: number): {
@@ -80,30 +91,40 @@ export function useBoardGrid(count: number): {
     };
   }, [count]);
 
-  const boardStyle = useMemo<CSSProperties>(() => {
-    if (!layout) return {};
-    return {
-      ["--board-left" as string]: `${layout.left}px`,
-      ["--board-top" as string]: `${layout.top}px`,
-      ["--board-cols" as string]: String(layout.cols),
-      ["--board-rows" as string]: String(layout.rows),
+  const boardStyle = useMemo(() => boardStyleOf(layout), [layout]);
+  const cardStyle = useCallback((index: number) => cardStyleOf(layout, index), [layout]);
+  return { boardStyle, cardStyle };
+}
+
+export function useShellGrid(
+  tileCount: number,
+  boardIndex = -1,
+): {
+  boardStyle: CSSProperties;
+  cardStyle: (index: number) => CSSProperties | undefined;
+} {
+  const [layout, setLayout] = useState<BoardLayout | null>(null);
+
+  useLayoutEffect(() => {
+    const shell = document.querySelector<HTMLElement>(".shell");
+    const main = document.querySelector<HTMLElement>(".main");
+    if (!shell || !main) return;
+    const sync = () => {
+      setLayout(layoutShellBoard(shell, main, tileCount, boardIndex));
     };
-  }, [layout]);
+    sync();
+    const observer = new ResizeObserver(sync);
+    observer.observe(shell);
+    observer.observe(main);
+    window.addEventListener("resize", sync);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", sync);
+    };
+  }, [tileCount, boardIndex]);
 
-  const cardStyle = useCallback(
-    (index: number): CSSProperties | undefined => {
-      const place = layout?.places[index];
-      if (!place) return undefined;
-      return {
-        ["--card-col" as string]: String(place.column),
-        ["--card-row" as string]: String(place.row),
-        ["--card-w" as string]: String(place.width),
-        ["--card-h" as string]: String(place.height),
-      };
-    },
-    [layout],
-  );
-
+  const boardStyle = useMemo(() => boardStyleOf(layout), [layout]);
+  const cardStyle = useCallback((index: number) => cardStyleOf(layout, index), [layout]);
   return { boardStyle, cardStyle };
 }
 
@@ -120,23 +141,21 @@ export function BoardExpandProvider({
 }: Props) {
   const navigate = useNavigate();
   const location = useLocation();
-  const playRef = useRef<HTMLDivElement | null>(null);
-  const flyerRef = useRef<HTMLElement | null>(null);
-  const startBoxRef = useRef<DOMRect | null>(null);
   const busyRef = useRef(false);
   const ownedNavRef = useRef<"open" | "home" | null>(null);
   const currentRef = useRef<string | null>(null);
   const openedFromLobbyRef = useRef(false);
+  const shiftRef = useRef(0);
 
   const initialGame = playSlug && getGame(playSlug) ? playSlug : null;
-  const initialPlayVisible = Boolean(playSlug) || isNotFound;
+  const initialPlay = Boolean(initialGame) || isNotFound;
 
   const [busy, setBusy] = useState(false);
   const [currentSlug, setCurrentSlug] = useState<string | null>(initialGame);
-  const [embedSlug, setEmbedSlug] = useState<string | null>(initialGame);
-  const [ghostSlug, setGhostSlug] = useState<string | null>(initialGame);
-  const [expanding, setExpanding] = useState(false);
-  const [playIn, setPlayIn] = useState(initialPlayVisible);
+  const [sliding, setSliding] = useState(false);
+  const [showHome, setShowHome] = useState(!initialPlay);
+  const [showPlay, setShowPlay] = useState(initialPlay);
+  const playIn = showPlay && !showHome;
 
   currentRef.current = currentSlug;
 
@@ -145,60 +164,76 @@ export function BoardExpandProvider({
     setBusy(value);
   };
 
-  const dropFlyer = () => {
-    clearFlyer(flyerRef.current);
-    flyerRef.current = null;
+  const writeShift = (px: number, animate: boolean) => {
+    const shell = document.querySelector<HTMLElement>(".shell");
+    if (!shell) return;
+    shiftRef.current = px;
+    if (animate) shell.classList.add("is-sliding");
+    else shell.classList.remove("is-sliding");
+    shell.style.setProperty("--board-shift-x", `${px}px`);
+  };
+
+  const measureSpan = () => {
+    const shell = document.querySelector<HTMLElement>(".shell");
+    const main = document.querySelector<HTMLElement>(".main");
+    if (!shell || !main) return 0;
+    applyBoardOrigin(shell, main);
+    const span = boardSlideSpan(shell, main);
+    shell.style.setProperty("--board-span-x", `${span}px`);
+    return span;
   };
 
   const snapToGame = useCallback((slug: string) => {
-    dropFlyer();
-    clearAllSqueezes();
     currentRef.current = slug;
     openedFromLobbyRef.current = false;
     setCurrentSlug(slug);
-    setEmbedSlug(slug);
-    setGhostSlug(slug);
-    setExpanding(false);
-    setPlayIn(true);
-    startBoxRef.current = null;
-    const play = playRef.current;
-    if (play) clearFixedBox(play);
+    setSliding(false);
+    setShowHome(false);
+    setShowPlay(true);
+    writeShift(0, false);
   }, []);
 
   const snapToHome = useCallback(() => {
-    dropFlyer();
-    clearAllSqueezes();
     currentRef.current = null;
     openedFromLobbyRef.current = false;
     setCurrentSlug(null);
-    setEmbedSlug(null);
-    setGhostSlug(null);
-    setExpanding(false);
-    setPlayIn(false);
-    startBoxRef.current = null;
-    const play = playRef.current;
-    if (play) clearFixedBox(play);
+    setSliding(false);
+    setShowHome(true);
+    setShowPlay(false);
+    writeShift(0, false);
   }, []);
 
   useLayoutEffect(() => {
-    if (!expanding) return;
-    const play = playRef.current;
-    const box = startBoxRef.current;
-    if (!play || !box) return;
-    applyFixedBox(play, box);
-    play.style.opacity = "1";
-    play.style.transition = "none";
-  }, [expanding]);
+    const shell = document.querySelector<HTMLElement>(".shell");
+    const main = document.querySelector<HTMLElement>(".main");
+    if (!shell || !main) return;
+    const sync = () => {
+      measureSpan();
+    };
+    sync();
+    const observer = new ResizeObserver(sync);
+    observer.observe(shell);
+    observer.observe(main);
+    window.addEventListener("resize", sync);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", sync);
+    };
+  }, []);
 
   useEffect(() => {
-    if (busyRef.current) return;
     if (ownedNavRef.current === "open" || ownedNavRef.current === "home") {
       ownedNavRef.current = null;
       return;
     }
+    if (busyRef.current) return;
     if (isNotFound) {
-      snapToHome();
-      setPlayIn(true);
+      currentRef.current = null;
+      setCurrentSlug(null);
+      setSliding(false);
+      setShowHome(false);
+      setShowPlay(true);
+      writeShift(0, false);
       return;
     }
     if (playSlug && getGame(playSlug)) {
@@ -206,35 +241,31 @@ export function BoardExpandProvider({
       return;
     }
     if (playSlug) {
-      snapToHome();
-      setPlayIn(true);
+      currentRef.current = null;
+      setCurrentSlug(null);
+      setSliding(false);
+      setShowHome(false);
+      setShowPlay(true);
+      writeShift(0, false);
       return;
     }
     snapToHome();
   }, [location.pathname, isNotFound, playSlug, snapToGame, snapToHome]);
 
-  useEffect(() => {
-    return () => {
-      clearFlyer(flyerRef.current);
-      flyerRef.current = null;
-    };
-  }, []);
-
   const openFromCard = useCallback(
-    async (slug: string, card: HTMLElement) => {
+    async (slug: string) => {
       if (busyRef.current) return;
       if (currentRef.current === slug) return;
       setBusyBoth(true);
-      setEmbedSlug(slug);
 
       const finishOpen = () => {
         currentRef.current = slug;
         openedFromLobbyRef.current = true;
         setCurrentSlug(slug);
-        setGhostSlug(slug);
-        setEmbedSlug(slug);
-        setExpanding(false);
-        setPlayIn(true);
+        setSliding(false);
+        setShowHome(false);
+        setShowPlay(true);
+        writeShift(0, false);
         ownedNavRef.current = "open";
         navigate(`/play/${slug}`);
       };
@@ -246,62 +277,29 @@ export function BoardExpandProvider({
       }
 
       try {
-        const from = card.getBoundingClientRect();
-        startBoxRef.current = new DOMRect(from.left, from.top, from.width, from.height);
-        const dest = playDestRect();
-        otherCards(slug).forEach((el) => applySqueeze(el, from, dest));
-        const { fly } = makeFlyer(card);
-        flyerRef.current = fly;
-
+        const span = measureSpan();
         currentRef.current = slug;
         openedFromLobbyRef.current = true;
         ownedNavRef.current = "open";
         setCurrentSlug(slug);
-        setGhostSlug(slug);
-        setExpanding(true);
-        setPlayIn(true);
+        setShowHome(true);
+        setShowPlay(true);
+        writeShift(0, false);
         navigate(`/play/${slug}`);
 
         await nextFrame();
         await nextFrame();
+        const ms = motionMs(SLIDE_MS);
+        setSliding(true);
+        writeShift(span, true);
+        const track = document.querySelector<HTMLElement>(".board-track");
+        if (track) await afterTransition(track, ms, "transform");
+        else await new Promise((resolve) => setTimeout(resolve, ms + 80));
 
-        const play = playRef.current;
-        const start = startBoxRef.current ?? from;
-        const destNow = playDestRect();
-        const radius = getComputedStyle(card).borderRadius;
-        const ms = motionMs(EXPAND_MS);
-
-        if (play) {
-          applyFixedBox(play, start);
-          play.style.opacity = "1";
-          play.style.borderRadius = radius;
-          play.style.transition = "none";
-          void play.offsetWidth;
-          play.style.transition = boxTransition(ms, 0);
-          applyFixedBox(play, destNow);
-          play.style.borderRadius = "0px";
-        }
-
-        fly.style.transition = "none";
-        applyFixedBox(fly, start);
-        fly.style.opacity = "1";
-        void fly.offsetWidth;
-        fly.style.transition = boxTransition(
-          ms,
-          Math.round(ms * 0.72),
-          Math.round(ms * 0.28),
-        );
-        fly.classList.add("is-expanding");
-        applyFixedBox(fly, destNow);
-        fly.style.opacity = "0";
-        fly.style.borderRadius = "0px";
-
-        await afterTransition(fly, ms, "width");
-        dropFlyer();
-        if (play) clearFixedBox(play);
-        setExpanding(false);
+        setSliding(false);
+        setShowHome(false);
+        writeShift(0, false);
       } catch {
-        dropFlyer();
         finishOpen();
       } finally {
         setBusyBoth(false);
@@ -313,102 +311,59 @@ export function BoardExpandProvider({
   const goHome = useCallback(async () => {
     if (busyRef.current || !currentRef.current) return;
     setBusyBoth(true);
-    const id = currentRef.current;
     const fromLobby = openedFromLobbyRef.current;
-    const card = findCard(id);
-    const play = playRef.current;
 
     const finishHome = () => {
       ownedNavRef.current = "home";
       snapToHome();
-      if (fromLobby) {
-        navigate(-1);
-      } else {
-        navigate("/");
-      }
+      if (fromLobby) navigate(-1);
+      else navigate("/");
     };
 
-    if (prefersReducedMotion() || !card || !play) {
+    if (prefersReducedMotion()) {
       finishHome();
       setBusyBoth(false);
       return;
     }
 
     try {
-      const dest = playDestRect();
-      const target = card.getBoundingClientRect();
-      startBoxRef.current = dest;
-      const radius = getComputedStyle(card).borderRadius;
-      const { fly } = makeFlyer(card);
-      flyerRef.current = fly;
-      applyFixedBox(fly, dest);
-      fly.style.opacity = "0";
-      fly.style.borderRadius = "0px";
-      fly.classList.add("is-expanding");
-      void fly.offsetWidth;
-
-      setExpanding(true);
-      applyFixedBox(play, dest);
-      play.style.opacity = "1";
-      play.style.borderRadius = "0px";
-      void play.offsetWidth;
-
-      const ms = motionMs(EXPAND_MS);
-      play.style.transition = boxTransition(ms, Math.round(ms * 0.7));
-      fly.style.transition = boxTransition(
-        ms,
-        Math.round(ms * 0.7),
-        0,
-      );
-
-      applyFixedBox(play, target);
-      play.style.opacity = "0";
-      play.style.borderRadius = radius;
-
-      applyFixedBox(fly, target);
-      fly.style.opacity = "1";
-      fly.style.borderRadius = radius;
-
-      otherCards(id).forEach(clearSqueeze);
-
-      await afterTransition(fly, ms, "width");
-      dropFlyer();
-      clearFixedBox(play);
+      const span = measureSpan();
+      setShowHome(true);
+      setShowPlay(true);
+      writeShift(span, false);
+      await nextFrame();
+      await nextFrame();
+      const ms = motionMs(SLIDE_MS);
+      setSliding(true);
+      writeShift(0, true);
+      const track = document.querySelector<HTMLElement>(".board-track");
+      if (track) await afterTransition(track, ms, "transform");
+      else await new Promise((resolve) => setTimeout(resolve, ms + 80));
     } catch {
-      dropFlyer();
+      /* snap below */
     }
 
     finishHome();
     setBusyBoth(false);
   }, [navigate, snapToHome]);
 
-  const api = useMemo<BoardExpandApi>(
+  const api = useMemo<BoardStageApi>(
     () => ({
       busy,
       currentSlug,
-      embedSlug,
-      ghostSlug,
-      expanding,
       playIn,
-      playRef,
+      sliding,
+      showHome,
+      showPlay,
       openFromCard,
       goHome,
     }),
-    [
-      busy,
-      currentSlug,
-      embedSlug,
-      ghostSlug,
-      expanding,
-      playIn,
-      openFromCard,
-      goHome,
-    ],
+    [busy, currentSlug, playIn, sliding, showHome, showPlay, openFromCard, goHome],
   );
 
   return (
-    <BoardExpandContext.Provider value={api}>
+    <BoardStageContext.Provider value={api}>
       {children}
-    </BoardExpandContext.Provider>
+    </BoardStageContext.Provider>
   );
 }

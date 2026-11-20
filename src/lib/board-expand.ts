@@ -1,4 +1,4 @@
-export const EXPAND_MS = 780;
+export const SLIDE_MS = 780;
 
 export function prefersReducedMotion(): boolean {
   return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -8,16 +8,10 @@ export function motionMs(ms: number): number {
   return prefersReducedMotion() ? 0 : ms;
 }
 
-export function wait(ms: number): Promise<void> {
-  return new Promise((resolve) => {
-    setTimeout(resolve, ms);
-  });
-}
-
 export function afterTransition(
   el: HTMLElement,
   ms: number,
-  property = "width",
+  property = "transform",
 ): Promise<void> {
   return new Promise((resolve) => {
     if (ms === 0) {
@@ -39,67 +33,6 @@ export function afterTransition(
     el.addEventListener("transitionend", onEnd);
     setTimeout(done, ms + 80);
   });
-}
-
-export function playDestRect(): DOMRect {
-  const main = document.querySelector<HTMLElement>(".main");
-  if (!main) {
-    return new DOMRect(0, 0, window.innerWidth, window.innerHeight);
-  }
-  const rect = main.getBoundingClientRect();
-  return new DOMRect(
-    rect.left,
-    rect.top,
-    rect.width,
-    Math.max(0, window.innerHeight - rect.top),
-  );
-}
-
-export function applyFixedBox(el: HTMLElement, rect: DOMRectReadOnly): void {
-  el.style.position = "fixed";
-  el.style.margin = "0";
-  el.style.inset = "unset";
-  el.style.right = "auto";
-  el.style.bottom = "auto";
-  el.style.left = `${rect.left}px`;
-  el.style.top = `${rect.top}px`;
-  el.style.width = `${rect.width}px`;
-  el.style.height = `${rect.height}px`;
-}
-
-export function clearFixedBox(el: HTMLElement): void {
-  el.style.position = "";
-  el.style.left = "";
-  el.style.top = "";
-  el.style.width = "";
-  el.style.height = "";
-  el.style.right = "";
-  el.style.bottom = "";
-  el.style.inset = "";
-  el.style.margin = "";
-  el.style.transition = "";
-  el.style.opacity = "";
-  el.style.borderRadius = "";
-}
-
-export function boxTransition(
-  ms: number,
-  opacityMs = ms,
-  opacityDelay = 0,
-): string {
-  const ease = `${ms}ms var(--ease-soft)`;
-  const fade = `${opacityMs}ms var(--ease-out)${opacityDelay > 0 ? ` ${opacityDelay}ms` : ""}`;
-  return [
-    `left ${ease}`,
-    `top ${ease}`,
-    `width ${ease}`,
-    `height ${ease}`,
-    `opacity ${fade}`,
-    `border-radius ${fade}`,
-    `background ${fade}`,
-    `border-color ${fade}`,
-    `box-shadow ${fade}`,
-  ].join(", ");
 }
 
 export function nextFrame(): Promise<void> {
@@ -132,7 +65,7 @@ function cellOf(el: Element, fallback = 32): number {
   return Number.isFinite(value) && value > 0 ? value : fallback;
 }
 
-function majorOf(el: Element): number {
+export function majorOf(el: Element): number {
   const value = parseFloat(getComputedStyle(el).getPropertyValue("--board-major"));
   if (Number.isFinite(value) && value > 0) return value;
   return cellOf(el) * BOARD_MAJOR_STEPS;
@@ -183,6 +116,13 @@ export function measureBoard(shell: HTMLElement, main: HTMLElement): Omit<BoardL
   };
 }
 
+/** Viewport span used when the floor slides, snapped up to a whole number of major cells. */
+export function boardSlideSpan(shell: HTMLElement, main: HTMLElement): number {
+  const major = majorOf(shell);
+  const width = main.getBoundingClientRect().width;
+  return Math.max(major, Math.ceil(width / major) * major);
+}
+
 export function placeCards(cols: number, rows: number, count: number): BoardPlace[] {
   const gap = 1;
   const n = Math.max(1, count);
@@ -227,83 +167,80 @@ export function placeCards(cols: number, rows: number, count: number): BoardPlac
   return places;
 }
 
+/** Menu-style tiles fill the board like lobby cards. Play puts chrome to the side or top and the board in the remaining cells. */
+export function placeShellTiles(
+  cols: number,
+  rows: number,
+  tileCount: number,
+  boardIndex = -1,
+): BoardPlace[] {
+  if (boardIndex < 0 || boardIndex >= tileCount) {
+    return placeCards(cols, rows, tileCount);
+  }
+  const chromeCount = tileCount - 1;
+  const gap = 1;
+  let cardW = Math.min(CARD_MAJOR_WIDTH, Math.max(1, cols));
+  let cardH = Math.min(CARD_MAJOR_HEIGHT, Math.max(1, rows));
+  const boardMin = 2;
+  const canSide = chromeCount > 0 && cols >= cardW + gap + boardMin;
+  const chrome: BoardPlace[] = [];
+
+  if (canSide) {
+    const needH = chromeCount * cardH + gap * Math.max(0, chromeCount - 1);
+    if (needH > rows) {
+      const fit = Math.floor((rows - gap * Math.max(0, chromeCount - 1)) / Math.max(1, chromeCount));
+      cardH = Math.max(1, fit);
+    }
+    for (let i = 0; i < chromeCount; i += 1) {
+      chrome.push({
+        column: 1,
+        row: 1 + i * (cardH + gap),
+        width: cardW,
+        height: cardH,
+      });
+    }
+    const board: BoardPlace = {
+      column: cardW + gap + 1,
+      row: 1,
+      width: Math.max(1, cols - cardW - gap),
+      height: rows,
+    };
+    return [...chrome.slice(0, boardIndex), board, ...chrome.slice(boardIndex)];
+  }
+
+  if (chromeCount === 0) {
+    return [{ column: 1, row: 1, width: cols, height: rows }];
+  }
+
+  const topRows = Math.min(rows, cardH);
+  const packed = placeCards(cols, topRows, chromeCount);
+  const usedRows = packed.reduce((max, place) => Math.max(max, place.row + place.height - 1), 0);
+  let boardRow = usedRows + gap + 1;
+  let boardH = rows - usedRows - gap;
+  if (boardH < 1) {
+    boardRow = Math.max(1, rows);
+    boardH = 1;
+  }
+  const board: BoardPlace = {
+    column: 1,
+    row: boardRow,
+    width: cols,
+    height: boardH,
+  };
+  return [...packed.slice(0, boardIndex), board, ...packed.slice(boardIndex)];
+}
+
 export function layoutBoard(shell: HTMLElement, main: HTMLElement, count: number): BoardLayout {
   const base = measureBoard(shell, main);
   return { ...base, places: placeCards(base.cols, base.rows, count) };
 }
 
-export type Flyer = {
-  fly: HTMLElement;
-  from: DOMRect;
-};
-
-export function makeFlyer(card: HTMLElement): Flyer {
-  const rect = card.getBoundingClientRect();
-  const fly = card.cloneNode(true) as HTMLElement;
-  fly.removeAttribute("data-game");
-  fly.removeAttribute("href");
-  fly.removeAttribute("aria-current");
-  fly.setAttribute("aria-hidden", "true");
-  fly.tabIndex = -1;
-  fly.classList.add("is-fly");
-  fly.classList.remove("is-ghost", "is-squeezed");
-  applyFixedBox(fly, rect);
-  fly.style.transform = "none";
-  document.body.appendChild(fly);
-  return { fly, from: new DOMRect(rect.left, rect.top, rect.width, rect.height) };
-}
-
-export function clearFlyer(fly: HTMLElement | null): void {
-  fly?.remove();
-}
-
-export function findCard(slug: string): HTMLElement | null {
-  return document.querySelector<HTMLElement>(
-    `.card[data-game="${CSS.escape(slug)}"]`,
-  );
-}
-
-export function otherCards(slug: string): HTMLElement[] {
-  return [...document.querySelectorAll<HTMLElement>(".card[data-game]")].filter(
-    (el) => el.dataset.game !== slug,
-  );
-}
-
-export function applySqueeze(
-  card: HTMLElement,
-  source: DOMRectReadOnly,
-  dest: DOMRectReadOnly,
-): void {
-  const cx = source.left + source.width / 2;
-  const cy = source.top + source.height / 2;
-  const rect = card.getBoundingClientRect();
-  const ox = rect.left + rect.width / 2;
-  const oy = rect.top + rect.height / 2;
-  let dx = ox - cx;
-  let dy = oy - cy;
-  const len = Math.hypot(dx, dy);
-  if (len < 1) {
-    dx = dest.width >= dest.height ? 1 : 0;
-    dy = dest.width >= dest.height ? 0 : 1;
-  } else {
-    dx /= len;
-    dy /= len;
-  }
-  const major = parseFloat(getComputedStyle(card).getPropertyValue("--board-major")) || 128;
-  const push = major;
-  card.style.setProperty("--squeeze-x", `${dx * push}px`);
-  card.style.setProperty("--squeeze-y", `${dy * push}px`);
-  card.style.setProperty("--squeeze-s", "0.9");
-  card.classList.add("is-squeezed");
-}
-
-export function clearSqueeze(card: HTMLElement): void {
-  card.classList.remove("is-squeezed");
-  card.style.removeProperty("--squeeze-x");
-  card.style.removeProperty("--squeeze-y");
-  card.style.removeProperty("--squeeze-s");
-}
-
-export function clearAllSqueezes(): void {
-  document.querySelectorAll<HTMLElement>(".card.is-squeezed").forEach(clearSqueeze);
+export function layoutShellBoard(
+  shell: HTMLElement,
+  main: HTMLElement,
+  tileCount: number,
+  boardIndex = -1,
+): BoardLayout {
+  const base = measureBoard(shell, main);
+  return { ...base, places: placeShellTiles(base.cols, base.rows, tileCount, boardIndex) };
 }

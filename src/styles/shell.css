@@ -11,6 +11,9 @@
 .shell {
   --board-origin-x: 0px;
   --board-origin-y: 0px;
+  --board-shift-x: 0px;
+  --board-span-x: 100%;
+  --board-slide-ms: 780ms;
   min-height: 100dvh;
   display: flex;
   flex-direction: column;
@@ -34,7 +37,11 @@
     var(--board-cell) var(--board-cell),
     var(--board-cell) var(--board-cell);
   background-position:
-    var(--board-origin-x) var(--board-origin-y);
+    calc(var(--board-origin-x) + var(--board-shift-x)) var(--board-origin-y);
+}
+
+.shell.is-sliding::before {
+  transition: background-position var(--board-slide-ms) var(--ease-soft);
 }
 
 .topbar {
@@ -446,6 +453,26 @@
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--md-sys-color-primary) 28%, transparent);
 }
 
+.card.is-static {
+  cursor: default;
+}
+
+.card.is-static:hover {
+  border-color: var(--glass-border);
+  box-shadow: none;
+}
+
+.card.is-primary {
+  border-color: color-mix(in srgb, var(--md-sys-color-primary) 55%, var(--glass-border));
+  background: color-mix(in srgb, var(--md-sys-color-primary-container) 55%, var(--glass-bg-strong));
+}
+
+button.card {
+  font: inherit;
+  color: inherit;
+  text-align: left;
+}
+
 .card h2 {
   margin: 0;
   font-size: 1.12rem;
@@ -522,88 +549,35 @@
 .fx .c.bl { bottom: 7px; left: 7px; border-bottom-width: 1px; border-left-width: 1px; }
 .fx .c.br { bottom: 7px; right: 7px; border-bottom-width: 1px; border-right-width: 1px; }
 
-.card.is-ghost {
-  visibility: hidden;
-  pointer-events: none;
-}
-
-.card.is-squeezed {
-  transform: translate(var(--squeeze-x, 0), var(--squeeze-y, 0)) scale(var(--squeeze-s, 1));
-  opacity: 0.42;
-  pointer-events: none;
-  filter: saturate(0.8);
-}
-
-.card.is-fly {
-  position: fixed;
-  margin: 0;
-  grid-column: auto;
-  grid-row: auto;
-  z-index: 40;
-  cursor: default;
-  pointer-events: none;
-  will-change: left, top, width, height, opacity;
-}
-
-.card.is-fly:hover {
-  transform: none;
-  box-shadow: none;
-}
-
-.home-layer {
-  position: relative;
-  height: 100%;
-  min-height: 100%;
-}
-
-.home-layer.is-hidden {
-  display: none !important;
-}
-
-.play-layer {
+.board-stage {
   position: absolute;
   inset: 0;
-  overflow: auto;
-  opacity: 0;
+  overflow: hidden;
+  z-index: 1;
+}
+
+.board-track {
+  display: flex;
+  flex-direction: row;
+  height: 100%;
+  transform: translateX(calc(-1 * var(--board-shift-x, 0px)));
+}
+
+.shell.is-sliding .board-track {
+  transition: transform var(--board-slide-ms) var(--ease-soft);
+  will-change: transform;
+}
+
+.shell.is-sliding .board-page {
   pointer-events: none;
-  z-index: 8;
 }
 
-.play-layer.is-in {
-  opacity: 1;
-  pointer-events: auto;
-}
-
-.play-layer.is-static {
+.board-page {
   position: relative;
-  inset: auto;
-  overflow: visible;
-}
-
-.play-layer[hidden] {
-  display: none !important;
-}
-
-.play-layer.is-embed {
+  flex: 0 0 var(--board-span-x, 100%);
+  width: var(--board-span-x, 100%);
+  height: 100%;
   overflow: hidden;
-  background: var(--page-base);
-}
-
-.play-layer.is-embed:not(.is-in):not(.is-expanding) {
-  opacity: 0;
-  visibility: hidden;
-  pointer-events: none;
-}
-
-.play-layer.is-embed.is-expanding,
-.play-layer.is-embed.is-in {
-  visibility: visible;
-}
-
-.play-layer.is-expanding {
-  z-index: 15;
-  overflow: hidden;
-  will-change: left, top, width, height, opacity;
 }
 
 .game-embed {
