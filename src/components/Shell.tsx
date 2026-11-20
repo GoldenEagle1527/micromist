@@ -1,15 +1,13 @@
-import { Suspense, useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { NavLink, Outlet, useMatch } from "react-router";
 import { getGame } from "../games/catalog";
 import { useLocale } from "../i18n";
-import { BoardExpandProvider, BoardFloor, useBoardExpand } from "./board-expand-context";
 import { useTheme } from "../hooks/useTheme";
 import {
   isFloatEmbed,
   openAdDocumentPip,
   supportsDocumentPip,
 } from "../lib/document-pip";
-import { HomePage } from "../pages/HomePage";
 import { LocalDataModal } from "./LocalDataModal";
 import { ensureLocalDbReady } from "../lib/game-store";
 import { siteKind, switchSiteHref } from "../lib/sites";
@@ -60,7 +58,7 @@ function StorageIcon() {
   );
 }
 
-function ShellFrame() {
+export function Shell() {
   const { mode, cycleMode } = useTheme();
   const { locale, t, toggleLocale } = useLocale();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -83,14 +81,10 @@ function ShellFrame() {
   const aboutTitleId = useId();
   const closeBtnRef = useRef<HTMLButtonElement | null>(null);
   const playMatch = useMatch("/play/:slug");
-  const playGameFromRoute = playMatch?.params.slug
+  const isHome = useMatch({ path: "/", end: true });
+  const playGame = playMatch?.params.slug
     ? getGame(playMatch.params.slug)
     : undefined;
-  const board = useBoardExpand();
-  const playGame = board.currentSlug
-    ? getGame(board.currentSlug)
-    : playGameFromRoute;
-  const isPlaying = board.showPlay || board.sliding;
   const themeLabel =
     mode === "system" ? t.themeSystem : mode === "light" ? t.themeLight : t.themeDark;
   const langButtonLabel = locale === "zh" ? "EN" : "中";
@@ -179,19 +173,9 @@ function ShellFrame() {
   }
 
   return (
-    <div className={`shell${isPlaying ? " is-playing" : ""}`}>
+    <div className="shell">
       <header className="topbar">
-        <NavLink
-          to="/"
-          className="brand"
-          onClick={(event) => {
-            setMenuOpen(false);
-            if (board.currentSlug || board.busy) {
-              event.preventDefault();
-              void board.goHome();
-            }
-          }}
-        >
+        <NavLink to="/" className="brand" onClick={() => setMenuOpen(false)}>
           <span className="brand-title-row">
             <span className="brand-zh">{t.brand}</span>
             {kind === "staging" ? (
@@ -202,18 +186,13 @@ function ShellFrame() {
           </span>
           {locale === "zh" ? <span className="brand-en">{t.brandSub}</span> : null}
         </NavLink>
-        <div className={`topbar-game${board.currentSlug ? " is-ready" : ""}`}>
-          {board.currentSlug && playGame ? (
-            <button
-              type="button"
-              className="topbar-game-title"
-              onClick={() => void board.goHome()}
-              aria-label={t.lobbyBack}
-            >
-              {playGame.title[locale]}
-            </button>
-          ) : null}
-        </div>
+        {playGame ? (
+          <div className="topbar-game" aria-current="page">
+            {playGame.title[locale]}
+          </div>
+        ) : (
+          <div className="topbar-game topbar-game-empty" aria-hidden="true" />
+        )}
         <div className="topbar-actions">
           <button
             type="button"
@@ -349,18 +328,11 @@ function ShellFrame() {
         </div>
       </nav>
 
-      <main className={`main${isPlaying ? " is-playing" : ""}`}>
-        <BoardFloor>
-          {board.showHome ? <HomePage /> : null}
-          {board.showPlay ? (
-            <Suspense fallback={null}>
-              <Outlet />
-            </Suspense>
-          ) : null}
-        </BoardFloor>
+      <main className="main">
+        <Outlet />
       </main>
 
-      {board.showHome && !board.showPlay && !board.sliding ? (
+      {isHome ? (
         <footer className="footer">
           <span>{t.footer}</span>
           <a href="https://github.com/GoldenEagle1527/micromist">GitHub</a>
@@ -427,19 +399,5 @@ function ShellFrame() {
         </div>
       ) : null}
     </div>
-  );
-}
-
-export function Shell() {
-  const playMatch = useMatch("/play/:slug");
-  const isHome = useMatch({ path: "/", end: true });
-  const isNotFound = !isHome && !playMatch;
-  return (
-    <BoardExpandProvider
-      playSlug={playMatch?.params.slug}
-      isNotFound={isNotFound}
-    >
-      <ShellFrame />
-    </BoardExpandProvider>
   );
 }

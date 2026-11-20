@@ -1,26 +1,30 @@
 import { Link, useParams } from "react-router";
 import "../styles/play.css";
-import { useBoardGrid } from "../components/board-expand-context";
+import { ExplosiveChessGame } from "../games/explosive-chess/ExplosiveChessGame";
+import { ChromaSlideGame } from "../games/chroma-slide/ChromaSlideGame";
 import { getGame } from "../games/catalog";
 import { useLocale } from "../i18n";
-import { GameShell } from "../platform/play";
-
-function MissingPlay({ slug }: { slug?: string }) {
-  const { t } = useLocale();
-  const { cardStyle } = useBoardGrid(1);
-  return (
-    <section className="board-ink" style={cardStyle(0)}>
-      <h2>{t.playMissingTitle}</h2>
-      <p>
-        {t.playMissingBody(slug ?? "")} <Link to="/">{t.playMissingLink}</Link>
-      </p>
-    </section>
-  );
-}
 
 export function PlayPage() {
   const { slug } = useParams();
+  const { t } = useLocale();
   const game = slug ? getGame(slug) : undefined;
-  if (!game) return <MissingPlay slug={slug} />;
-  return <GameShell key={game.slug} load={game.loadPlay} preview={game.preview} />;
+
+  if (!game) {
+    return (
+      <section className="hero">
+        <h1>{t.playMissingTitle}</h1>
+        <p className="lede">
+          {t.playMissingBody(slug ?? "")} <Link to="/">{t.playMissingLink}</Link>
+        </p>
+      </section>
+    );
+  }
+
+  return (
+    <>
+      {game.slug === "explosive-chess" ? <ExplosiveChessGame /> : null}
+      {game.slug === "chroma-slide" ? <ChromaSlideGame /> : null}
+    </>
+  );
 }
