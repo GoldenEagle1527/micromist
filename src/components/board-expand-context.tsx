@@ -42,6 +42,8 @@ export type BoardStageApi = {
   seedSlug: string | null;
   cols: number;
   rows: number;
+  layoutRows: number;
+  fadeSeed: boolean;
   openFromCard: (slug: string, place?: BoardPlace) => void;
   goHome: () => void;
   reportPlayRows: (rows: number) => void;
@@ -79,8 +81,11 @@ export function useBoardGrid(count: number): {
   cardStyle: (index: number) => CSSProperties | undefined;
   places: BoardPlace[];
 } {
-  const { cols, rows } = useBoardExpand();
-  const places = useMemo(() => placeCards(cols, rows, count), [cols, rows, count]);
+  const { cols, layoutRows } = useBoardExpand();
+  const places = useMemo(
+    () => placeCards(cols, layoutRows, count),
+    [cols, layoutRows, count],
+  );
   const boardStyle = useMemo<CSSProperties>(() => ({}), []);
   const cardStyle = useCallback((index: number) => placeStyle(places[index]), [places]);
   return { boardStyle, cardStyle, places };
@@ -174,9 +179,11 @@ export function BoardExpandProvider({
 
   const cols = Math.max(1, viewport.cols);
   const rows = Math.max(viewport.rows, floorRows);
+  const layoutRows = Math.max(1, viewport.rows);
   const sliding = lifting || growing || shrinking;
   const playIn = showPlay && !showHome;
   const seedSlug = fadeOthers || sliding ? currentSlug : null;
+  const fadeSeed = showPlay && showHome;
 
   const setBusyBoth = (value: boolean) => {
     busyRef.current = value;
@@ -472,9 +479,11 @@ export function BoardExpandProvider({
       showHome,
       showPlay,
       fadeOthers,
+      fadeSeed,
       seedSlug,
       cols,
       rows,
+      layoutRows,
       openFromCard,
       goHome,
       reportPlayRows,
@@ -487,9 +496,11 @@ export function BoardExpandProvider({
       showHome,
       showPlay,
       fadeOthers,
+      fadeSeed,
       seedSlug,
       cols,
       rows,
+      layoutRows,
       openFromCard,
       goHome,
       reportPlayRows,
@@ -505,14 +516,13 @@ export function BoardExpandProvider({
   const cells: ReactNode[] = [];
   for (let row = 1; row <= rows; row += 1) {
     for (let column = 1; column <= cols; column += 1) {
-      const lift = Boolean(seed && lifting && isSideCell(column, row, seed));
       const born = Boolean(growing && bornFromRow > 0 && row >= bornFromRow);
       const unborn = Boolean(shrinking && bornFromRow > 0 && row >= bornFromRow);
       const delay = born || unborn ? growStaggerMs(column, row, bornFromRow) : 0;
       cells.push(
         <div
           key={`${column}:${row}`}
-          className={`board-cell${lift ? " is-lift" : ""}${born ? " is-born" : ""}${unborn ? " is-unborn" : ""}`}
+          className={`board-cell${born ? " is-born" : ""}${unborn ? " is-unborn" : ""}`}
           style={{
             ["--c" as string]: column,
             ["--r" as string]: row,
@@ -522,6 +532,26 @@ export function BoardExpandProvider({
           data-r={row}
         />,
       );
+    }
+  }
+
+  if (seed && lifting) {
+    for (let row = 1; row <= seed.row + seed.height - 1; row += 1) {
+      for (let column = 1; column <= cols; column += 1) {
+        if (!isSideCell(column, row, seed)) continue;
+        cells.push(
+          <div
+            key={`lift:${column}:${row}`}
+            className="board-cell is-lift is-ghost"
+            style={{
+              ["--c" as string]: column,
+              ["--r" as string]: row,
+            }}
+            data-c={column}
+            data-r={row}
+          />,
+        );
+      }
     }
   }
 

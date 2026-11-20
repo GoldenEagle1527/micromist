@@ -10,7 +10,7 @@ import { useLocale } from "../i18n";
 
 export function HomePage() {
   const { locale, t } = useLocale();
-  const { openFromCard, currentSlug, fadeOthers } = useBoardExpand();
+  const { openFromCard, currentSlug, fadeOthers, fadeSeed } = useBoardExpand();
   const games = listedGames();
   const { cardStyle, places } = useBoardGrid(games.length);
 
@@ -24,7 +24,7 @@ export function HomePage() {
         <Link
           key={game.slug}
           to={`/play/${game.slug}`}
-          className={`card${fadeOthers && game.slug !== currentSlug ? " is-leaving" : ""}`}
+          className={`card${fadeOthers && (fadeSeed || game.slug !== currentSlug) ? " is-leaving" : ""}`}
           data-game={game.slug}
           style={cardStyle(index)}
           onClick={(event) => {

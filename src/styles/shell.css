@@ -588,10 +588,21 @@ button.card {
     inset 0 -1px 0 var(--board-line-strong);
 }
 
-.board-cell.is-lift {
+.board-cell.is-lift,
+.board-cell.is-ghost {
   z-index: 2;
+  pointer-events: none;
+}
+
+.board-cell.is-lift {
   transform: translateY(calc(-1 * var(--lift-rows, 2) * var(--board-major)));
   transition: transform 620ms var(--ease-soft);
+  background-color: color-mix(in srgb, var(--md-sys-color-surface) 88%, transparent);
+  box-shadow:
+    inset -1px 0 0 var(--board-line-strong),
+    inset 1px 0 0 var(--board-line-strong),
+    inset 0 -1px 0 var(--board-line-strong),
+    inset 0 1px 0 var(--board-line-strong);
 }
 
 .board-cell.is-born {
