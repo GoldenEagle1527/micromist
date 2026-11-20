@@ -1,41 +1,40 @@
-.game-shell-params {
-  display: grid;
-  gap: 0.7rem 1rem;
-  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
-  position: relative;
-  z-index: 1;
-}
-
-.game-shell-params label {
+.game-shell-param {
   display: flex;
   flex-direction: column;
-  gap: 0.3rem;
+  justify-content: center;
+  gap: 0.28rem;
+  min-height: 0;
   font-size: 0.88rem;
 }
 
-.game-shell-params select,
-.game-shell-params input {
+.game-shell-param select,
+.game-shell-param input {
   font: inherit;
   color: inherit;
-  background: var(--glass-bg);
-  border: 1px solid var(--glass-border);
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--board-line-strong);
   border-radius: 0;
-  padding: 0.4rem 0.5rem;
+  padding: 0.15rem 0;
+  outline: none;
+}
+
+.game-shell-param select:focus,
+.game-shell-param input:focus {
+  border-bottom-color: var(--md-sys-color-primary);
 }
 
 .game-shell-hud {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.75rem 1.1rem;
-  position: relative;
-  z-index: 1;
+  gap: 0.5rem 1rem;
 }
 
 .game-shell-hud-item strong {
   margin-left: 0.2rem;
 }
 
-.card.is-board {
+.board-ink.is-board {
   padding: 0;
   overflow: hidden;
 }
@@ -59,8 +58,6 @@
   margin: 0;
   font-weight: 700;
   letter-spacing: 0.08em;
-  position: relative;
-  z-index: 1;
 }
 
 .game-shell-seats,
@@ -70,17 +67,13 @@
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 0.35rem;
-  position: relative;
-  z-index: 1;
+  gap: 0.2rem;
 }
 
 .game-shell-records-label {
-  margin: 0.25rem 0;
+  margin: 0.1rem 0;
   font-size: 0.85rem;
   color: var(--md-sys-color-on-surface-variant);
-  position: relative;
-  z-index: 1;
 }
 
 .game-shell-records-group,
@@ -88,10 +81,8 @@
 .game-shell-records-group li {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.4rem 0.7rem;
+  gap: 0.3rem 0.6rem;
   align-items: baseline;
-  position: relative;
-  z-index: 1;
 }
 
 .game-shell-badge {

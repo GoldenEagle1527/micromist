@@ -2,7 +2,7 @@ import { Suspense, useEffect, useId, useRef, useState } from "react";
 import { NavLink, Outlet, useMatch } from "react-router";
 import { getGame } from "../games/catalog";
 import { useLocale } from "../i18n";
-import { BoardExpandProvider, useBoardExpand } from "./board-expand-context";
+import { BoardExpandProvider, BoardFloor, useBoardExpand } from "./board-expand-context";
 import { useTheme } from "../hooks/useTheme";
 import {
   isFloatEmbed,
@@ -350,22 +350,14 @@ function ShellFrame() {
       </nav>
 
       <main className={`main${isPlaying ? " is-playing" : ""}`}>
-        <div className="board-stage">
-          <div className="board-track">
-            {board.showHome ? (
-              <div className="board-page">
-                <HomePage />
-              </div>
-            ) : null}
-            {board.showPlay ? (
-              <div className="board-page">
-                <Suspense fallback={null}>
-                  <Outlet />
-                </Suspense>
-              </div>
-            ) : null}
-          </div>
-        </div>
+        <BoardFloor>
+          {board.showHome ? <HomePage /> : null}
+          {board.showPlay ? (
+            <Suspense fallback={null}>
+              <Outlet />
+            </Suspense>
+          ) : null}
+        </BoardFloor>
       </main>
 
       {board.showHome && !board.showPlay && !board.sliding ? (

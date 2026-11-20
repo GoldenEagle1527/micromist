@@ -7,15 +7,13 @@ import { GameShell } from "../platform/play";
 
 function MissingPlay({ slug }: { slug?: string }) {
   const { t } = useLocale();
-  const { boardStyle, cardStyle } = useBoardGrid(1);
+  const { cardStyle } = useBoardGrid(1);
   return (
-    <section className="grid" style={boardStyle}>
-      <section className="card is-static" style={cardStyle(0)}>
-        <h2>{t.playMissingTitle}</h2>
-        <p>
-          {t.playMissingBody(slug ?? "")} <Link to="/">{t.playMissingLink}</Link>
-        </p>
-      </section>
+    <section className="board-ink" style={cardStyle(0)}>
+      <h2>{t.playMissingTitle}</h2>
+      <p>
+        {t.playMissingBody(slug ?? "")} <Link to="/">{t.playMissingLink}</Link>
+      </p>
     </section>
   );
 }

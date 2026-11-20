@@ -1,4 +1,7 @@
-export const SLIDE_MS = 780;
+export const LIFT_MS = 620;
+export const GROW_MS = 820;
+export const SETTLE_MS = 480;
+export const LIFT_ROWS = 2;
 
 export function prefersReducedMotion(): boolean {
   return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -41,6 +44,12 @@ export function nextFrame(): Promise<void> {
   });
 }
 
+export function waitMs(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
 export type BoardPlace = {
   column: number;
   row: number;
@@ -59,6 +68,8 @@ export type BoardLayout = {
 export const BOARD_MAJOR_STEPS = 4;
 export const CARD_MAJOR_WIDTH = 3;
 export const CARD_MAJOR_HEIGHT = 2;
+export const START_MAJOR_WIDTH = 2;
+export const START_MAJOR_HEIGHT = 1;
 
 function cellOf(el: Element, fallback = 32): number {
   const value = parseFloat(getComputedStyle(el).getPropertyValue("--board-cell"));
@@ -116,13 +127,6 @@ export function measureBoard(shell: HTMLElement, main: HTMLElement): Omit<BoardL
   };
 }
 
-/** Viewport span used when the floor slides, snapped up to a whole number of major cells. */
-export function boardSlideSpan(shell: HTMLElement, main: HTMLElement): number {
-  const major = majorOf(shell);
-  const width = main.getBoundingClientRect().width;
-  return Math.max(major, Math.ceil(width / major) * major);
-}
-
 export function placeCards(cols: number, rows: number, count: number): BoardPlace[] {
   const gap = 1;
   const n = Math.max(1, count);
@@ -167,80 +171,72 @@ export function placeCards(cols: number, rows: number, count: number): BoardPlac
   return places;
 }
 
-/** Menu-style tiles fill the board like lobby cards. Play puts chrome to the side or top and the board in the remaining cells. */
-export function placeShellTiles(
-  cols: number,
-  rows: number,
-  tileCount: number,
-  boardIndex = -1,
-): BoardPlace[] {
-  if (boardIndex < 0 || boardIndex >= tileCount) {
-    return placeCards(cols, rows, tileCount);
-  }
-  const chromeCount = tileCount - 1;
-  const gap = 1;
-  let cardW = Math.min(CARD_MAJOR_WIDTH, Math.max(1, cols));
-  let cardH = Math.min(CARD_MAJOR_HEIGHT, Math.max(1, rows));
-  const boardMin = 2;
-  const canSide = chromeCount > 0 && cols >= cardW + gap + boardMin;
-  const chrome: BoardPlace[] = [];
-
-  if (canSide) {
-    const needH = chromeCount * cardH + gap * Math.max(0, chromeCount - 1);
-    if (needH > rows) {
-      const fit = Math.floor((rows - gap * Math.max(0, chromeCount - 1)) / Math.max(1, chromeCount));
-      cardH = Math.max(1, fit);
-    }
-    for (let i = 0; i < chromeCount; i += 1) {
-      chrome.push({
-        column: 1,
-        row: 1 + i * (cardH + gap),
-        width: cardW,
-        height: cardH,
-      });
-    }
-    const board: BoardPlace = {
-      column: cardW + gap + 1,
-      row: 1,
-      width: Math.max(1, cols - cardW - gap),
-      height: rows,
-    };
-    return [...chrome.slice(0, boardIndex), board, ...chrome.slice(boardIndex)];
-  }
-
-  if (chromeCount === 0) {
-    return [{ column: 1, row: 1, width: cols, height: rows }];
-  }
-
-  const topRows = Math.min(rows, cardH);
-  const packed = placeCards(cols, topRows, chromeCount);
-  const usedRows = packed.reduce((max, place) => Math.max(max, place.row + place.height - 1), 0);
-  let boardRow = usedRows + gap + 1;
-  let boardH = rows - usedRows - gap;
-  if (boardH < 1) {
-    boardRow = Math.max(1, rows);
-    boardH = 1;
-  }
-  const board: BoardPlace = {
-    column: 1,
-    row: boardRow,
-    width: cols,
-    height: boardH,
-  };
-  return [...packed.slice(0, boardIndex), board, ...packed.slice(boardIndex)];
-}
-
 export function layoutBoard(shell: HTMLElement, main: HTMLElement, count: number): BoardLayout {
   const base = measureBoard(shell, main);
   return { ...base, places: placeCards(base.cols, base.rows, count) };
 }
 
-export function layoutShellBoard(
-  shell: HTMLElement,
-  main: HTMLElement,
-  tileCount: number,
-  boardIndex = -1,
-): BoardLayout {
-  const base = measureBoard(shell, main);
-  return { ...base, places: placeShellTiles(base.cols, base.rows, tileCount, boardIndex) };
+export type PlayPieceSize = {
+  width: number;
+  height: number;
+  gapBefore?: number;
+};
+
+export function placePlayPieces(
+  cols: number,
+  pieces: PlayPieceSize[],
+  originColumn = 1,
+  originRow = 1,
+): BoardPlace[] {
+  const places: BoardPlace[] = [];
+  if (cols < 1) return places;
+  let column = originColumn;
+  let row = originRow;
+  let rowHeight = 0;
+  for (const piece of pieces) {
+    const width = Math.max(1, Math.min(piece.width, cols));
+    const height = Math.max(1, piece.height);
+    const gap = Math.max(0, piece.gapBefore ?? 0);
+    if (gap > 0) {
+      if (rowHeight > 0) {
+        row += rowHeight + gap;
+        column = originColumn;
+        rowHeight = 0;
+      } else if (row > originRow) {
+        row += gap;
+      }
+    }
+    if (column > originColumn && column + width - 1 > originColumn + cols - 1) {
+      column = originColumn;
+      row += rowHeight;
+      rowHeight = 0;
+    }
+    places.push({ column, row, width, height });
+    column += width;
+    rowHeight = Math.max(rowHeight, height);
+    if (column > originColumn + cols - 1) {
+      column = originColumn;
+      row += rowHeight;
+      rowHeight = 0;
+    }
+  }
+  return places;
+}
+
+export function extentRows(places: BoardPlace[], originRow = 1): number {
+  let maxRow = originRow;
+  for (const place of places) {
+    maxRow = Math.max(maxRow, place.row + place.height - 1);
+  }
+  return Math.max(1, maxRow - originRow + 1);
+}
+
+export function isSideCell(column: number, row: number, seed: BoardPlace): boolean {
+  const beside = column < seed.column || column >= seed.column + seed.width;
+  const inLiftBand = row <= seed.row + seed.height - 1;
+  return beside && inLiftBand;
+}
+
+export function growStaggerMs(column: number, row: number, bornFromRow: number): number {
+  return Math.max(0, row - bornFromRow) * 70 + Math.max(0, column - 1) * 28;
 }
