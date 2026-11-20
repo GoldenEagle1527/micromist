@@ -235,3 +235,30 @@
 .gomoku-actions button {
   min-width: 5.5rem;
 }
+
+.gomoku-room-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+}
+
+.gomoku-seat-line {
+  font-variant-numeric: tabular-nums;
+}
+
+.gomoku-actions a.ghost {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+  box-sizing: border-box;
+  min-height: 2.5rem;
+  padding: 0.45rem 0.9rem;
+  border-radius: var(--md-sys-shape-corner-sm);
+  border: 1px solid var(--md-sys-color-outline-variant);
+  color: inherit;
+}
+
+.gomoku-actions a.ghost:hover {
+  background: color-mix(in srgb, var(--md-sys-color-on-surface) 8%, transparent);
+}

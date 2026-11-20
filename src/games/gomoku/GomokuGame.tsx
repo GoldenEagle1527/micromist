@@ -1,22 +1,23 @@
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { useSearchParams } from "react-router";
 import "./gomoku.css";
 import { useLocale } from "../../i18n";
 import { useLocalGamePersist } from "../local-persist";
 import { chooseMove, type Difficulty } from "./ai";
 import {
-  SIZE,
-  colOf,
   emptyState,
   isOver,
   isValidState,
   play,
-  rowOf,
   undo,
   type GameState,
   type Player,
 } from "./engine";
+import { GomokuBoard } from "./GomokuBoard";
+import { GomokuRoom } from "./GomokuRoom";
+import { generateRoomCode } from "./online";
 
-type Opponent = "ai" | "local";
+type Opponent = "ai" | "local" | "online";
 type Screen = "setup" | "playing";
 type ConfirmKind = "restart" | "setup" | null;
 
@@ -31,15 +32,6 @@ type Persist = {
   settings: Settings;
   state: GameState;
 };
-
-const COLS = "ABCDEFGHIJKLMNO";
-const STARS = new Set([
-  `${3}-${3}`,
-  `${3}-11`,
-  `${7}-${7}`,
-  `${11}-${3}`,
-  `${11}-11`,
-]);
 
 const DEFAULT_SETTINGS: Settings = {
   opponent: "ai",
@@ -65,12 +57,21 @@ function statusText(
 }
 
 export function GomokuGame() {
+  const [searchParams] = useSearchParams();
+  const roomCode = (searchParams.get("room") ?? "").trim().toLowerCase();
+  if (/^[a-z0-9]+$/.test(roomCode)) {
+    return <GomokuRoom roomCode={roomCode} />;
+  }
+  return <GomokuLocalGame />;
+}
+
+function GomokuLocalGame() {
   const { t } = useLocale();
   const g = t.gomoku;
+  const [, setSearchParams] = useSearchParams();
   const [screen, setScreen] = useState<Screen>("setup");
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
   const [state, setState] = useState<GameState>(() => emptyState());
-  const [hover, setHover] = useState<number | null>(null);
   const [thinking, setThinking] = useState(false);
   const [confirm, setConfirm] = useState<ConfirmKind>(null);
   const confirmTitleId = useId();
@@ -79,14 +80,19 @@ export function GomokuGame() {
   const aiTimer = useRef<number | null>(null);
 
   const persistState: Persist | null =
-    screen === "playing"
+    screen === "playing" && settings.opponent !== "online"
       ? { screen: "playing", settings, state }
       : null;
 
   useLocalGamePersist<Persist>("gomoku", persistState, {
-    shouldSave: (s) => s.screen === "playing" && s.state.moves.length > 0 && s.state.winner === 0,
+    shouldSave: (s) =>
+      s.screen === "playing" &&
+      s.settings.opponent !== "online" &&
+      s.state.moves.length > 0 &&
+      s.state.winner === 0,
     onHydrate: (data) => {
       if (data.screen !== "playing" || !isValidState(data.state)) return;
+      if (data.settings?.opponent === "online") return;
       const nextSettings: Settings = {
         opponent: data.settings?.opponent === "local" ? "local" : "ai",
         difficulty:
@@ -97,7 +103,6 @@ export function GomokuGame() {
       };
       setSettings(nextSettings);
       setState(data.state);
-      setHover(null);
       setConfirm(null);
       setScreen("playing");
     },
@@ -156,7 +161,6 @@ export function GomokuGame() {
   const startGame = useCallback(() => {
     clearAiTimer();
     setState(emptyState());
-    setHover(null);
     setConfirm(null);
     setScreen("playing");
   }, [clearAiTimer]);
@@ -164,14 +168,12 @@ export function GomokuGame() {
   const doRestart = useCallback(() => {
     clearAiTimer();
     setState(emptyState());
-    setHover(null);
     setConfirm(null);
   }, [clearAiTimer]);
 
   const doBackToSetup = useCallback(() => {
     clearAiTimer();
     setState(emptyState());
-    setHover(null);
     setConfirm(null);
     setScreen("setup");
   }, [clearAiTimer]);
@@ -181,7 +183,6 @@ export function GomokuGame() {
     clearAiTimer();
     const steps = settings.opponent === "ai" ? Math.min(2, state.moves.length) : 1;
     setState((current) => undo(current, steps));
-    setHover(null);
   }, [thinking, state.moves.length, settings.opponent, clearAiTimer]);
 
   const onPointClick = useCallback(
@@ -191,27 +192,13 @@ export function GomokuGame() {
       const next = play(state, index);
       if (!next) return;
       setState(next);
-      setHover(null);
     },
     [thinking, confirm, state, settings],
   );
 
-  const lastMove = state.moves.length ? state.moves[state.moves.length - 1] : null;
-  const winSet = useMemo(() => new Set(state.winLine ?? []), [state.winLine]);
-  const canHover =
+  const canPlay =
     !thinking && !confirm && !isOver(state) &&
     (settings.opponent !== "ai" || state.turn === settings.humanColor);
-
-  const lineNodes = useMemo(() => {
-    const n = SIZE;
-    const lines: string[] = [];
-    for (let i = 0; i < n; i++) {
-      const p = (i / (n - 1)) * 100;
-      lines.push(`M 0 ${p} H 100`);
-      lines.push(`M ${p} 0 V 100`);
-    }
-    return lines;
-  }, []);
 
   if (screen === "setup") {
     return (
@@ -224,15 +211,17 @@ export function GomokuGame() {
               {g.mode}
               <select
                 value={settings.opponent}
-                onChange={(e) =>
+                onChange={(e) => {
+                  const value = e.target.value;
                   setSettings((s) => ({
                     ...s,
-                    opponent: e.target.value === "local" ? "local" : "ai",
-                  }))
-                }
+                    opponent: value === "local" ? "local" : value === "online" ? "online" : "ai",
+                  }));
+                }}
               >
                 <option value="ai">{g.vsAi}</option>
                 <option value="local">{g.hotseat}</option>
+                <option value="online">{g.online}</option>
               </select>
             </label>
             {settings.opponent === "ai" ? (
@@ -272,9 +261,19 @@ export function GomokuGame() {
             ) : null}
           </div>
           <div className="row">
-            <button type="button" className="primary" onClick={startGame}>
-              {g.start}
-            </button>
+            {settings.opponent === "online" ? (
+              <button
+                type="button"
+                className="primary"
+                onClick={() => setSearchParams({ room: generateRoomCode() })}
+              >
+                {g.createRoom}
+              </button>
+            ) : (
+              <button type="button" className="primary" onClick={startGame}>
+                {g.start}
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -287,72 +286,17 @@ export function GomokuGame() {
         <p className="gomoku-status">{statusText(state, settings, thinking, g)}</p>
       </div>
 
-      <div className="gomoku-board-wrap">
-        <div
-          className="gomoku-board"
-          style={{ ["--gomoku-n" as string]: SIZE }}
-          role="grid"
-          aria-label={g.boardAria}
-          onMouseLeave={() => setHover(null)}
-        >
-          <div className="gomoku-inner">
-          <svg className="gomoku-lines" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
-            {lineNodes.map((d) => (
-              <path key={d} d={d} fill="none" stroke="rgba(40, 24, 8, 0.55)" strokeWidth="0.28" />
-            ))}
-            {[...STARS].map((key) => {
-              const [r, c] = key.split("-").map(Number);
-              const x = (c / (SIZE - 1)) * 100;
-              const y = (r / (SIZE - 1)) * 100;
-              return <circle key={key} cx={x} cy={y} r="0.85" fill="rgba(40, 24, 8, 0.7)" />;
-            })}
-          </svg>
-          <div className="gomoku-points">
-            {state.board.map((stone, index) => {
-              const r = rowOf(index);
-              const c = colOf(index);
-              const colLabel = COLS[c] ?? String(c + 1);
-              const showGhost = canHover && hover === index && stone === 0;
-              const ghostColor = state.turn;
-              return (
-                <button
-                  key={index}
-                  type="button"
-                  role="gridcell"
-                  className="gomoku-point"
-                  disabled={!canHover || stone !== 0}
-                  aria-label={
-                    stone === 0
-                      ? g.emptyAria(r + 1, colLabel)
-                      : g.stoneAria(stone === 1 ? g.black : g.white, r + 1, colLabel)
-                  }
-                  onClick={() => onPointClick(index)}
-                  onMouseEnter={() => setHover(index)}
-                  onFocus={() => setHover(index)}
-                >
-                  {stone !== 0 ? (
-                    <span
-                      className={[
-                        "gomoku-stone",
-                        stone === 1 ? "is-black" : "is-white",
-                        lastMove === index ? "is-last" : "",
-                        winSet.has(index) ? "is-win" : "",
-                      ]
-                        .filter(Boolean)
-                        .join(" ")}
-                    />
-                  ) : showGhost ? (
-                    <span
-                      className={`gomoku-ghost gomoku-stone ${ghostColor === 1 ? "is-black" : "is-white"}`}
-                    />
-                  ) : null}
-                </button>
-              );
-            })}
-          </div>
-          </div>
-        </div>
-      </div>
+      <GomokuBoard
+        state={state}
+        canPlay={canPlay}
+        ghostColor={state.turn}
+        boardAria={g.boardAria}
+        emptyAria={g.emptyAria}
+        stoneAria={g.stoneAria}
+        black={g.black}
+        white={g.white}
+        onPointClick={onPointClick}
+      />
 
       <div className="gomoku-actions">
         <button
@@ -384,7 +328,6 @@ export function GomokuGame() {
       {confirm ? (
         <div
           className="modal-backdrop"
-          role="presentation"
           onClick={() => setConfirm(null)}
         >
           <div

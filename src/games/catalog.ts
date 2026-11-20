@@ -55,13 +55,13 @@ export const games: GameMeta[] = [
   },
   {
     slug: "gomoku",
-    mode: "single",
+    mode: "single-online",
     title: { zh: "五子棋", en: "Gomoku" },
     blurb: {
-      zh: "十五路棋盘，黑先，五子连珠。可热座双人，或对战本机 AI。",
-      en: "A 15×15 board. Black goes first; five in a row wins. Play hotseat or against a built-in AI.",
+      zh: "十五路棋盘，黑先，五子连珠。可热座、对战本机 AI，或分享链接联机。",
+      en: "A 15×15 board. Black goes first; five in a row wins. Play hotseat, against a built-in AI, or online with a share link.",
     },
-    badge: { zh: "单机", en: "Offline" },
+    badge: { zh: "单机/联机", en: "Offline / Online" },
     audience: "staging",
     preview: previewGomoku,
     loadPlay: loadOnce(() => import("./gomoku/play").then((m) => m.playModule)),

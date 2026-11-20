@@ -34,6 +34,34 @@ export type GomokuDict = {
   stoneAria: (color: string, row: number, col: string) => string;
   black: string;
   white: string;
+  online: string;
+  createRoom: string;
+  roomCodeLabel: (code: string) => string;
+  copyLink: string;
+  linkCopied: string;
+  copyFailed: string;
+  claimBlack: string;
+  claimWhite: string;
+  seatTaken: string;
+  seatEmpty: string;
+  onlineNow: string;
+  offlineNow: string;
+  you: string;
+  waitingSeats: string;
+  waitingBlack: string;
+  waitingWhite: string;
+  youAreBlack: string;
+  youAreWhite: string;
+  watching: string;
+  roomConnecting: string;
+  roomClosed: string;
+  opponentLeft: string;
+  yourTurn: string;
+  opponentTurn: string;
+  resign: string;
+  rematch: string;
+  rematchWaiting: string;
+  leaveRoom: string;
 };
 
 export const gomokuZh: GomokuDict = {
@@ -72,6 +100,34 @@ export const gomokuZh: GomokuDict = {
   stoneAria: (color, row, col) => `${color} ${col}${row}`,
   black: "黑棋",
   white: "白棋",
+  online: "联机对战",
+  createRoom: "创建房间",
+  roomCodeLabel: (code) => `房间 ${code}`,
+  copyLink: "复制邀请链接",
+  linkCopied: "链接已复制",
+  copyFailed: "复制失败，请手动复制地址栏链接",
+  claimBlack: "执黑",
+  claimWhite: "执白",
+  seatTaken: "已有人坐",
+  seatEmpty: "空位",
+  onlineNow: "在线",
+  offlineNow: "离线",
+  you: "你",
+  waitingSeats: "双方入座后开局，黑棋先手。",
+  waitingBlack: "等待黑棋入座…",
+  waitingWhite: "等待白棋入座…",
+  youAreBlack: "你执黑棋。",
+  youAreWhite: "你执白棋。",
+  watching: "观战中。",
+  roomConnecting: "正在进入房间…",
+  roomClosed: "房间已关闭。",
+  opponentLeft: "对方暂时离开，可等待重连。",
+  yourTurn: "轮到你落子",
+  opponentTurn: "等待对方落子",
+  resign: "认输",
+  rematch: "再来一局",
+  rematchWaiting: "已申请再来一局，等待对方同意",
+  leaveRoom: "离开房间",
 };
 
 export const gomokuEn: GomokuDict = {
@@ -111,4 +167,32 @@ export const gomokuEn: GomokuDict = {
   stoneAria: (color, row, col) => `${color} at ${col}${row}`,
   black: "Black",
   white: "White",
+  online: "Online",
+  createRoom: "Create room",
+  roomCodeLabel: (code) => `Room ${code}`,
+  copyLink: "Copy invite link",
+  linkCopied: "Link copied",
+  copyFailed: "Couldn't copy. Paste the address-bar link instead.",
+  claimBlack: "Take Black",
+  claimWhite: "Take White",
+  seatTaken: "Taken",
+  seatEmpty: "Open",
+  onlineNow: "online",
+  offlineNow: "offline",
+  you: "You",
+  waitingSeats: "The game starts once both seats are taken. Black moves first.",
+  waitingBlack: "Waiting for Black to sit…",
+  waitingWhite: "Waiting for White to sit…",
+  youAreBlack: "You have Black.",
+  youAreWhite: "You have White.",
+  watching: "Spectating.",
+  roomConnecting: "Joining the room…",
+  roomClosed: "This room has closed.",
+  opponentLeft: "Your opponent left temporarily and may reconnect.",
+  yourTurn: "Your move",
+  opponentTurn: "Waiting for the other player",
+  resign: "Resign",
+  rematch: "Rematch",
+  rematchWaiting: "Rematch requested — waiting for the other player",
+  leaveRoom: "Leave room",
 };
