@@ -107,6 +107,10 @@
   margin: 0 auto;
 }
 
+.game-shell-board-host > .gomoku-board-wrap {
+  width: 100%;
+}
+
 .gomoku-board {
   --gomoku-n: 15;
   position: relative;
