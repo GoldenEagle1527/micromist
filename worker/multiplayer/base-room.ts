@@ -9,14 +9,18 @@
 import { DurableObject } from "cloudflare:workers";
 import {
   isSeatedSeat,
+  normalizePlayerKind,
   parseRoomId,
+  playerKindFromJoin,
   type Phase,
   type Role,
   type Seat,
   type WireMsg,
 } from "../../shared/multiplayer";
 import type { GameRoomAdapter, RoomHost } from "./adapter";
+import { overlayLiveSockets, replacePlayersFromSnapshot } from "./presence";
 import { getGameAdapterFactory } from "./registry";
+import { decideClaim, type PlaySeat } from "./seating";
 import type { JoinResult, PersistedRoom, PlayerRecord, SessionAttachment } from "./types";
 
 export type { PlayerRecord, SessionAttachment, JoinResult, PersistedRoom };
@@ -43,36 +47,27 @@ export class GameRoom extends DurableObject<Env> {
       this.roomCode = parsed.code;
     }
 
+    // Snapshot reload marks every seat offline. Overlay hibernated sockets
+    // after that await, still inside this gate, so a later guest join sees
+    // the host's open socket. Scanning getWebSockets() before restore loses
+    // the pass: restore() clears the map and writes connected: false.
     this.ready = this.ctx.blockConcurrencyWhile(async () => {
       await this.restore();
+      this.attachHibernatedSockets();
       this.ensureAdapter();
     });
 
-    for (const ws of this.ctx.getWebSockets()) {
-      const attachment = ws.deserializeAttachment() as SessionAttachment | undefined;
-      if (!attachment?.playerId) continue;
-      this.sessions.set(ws, { ...attachment });
-      const existing = this.players.get(attachment.playerId);
-      if (existing) {
-        existing.connected = true;
-        existing.seat = attachment.seat;
-        existing.role = attachment.role;
-        existing.name = attachment.name || existing.name;
-      } else {
-        this.players.set(attachment.playerId, {
-          playerId: attachment.playerId,
-          name: attachment.name || "Player",
-          seat: attachment.seat,
-          role: attachment.role,
-          ready: false,
-          rematch: false,
-          connected: true,
-        });
-        if (attachment.role === "host") this.hostId = attachment.playerId;
-      }
-    }
-
     this.ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair("ping", "pong"));
+  }
+
+  /** Live sockets win over the persisted `connected: false` flag. */
+  private attachHibernatedSockets(): void {
+    const open = [...this.ctx.getWebSockets()].map((socket) => ({
+      socket,
+      attachment: socket.deserializeAttachment() as SessionAttachment | undefined,
+    }));
+    const newHostId = overlayLiveSockets(this.players, this.sessions, open);
+    if (newHostId) this.hostId = newHostId;
   }
 
   private ensureAdapter(): void {
@@ -127,11 +122,9 @@ export class GameRoom extends DurableObject<Env> {
     if (snap.roomCode) this.roomCode = snap.roomCode;
     this.phase = snap.phase ?? "lobby";
     this.hostId = snap.hostId ?? null;
-    this.players.clear();
-    for (const p of snap.players ?? []) {
-      // Rehydrate seats; connected flags refreshed from live sockets above/below.
-      this.players.set(p.playerId, { ...p, connected: false, ready: false });
-    }
+    // Seats survive hibernation. Presence does not — attachHibernatedSockets()
+    // sets connected from sockets that are still open.
+    replacePlayersFromSnapshot(this.players, snap.players ?? []);
     this.ensureAdapter();
     this.adapter?.hydrate(snap.adapter);
   }
@@ -184,6 +177,7 @@ export class GameRoom extends DurableObject<Env> {
       seat: "spectator",
       role: "spectator",
       name: "",
+      kind: "human",
     };
     server.serializeAttachment(empty);
     this.sessions.set(server, { ...empty });
@@ -227,13 +221,20 @@ export class GameRoom extends DurableObject<Env> {
         this.send(ws, "error", { message: "Config locked after start" });
         return;
       }
-      if (session.role !== "host") {
+      if (!this.canConfigure(session)) {
         this.send(ws, "error", { message: "Only host can set config" });
         return;
       }
       if (!this.adapter.onSetConfig(ws, session, payload)) {
         this.send(ws, "error", { message: "Config not supported" });
       }
+      return;
+    }
+    if (
+      this.adapter.explicitSeating &&
+      (msg.type === "claim_seat" || msg.type === "sit")
+    ) {
+      this.handleClaimSeat(ws, payload);
       return;
     }
 
@@ -338,14 +339,20 @@ export class GameRoom extends DurableObject<Env> {
     }
 
     const existing = this.players.get(playerId);
-    if (existing && isSeatedSeat(existing.seat)) {
+    const kind = playerKindFromJoin(payload.kind, existing?.kind);
+    // Same playerId is the same person: red, blue, or spectator. A new id is not.
+    if (existing) {
       existing.name = name;
       existing.connected = true;
+      existing.kind = kind;
       const role: Role =
-        existing.role === "host" || existing.role === "guest" ? existing.role : "guest";
+        existing.role === "host" || existing.role === "guest" || existing.role === "spectator"
+          ? existing.role
+          : "spectator";
       existing.role = role;
-      this.attach(ws, { playerId, seat: existing.seat, role, name });
-      this.send(ws, "welcome", { playerId, seat: existing.seat, role });
+      this.attach(ws, { playerId, seat: existing.seat, role, name, kind });
+      this.send(ws, "welcome", this.welcomeBody(playerId, existing.seat, role, kind));
+      this.adapter.onSeated?.(ws, existing, { reclaimed: true });
       this.sendRoom(ws);
       if (this.phase === "playing" || this.phase === "over") {
         this.adapter.onReclaimSync(ws, existing);
@@ -356,8 +363,10 @@ export class GameRoom extends DurableObject<Env> {
       return;
     }
 
-    const assigned = this.assignNewSeat(playerId);
-    this.players.set(playerId, {
+    const assigned = this.adapter.explicitSeating
+      ? ({ seat: "spectator", role: "spectator" } as JoinResult)
+      : this.assignNewSeat(playerId);
+    const player: PlayerRecord = {
       playerId,
       name,
       seat: assigned.seat,
@@ -365,18 +374,112 @@ export class GameRoom extends DurableObject<Env> {
       ready: false,
       rematch: false,
       connected: true,
-    });
-    if (assigned.role === "host") this.hostId = playerId;
+      kind,
+    };
+    this.players.set(playerId, player);
+    // First person in the room may set config even while they are still a spectator.
+    if (!this.hostId) this.hostId = playerId;
 
     this.attach(ws, {
       playerId,
       seat: assigned.seat,
       role: assigned.role,
       name,
+      kind,
     });
-    this.send(ws, "welcome", { playerId, seat: assigned.seat, role: assigned.role });
+    this.send(ws, "welcome", this.welcomeBody(playerId, assigned.seat, assigned.role, kind));
+    this.adapter.onSeated?.(ws, player, { reclaimed: false });
+    this.sendRoom(ws);
+    if (this.phase === "playing" || this.phase === "over") {
+      this.adapter.onReclaimSync(ws, player);
+    }
     this.broadcastRoom();
     if (this.phase === "lobby") this.adapter.tryStartGame();
+    void this.persist();
+  }
+
+  /**
+   * Config host is `hostId` (the first connection's playerId), not the red seat
+   * and not whoever called create_room. Explosive-chess claim_seat sets role
+   * "host" only for that same id, so a blue seat can be the config host and a
+   * red seat can be a guest. Claiming a color does not move hostId. The wire
+   * field `canConfig` is hostId === playerId. A guest (canConfig false) cannot
+   * set config. Phase must still be lobby; the second claimed seat starts the
+   * match and locks config for everyone, including the config host.
+   */
+  private canConfigure(session: SessionAttachment): boolean {
+    return session.role === "host" || session.playerId === this.hostId;
+  }
+
+  private welcomeBody(playerId: string, seat: Seat, role: Role, kind: SessionAttachment["kind"]) {
+    return {
+      playerId,
+      seat,
+      role,
+      kind: normalizePlayerKind(kind),
+      canConfig: this.hostId === playerId,
+    };
+  }
+
+  private handleClaimSeat(ws: WebSocket, payload: Record<string, unknown>) {
+    const session = this.requireJoined(ws);
+    if (!session) return;
+    const raw = typeof payload.seat === "string" ? payload.seat.trim().toLowerCase() : "";
+    const allowed = this.adapter?.playSeats ?? (["red", "blue"] as const);
+    if (!allowed.includes(raw as PlaySeat)) {
+      this.send(ws, "error", {
+        message:
+          allowed.length === 2 && allowed[0] === "red" && allowed[1] === "blue"
+            ? "seat must be red or blue"
+            : `seat must be ${allowed.join(" or ")}`,
+      });
+      return;
+    }
+    const seat = raw as PlaySeat;
+    const player = this.players.get(session.playerId);
+    if (!player) {
+      this.send(ws, "error", { message: "Join first" });
+      return;
+    }
+    const decision = decideClaim({
+      phase: this.phase,
+      hostId: this.hostId,
+      player,
+      seat,
+      players: this.players.values(),
+    });
+    if (!decision.ok) {
+      this.send(ws, "error", { message: decision.message });
+      return;
+    }
+    if (decision.changed) {
+      player.seat = decision.seat;
+      player.role = decision.role;
+      player.ready = false;
+      player.rematch = false;
+    }
+    this.refreshAttachmentSeat(player.playerId, player.seat, player.role);
+    this.send(ws, "seated", {
+      playerId: player.playerId,
+      name: player.name,
+      seat: player.seat,
+      role: player.role,
+      kind: normalizePlayerKind(player.kind),
+      changed: decision.changed,
+      canConfig: this.hostId === player.playerId,
+      you: {
+        playerId: player.playerId,
+        name: player.name,
+        seat: player.seat,
+        role: player.role,
+        kind: normalizePlayerKind(player.kind),
+        color: player.seat === "red" || player.seat === "blue" ? player.seat : null,
+        canConfig: this.hostId === player.playerId,
+      },
+    });
+    this.adapter?.onSeatClaimed?.(ws, player, { changed: decision.changed });
+    this.broadcastRoom();
+    if (decision.changed && this.phase === "lobby") this.adapter?.tryStartGame();
     void this.persist();
   }
 
@@ -405,17 +508,13 @@ export class GameRoom extends DurableObject<Env> {
     this.sessions.set(ws, attachment);
   }
 
-  refreshAttachmentSeat(playerId: string, seat: Seat) {
+  refreshAttachmentSeat(playerId: string, seat: Seat, role?: Role) {
     for (const [ws, session] of this.sessions) {
       if (session.playerId !== playerId) continue;
-      const next = { ...session, seat };
+      const next = { ...session, seat, role: role ?? session.role };
       ws.serializeAttachment(next);
       this.sessions.set(ws, next);
-      this.send(ws, "welcome", {
-        playerId,
-        seat,
-        role: next.role,
-      });
+      this.send(ws, "welcome", this.welcomeBody(playerId, next.seat, next.role, next.kind));
     }
   }
 
@@ -445,6 +544,7 @@ export class GameRoom extends DurableObject<Env> {
         ready: p.ready,
         rematch: p.rematch,
         connected: p.connected,
+        kind: normalizePlayerKind(p.kind),
       }));
     return {
       players,

@@ -1,0 +1,283 @@
+/* Generic /play chrome. Games only style the board they bind into the host. */
+
+.game-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  width: 100%;
+}
+
+.game-shell-is-play {
+  flex: 1;
+  min-height: 0;
+  gap: 0.45rem;
+  overscroll-behavior: none;
+}
+
+.game-shell-setup {
+  width: min(26rem, 100%);
+  margin: 0.5rem auto 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  align-items: stretch;
+}
+
+.game-shell-setup > .panel {
+  width: 100%;
+}
+
+.game-shell-setup .panel h2 {
+  text-align: center;
+}
+
+.game-shell-setup .panel > .hint {
+  text-align: center;
+}
+
+.game-shell-back {
+  align-self: flex-start;
+  margin-bottom: 0.35rem;
+}
+
+.game-shell-menu {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  width: 100%;
+  margin: 0.35rem 0 0;
+}
+
+.game-shell-menu button {
+  width: 100%;
+  justify-content: center;
+}
+
+.game-shell-params {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  width: 100%;
+  margin-top: 0.35rem;
+}
+
+.game-shell-param {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.88rem;
+  font-weight: 500;
+  color: var(--md-sys-color-on-surface-variant);
+  width: 100%;
+  min-width: 0;
+}
+
+.game-shell-param select,
+.game-shell-param input {
+  width: 100%;
+  font: inherit;
+  background: var(--md-sys-color-surface-container-highest);
+  color: var(--md-sys-color-on-surface);
+  border: 1px solid var(--md-sys-color-outline-variant);
+  border-radius: var(--md-sys-shape-corner-sm);
+  padding: 0.55rem 0.7rem;
+  min-height: 2.5rem;
+  outline: none;
+}
+
+.game-shell-param select:focus,
+.game-shell-param input:focus {
+  outline: 2px solid color-mix(in srgb, var(--md-sys-color-primary) 55%, transparent);
+  outline-offset: 1px;
+  border-color: var(--md-sys-color-primary);
+}
+
+.game-shell-param select:disabled,
+.game-shell-param input:disabled {
+  opacity: 0.65;
+}
+
+.game-shell-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  width: 100%;
+  margin: 0.85rem 0 0;
+}
+
+.game-shell-setup .game-shell-actions {
+  flex-direction: column;
+}
+
+.game-shell-setup .game-shell-actions button {
+  width: 100%;
+  justify-content: center;
+}
+
+.game-shell-play {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  width: 100%;
+  flex: 1;
+  min-height: 0;
+  margin: 0;
+  padding: 0.35rem 0.6rem calc(0.45rem + var(--safe-bottom, 0px));
+  box-sizing: border-box;
+}
+
+.game-shell-hud {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.5rem 1rem;
+  flex-shrink: 0;
+}
+
+.game-shell-hud-item {
+  font-size: 0.95rem;
+  color: var(--md-sys-color-on-surface-variant);
+}
+
+.game-shell-hud-item strong {
+  margin-left: 0.2rem;
+  font-weight: 650;
+  color: var(--md-sys-color-on-surface);
+  font-variant-numeric: tabular-nums;
+}
+
+.game-shell-status {
+  margin: 0;
+  text-align: center;
+  font-size: 1.05rem;
+  font-weight: 650;
+  color: var(--md-sys-color-on-surface);
+  flex-shrink: 0;
+}
+
+.game-shell-board-host {
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: 0;
+  margin: 0;
+  display: flex;
+  align-items: stretch;
+  justify-content: stretch;
+  overflow: hidden;
+}
+
+.game-shell-board-host canvas {
+  display: block;
+}
+
+.game-shell-board-host:not(.is-pan) canvas {
+  max-width: 100%;
+  max-height: 100%;
+}
+
+.grid-board-viewport {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  position: relative;
+  display: grid;
+  place-items: center;
+}
+
+.grid-board-viewport.is-pan {
+  display: block;
+  touch-action: none;
+}
+
+.grid-board-viewport.is-pan canvas {
+  position: absolute;
+  left: 0;
+  top: 0;
+  max-width: none;
+  max-height: none;
+  transform-origin: 0 0;
+}
+
+.game-shell-play .game-shell-actions {
+  justify-content: center;
+  margin-top: 0.15rem;
+  flex-shrink: 0;
+}
+
+.game-shell-play .game-shell-room {
+  flex-shrink: 0;
+  margin-top: 0;
+}
+
+.game-shell-room {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-top: 0.75rem;
+}
+
+.game-shell-room h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.game-shell-room-code {
+  margin: 0;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.game-shell-seats,
+.game-shell-records-group ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.game-shell-records {
+  margin-top: 1rem;
+}
+
+.game-shell-records h3 {
+  margin: 0 0 0.35rem;
+  font-size: 1rem;
+}
+
+.game-shell-records-label {
+  margin: 0.1rem 0;
+  font-size: 0.85rem;
+  color: var(--md-sys-color-on-surface-variant);
+}
+
+.game-shell-records-group,
+.game-shell-seats li,
+.game-shell-records-group li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem 0.6rem;
+  align-items: baseline;
+}
+
+.game-shell-badge {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--md-sys-color-primary);
+}
+
+.game-shell-invite {
+  width: 100%;
+  justify-content: center;
+  margin-top: 0.65rem;
+}
+
+@media (min-width: 720px) {
+  .game-shell-setup {
+    width: min(28rem, 100%);
+    margin-top: 1.25rem;
+  }
+}

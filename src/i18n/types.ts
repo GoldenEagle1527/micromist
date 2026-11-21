@@ -1,5 +1,6 @@
 import type { ChromaDict } from "../games/chroma-slide/i18n";
 import type { ExplosiveDict } from "../games/explosive-chess/i18n";
+import type { GomokuDict } from "../games/gomoku/i18n";
 
 export type Locale = "zh" | "en";
 
@@ -34,6 +35,7 @@ export type Dict = {
   floatAdBadge: string;
   floatAdTitle: string;
   playCta: string;
+  lobbyBack: string;
   notFoundTitle: string;
   notFoundBody: string;
   notFoundLink: string;
@@ -60,6 +62,7 @@ export type Dict = {
   storageLegacyNote: string;
   explosive: ExplosiveDict;
   chroma: ChromaDict;
+  gomoku: GomokuDict;
 };
 
 export type GameLocaleFields = {

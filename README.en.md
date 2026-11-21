@@ -31,7 +31,7 @@ The client also ships light i18n (one language at a time) and light / dark / sys
 
 Workers Static Assets requests are **free and unlimited**. SPA routes that only serve `index.html` / JS / CSS do not invoke the Worker.
 
-The thin Worker mainly handles `/ws` and `/ws/*` (`run_worker_first`); those invocations count toward Workers Free daily request and CPU limits.
+The thin Worker handles `/ws`, `/ws/*`, and the explosive-chess Agent Guide at `/agent-guide` and `/agent-guide/*` (`run_worker_first`). `/mcp` and `/mcp/*` are intercepted and return 404: this host does not serve an MCP server. Those invocations count toward Workers Free daily request and CPU limits. The guide must be the Worker body, not the SPA shell.
 
 Durable Objects are available on the free plan when created with **`new_sqlite_classes`**. This repo already does that. SQLite is only the DO runtime backend (e.g. short-lived room persistence across hibernation), **not** a user or history store. Empty rooms should hibernate and recycle.
 
@@ -71,6 +71,10 @@ Runs `vite build` then `wrangler deploy`. You need a Cloudflare account and `wra
 
 WebSocket: `GET /ws/:roomId` with `Upgrade: websocket` → `GameRoom`.
 
+Explosive-chess agent play uses the same room WebSocket as humans. Official Node and Python clients (one process keeps the WebSocket open and serves HTTP on `127.0.0.1` so curl can play) are `server.mjs` and `server.py` under `/agent-clients/explosive-chess/`. Protocol body: [`docs/agent-ws-explosive-chess.md`](docs/agent-ws-explosive-chess.md), served by the Worker at `/agent-guide/explosive-chess`. The explosive-chess setup page (`/play/explosive-chess`) ends match setup with one clickable line. Clicking it copies a prompt that includes the current host’s Agent Guide URL and those client download URLs. The prompt is not shown on the page.
+
+Chroma Slide is a solo puzzle. Agents use the same local HTTP client shape on a room WebSocket. Clients live under `/agent-clients/chroma-slide/`. Protocol: [`docs/agent-ws-chroma-slide.md`](docs/agent-ws-chroma-slide.md) and Chinese [`docs/agent-ws-chroma-slide.zh.md`](docs/agent-ws-chroma-slide.zh.md), served at `/agent-guide/chroma-slide`. The setup page ends with one clickable line that copies a Chinese or English prompt for the current UI language. The only seat is `player`. The puzzle starts when that seat is claimed.
+
 ## Project layout
 
 ```
@@ -78,12 +82,12 @@ src/                 React SPA (shell, home, /play, i18n, theme)
 src/games/           Per-game clients and catalog
 worker/              Worker entry, GameRoom, game adapters
 shared/              Pure logic shared by SPA and Worker (as needed)
-wrangler.jsonc       Static Assets + GAME_ROOM + sqlite migration
+wrangler.jsonc       Static Assets + GAME_ROOM + unused ExplosiveChessMcp binding + sqlite migration
 ```
 
 Add an offline game: register it in `catalog` → implement the play UI → mount it from `/play` by slug. Prefer on-device storage for progress.
 
-Add multiplayer: implement `worker/games/<slug>/adapter.ts`, register it on the shared `GameRoom`, and wire the client to the shared online shell. Do not create a new DO binding per game.
+Add multiplayer: implement `worker/games/<slug>/adapter.ts`, register it on the shared `GameRoom`, and wire the client to the shared online shell. Do not create a new DO binding per game. `ExplosiveChessMcp` remains from an earlier migration and is not mounted on a public route.
 
 ## Scripts
 
@@ -92,6 +96,7 @@ Add multiplayer: implement `worker/games/<slug>/adapter.ts`, register it on the 
 | `dev` | Vite + local Workers runtime |
 | `build` | `tsc -b` then Vite production build |
 | `deploy` | Build and `wrangler deploy` |
+| `deploy:staging` | Build with `--mode staging` and deploy to staging |
 | `check` / `typecheck` | TypeScript project check |
 | `preview` | Preview the production build in the Workers runtime |
 | `cf-typegen` | Regenerate `worker-configuration.d.ts` from bindings |

@@ -4,6 +4,7 @@ import {
   readStoredTheme,
   resolveTheme,
   storeTheme,
+  THEME_STORAGE_KEY,
   type ResolvedTheme,
   type ThemeMode,
 } from "../theme/applyTheme";
@@ -35,6 +36,16 @@ export function useTheme() {
     media.addEventListener("change", onChange);
     return () => media.removeEventListener("change", onChange);
   }, [mode]);
+
+  useEffect(() => {
+    const onStorage = (event: StorageEvent) => {
+      if (event.key !== THEME_STORAGE_KEY) return;
+      const next = readStoredTheme();
+      setModeState(next);
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, []);
 
   const setMode = useCallback((next: ThemeMode) => {
     storeTheme(next);

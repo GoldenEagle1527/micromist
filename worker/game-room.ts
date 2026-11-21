@@ -3,4 +3,6 @@
  * Register all game adapters here before the class is used.
  */
 import "./games/explosive-chess/register";
+import "./games/chroma-slide/register";
+import "./games/gomoku/register";
 export { GameRoom } from "./multiplayer/base-room";

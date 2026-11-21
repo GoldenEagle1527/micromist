@@ -313,6 +313,20 @@
   flex: 1;
 }
 
+/* Play: lock the shell to the viewport so the board can fill leftover space. */
+.shell:has(.game-shell-is-play) {
+  height: 100dvh;
+  max-height: 100dvh;
+  overflow: hidden;
+}
+
+.shell:has(.game-shell-is-play) .main {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
 .hero {
   margin-bottom: 1.75rem;
   padding: 1.35rem 1.25rem;
@@ -351,6 +365,7 @@
   display: grid;
   grid-template-columns: 1fr;
   gap: 0.9rem;
+  padding: 1rem 1rem calc(1.25rem + var(--safe-bottom));
 }
 
 .card {
@@ -415,7 +430,6 @@
   font-size: 0.9rem;
   font-weight: 600;
 }
-
 
 .hint {
   color: var(--md-sys-color-on-surface-variant);
@@ -607,6 +621,7 @@ button:disabled {
   .grid {
     grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
     gap: 1rem;
+    padding: 1.15rem 1.4rem 1.75rem;
   }
 }
 

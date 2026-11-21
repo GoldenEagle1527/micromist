@@ -111,6 +111,21 @@ html[data-theme="dark"] .explosive-status .explosive-count.blue {
   background: var(--md-sys-color-surface-container-high);
 }
 
+.explosive-roster {
+  margin-top: 0.75rem;
+}
+
+.explosive-roster-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.explosive-roster-row button {
+  flex: 0 0 auto;
+}
+
 .explosive-controls input[type="text"] {
   background: var(--md-sys-color-surface-container-highest);
   color: var(--md-sys-color-on-surface);
@@ -151,8 +166,8 @@ html[data-theme="dark"] .explosive-status .explosive-count.blue {
 }
 
 .explosive-setup {
-  width: min(26rem, 100%);
-  margin: 0.5rem auto 1.5rem;
+  width: min(26rem, calc(100% - 1.5rem));
+  margin: 0.75rem auto 1.5rem;
   display: flex;
   flex-direction: column;
   gap: 0.9rem;
@@ -207,11 +222,47 @@ html[data-theme="dark"] .explosive-status .explosive-count.blue {
   margin: 0.85rem 0 0;
 }
 
+button.explosive-agent-invite {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  margin: 0.9rem 0 0;
+  padding: 0.7rem 0.9rem;
+  border: 1px solid color-mix(in srgb, var(--md-sys-color-primary) 45%, var(--md-sys-color-outline-variant));
+  border-radius: var(--md-sys-shape-corner-md);
+  background: color-mix(in srgb, var(--md-sys-color-primary) 8%, transparent);
+  color: var(--md-sys-color-primary);
+  font-size: 0.95rem;
+  font-weight: 600;
+  line-height: 1.4;
+  text-align: left;
+  cursor: pointer;
+  min-height: 2.75rem;
+}
+
+button.explosive-agent-invite:hover {
+  background: color-mix(in srgb, var(--md-sys-color-primary) 14%, transparent);
+}
+
+button.explosive-agent-invite[data-phase="ok"] {
+  border-color: var(--md-sys-color-primary);
+}
+
+button.explosive-agent-invite:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--md-sys-color-primary) 55%, transparent);
+  outline-offset: 2px;
+}
+
+button.explosive-agent-invite[data-phase="fail"] {
+  border-color: #c62828;
+  color: #e53935;
+}
+
 @media (min-width: 720px) {
   
 
 .explosive-setup {
-    width: min(28rem, 100%);
+    width: min(28rem, calc(100% - 2rem));
     margin-top: 1.25rem;
   }
 }
@@ -221,3 +272,4 @@ html[data-theme="dark"] .explosive-status .explosive-count.blue {
   gap: 0.5rem 0.75rem;
   align-items: center;
 }
+

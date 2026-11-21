@@ -1,5 +1,17 @@
 import type { Locale } from "../i18n";
+import type { GamePlayModule, GamePreview } from "../platform/play";
 import { siteKind, type SiteKind } from "../lib/sites";
+import { preview as previewChromaSlide } from "./chroma-slide/play-preview";
+import { preview as previewExplosiveChess } from "./explosive-chess/play-preview";
+import { preview as previewGomoku } from "./gomoku/play-preview";
+
+function loadOnce(load: () => Promise<GamePlayModule>): () => Promise<GamePlayModule> {
+  let pending: Promise<GamePlayModule> | undefined;
+  return () => {
+    pending ??= load();
+    return pending;
+  };
+}
 
 export type GameMode = "single" | "single-online";
 
@@ -22,6 +34,10 @@ export type GameMeta = {
   audience?: GameAudience;
   /** When false, never listed. Prefer `audience` for env gates. Default true. */
   listed?: boolean;
+  /** Sync first-paint snapshot. Lives in the main bundle so GameShell can paint before the session loads. */
+  preview: GamePreview;
+  /** Lazy play session runtime. PlayPage mounts GameShell with this; the shell must not switch on slug. */
+  loadPlay: () => Promise<GamePlayModule>;
 };
 
 export const games: GameMeta[] = [
@@ -34,17 +50,34 @@ export const games: GameMeta[] = [
       en: "Place until cells burst and recolor neighbors. Solo vs AI / hotseat, or online via share link.",
     },
     badge: { zh: "单机/联机", en: "Offline / Online" },
+    preview: previewExplosiveChess,
+    loadPlay: loadOnce(() => import("./explosive-chess/play").then((m) => m.playModule)),
+  },
+  {
+    slug: "gomoku",
+    mode: "single-online",
+    title: { zh: "五子棋", en: "Gomoku" },
+    blurb: {
+      zh: "十五路棋盘，黑先。经典连五即胜，或连战用提子次数决胜。可热座、对战本机 AI，或分享链接联机。",
+      en: "A 15×15 board. Black goes first. Classic five-in-a-row, or Series decided by captures. Hotseat, built-in AI, or a share-link room.",
+    },
+    badge: { zh: "单机/联机", en: "Offline / Online" },
+    audience: "staging",
+    preview: previewGomoku,
+    loadPlay: loadOnce(() => import("./gomoku/play").then((m) => m.playModule)),
   },
   {
     slug: "chroma-slide",
     mode: "single",
     title: { zh: "滑动色块", en: "Chroma Slide" },
     blurb: {
-      zh: "滑动色块，把每种颜色收成一块实心矩形。单人本地，步数只记本局。",
-      en: "Slide colored tiles until each hue forms one solid rectangle. Solo local; steps are per run.",
+      zh: "滑动色块，把每种颜色收成一块实心正方形。本机开局，或用分享链接把单人谜题交给人 / Agent。",
+      en: "Slide colored tiles until each hue forms one solid square. Play locally, or share a solo-puzzle room with a person or Agent.",
     },
     badge: { zh: "单机", en: "Offline" },
-  }
+    preview: previewChromaSlide,
+    loadPlay: loadOnce(() => import("./chroma-slide/play").then((m) => m.playModule)),
+  },
 ];
 
 function audienceAllows(audience: GameAudience | undefined, kind: SiteKind): boolean {
@@ -72,4 +105,11 @@ export function getGame(
   kind: SiteKind = siteKind(),
 ): GameMeta | undefined {
   return listedGames(kind).find((game) => game.slug === slug);
+}
+
+/** Start downloading play runtimes after the lobby is on screen. */
+export function prefetchPlayModules(): void {
+  for (const game of listedGames()) {
+    void game.loadPlay();
+  }
 }

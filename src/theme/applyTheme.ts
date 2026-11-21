@@ -1,7 +1,8 @@
 export type ThemeMode = "light" | "dark" | "system";
 export type ResolvedTheme = "light" | "dark";
 
-const STORAGE_KEY = "micromist.theme";
+export const THEME_STORAGE_KEY = "micromist.theme";
+const STORAGE_KEY = THEME_STORAGE_KEY;
 
 export function readStoredTheme(): ThemeMode {
   try {

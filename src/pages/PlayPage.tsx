@@ -1,9 +1,8 @@
 import { Link, useParams } from "react-router";
 import "../styles/play.css";
-import { ExplosiveChessGame } from "../games/explosive-chess/ExplosiveChessGame";
-import { ChromaSlideGame } from "../games/chroma-slide/ChromaSlideGame";
 import { getGame } from "../games/catalog";
 import { useLocale } from "../i18n";
+import { GameShell } from "../platform/play";
 
 export function PlayPage() {
   const { slug } = useParams();
@@ -21,10 +20,5 @@ export function PlayPage() {
     );
   }
 
-  return (
-    <>
-      {game.slug === "explosive-chess" ? <ExplosiveChessGame /> : null}
-      {game.slug === "chroma-slide" ? <ChromaSlideGame /> : null}
-    </>
-  );
+  return <GameShell load={game.loadPlay} preview={game.preview} />;
 }

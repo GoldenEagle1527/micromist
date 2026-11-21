@@ -33,6 +33,20 @@ export type ChromaDict = {
   stepsCount: (steps: number) => string;
   winModalTitle: string;
   newBestBadge: string;
+  agentInviteLine: string;
+  agentInviteCopied: string;
+  agentInviteFailed: string;
+  roomTitle: string;
+  roomWaiting: string;
+  roomClaim: string;
+  roomYouSolve: string;
+  roomWatching: (name: string) => string;
+  roomSolved: (steps: number) => string;
+  roomClosed: string;
+  roomBack: string;
+  roomCode: (code: string) => string;
+  roomConnecting: string;
+  roomSpectatorHint: string;
 };
 
 function formatDurationEn(ms: number): string {
@@ -102,6 +116,20 @@ export const chromaEn: ChromaDict = {
   stepsCount: (steps) => `${steps} steps`,
   winModalTitle: "Puzzle cleared",
   newBestBadge: "New best",
+  agentInviteLine: "Click me to send this to your AI and let it solve a puzzle.",
+  agentInviteCopied: "Copied",
+  agentInviteFailed: "Copy failed",
+  roomTitle: "Shared puzzle",
+  roomWaiting: "Waiting for someone to sit. The puzzle starts when the player seat is taken.",
+  roomClaim: "Sit and solve",
+  roomYouSolve: "You are solving this puzzle.",
+  roomWatching: (name) => `Watching ${name}`,
+  roomSolved: (steps) => `Solved in ${steps} steps.`,
+  roomClosed: "This room closed.",
+  roomBack: "Back to local play",
+  roomCode: (code) => `Room ${code}`,
+  roomConnecting: "Connecting…",
+  roomSpectatorHint: "You are watching. Slides come from the seated player.",
 };
 
 export const chromaZh: ChromaDict = {
@@ -149,4 +177,18 @@ export const chromaZh: ChromaDict = {
   stepsCount: (steps) => `${steps} 步`,
   winModalTitle: "通关",
   newBestBadge: "新最佳",
+  agentInviteLine: "点我，把内容发给 AI，让它来解这一局",
+  agentInviteCopied: "已复制",
+  agentInviteFailed: "复制失败",
+  roomTitle: "共享谜题",
+  roomWaiting: "还没有人入座。player 坐下之后才会发牌。",
+  roomClaim: "坐下解题",
+  roomYouSolve: "你正在解这盘。",
+  roomWatching: (name) => `正在看 ${name}`,
+  roomSolved: (steps) => `已解开，共用 ${steps} 步。`,
+  roomClosed: "这个房间已关闭。",
+  roomBack: "返回本机游戏",
+  roomCode: (code) => `房间 ${code}`,
+  roomConnecting: "正在连接…",
+  roomSpectatorHint: "你在旁观。滑动来自已入座的那一位。",
 };

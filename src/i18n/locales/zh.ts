@@ -1,6 +1,7 @@
 import type { Dict } from "../types";
 import { chromaZh } from "../../games/chroma-slide/i18n";
 import { explosiveZh } from "../../games/explosive-chess/i18n";
+import { gomokuZh } from "../../games/gomoku/i18n";
 
 export const zh: Dict = {
   brand: "微渺",
@@ -34,6 +35,7 @@ export const zh: Dict = {
   floatAdBadge: "广告",
   floatAdTitle: "精选推广",
   playCta: "开始玩",
+  lobbyBack: "返回大厅",
   notFoundTitle: "没有这个页面",
   notFoundBody: "这条路径没有对应的页面。",
   notFoundLink: "回微渺首页",
@@ -61,4 +63,5 @@ export const zh: Dict = {
   storageLegacyNote: "清除「平台设置」会影响主题与语言等偏好。",
   explosive: explosiveZh,
   chroma: chromaZh,
+  gomoku: gomokuZh,
 };

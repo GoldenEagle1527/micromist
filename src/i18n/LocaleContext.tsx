@@ -61,6 +61,16 @@ export function LocaleProvider({ children }: { children: ReactNode }) {
     document.documentElement.lang = locale === "zh" ? "zh-CN" : "en";
   }, [locale]);
 
+  useEffect(() => {
+    const onStorage = (event: StorageEvent) => {
+      if (event.key !== STORAGE_KEY) return;
+      const next = event.newValue === "zh" || event.newValue === "en" ? event.newValue : detectLocale();
+      setLocaleState(next);
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, []);
+
   const value = useMemo<LocaleContextValue>(
     () => ({
       locale,
