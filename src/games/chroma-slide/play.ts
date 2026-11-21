@@ -241,7 +241,14 @@ class ChromaSession implements GameSession {
     this.boardHost = null;
   }
 
-  choose(): void {}
+  choose(itemId: string): void {
+    if (itemId === "claim-player") {
+      this.roomClient?.send("claim_seat", { seat: "player" });
+      return;
+    }
+    if (this.roomCode) return;
+    if (itemId === "start") this.startLocal();
+  }
 
   back(): void {
     if (this.roomCode) {
@@ -284,7 +291,7 @@ class ChromaSession implements GameSession {
       this.goMenu(true);
       return;
     }
-    if (id === "dismiss-win") {
+    if (id === "dismiss-win" || id === "dismiss-dialog") {
       this.dialog = undefined;
       this.emit();
       return;
@@ -435,9 +442,12 @@ class ChromaSession implements GameSession {
                 ? ch.roomWatching(solver.name)
                 : ch.roomWaiting;
     const canClaim = this.you?.seat === "spectator" && this.roomPhase === "lobby" && !solver;
+    const you = this.you;
+    const solverLabel = solver?.name || "player";
     return {
       phase: this.puzzle || pub ? "play" : "menu",
       title: ch.roomTitle,
+      hint: this.puzzle || pub ? undefined : status,
       hud: [
         { id: "room", value: ch.roomCode(this.roomCode) },
         ...(pub
@@ -454,6 +464,20 @@ class ChromaSession implements GameSession {
         ...(canClaim ? [{ id: "claim-player", label: ch.roomClaim, kind: "primary" as const }] : []),
         { id: "leave-room", label: ch.roomBack, kind: "ghost" as const },
       ],
+      room: {
+        title: ch.roomTitle,
+        status,
+        code: this.roomCode,
+        seats: [
+          {
+            id: "player",
+            label: solver ? solverLabel : ch.roomClaim,
+            canClaim,
+            isYou: you?.seat === "player",
+            detail: solver && you?.seat !== "player" ? ch.roomWatching(solver.name) : undefined,
+          },
+        ],
+      },
     };
   }
 

@@ -239,6 +239,9 @@ class ExplosiveSession implements GameSession {
       this.startLocalGame();
       return;
     }
+    if (id === "dismiss-dialog") {
+      return;
+    }
     if (id === "restart") {
       clearLocalProgress(SOLO_PROGRESS_SLUG);
       this.pendingRestore = null;
