@@ -26,6 +26,7 @@
     "deploy:staging": "npm run build -- --mode staging && node scripts/patch-staging-wrangler.mjs && wrangler deploy"
   },
   "dependencies": {
+    "@algorithm.ts/gomoku": "^4.0.5",
     "phaser": "^3.90.0",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",

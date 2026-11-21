@@ -1,4 +1,13 @@
 import {
+  GomokuSolution,
+  createDefaultGomokuSearcher,
+  createGomokuSearcher,
+  createScoreMap,
+  type IGomokuMover,
+  type IGomokuPiece,
+  type IGomokuSearcher,
+} from "@algorithm.ts/gomoku";
+import {
   captureOf,
   colOf,
   inBounds,
@@ -14,6 +23,103 @@ import {
 } from "./engine";
 
 export type Difficulty = "easy" | "normal" | "hard";
+
+/** MIT: https://github.com/guanghechen/algorithm.ts — 0=white, 1=black. */
+const ENGINE_BLACK = 1;
+const ENGINE_WHITE = 0;
+const SCORE_MAP = createScoreMap(5);
+
+function searcherFor(difficulty: Difficulty): (mover: IGomokuMover) => IGomokuSearcher {
+  if (difficulty === "easy") {
+    return (mover) =>
+      createGomokuSearcher({
+        searchContext: mover,
+        narrowSearcherOptions: [
+          {
+            MAX_SEARCH_DEPTH: 1,
+            MAX_CANDIDATE_COUNT: 6,
+            MIN_PROMOTION_SCORE: SCORE_MAP.con[2]![2]! * 4,
+            CANDIDATE_GROWTH_FACTOR: 4,
+          },
+        ],
+        deepSearcherOption: {
+          MAX_SEARCH_DEPTH: 2,
+          MIN_PROMOTION_SCORE: SCORE_MAP.con[4]![1]!,
+        },
+      });
+  }
+  if (difficulty === "normal") {
+    return (mover) =>
+      createGomokuSearcher({
+        searchContext: mover,
+        narrowSearcherOptions: [
+          {
+            MAX_SEARCH_DEPTH: 2,
+            MAX_CANDIDATE_COUNT: 8,
+            MIN_PROMOTION_SCORE: SCORE_MAP.con[2]![2]! * 4,
+            CANDIDATE_GROWTH_FACTOR: 8,
+          },
+          {
+            MAX_SEARCH_DEPTH: 4,
+            MAX_CANDIDATE_COUNT: 4,
+            MIN_PROMOTION_SCORE: SCORE_MAP.con[3]![1]! * 2,
+            CANDIDATE_GROWTH_FACTOR: 8,
+          },
+        ],
+        deepSearcherOption: {
+          MAX_SEARCH_DEPTH: 8,
+          MIN_PROMOTION_SCORE: SCORE_MAP.con[4]![1]!,
+        },
+      });
+  }
+  return (mover) =>
+    createDefaultGomokuSearcher(SCORE_MAP, mover, {
+      MAX_ADJACENT: 5,
+      CANDIDATE_GROWTH_FACTOR: 8,
+    });
+}
+
+function piecesOf(state: GameState): IGomokuPiece[] {
+  const size = state.size;
+  const pieces: IGomokuPiece[] = [];
+  for (let i = 0; i < state.board.length; i++) {
+    const stone = state.board[i];
+    if (stone === 0) continue;
+    pieces.push({
+      r: Math.floor(i / size),
+      c: i % size,
+      p: stone === 1 ? ENGINE_BLACK : ENGINE_WHITE,
+    });
+  }
+  return pieces;
+}
+
+function firstEmpty(state: GameState): number {
+  const found = state.board.findIndex((cell) => cell === 0);
+  return found >= 0 ? found : Math.floor(state.board.length / 2);
+}
+
+function chooseClassic(state: GameState, difficulty: Difficulty): number {
+  const size = state.size;
+  const solution = new GomokuSolution({
+    MAX_ROW: size,
+    MAX_COL: size,
+    MAX_ADJACENT: 5,
+    MAX_DISTANCE_OF_NEIGHBOR: 2,
+    deeperSearcher: searcherFor(difficulty),
+  });
+  solution.init(piecesOf(state));
+  const nextPlayer = state.turn === 1 ? ENGINE_BLACK : ENGINE_WHITE;
+  try {
+    const [row, col] = solution.minimaxSearch(nextPlayer);
+    if (row < 0 || col < 0 || !inBounds(row, col, size)) return firstEmpty(state);
+    const index = idx(row, col, size);
+    if (state.board[index] !== 0) return firstEmpty(state);
+    return index;
+  } catch {
+    return firstEmpty(state);
+  }
+}
 
 const FIVE = 100_000;
 const OPEN_FOUR = 10_000;
@@ -78,12 +184,7 @@ function scoreWindow(s: string): number {
   return 0;
 }
 
-export function scorePoint(
-  board: Stone[],
-  size: number,
-  index: number,
-  color: Player,
-): number {
+function scorePoint(board: Stone[], size: number, index: number, color: Player): number {
   const row = rowOf(index, size);
   const col = colOf(index, size);
   let total = 0;
@@ -106,7 +207,7 @@ export function scorePoint(
   return total;
 }
 
-export function candidates(board: Stone[], size: number, radius = 2): number[] {
+function candidates(board: Stone[], size: number, radius = 2): number[] {
   const n = size * size;
   const marked = new Uint8Array(n);
   let any = false;
@@ -139,9 +240,7 @@ function evaluateBoard(state: GameState, me: Player): number {
     score += scorePoint(state.board, state.size, index, me);
     score -= scorePoint(state.board, state.size, index, opp) * 1.15;
   }
-  if (state.rules === "series") {
-    score += (captureOf(state, me) - captureOf(state, opp)) * 12_000;
-  }
+  score += (captureOf(state, me) - captureOf(state, opp)) * 12_000;
   return score;
 }
 
@@ -204,7 +303,7 @@ function search(
   return best === Infinity || best === -Infinity ? 0 : best;
 }
 
-export function chooseMove(state: GameState, difficulty: Difficulty): number {
+function chooseSeries(state: GameState, difficulty: Difficulty): number {
   const size = state.size;
   const me = state.turn;
   const opp = other(me);
@@ -214,7 +313,7 @@ export function chooseMove(state: GameState, difficulty: Difficulty): number {
   const blocks = capturingMoves({ ...state, turn: opp }, opp, spots);
   if (blocks.length) return pickRandom(blocks);
 
-  if (!spots.length) return Math.floor(state.board.length / 2);
+  if (!spots.length) return firstEmpty(state);
   const ranked = rankedMoves(state, spots);
   if (!ranked.length) return spots[0]!;
   if (difficulty === "easy") {
@@ -243,4 +342,9 @@ export function chooseMove(state: GameState, difficulty: Difficulty): number {
     }
   }
   return pickRandom(best);
+}
+
+export function chooseMove(state: GameState, difficulty: Difficulty): number {
+  if (state.rules === "series") return chooseSeries(state, difficulty);
+  return chooseClassic(state, difficulty);
 }
