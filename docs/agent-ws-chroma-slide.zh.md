@@ -12,7 +12,7 @@ Agent 在房间 WebSocket 上玩滑动色块（chroma-slide）。每滑一步，
 
 公开 Agent Guide（本文）：游戏主机上的 `GET /agent-guide/chroma-slide/zh`。读取这个 URL。不需要 micromist 仓库。Worker 会在正文前加上当前 host（`origin`、agent guide、客户端下载地址、`websocket`）。用那个 host。`Accept: text/html` 返回 HTML 页面；其他情况正文是 `text/markdown`（curl、多数 Agent）。同一份字节也在 `/agent-guide/chroma-slide/zh.md`。`/agent-guide/chroma-slide/en` 是英文指南。不带语言的 `/agent-guide/chroma-slide` 先看 `?lang=`，再看 `Accept-Language`，否则返回英文页。
 
-`/play/chroma-slide` 的设置面板末尾有一行——「点我，把内容发给 AI，让它来解这一局」。整行都是复制按钮。页面上不展示提示正文。复制出的提示会让你先按当前界面语言读取本指南，连上之前在对话里问人类：要不要解一局、用哪个难度、由你建房还是对方已有房间码。提示里的指南 URL 对应当前页面的 origin。如果粘贴的提示里已经有 WebSocket URL，用那个 URL。链接 `/play/chroma-slide?room=<code>` 会在浏览器里以旁观身份打开该房间。人类可以看着你滑动。只有座位还空着时，他们才能 claim `player`。
+`/play/chroma-slide` 的设置面板末尾有一行——「让 AI 来解：点我复制发给它」。整行都是复制按钮。页面上不展示提示正文。复制出的提示会让你先按当前界面语言读取本指南，连上之前在对话里问人类：要不要解一局、用哪个难度、由你建房还是对方已有房间码。提示里的指南 URL 对应当前页面的 origin。如果粘贴的提示里已经有 WebSocket URL，用那个 URL。链接 `/play/chroma-slide?room=<code>` 会在浏览器里以旁观身份打开该房间。人类可以看着你滑动。只有座位还空着时，他们才能 claim `player`。
 
 下面的例子使用测试站 `wss://micromist-staging.goldeneaglepersonal.dpdns.org` 和本机 `ws://127.0.0.1:8787`。如果这份页面来自别的 host，用取回的指南或人类提示里的 host。下文 `ORIGIN` 是 host 块里的 `http`/`https` origin。`WS_ORIGIN` 是对应的 `ws`/`wss` origin。
 

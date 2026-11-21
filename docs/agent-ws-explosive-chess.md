@@ -10,7 +10,7 @@ One process joins and keeps the socket open until the server pushes `game_over` 
 
 Public Agent Guide (this document): `GET /agent-guide/explosive-chess/en` on the game host. Fetch that URL. You do not need the micromist repository. The Worker serves this file and prepends the live host (`origin`, `agent guide`, client download URLs, `websocket`). Use that host. `Accept: text/html` returns an HTML page; otherwise the body is `text/markdown` (curl, most agents). The same bytes are at `/agent-guide/explosive-chess/en.md`. `/agent-guide/explosive-chess/zh` is the Chinese guide. An unlocalized `/agent-guide/explosive-chess` follows `?lang=` and then `Accept-Language`, and otherwise serves this English page.
 
-On `/play/explosive-chess` (the explosive-chess setup page, after you open the game) the bottom of match setup is one line — "Click me to send this to your AI and play together." That whole line is the copy control. The prompt is not shown on the page. The copied prompt tells you to fetch this guide in the current UI language, then ask the human in chat before you connect: play against them? should you create a room? or do they already have a room code? The guide URL in the prompt is absolute for the page origin. If a pasted prompt also contains a websocket URL, use that exact URL.
+On `/play/explosive-chess` (the explosive-chess setup page, after you open the game) the bottom of match setup is one line — "Play vs an AI: click to copy a prompt for it." That whole line is the copy control. The prompt is not shown on the page. The copied prompt tells you to fetch this guide in the current UI language, then ask the human in chat before you connect: play against them? should you create a room? or do they already have a room code? The guide URL in the prompt is absolute for the page origin. If a pasted prompt also contains a websocket URL, use that exact URL.
 
 Examples below use staging `wss://micromist-staging.goldeneaglepersonal.dpdns.org` and local `ws://127.0.0.1:8787`. If this page was served from another host, use the host in the fetched guide or in the human's prompt. `ORIGIN` below means the `http`/`https` origin from the host block. `WS_ORIGIN` means the matching `ws`/`wss` origin.
 
@@ -343,7 +343,7 @@ Run `create_room` with `--seat red` or `--seat blue`. Omit `-c` for a generated 
 
 If they want two AIs to play each other, you are Agent A: `create_room --seat red` as above and pass `--config` before B claims a seat. Give them the same room code for the second AI. Agent B runs `join_room -c <code> --seat blue` with a different `playerId` and does not pass `--config`. Humans and other agents can `join_room` with no `--seat` and watch. If B's client fails before `joined`, run it again — A creates the room by connecting. The client retries a few times on its own if the socket drops before `joined`. After `joined`, it prints `listening` and waits for pushes. Curl `/wait`. Do not poll.
 
-The human can also share `?room=<code>` with another person. Clicks from a seated human are the same `move` messages. In-game status shows `vs Agent` when the other seat's kind is `agent`. A person who does not sit stays on the roster as a spectator.
+The human can also share `?room=<code>` with another person. Clicks from a seated human are the same `move` messages. In-game status shows `Playing vs AI` when the other seat's kind is `agent`. A person who does not sit stays on the roster as a spectator.
 
 Each agent still chooses its own moves from `legalActions`. Neither agent should hand the position to a solver.
 

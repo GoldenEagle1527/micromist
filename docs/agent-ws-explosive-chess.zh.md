@@ -10,7 +10,7 @@ Agent 和人类使用同一个房间 WebSocket 下爆炸棋（explosive-chess）
 
 公开 Agent Guide（本文）：游戏站点上的 `GET /agent-guide/explosive-chess/zh`。读取这个 URL 即可，不需要 micromist 仓库。Worker 会在本文前面加上当前站点（`origin`、Agent Guide、客户端下载地址、`websocket`）。请用那个 host。请求带 `Accept: text/html` 时返回 HTML，否则正文是 `text/markdown`（curl 和多数 Agent）。同一份正文也在 `/agent-guide/explosive-chess/zh.md`。英文指南在 `/agent-guide/explosive-chess/en`。不带语言的 `/agent-guide/explosive-chess` 会先看 `?lang=`，再看 `Accept-Language`，否则返回英文。
 
-在 `/play/explosive-chess`（打开爆炸棋之后的设置页）里，对局设置底部有一行：「点我，把内容发给 AI 陪你一起玩吧」。整行都是复制按钮。页面上不显示提示词。复制出来的提示词会让你按当前界面语言读取这份指南，连上之前先在对话里问人类：要不要和他们对下、要不要由你建房，还是他们已经有房间码。提示词里的指南 URL 是该页面 origin 的绝对地址。如果贴出来的提示词里已经有 WebSocket URL，就用那个 URL。
+在 `/play/explosive-chess`（打开爆炸棋之后的设置页）里，对局设置底部有一行：「跟 AI 对战：点我复制，发给它一起下」。整行都是复制按钮。页面上不显示提示词。复制出来的提示词会让你按当前界面语言读取这份指南，连上之前先在对话里问人类：要不要和他们对下、要不要由你建房，还是他们已经有房间码。提示词里的指南 URL 是该页面 origin 的绝对地址。如果贴出来的提示词里已经有 WebSocket URL，就用那个 URL。
 
 下面的例子使用 staging `wss://micromist-staging.goldeneaglepersonal.dpdns.org` 和本地 `ws://127.0.0.1:8787`。如果这份页面来自别的 host，以指南开头的 host 块或人类提示词里的 host 为准。下文 `ORIGIN` 是 host 块里的 `http`/`https` origin，`WS_ORIGIN` 是对应的 `ws`/`wss` origin。
 
@@ -343,7 +343,7 @@ websocat "wss://micromist-staging.goldeneaglepersonal.dpdns.org/ws/explosive-che
 
 如果他们想让两个 AI 对打，你是 Agent A：按上面的方式 `create_room --seat red`，并在 B 占座前带上 `--config`。把同一个房间码交给第二个 AI。Agent B 用不同的 `playerId` 运行 `join_room -c <code> --seat blue`，并且不要带 `--config`。人类和其他 Agent 可以不带 `--seat` 地 `join_room`，然后旁观。如果 B 的客户端在 `joined` 之前失败，再运行一次——A 一连接就会建房。连接在 `joined` 之前掉线时，客户端自己会重试几次。`joined` 之后它会打印 `listening` 并等待推送。请 curl `/wait`。不要轮询。
 
-人类也可以把 `?room=<code>` 分享给另一个人。已经入座的人类点击同样是 `move` 消息。对方座位的 kind 是 `agent` 时，对局状态会显示 `vs Agent`。没有入座的人留在名单里当旁观。
+人类也可以把 `?room=<code>` 分享给另一个人。已经入座的人类点击同样是 `move` 消息。对方座位的 kind 是 `agent` 时，对局状态会显示 `跟 AI 对战`。没有入座的人留在名单里当旁观。
 
 每个 Agent 仍然自己从 `legalActions` 里选着法。不要把局面交给求解器。
 

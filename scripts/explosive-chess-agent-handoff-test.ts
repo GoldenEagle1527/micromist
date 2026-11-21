@@ -116,8 +116,8 @@ c.section("served guide");
   c.check(composed.includes("There is no MCP"), "protocol no-MCP kept");
   c.check(composed.includes("Keep that socket open"), "guide says the socket must stay open");
   c.check(composed.includes("Leave your socket open"), "guide says the host waits connected");
-  c.check(composed.includes("Click me to send this to your AI and play together."), "english setup invite line is in the guide");
-  c.check(!composed.includes("点我，把内容发给 AI 陪你一起玩吧"), "english guide does not use the chinese invite line");
+  c.check(composed.includes("Play vs an AI: click to copy a prompt for it."), "english setup invite line is in the guide");
+  c.check(!composed.includes("跟 AI 对战：点我复制，发给它一起下"), "english guide does not use the chinese invite line");
   c.check(composed.includes("should you create a room"), "guide tells the agent to ask about creating a room");
   c.check(composed.includes("no chess strength"), "guide says the clients have no chess strength");
   c.check(composed.includes("Do not write a solver"), "guide forbids a solver");
@@ -146,7 +146,7 @@ c.section("served guide");
 
   const composedZh = composeAgentGuide(origin, protocolZh, "zh");
   c.check(composedZh.startsWith("# 当前站点"), "chinese guide starts with the host block");
-  c.check(composedZh.includes("点我，把内容发给 AI 陪你一起玩吧"), "chinese setup invite line is in the guide");
+  c.check(composedZh.includes("跟 AI 对战：点我复制，发给它一起下"), "chinese setup invite line is in the guide");
   c.check(!composedZh.includes("should you create a room"), "chinese guide does not use the english question");
   c.check(composedZh.includes("它们没有棋力"), "chinese guide says the clients have no chess strength");
   c.check(composedZh.includes("不要编写求解器"), "chinese guide forbids a solver");
@@ -200,7 +200,7 @@ c.section("served guide");
   const mdBody = await mdRes!.text();
   c.check(mdBody.startsWith("# This host"), "curl body starts with the english host block");
   c.check(mdBody.includes("kind"), "curl body has join kind");
-  c.check(!mdBody.includes("点我，把内容发给 AI 陪你一起玩吧"), "default curl guide is english");
+  c.check(!mdBody.includes("跟 AI 对战：点我复制，发给它一起下"), "default curl guide is english");
 
   const zhRes = agentGuideHttpResponse(
     new Request(`${origin}/agent-guide/explosive-chess/zh`, { headers: { accept: "*/*" } }),
@@ -452,7 +452,7 @@ c.section("setup copy strings");
   const enKeys = Object.keys(explosiveEn).sort();
   const zhKeys = Object.keys(explosiveZh).sort();
   c.check(enKeys.join() === zhKeys.join(), "en and zh explosive strings match", enKeys.filter((k) => !zhKeys.includes(k)).join(","));
-  c.check(explosiveZh.agentInviteLine === "点我，把内容发给 AI 陪你一起玩吧", "chinese one-liner");
+  c.check(explosiveZh.agentInviteLine === "跟 AI 对战：点我复制，发给它一起下", "chinese one-liner");
   c.check(explosiveEn.agentInviteLine.length > 0 && !explosiveEn.agentInviteLine.includes("\n"), "english one-liner");
   c.check(!("agentInviteCopy" in explosiveEn) && !("agentInviteCopy" in explosiveZh), "no separate copy button label");
   for (const gone of ["agentHandoffTitle", "copyForAgent", "copyAgentA", "dualTitle", "copyWsOnly"]) {

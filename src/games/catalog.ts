@@ -46,8 +46,8 @@ export const games: GameMeta[] = [
     mode: "single-online",
     title: { zh: "爆炸棋", en: "Explosive Chess" },
     blurb: {
-      zh: "落子叠满即爆，连锁改色占盘。单人可对战 AI 或热座；联机靠分享链接开房。",
-      en: "Place until cells burst and recolor neighbors. Solo vs AI / hotseat, or online via share link.",
+      zh: "落子叠满即爆，连锁改色占盘。可人机对战或同屏双人；联机靠分享链接，也可发给 AI 一起下。",
+      en: "Place until cells burst and recolor neighbors. Solo vs computer or pass-and-play; online via share link, including an AI.",
     },
     badge: { zh: "单机/联机", en: "Offline / Online" },
     preview: previewExplosiveChess,
@@ -58,8 +58,8 @@ export const games: GameMeta[] = [
     mode: "single-online",
     title: { zh: "五子棋", en: "Gomoku" },
     blurb: {
-      zh: "十五路棋盘，黑先。经典连五即胜，或连战用提子次数决胜。可热座、对战本机 AI，或分享链接联机。",
-      en: "A 15×15 board. Black goes first. Classic five-in-a-row, or Series decided by captures. Hotseat, built-in AI, or a share-link room.",
+      zh: "十五路棋盘，黑先。经典连五即胜，或连战用提子次数决胜。可同屏双人、人机对战，或分享链接联机。",
+      en: "A 15×15 board. Black goes first. Classic five-in-a-row, or Series decided by captures. Pass and play, vs computer, or a share-link room.",
     },
     badge: { zh: "单机/联机", en: "Offline / Online" },
     preview: previewGomoku,
@@ -70,8 +70,8 @@ export const games: GameMeta[] = [
     mode: "single",
     title: { zh: "滑动色块", en: "Chroma Slide" },
     blurb: {
-      zh: "滑动色块，把每种颜色收成一块实心正方形。本机开局，或用分享链接把单人谜题交给人 / Agent。",
-      en: "Slide colored tiles until each hue forms one solid square. Play locally, or share a solo-puzzle room with a person or Agent.",
+      zh: "滑动色块，把每种颜色收成一块实心正方形。本机开局，或用分享链接把谜题交给人来解，也可发给 AI 来解。",
+      en: "Slide colored tiles until each hue forms one solid square. Play locally, or share a solo-puzzle room with a person or an AI.",
     },
     badge: { zh: "单机", en: "Offline" },
     preview: previewChromaSlide,
