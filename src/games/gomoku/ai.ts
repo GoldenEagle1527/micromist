@@ -1,10 +1,18 @@
 import {
+  GomokuSolution,
+  createDefaultGomokuSearcher,
+  createGomokuSearcher,
+  createScoreMap,
+  type IGomokuMover,
+  type IGomokuPiece,
+  type IGomokuSearcher,
+} from "@algorithm.ts/gomoku";
+import {
   captureOf,
   colOf,
   inBounds,
   idx,
   isOver,
-  opensCapture,
   other,
   playTurn,
   rowOf,
@@ -14,6 +22,103 @@ import {
 } from "./engine";
 
 export type Difficulty = "easy" | "normal" | "hard";
+
+/** MIT: https://github.com/guanghechen/algorithm.ts — 0=white, 1=black. */
+const ENGINE_BLACK = 1;
+const ENGINE_WHITE = 0;
+const SCORE_MAP = createScoreMap(5);
+
+function searcherFor(difficulty: Difficulty): (mover: IGomokuMover) => IGomokuSearcher {
+  if (difficulty === "easy") {
+    return (mover) =>
+      createGomokuSearcher({
+        searchContext: mover,
+        narrowSearcherOptions: [
+          {
+            MAX_SEARCH_DEPTH: 1,
+            MAX_CANDIDATE_COUNT: 6,
+            MIN_PROMOTION_SCORE: SCORE_MAP.con[2]![2]! * 4,
+            CANDIDATE_GROWTH_FACTOR: 4,
+          },
+        ],
+        deepSearcherOption: {
+          MAX_SEARCH_DEPTH: 2,
+          MIN_PROMOTION_SCORE: SCORE_MAP.con[4]![1]!,
+        },
+      });
+  }
+  if (difficulty === "normal") {
+    return (mover) =>
+      createGomokuSearcher({
+        searchContext: mover,
+        narrowSearcherOptions: [
+          {
+            MAX_SEARCH_DEPTH: 2,
+            MAX_CANDIDATE_COUNT: 8,
+            MIN_PROMOTION_SCORE: SCORE_MAP.con[2]![2]! * 4,
+            CANDIDATE_GROWTH_FACTOR: 8,
+          },
+          {
+            MAX_SEARCH_DEPTH: 4,
+            MAX_CANDIDATE_COUNT: 4,
+            MIN_PROMOTION_SCORE: SCORE_MAP.con[3]![1]! * 2,
+            CANDIDATE_GROWTH_FACTOR: 8,
+          },
+        ],
+        deepSearcherOption: {
+          MAX_SEARCH_DEPTH: 8,
+          MIN_PROMOTION_SCORE: SCORE_MAP.con[4]![1]!,
+        },
+      });
+  }
+  return (mover) =>
+    createDefaultGomokuSearcher(SCORE_MAP, mover, {
+      MAX_ADJACENT: 5,
+      CANDIDATE_GROWTH_FACTOR: 8,
+    });
+}
+
+function piecesOf(state: GameState): IGomokuPiece[] {
+  const size = state.size;
+  const pieces: IGomokuPiece[] = [];
+  for (let i = 0; i < state.board.length; i++) {
+    const stone = state.board[i];
+    if (stone === 0) continue;
+    pieces.push({
+      r: Math.floor(i / size),
+      c: i % size,
+      p: stone === 1 ? ENGINE_BLACK : ENGINE_WHITE,
+    });
+  }
+  return pieces;
+}
+
+function firstEmpty(state: GameState): number {
+  const found = state.board.findIndex((cell) => cell === 0);
+  return found >= 0 ? found : Math.floor(state.board.length / 2);
+}
+
+function chooseClassic(state: GameState, difficulty: Difficulty): number {
+  const size = state.size;
+  const solution = new GomokuSolution({
+    MAX_ROW: size,
+    MAX_COL: size,
+    MAX_ADJACENT: 5,
+    MAX_DISTANCE_OF_NEIGHBOR: 2,
+    deeperSearcher: searcherFor(difficulty),
+  });
+  solution.init(piecesOf(state));
+  const nextPlayer = state.turn === 1 ? ENGINE_BLACK : ENGINE_WHITE;
+  try {
+    const [row, col] = solution.minimaxSearch(nextPlayer);
+    if (row < 0 || col < 0 || !inBounds(row, col, size)) return firstEmpty(state);
+    const index = idx(row, col, size);
+    if (state.board[index] !== 0) return firstEmpty(state);
+    return index;
+  } catch {
+    return firstEmpty(state);
+  }
+}
 
 const FIVE = 100_000;
 const OPEN_FOUR = 10_000;
@@ -78,12 +183,7 @@ function scoreWindow(s: string): number {
   return 0;
 }
 
-export function scorePoint(
-  board: Stone[],
-  size: number,
-  index: number,
-  color: Player,
-): number {
+function scorePoint(board: Stone[], size: number, index: number, color: Player): number {
   const row = rowOf(index, size);
   const col = colOf(index, size);
   let total = 0;
@@ -106,7 +206,7 @@ export function scorePoint(
   return total;
 }
 
-export function candidates(board: Stone[], size: number, radius = 2): number[] {
+function candidates(board: Stone[], size: number, radius = 2): number[] {
   const n = size * size;
   const marked = new Uint8Array(n);
   let any = false;
@@ -131,7 +231,10 @@ export function candidates(board: Stone[], size: number, radius = 2): number[] {
   return out;
 }
 
-function evaluateBoard(state: GameState, me: Player): number {
+/** One capture outweighs any shape score. Closer to the goal counts more. */
+const CAPTURE_UNIT = 2_000_000;
+
+function shapeDelta(state: GameState, me: Player): number {
   const opp = other(me);
   let score = 0;
   const cells = candidates(state.board, state.size, 1);
@@ -139,59 +242,78 @@ function evaluateBoard(state: GameState, me: Player): number {
     score += scorePoint(state.board, state.size, index, me);
     score -= scorePoint(state.board, state.size, index, opp) * 1.15;
   }
-  if (state.rules === "series") {
-    score += (captureOf(state, me) - captureOf(state, opp)) * 12_000;
-  }
   return score;
 }
 
-function capturingMoves(state: GameState, color: Player, spots: number[]): number[] {
-  const hits: number[] = [];
-  for (const index of spots) {
-    if (opensCapture(state, index, color)) hits.push(index);
-  }
-  return hits;
+function evalSeries(state: GameState, root: Player): number {
+  const opp = other(root);
+  if (state.winner === root) return 1_000_000_000;
+  if (state.winner === opp) return -1_000_000_000;
+  const mine = captureOf(state, root);
+  const theirs = captureOf(state, opp);
+  if (state.winner === 3) return (mine - theirs) * CAPTURE_UNIT;
+  return (mine - theirs) * CAPTURE_UNIT + (mine * mine - theirs * theirs) * 50_000 + shapeDelta(state, root);
 }
 
-function pickRandom(list: number[]): number {
-  return list[Math.floor(Math.random() * list.length)] ?? list[0]!;
-}
-
-function rankedMoves(state: GameState, spots: number[]): { index: number; score: number }[] {
+function rankedMoves(state: GameState): number[] {
   const me = state.turn;
   const opp = other(me);
-  const ranked = spots.map((index) => {
+  const ranked = candidates(state.board, state.size, 2).map((index) => {
     const attack = scorePoint(state.board, state.size, index, me);
     const defend = scorePoint(state.board, state.size, index, opp);
     return { index, score: attack + defend * 1.15 };
   });
   ranked.sort((a, b) => b.score - a.score);
-  return ranked;
+  return ranked.map((item) => item.index);
 }
 
-function search(
+class SeriesBudget {
+  deadline: number;
+  cut = false;
+  constructor(ms: number) {
+    this.deadline = performance.now() + ms;
+  }
+  expired(): boolean {
+    if (performance.now() < this.deadline) return false;
+    this.cut = true;
+    return true;
+  }
+}
+
+/**
+ * Same shape as the classic engine's search: order nearby candidates, keep fewer
+ * of them as the ply grows, and look one ply further after a capture.
+ * One ply here is a whole series turn (place, lift five, flip).
+ */
+function seriesSearch(
   state: GameState,
   depth: number,
   alpha: number,
   beta: number,
   root: Player,
-  maxBranch: number,
+  limits: readonly number[],
+  ply: number,
+  extensions: number,
+  budget: SeriesBudget,
 ): number {
-  if (isOver(state) || depth === 0) {
-    if (state.winner === root) return FIVE * 4;
-    if (state.winner === other(root)) return -FIVE * 4;
-    if (state.winner === 3) return 0;
-    return evaluateBoard(state, root);
-  }
-  const spots = rankedMoves(state, candidates(state.board, state.size, 2))
-    .slice(0, maxBranch)
-    .map((item) => item.index);
+  if (budget.expired()) return evalSeries(state, root);
+  if (isOver(state) || depth === 0) return evalSeries(state, root);
+  const branch = limits[Math.min(ply, limits.length - 1)] ?? 3;
+  const spots = rankedMoves(state).slice(0, branch);
   const maximizing = state.turn === root;
   let best = maximizing ? -Infinity : Infinity;
   for (const index of spots) {
+    if (budget.expired()) break;
     const next = playTurn(state, index);
     if (!next) continue;
-    const value = search(next, depth - 1, alpha, beta, root, maxBranch);
+    const captured = next.captures[state.turn - 1]! > state.captures[state.turn - 1]!;
+    let childDepth = depth - 1;
+    let childExt = extensions;
+    if (captured && childDepth === 0 && childExt > 0 && !isOver(next)) {
+      childDepth = 1;
+      childExt -= 1;
+    }
+    const value = seriesSearch(next, childDepth, alpha, beta, root, limits, ply + 1, childExt, budget);
     if (maximizing) {
       if (value > best) best = value;
       if (value > alpha) alpha = value;
@@ -201,46 +323,65 @@ function search(
     }
     if (beta <= alpha) break;
   }
-  return best === Infinity || best === -Infinity ? 0 : best;
+  return best === Infinity || best === -Infinity ? evalSeries(state, root) : best;
+}
+
+function seriesPlan(difficulty: Difficulty): {
+  maxDepth: number;
+  limits: readonly number[];
+  extensions: number;
+  budgetMs: number;
+} {
+  if (difficulty === "easy") return { maxDepth: 2, limits: [5, 3], extensions: 0, budgetMs: 80 };
+  if (difficulty === "normal") return { maxDepth: 3, limits: [8, 5, 3], extensions: 1, budgetMs: 160 };
+  return { maxDepth: 4, limits: [10, 6, 4, 3], extensions: 2, budgetMs: 320 };
+}
+
+function chooseSeries(state: GameState, difficulty: Difficulty): number {
+  const me = state.turn;
+  const ordered = rankedMoves(state);
+  if (!ordered.length) return firstEmpty(state);
+  for (const index of ordered) {
+    const next = playTurn(state, index);
+    if (next?.winner === me) return index;
+  }
+
+  const plan = seriesPlan(difficulty);
+  const budget = new SeriesBudget(plan.budgetMs);
+  let chosen = ordered[0]!;
+  for (let depth = 2; depth <= plan.maxDepth; depth++) {
+    if (budget.expired()) break;
+    budget.cut = false;
+    const branch = plan.limits[0] ?? ordered.length;
+    let bestScore = -Infinity;
+    let bestIndex = chosen;
+    let finished = true;
+    for (const index of ordered.slice(0, branch)) {
+      if (budget.expired()) {
+        finished = false;
+        break;
+      }
+      const next = playTurn(state, index);
+      if (!next) continue;
+      const captured = next.captures[me - 1]! > state.captures[me - 1]!;
+      let childDepth = depth - 1;
+      let childExt = plan.extensions;
+      if (captured && childDepth === 0 && childExt > 0 && !isOver(next)) {
+        childDepth = 1;
+        childExt -= 1;
+      }
+      const value = seriesSearch(next, childDepth, -Infinity, Infinity, me, plan.limits, 1, childExt, budget);
+      if (value > bestScore) {
+        bestScore = value;
+        bestIndex = index;
+      }
+    }
+    if (finished && !budget.cut) chosen = bestIndex;
+  }
+  return chosen;
 }
 
 export function chooseMove(state: GameState, difficulty: Difficulty): number {
-  const size = state.size;
-  const me = state.turn;
-  const opp = other(me);
-  const spots = candidates(state.board, size, 2);
-  const wins = capturingMoves(state, me, spots);
-  if (wins.length) return pickRandom(wins);
-  const blocks = capturingMoves({ ...state, turn: opp }, opp, spots);
-  if (blocks.length) return pickRandom(blocks);
-
-  if (!spots.length) return Math.floor(state.board.length / 2);
-  const ranked = rankedMoves(state, spots);
-  if (!ranked.length) return spots[0]!;
-  if (difficulty === "easy") {
-    const pool = ranked.slice(0, Math.min(8, ranked.length));
-    return pickRandom(pool.map((item) => item.index));
-  }
-  if (difficulty === "normal" || ranked.length <= 1) {
-    const top = ranked[0]?.score ?? 0;
-    const pool = ranked.filter((item) => item.score >= top - 80).map((item) => item.index);
-    return pickRandom(pool.length ? pool : [ranked[0]!.index]);
-  }
-
-  const branch = ranked.slice(0, 12);
-  let bestScore = -Infinity;
-  let best: number[] = [branch[0]!.index];
-  for (const item of branch) {
-    const next = playTurn(state, item.index);
-    if (!next) continue;
-    const value = search(next, 1, -Infinity, Infinity, me, 10);
-    if (value > bestScore + 30) {
-      bestScore = value;
-      best = [item.index];
-    } else if (value >= bestScore - 30) {
-      if (value > bestScore) bestScore = value;
-      best.push(item.index);
-    }
-  }
-  return pickRandom(best);
+  if (state.rules === "series") return chooseSeries(state, difficulty);
+  return chooseClassic(state, difficulty);
 }

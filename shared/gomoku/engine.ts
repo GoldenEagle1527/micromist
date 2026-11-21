@@ -125,8 +125,8 @@ export function winningLine(
   return null;
 }
 
-export function stonesInFives(board: Stone[], size: number, color: Player): number[] {
-  const found = new Set<number>();
+function runsAtLeastFive(board: Stone[], size: number, color: Player): number[][] {
+  const runs: number[][] = [];
   for (const [dr, dc] of DIRS) {
     for (let i = 0; i < board.length; i++) {
       if (board[i] !== color) continue;
@@ -143,12 +143,43 @@ export function stonesInFives(board: Stone[], size: number, color: Player): numb
         r += dr;
         c += dc;
       }
-      if (run.length >= 5) {
-        for (const cell of run) found.add(cell);
-      }
+      if (run.length >= 5) runs.push(run);
     }
   }
+  return runs;
+}
+
+export function stonesInFives(board: Stone[], size: number, color: Player): number[] {
+  const found = new Set<number>();
+  for (const run of runsAtLeastFive(board, size, color)) {
+    for (const cell of run) found.add(cell);
+  }
   return [...found].sort((a, b) => a - b);
+}
+
+/** Every contiguous five inside a run of five or more. A cross yields one window per arm. */
+export function captureWindows(board: Stone[], size: number, color: Player): number[][] {
+  const windows: number[][] = [];
+  for (const run of runsAtLeastFive(board, size, color)) {
+    for (let start = 0; start + 5 <= run.length; start++) {
+      windows.push(run.slice(start, start + 5));
+    }
+  }
+  return windows;
+}
+
+/** True when every selected stone sits inside one contiguous five. */
+export function fitsCapture(board: Stone[], size: number, selected: number[]): boolean {
+  if (selected.length === 0) return true;
+  if (selected.length > 5) return false;
+  const color = board[selected[0]!];
+  if (color !== 1 && color !== 2) return false;
+  for (const cell of selected) {
+    if (board[cell] !== color) return false;
+  }
+  return captureWindows(board, size, color).some((window) =>
+    selected.every((cell) => window.includes(cell)),
+  );
 }
 
 function boardFull(board: Stone[]): boolean {
@@ -182,7 +213,9 @@ function passTurn(state: GameState): GameState {
 function beginRemove(state: GameState): GameState {
   const eligible = stonesInFives(state.board, state.size, state.turn);
   if (eligible.length < 5) return passTurn(state);
-  if (eligible.length === 5) return resolveRemove(state, eligible);
+  if (eligible.length === 5 && fitsCapture(state.board, state.size, eligible)) {
+    return resolveRemove(state, eligible);
+  }
   return {
     ...state,
     pending: { kind: "remove", eligible, selected: [] },
@@ -240,6 +273,7 @@ function selectRemove(state: GameState, index: number): GameState | null {
   const selected = pending.selected.includes(index)
     ? pending.selected.filter((cell) => cell !== index)
     : pending.selected.concat(index);
+  if (!fitsCapture(state.board, state.size, selected)) return null;
   if (selected.length === 5) return resolveRemove(state, selected);
   return {
     ...state,
@@ -284,7 +318,12 @@ export function play(state: GameState, index: number): GameState | null {
 
 export function canActOn(state: GameState, index: number): boolean {
   if (state.winner !== 0) return false;
-  if (state.pending?.kind === "remove") return state.pending.eligible.includes(index);
+  if (state.pending?.kind === "remove") {
+    if (state.pending.selected.includes(index)) return true;
+    if (state.pending.selected.length >= 5) return false;
+    if (!state.pending.eligible.includes(index)) return false;
+    return fitsCapture(state.board, state.size, state.pending.selected.concat(index));
+  }
   if (state.pending?.kind === "flip") return state.board[index] === other(state.turn);
   return isEmpty(state, index);
 }
@@ -306,20 +345,16 @@ export function opensCapture(state: GameState, index: number, color: Player): bo
 export function pickRemoveStones(state: GameState): number[] | null {
   const pending = state.pending;
   if (!pending || pending.kind !== "remove") return null;
-  const need = 5 - pending.selected.length;
-  if (need <= 0) return pending.selected.slice();
-  const remain = pending.eligible.filter((cell) => !pending.selected.includes(cell));
-  const line =
-    state.lastMove != null ? winningLine(state.board, state.size, state.lastMove) : null;
-  const ordered: number[] = [];
-  if (line) {
-    for (const cell of line) {
-      if (remain.includes(cell) && !ordered.includes(cell)) ordered.push(cell);
-    }
+  const selected = pending.selected;
+  let matches = captureWindows(state.board, state.size, state.turn).filter((window) =>
+    selected.every((cell) => window.includes(cell)),
+  );
+  if (!matches.length) return null;
+  if (state.lastMove != null) {
+    const around = matches.filter((window) => window.includes(state.lastMove!));
+    if (around.length) matches = around;
   }
-  for (const cell of remain) if (!ordered.includes(cell)) ordered.push(cell);
-  if (ordered.length < need) return null;
-  return pending.selected.concat(ordered.slice(0, need));
+  return matches[0]!.slice();
 }
 
 export function pickFlipStone(state: GameState): number | null {
@@ -378,6 +413,95 @@ export function playTurn(state: GameState, index: number): GameState | null {
   const next = play(state, index);
   if (!next) return null;
   return resolvePendingGreedy(next);
+}
+
+/**
+ * Series placement that leaves a completed five on the board.
+ * `play` lifts that five immediately; the client holds the line, then calls `liftShown`.
+ */
+export function placeShown(state: GameState, index: number): GameState | null {
+  if (state.rules !== "series") return null;
+  if (state.pending || state.winner !== 0 || !isEmpty(state, index)) return null;
+  const board = state.board.slice() as Stone[];
+  board[index] = state.turn;
+  const base: GameState = {
+    ...state,
+    board,
+    moves: state.moves.concat(index),
+    lastMove: index,
+    winLine: null,
+    pending: null,
+  };
+  const line = stonesInFives(board, state.size, state.turn);
+  if (line.length >= 5) return { ...base, winLine: line };
+  if (boardFull(board)) return decideFullWinner(base);
+  return { ...base, turn: other(state.turn) };
+}
+
+/** Lift five marked stones. A following five or flip is left for the caller to show. */
+export function liftShown(state: GameState, picked?: number[]): GameState | null {
+  if (state.rules !== "series" || state.winner !== 0 || state.pending?.kind === "flip") return null;
+  const eligible =
+    state.pending?.kind === "remove"
+      ? state.pending.eligible
+      : stonesInFives(state.board, state.size, state.turn);
+  if (eligible.length < 5) return null;
+  let chosen = picked;
+  if (!chosen || chosen.length !== 5) {
+    const staged: GameState = {
+      ...state,
+      pending: {
+        kind: "remove",
+        eligible,
+        selected: state.pending?.kind === "remove" ? state.pending.selected : [],
+      },
+      winLine: eligible,
+    };
+    const auto = pickRemoveStones(staged);
+    if (!auto) return null;
+    chosen = auto;
+  }
+  if (chosen.length !== 5 || !fitsCapture(state.board, state.size, chosen)) return null;
+  const board = state.board.slice() as Stone[];
+  for (const cell of chosen) board[cell] = 0;
+  const captures: [number, number] = [state.captures[0], state.captures[1]];
+  captures[state.turn - 1] += 1;
+  const next: GameState = {
+    ...state,
+    board,
+    captures,
+    pending: null,
+    winLine: null,
+  };
+  if (captureOf(next, next.turn) >= next.capturesToWin) {
+    return { ...next, winner: next.turn };
+  }
+  if (listStones(board, other(next.turn)).length > 0) {
+    return { ...next, pending: { kind: "flip" } };
+  }
+  const leftover = stonesInFives(board, state.size, next.turn);
+  if (leftover.length >= 5) return { ...next, winLine: leftover };
+  if (boardFull(board)) return decideFullWinner(next);
+  return { ...next, turn: other(next.turn) };
+}
+
+/** Flip one stone. A new five stays marked instead of being lifted in the same step. */
+export function flipShown(state: GameState, index: number): GameState | null {
+  if (state.pending?.kind !== "flip" || state.winner !== 0) return null;
+  if (state.board[index] !== other(state.turn)) return null;
+  const board = state.board.slice() as Stone[];
+  board[index] = state.turn;
+  const next: GameState = {
+    ...state,
+    board,
+    lastMove: index,
+    pending: null,
+    winLine: null,
+  };
+  const line = stonesInFives(board, state.size, state.turn);
+  if (line.length >= 5) return { ...next, winLine: line };
+  if (boardFull(board)) return decideFullWinner(next);
+  return { ...next, turn: other(state.turn) };
 }
 
 export function resign(state: GameState, loser: Player): GameState {
