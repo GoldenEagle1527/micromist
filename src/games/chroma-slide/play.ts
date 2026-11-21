@@ -468,7 +468,6 @@ class ChromaSession implements GameSession {
     return {
       accent: chromaAccent(cell),
       fill: TILE_COLORS[cell] ?? null,
-      dots: { count: 1, color: cell === 0 ? "red" : cell === 1 ? "blue" : "neutral" },
       path,
     };
   }
