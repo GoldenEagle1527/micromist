@@ -1,5 +1,5 @@
 import { generateRoomCode as sharedGenerateRoomCode } from "../../../shared/multiplayer";
-import type { GameState } from "../../../shared/gomoku/engine";
+import type { GameState, Rules } from "../../../shared/gomoku/engine";
 import {
   OnlineRoomClient,
   getOrCreatePlayerIdForGame,
@@ -31,7 +31,7 @@ export function shareUrl(roomCode: string): string {
 
 export type GomokuHandlers = {
   onWelcome?: CommonHandlers["onWelcome"];
-  onRoom?: (payload: { players: RoomPlayer[]; phase: Phase }) => void;
+  onRoom?: (payload: { players: RoomPlayer[]; phase: Phase; config: Record<string, unknown> }) => void;
   onStart?: (payload: Record<string, unknown>) => void;
   onState?: (payload: { publicState: GameState }) => void;
   onGameOver?: (payload: { winner: number; winReason?: string; winLine?: number[] | null }) => void;
@@ -54,7 +54,11 @@ export class GomokuOnlineClient {
     this.inner.connect(roomCode, {
       onWelcome: handlers.onWelcome,
       onRoom: (payload) => {
-        handlers.onRoom?.({ players: payload.players, phase: payload.phase });
+        handlers.onRoom?.({
+          players: payload.players,
+          phase: payload.phase,
+          config: payload.config ?? {},
+        });
       },
       onError: handlers.onError,
       onPeerLeft: handlers.onPeerLeft,
@@ -90,6 +94,10 @@ export class GomokuOnlineClient {
 
   claimSeat(seat: "red" | "blue"): boolean {
     return this.inner.send("claim_seat", { seat });
+  }
+
+  setConfig(config: { rules: Rules; capturesToWin: number }): boolean {
+    return this.inner.send("set_config", { ...config });
   }
 
   move(index: number): boolean {

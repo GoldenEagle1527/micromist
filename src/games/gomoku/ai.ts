@@ -1,10 +1,12 @@
 import {
+  captureOf,
   colOf,
   inBounds,
   idx,
   isOver,
+  opensCapture,
   other,
-  play,
+  playTurn,
   rowOf,
   type GameState,
   type Player,
@@ -129,26 +131,24 @@ export function candidates(board: Stone[], size: number, radius = 2): number[] {
   return out;
 }
 
-function evaluateBoard(board: Stone[], size: number, me: Player): number {
+function evaluateBoard(state: GameState, me: Player): number {
   const opp = other(me);
   let score = 0;
-  const cells = candidates(board, size, 1);
+  const cells = candidates(state.board, state.size, 1);
   for (const index of cells) {
-    score += scorePoint(board, size, index, me);
-    score -= scorePoint(board, size, index, opp) * 1.15;
+    score += scorePoint(state.board, state.size, index, me);
+    score -= scorePoint(state.board, state.size, index, opp) * 1.15;
+  }
+  if (state.rules === "series") {
+    score += (captureOf(state, me) - captureOf(state, opp)) * 12_000;
   }
   return score;
 }
 
-function winningMoves(
-  state: GameState,
-  color: Player,
-  spots: number[],
-): number[] {
+function capturingMoves(state: GameState, color: Player, spots: number[]): number[] {
   const hits: number[] = [];
   for (const index of spots) {
-    const next = play({ ...state, turn: color }, index);
-    if (next && next.winner === color) hits.push(index);
+    if (opensCapture(state, index, color)) hits.push(index);
   }
   return hits;
 }
@@ -181,7 +181,7 @@ function search(
     if (state.winner === root) return FIVE * 4;
     if (state.winner === other(root)) return -FIVE * 4;
     if (state.winner === 3) return 0;
-    return evaluateBoard(state.board, state.size, root);
+    return evaluateBoard(state, root);
   }
   const spots = rankedMoves(state, candidates(state.board, state.size, 2))
     .slice(0, maxBranch)
@@ -189,7 +189,7 @@ function search(
   const maximizing = state.turn === root;
   let best = maximizing ? -Infinity : Infinity;
   for (const index of spots) {
-    const next = play(state, index);
+    const next = playTurn(state, index);
     if (!next) continue;
     const value = search(next, depth - 1, alpha, beta, root, maxBranch);
     if (maximizing) {
@@ -209,9 +209,9 @@ export function chooseMove(state: GameState, difficulty: Difficulty): number {
   const me = state.turn;
   const opp = other(me);
   const spots = candidates(state.board, size, 2);
-  const wins = winningMoves(state, me, spots);
+  const wins = capturingMoves(state, me, spots);
   if (wins.length) return pickRandom(wins);
-  const blocks = winningMoves({ ...state, turn: opp }, opp, spots);
+  const blocks = capturingMoves({ ...state, turn: opp }, opp, spots);
   if (blocks.length) return pickRandom(blocks);
 
   if (!spots.length) return Math.floor(state.board.length / 2);
@@ -231,7 +231,7 @@ export function chooseMove(state: GameState, difficulty: Difficulty): number {
   let bestScore = -Infinity;
   let best: number[] = [branch[0]!.index];
   for (const item of branch) {
-    const next = play(state, item.index);
+    const next = playTurn(state, item.index);
     if (!next) continue;
     const value = search(next, 1, -Infinity, Infinity, me, 10);
     if (value > bestScore + 30) {

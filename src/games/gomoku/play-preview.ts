@@ -49,6 +49,16 @@ export const preview: GamePreview = (ctx) => {
             { value: "2", label: g.playWhite },
           ],
         },
+        {
+          id: "rules",
+          label: g.rules,
+          type: "select",
+          value: "classic",
+          options: [
+            { value: "classic", label: g.rulesClassic },
+            { value: "series", label: g.rulesSeries },
+          ],
+        },
       ],
     },
     actions: [{ id: "start", label: g.start, kind: "primary" }],

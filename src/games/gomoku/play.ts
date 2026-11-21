@@ -13,13 +13,20 @@ import { clearLocalProgress, loadLocalProgress, saveLocalProgress } from "../loc
 import { chooseMove, type Difficulty } from "./ai";
 import {
   SIZE,
+  asRules,
+  canActOn,
+  clampCapturesToWin,
+  cloneState,
+  DEFAULT_CAPTURES_TO_WIN,
   emptyState,
   isOver,
-  isValidState,
+  parseState,
   play,
-  undo,
+  playTurn,
+  resolvePendingGreedy,
   type GameState,
   type Player,
+  type Rules,
 } from "./engine";
 import { gomokuEn, gomokuZh, type GomokuDict } from "./i18n";
 import {
@@ -39,6 +46,8 @@ type Settings = {
   opponent: Opponent;
   difficulty: Difficulty;
   humanColor: Player;
+  rules: Rules;
+  capturesToWin: number;
 };
 
 type Persist = {
@@ -57,6 +66,8 @@ const DEFAULT_SETTINGS: Settings = {
   opponent: "ai",
   difficulty: "normal",
   humanColor: 1,
+  rules: "classic",
+  capturesToWin: DEFAULT_CAPTURES_TO_WIN,
 };
 
 function dict(locale: SessionContext["locale"]): GomokuDict {
@@ -90,6 +101,11 @@ class GomokuSession implements GameSession {
   private state: GameState = emptyState();
   private thinking = false;
   private aiTimer: number | null = null;
+  private history: GameState[] = [];
+  private roomRules: Rules = "classic";
+  private roomCapturesToWin = DEFAULT_CAPTURES_TO_WIN;
+  private configSentForRoom = "";
+  private pendingConfig: string | null = null;
   private boardHost: HTMLElement | null = null;
   private canvas: HTMLCanvasElement | null = null;
   private grid: GridBoard | null = null;
@@ -161,6 +177,10 @@ class GomokuSession implements GameSession {
     if (id === "mode") this.settings = { ...this.settings, opponent: asOpponent(text) };
     if (id === "difficulty") this.settings = { ...this.settings, difficulty: asDifficulty(text) };
     if (id === "humanColor") this.settings = { ...this.settings, humanColor: text === "2" ? 2 : 1 };
+    if (id === "rules") this.settings = { ...this.settings, rules: asRules(text) };
+    if (id === "capturesToWin") {
+      this.settings = { ...this.settings, capturesToWin: clampCapturesToWin(value) };
+    }
     this.emit();
   }
 
@@ -281,11 +301,31 @@ class GomokuSession implements GameSession {
         },
       );
     }
+    fields.push({
+      id: "rules",
+      label: g.rules,
+      type: "select",
+      value: this.settings.rules,
+      options: [
+        { value: "classic", label: g.rulesClassic },
+        { value: "series", label: g.rulesSeries },
+      ],
+    });
+    if (this.settings.rules === "series") {
+      fields.push({
+        id: "capturesToWin",
+        label: g.capturesToWin,
+        type: "number",
+        value: this.settings.capturesToWin,
+        min: 1,
+        max: 9,
+      });
+    }
     const online = this.settings.opponent === "online";
     return {
       phase: "menu",
       title: g.setupTitle,
-      hint: g.setupHint,
+      hint: this.settings.rules === "series" ? g.seriesHint : g.setupHint,
       params: { fields },
       actions: [
         {
@@ -309,7 +349,7 @@ class GomokuSession implements GameSession {
         id: "undo",
         label: g.undo,
         kind: "ghost",
-        disabled: this.thinking || this.state.moves.length === 0,
+        disabled: this.thinking || this.history.length === 0,
       },
       {
         id: "restart",
@@ -326,9 +366,16 @@ class GomokuSession implements GameSession {
         confirm: confirm(g.confirmSetupTitle, g.confirmSetupBody),
       },
     ];
+    const hud = [{ id: "status", value: this.localStatus(g) }];
+    if (this.state.rules === "series") {
+      hud.unshift({
+        id: "captures",
+        value: g.capturesHud(this.state.captures[0], this.state.captures[1], this.state.capturesToWin),
+      });
+    }
     return {
       phase: "play",
-      hud: [{ id: "status", value: this.localStatus(g) }],
+      hud,
       actions,
     };
   }
@@ -361,6 +408,18 @@ class GomokuSession implements GameSession {
       hud: showBoard
         ? [
             { id: "room", value: g.roomCodeLabel(this.roomCode) },
+            ...(this.roomRules === "series" && this.state
+              ? [
+                  {
+                    id: "captures",
+                    value: g.capturesHud(
+                      this.state.captures[0],
+                      this.state.captures[1],
+                      this.state.capturesToWin,
+                    ),
+                  },
+                ]
+              : []),
             { id: "status", value: this.roomStatus(g) },
           ]
         : undefined,
@@ -403,6 +462,10 @@ class GomokuSession implements GameSession {
 
   private localStatus(g: GomokuDict): string {
     if (this.thinking) return g.thinking;
+    if (this.state.pending?.kind === "remove") {
+      return g.pickRemove(this.state.pending.selected.length);
+    }
+    if (this.state.pending?.kind === "flip") return g.pickFlip;
     if (this.state.winner === 3) return g.draw;
     if (this.state.winner === 1 || this.state.winner === 2) {
       if (this.settings.opponent === "ai") {
@@ -418,10 +481,16 @@ class GomokuSession implements GameSession {
     if (!this.you || this.roomPhase === "connecting") return g.roomConnecting;
     const black = occupant(this.players, "red");
     const white = occupant(this.players, "blue");
+    const rulesBit =
+      this.roomRules === "series" ? g.roomRulesSeries(this.roomCapturesToWin) : g.roomRulesClassic;
     if (this.roomPhase === "lobby") {
-      if (this.you.seat === "red") return black && !white ? g.waitingWhite : g.waitingSeats;
-      if (this.you.seat === "blue") return white && !black ? g.waitingBlack : g.waitingSeats;
-      return g.waitingSeats;
+      if (this.you.seat === "red") {
+        return `${rulesBit} ${black && !white ? g.waitingWhite : g.waitingSeats}`;
+      }
+      if (this.you.seat === "blue") {
+        return `${rulesBit} ${white && !black ? g.waitingBlack : g.waitingSeats}`;
+      }
+      return `${rulesBit} ${g.waitingSeats}`;
     }
     const youBit =
       this.you.seat === "red" ? g.youAreBlack : this.you.seat === "blue" ? g.youAreWhite : g.watching;
@@ -435,6 +504,12 @@ class GomokuSession implements GameSession {
     }
     if (this.state && this.roomPhase === "playing") {
       const myColor = seatToPlayer(this.you.seat);
+      if (this.state.pending?.kind === "remove") {
+        return `${g.pickRemove(this.state.pending.selected.length)} ${youBit}`;
+      }
+      if (this.state.pending?.kind === "flip") {
+        return `${g.pickFlip} ${youBit}`;
+      }
       if (myColor) {
         return `${this.state.turn === myColor ? g.yourTurn : g.opponentTurn} ${youBit}`;
       }
@@ -457,8 +532,7 @@ class GomokuSession implements GameSession {
 
   private canPlayIndex(index: number): boolean {
     const state = this.boardState();
-    if (!state || isOver(state)) return false;
-    if (state.board[index] !== 0) return false;
+    if (!state || isOver(state) || !canActOn(state, index)) return false;
     if (this.roomCode) {
       const myColor = this.you ? seatToPlayer(this.you.seat) : null;
       return Boolean(myColor && this.roomPhase === "playing" && state.turn === myColor);
@@ -471,10 +545,14 @@ class GomokuSession implements GameSession {
     if (!state) return {};
     const index = row * state.size + col;
     const stone = state.board[index];
+    const pending = state.pending;
+    const selected = pending?.kind === "remove" && pending.selected.includes(index);
+    const eligible = pending?.kind === "remove" && pending.eligible.includes(index);
     const win = state.winLine?.includes(index) ?? false;
     return {
       stone: stone === 1 ? "black" : stone === 2 ? "white" : null,
-      path: win,
+      path: win || eligible,
+      accent: selected ? (state.turn === 1 ? "red" : "blue") : "none",
     };
   }
 
@@ -507,8 +585,8 @@ class GomokuSession implements GameSession {
 
   private paint(): void {
     const state = this.boardState();
-    if (state && state.moves.length) {
-      const last = state.moves[state.moves.length - 1]!;
+    const last = state?.lastMove;
+    if (state && last != null && state.board[last]) {
       this.grid?.setLastMove(Math.floor(last / state.size), last % state.size);
     } else {
       this.grid?.clearLastMove();
@@ -535,21 +613,38 @@ class GomokuSession implements GameSession {
     if (this.settings.opponent === "ai" && this.state.turn !== this.settings.humanColor) return;
     const next = play(this.state, index);
     if (!next) return;
+    this.history.push(cloneState(this.state));
     this.state = next;
     this.emit();
   }
 
   private onUndo(): void {
-    if (this.roomCode || this.thinking || this.state.moves.length === 0) return;
+    if (this.roomCode || this.thinking || this.history.length === 0) return;
     this.clearAi();
-    const steps = this.settings.opponent === "ai" ? Math.min(2, this.state.moves.length) : 1;
-    this.state = undo(this.state, steps);
+    const classicAi =
+      this.settings.opponent === "ai" &&
+      this.settings.rules === "classic" &&
+      !this.state.pending &&
+      this.history.length >= 2;
+    const steps = classicAi ? 2 : 1;
+    for (let i = 0; i < steps; i++) {
+      const prev = this.history.pop();
+      if (prev) this.state = prev;
+    }
     this.emit();
+  }
+
+  private freshState(): GameState {
+    return emptyState({
+      rules: this.settings.rules,
+      capturesToWin: this.settings.capturesToWin,
+    });
   }
 
   private startLocal(): void {
     this.clearAi();
-    this.state = emptyState();
+    this.history = [];
+    this.state = this.freshState();
     this.phase = "play";
     this.emit();
   }
@@ -557,12 +652,14 @@ class GomokuSession implements GameSession {
   private doRestart(): void {
     if (this.roomCode) return;
     this.clearAi();
-    this.state = emptyState();
+    this.history = [];
+    this.state = this.freshState();
     this.emit();
   }
 
   private goMenu(clearProgress: boolean): void {
     this.clearAi();
+    this.history = [];
     this.phase = "menu";
     this.state = emptyState();
     if (clearProgress) clearLocalProgress(SLUG);
@@ -571,6 +668,7 @@ class GomokuSession implements GameSession {
 
   private createRoom(): void {
     const code = generateRoomCode();
+    this.pendingConfig = code;
     const next = new URLSearchParams(this.ctx.search);
     next.set("room", code);
     this.ctx.setSearch(next, { replace: true });
@@ -578,14 +676,18 @@ class GomokuSession implements GameSession {
 
   private hydrate(): void {
     const data = loadLocalProgress<Persist>(SLUG);
-    if (!data || data.screen !== "playing" || !isValidState(data.state)) return;
+    const state = data?.state ? parseState(data.state) : null;
+    if (!data || data.screen !== "playing" || !state) return;
     if (data.settings?.opponent === "online") return;
     this.settings = {
       opponent: data.settings?.opponent === "local" ? "local" : "ai",
       difficulty: asDifficulty(data.settings?.difficulty ?? "normal"),
       humanColor: data.settings?.humanColor === 2 ? 2 : 1,
+      rules: asRules(data.settings?.rules ?? state.rules),
+      capturesToWin: clampCapturesToWin(data.settings?.capturesToWin ?? state.capturesToWin),
     };
-    this.state = data.state;
+    this.state = state;
+    this.history = [];
     this.phase = "play";
     this.scheduleAi();
   }
@@ -617,11 +719,19 @@ class GomokuSession implements GameSession {
     const difficulty = this.settings.difficulty;
     this.thinking = true;
     this.aiTimer = window.setTimeout(() => {
-      const move = chooseMove(from, difficulty);
-      const next = play(from, move);
+      const next = from.pending
+        ? resolvePendingGreedy(from)
+        : playTurn(from, chooseMove(from, difficulty));
       this.thinking = false;
       this.aiTimer = null;
-      if (next) this.state = next;
+      const stuck =
+        Boolean(from.pending) &&
+        Boolean(next?.pending) &&
+        next?.pending?.kind === from.pending?.kind;
+      if (next && !stuck) {
+        this.history.push(cloneState(from));
+        this.state = next;
+      }
       this.emit();
     }, 80);
   }
@@ -647,6 +757,9 @@ class GomokuSession implements GameSession {
     this.peerHint = "";
     this.you = null;
     this.players = [];
+    this.configSentForRoom = "";
+    this.roomRules = this.settings.rules;
+    this.roomCapturesToWin = this.settings.capturesToWin;
     const client = new GomokuOnlineClient();
     const playerId = getOrCreatePlayerId();
     this.client = client;
@@ -657,6 +770,18 @@ class GomokuSession implements GameSession {
       onWelcome: (payload) => {
         this.you = { playerId: payload.playerId, seat: payload.seat };
         if (this.roomPhase === "connecting") this.roomPhase = "lobby";
+        if (
+          payload.canConfig === true &&
+          this.pendingConfig === code &&
+          this.configSentForRoom !== code
+        ) {
+          this.configSentForRoom = code;
+          this.pendingConfig = null;
+          client.setConfig({
+            rules: this.settings.rules,
+            capturesToWin: this.settings.capturesToWin,
+          });
+        }
         this.emit();
       },
       onRoom: (payload) => {
@@ -664,6 +789,11 @@ class GomokuSession implements GameSession {
         this.players = payload.players;
         const self = payload.players.find((p) => p.playerId === playerId);
         if (self) this.you = { playerId: self.playerId, seat: self.seat };
+        const cfg = payload.config;
+        if (cfg && typeof cfg === "object") {
+          this.roomRules = asRules(cfg.rules);
+          this.roomCapturesToWin = clampCapturesToWin(cfg.capturesToWin);
+        }
         this.emit();
       },
       onStart: () => {
@@ -673,8 +803,11 @@ class GomokuSession implements GameSession {
         this.emit();
       },
       onState: (payload) => {
-        if (isValidState(payload.publicState)) {
-          this.state = payload.publicState;
+        const next = parseState(payload.publicState);
+        if (next) {
+          this.state = next;
+          this.roomRules = next.rules;
+          this.roomCapturesToWin = next.capturesToWin;
           this.phase = "play";
           this.roomError = "";
           this.emit();
@@ -715,6 +848,8 @@ class GomokuSession implements GameSession {
     this.roomClosed = false;
     this.peerHint = "";
     this.roomPhase = "connecting";
+    this.configSentForRoom = "";
+    this.pendingConfig = null;
     this.phase = "menu";
     this.state = emptyState();
     this.settings = { ...this.settings, opponent: "ai" };

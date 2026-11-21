@@ -58,8 +58,8 @@ export const games: GameMeta[] = [
     mode: "single-online",
     title: { zh: "五子棋", en: "Gomoku" },
     blurb: {
-      zh: "十五路棋盘，黑先，五子连珠。可热座、对战本机 AI，或分享链接联机。",
-      en: "A 15×15 board. Black goes first; five in a row wins. Play hotseat, against a built-in AI, or online with a share link.",
+      zh: "十五路棋盘，黑先。经典连五即胜，或连战用提子次数决胜。可热座、对战本机 AI，或分享链接联机。",
+      en: "A 15×15 board. Black goes first. Classic five-in-a-row, or Series decided by captures. Hotseat, built-in AI, or a share-link room.",
     },
     badge: { zh: "单机/联机", en: "Offline / Online" },
     audience: "staging",

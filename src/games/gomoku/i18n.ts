@@ -62,11 +62,21 @@ export type GomokuDict = {
   rematch: string;
   rematchWaiting: string;
   leaveRoom: string;
+  rules: string;
+  rulesClassic: string;
+  rulesSeries: string;
+  capturesToWin: string;
+  seriesHint: string;
+  pickRemove: (selected: number) => string;
+  pickFlip: string;
+  capturesHud: (black: number, white: number, goal: number) => string;
+  roomRulesClassic: string;
+  roomRulesSeries: (goal: number) => string;
 };
 
 export const gomokuZh: GomokuDict = {
   setupTitle: "对局设置",
-  setupHint: "十五路棋盘，黑棋先行，横、竖、斜连成五子即胜。本局为自由五子棋，没有禁手。",
+  setupHint: "十五路棋盘，黑棋先行。经典模式连五即胜；连战则连五后提子翻子，先达到提子次数者胜。自由五子棋，没有禁手。",
   mode: "对局方式",
   vsAi: "对战 AI",
   hotseat: "热座双人",
@@ -128,12 +138,22 @@ export const gomokuZh: GomokuDict = {
   rematch: "再来一局",
   rematchWaiting: "已申请再来一局，等待对方同意",
   leaveRoom: "离开房间",
+  rules: "胜负规则",
+  rulesClassic: "经典（连五即胜）",
+  rulesSeries: "连战（提子决胜）",
+  capturesToWin: "提子次数",
+  seriesHint: "连成五子后先提走自己的五子，再把对方一子翻成己方，计一次提子。",
+  pickRemove: (selected) => `选择要提走的 5 子（已选 ${selected}/5）`,
+  pickFlip: "选择对方一子，翻成自己的颜色",
+  capturesHud: (black, white, goal) => `提子 黑 ${black} · 白 ${white} / ${goal}`,
+  roomRulesClassic: "经典规则，连五即胜。",
+  roomRulesSeries: (goal) => `连战 · 先提 ${goal} 次者胜。`,
 };
 
 export const gomokuEn: GomokuDict = {
   setupTitle: "Match setup",
   setupHint:
-    "A 15×15 board. Black goes first; five in a row — horizontal, vertical, or diagonal — wins. Freestyle rules, no forbidden moves.",
+    "A 15×15 board. Black goes first. Classic mode wins on five in a row; Series mode captures after each five, and the capture target wins. Freestyle, no forbidden moves.",
   mode: "Mode",
   vsAi: "vs AI",
   hotseat: "Hotseat",
@@ -195,4 +215,14 @@ export const gomokuEn: GomokuDict = {
   rematch: "Rematch",
   rematchWaiting: "Rematch requested — waiting for the other player",
   leaveRoom: "Leave room",
+  rules: "Win condition",
+  rulesClassic: "Classic (five in a row)",
+  rulesSeries: "Series (captures)",
+  capturesToWin: "Captures to win",
+  seriesHint: "After five in a row, lift five of your stones, then flip one enemy stone. That is one capture.",
+  pickRemove: (selected) => `Pick 5 stones to lift (${selected}/5)`,
+  pickFlip: "Pick one enemy stone to flip to your color",
+  capturesHud: (black, white, goal) => `Captures Black ${black} · White ${white} / ${goal}`,
+  roomRulesClassic: "Classic rules: five in a row wins.",
+  roomRulesSeries: (goal) => `Series · first to ${goal} captures wins.`,
 };

@@ -1,20 +1,31 @@
 import {
+  asRules,
+  clampCapturesToWin,
+  DEFAULT_CAPTURES_TO_WIN,
   emptyState,
   idx,
   inBounds,
   isOver,
-  isValidState,
+  parseState,
   play,
   resign,
   type GameState,
   type Player,
+  type Rules,
 } from "../../../shared/gomoku/engine";
 import { isSeatedSeat, normalizePlayerKind, type Seat } from "../../../shared/multiplayer";
 import type { GameRoomAdapter, RoomHost } from "../../multiplayer/adapter";
 import type { PlayerRecord } from "../../multiplayer/types";
 
+type RoomConfig = {
+  rules: Rules;
+  capturesToWin: number;
+};
+
 type Serialized = {
   state: GameState | null;
+  config: RoomConfig;
+  configFrozen: boolean;
 };
 
 function seatToPlayer(seat: Seat): Player | null {
@@ -23,8 +34,14 @@ function seatToPlayer(seat: Seat): Player | null {
   return null;
 }
 
+function defaultConfig(): RoomConfig {
+  return { rules: "classic", capturesToWin: DEFAULT_CAPTURES_TO_WIN };
+}
+
 export function createGomokuAdapter(host: RoomHost): GameRoomAdapter {
   let state: GameState | null = null;
+  let config: RoomConfig = defaultConfig();
+  let configFrozen = false;
 
   const api: GameRoomAdapter = {
     slug: "gomoku",
@@ -32,17 +49,22 @@ export function createGomokuAdapter(host: RoomHost): GameRoomAdapter {
 
     getPublicConfig: () => ({
       size: state?.size ?? 15,
+      rules: config.rules,
+      capturesToWin: config.capturesToWin,
     }),
 
     hostSeat: () => "red",
 
     onRecycle: () => {
       state = null;
+      config = defaultConfig();
+      configFrozen = false;
     },
 
     onSeated: (ws, player, info) => {
       const reusedRoom =
         info.reclaimed ||
+        configFrozen ||
         host.phase !== "lobby" ||
         state != null ||
         [...host.players.values()].some((p) => p.playerId !== player.playerId);
@@ -62,10 +84,11 @@ export function createGomokuAdapter(host: RoomHost): GameRoomAdapter {
       host.send(ws, "start", {
         phase: host.phase,
         yourSeat: player.seat,
+        config: api.getPublicConfig(),
       });
       host.send(ws, "state", { publicState: publicView() });
       if (host.phase === "over" || isOver(state)) {
-        host.send(ws, "game_over", gameOverBody("five"));
+        host.send(ws, "game_over", gameOverBody());
         return;
       }
       if (canMove(player.seat)) {
@@ -77,11 +100,16 @@ export function createGomokuAdapter(host: RoomHost): GameRoomAdapter {
       // The shell calls tryStartGame after a changed claim.
     },
 
-    onSetConfig: (ws, _session, _payload) => {
-      if (host.phase !== "lobby" || state) {
+    onSetConfig: (ws, _session, payload) => {
+      if (configFrozen || host.phase !== "lobby" || state) {
         host.send(ws, "error", { message: "Config locked after the match starts" });
         return true;
       }
+      config = {
+        rules: asRules(payload.rules),
+        capturesToWin: clampCapturesToWin(payload.capturesToWin),
+      };
+      configFrozen = true;
       host.broadcastRoom();
       void host.persist();
       return true;
@@ -94,7 +122,8 @@ export function createGomokuAdapter(host: RoomHost): GameRoomAdapter {
       const white = seated.find((p) => p.seat === "blue");
       if (!black || !white) return;
 
-      state = emptyState();
+      configFrozen = true;
+      state = emptyState(config);
       host.setPhase("playing");
       for (const p of seated) {
         p.ready = false;
@@ -126,13 +155,23 @@ export function createGomokuAdapter(host: RoomHost): GameRoomAdapter {
       }
     },
 
-    serialize: (): Serialized => ({ state }),
+    serialize: (): Serialized => ({ state, config, configFrozen }),
 
     hydrate: (blob: unknown) => {
       state = null;
+      config = defaultConfig();
+      configFrozen = false;
       if (!blob || typeof blob !== "object") return;
       const data = blob as Partial<Serialized>;
-      if (isValidState(data.state)) state = data.state;
+      if (data.config && typeof data.config === "object") {
+        config = {
+          rules: asRules(data.config.rules),
+          capturesToWin: clampCapturesToWin(data.config.capturesToWin),
+        };
+      }
+      if (data.configFrozen === true) configFrozen = true;
+      const parsed = parseState(data.state);
+      if (parsed) state = parsed;
     },
   };
 
@@ -189,7 +228,7 @@ export function createGomokuAdapter(host: RoomHost): GameRoomAdapter {
       gameOver: isOver(state),
     });
     if (isOver(state)) {
-      host.broadcast("game_over", gameOverBody(state.winner === 3 ? "draw" : "five"));
+      host.broadcast("game_over", gameOverBody());
     } else {
       pushYourTurn();
     }
@@ -283,12 +322,23 @@ export function createGomokuAdapter(host: RoomHost): GameRoomAdapter {
     }
   }
 
-  function gameOverBody(reason: "five" | "draw" | "surrender") {
+  function gameOverBody(reason?: "five" | "draw" | "surrender" | "captures" | "board") {
+    const resolved = reason ?? inferReason();
     return {
       winner: state?.winner ?? 0,
-      winReason: reason,
+      winReason: resolved,
       winLine: state?.winLine ?? null,
     };
+  }
+
+  function inferReason(): "five" | "draw" | "captures" | "board" {
+    if (!state) return "draw";
+    if (state.winner === 3) return "draw";
+    if (state.rules === "series") {
+      const n = state.winner === 1 || state.winner === 2 ? state.captures[state.winner - 1] : 0;
+      return n >= state.capturesToWin ? "captures" : "board";
+    }
+    return "five";
   }
 
   return api;
