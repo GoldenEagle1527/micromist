@@ -341,7 +341,7 @@ export function createGridBoard(
   function drawStone(x: number, y: number, stone: StoneColor, colors: ThemeColors): void {
     const cx = x + cellSize / 2;
     const cy = y + cellSize / 2;
-    const radius = Math.max(cellSize * 0.36, 4);
+    const radius = Math.max(cellSize * 0.22, 3);
     ctx.beginPath();
     ctx.arc(cx, cy + radius * 0.12, radius, 0, Math.PI * 2);
     ctx.fillStyle = colors.dotShadow;
