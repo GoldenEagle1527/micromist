@@ -313,6 +313,20 @@
   flex: 1;
 }
 
+/* Play: lock the shell to the viewport so the board can fill leftover space. */
+.shell:has(.game-shell-is-play) {
+  height: 100dvh;
+  max-height: 100dvh;
+  overflow: hidden;
+}
+
+.shell:has(.game-shell-is-play) .main {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
 .hero {
   margin-bottom: 1.75rem;
   padding: 1.35rem 1.25rem;

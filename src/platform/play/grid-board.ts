@@ -33,6 +33,8 @@ export type GridBoard = {
   destroy: () => void;
   readonly cellSize: number;
   readonly hover: { row: number; col: number } | null;
+  /** Mobile UA: board fills the host, but can be pinched and panned. */
+  readonly panEnabled: boolean;
 };
 
 type ThemeColors = {
@@ -145,6 +147,33 @@ function roundRect(
   ctx.closePath();
 }
 
+function isMobileUA(): boolean {
+  if (typeof navigator === "undefined") return false;
+  const ua = navigator.userAgent;
+  if (/Mobi|Android|iPhone|iPod|Windows Phone|webOS|BlackBerry/i.test(ua)) return true;
+  if (/iPad/i.test(ua)) return true;
+  if (navigator.maxTouchPoints > 1 && /Macintosh/.test(ua)) return true;
+  return false;
+}
+
+function touchDist(a: Touch, b: Touch): number {
+  return Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+}
+
+function touchMid(a: Touch, b: Touch): { x: number; y: number } {
+  return { x: (a.clientX + b.clientX) / 2, y: (a.clientY + b.clientY) / 2 };
+}
+
+function ensureViewport(canvas: HTMLCanvasElement): HTMLElement {
+  const parent = canvas.parentElement;
+  if (parent?.classList.contains("grid-board-viewport")) return parent;
+  const viewport = document.createElement("div");
+  viewport.className = "grid-board-viewport";
+  if (parent) parent.replaceChild(viewport, canvas);
+  viewport.append(canvas);
+  return viewport;
+}
+
 function getDotPositions(
   count: number,
   cx: number,
@@ -184,6 +213,9 @@ export function createGridBoard(
     throw new Error("2d context unavailable");
   }
   const ctx: CanvasRenderingContext2D = maybeCtx;
+  const viewport = ensureViewport(canvas);
+  const host = viewport.parentElement;
+  const panEnabled = isMobileUA();
 
   let cellSize = 32;
   let canvasSize = 0;
@@ -193,6 +225,18 @@ export function createGridBoard(
   let explosionHighlight: Set<number> | null = null;
   let cachedIsDark: boolean | null = null;
   let destroyed = false;
+  let viewScale = 1;
+  let viewTx = 0;
+  let viewTy = 0;
+  let ignoreClickUntil = 0;
+  let dragging = false;
+  let pinchStartDist = 0;
+  let pinchStartScale = 1;
+  let lastTouchX = 0;
+  let lastTouchY = 0;
+  let gestureMoved = false;
+  const TAP_SLOP = 12;
+  let lastFitKey = "";
 
   function boardSize(): number {
     return Math.max(1, source.size);
@@ -209,17 +253,65 @@ export function createGridBoard(
     return isDark() ? DARK_COLORS : LIGHT_COLORS;
   }
 
+  function maxViewScale(): number {
+    const n = boardSize();
+    const minCell = 48;
+    const needed = canvasSize > 0 ? (minCell * n) / canvasSize : 3;
+    return Math.min(8, Math.max(3, needed));
+  }
+
+  function clampAxis(offset: number, scaled: number, span: number): number {
+    if (scaled <= span + 0.5) return (span - scaled) / 2;
+    const min = span - scaled;
+    return Math.min(0, Math.max(min, offset));
+  }
+
+  function clampView(): void {
+    const rect = viewport.getBoundingClientRect();
+    const scaled = canvasSize * viewScale;
+    viewTx = clampAxis(viewTx, scaled, rect.width);
+    viewTy = clampAxis(viewTy, scaled, rect.height);
+  }
+
+  function applyView(): void {
+    if (!panEnabled) {
+      canvas.style.transform = "";
+      return;
+    }
+    canvas.style.transformOrigin = "0 0";
+    canvas.style.transform = `translate(${viewTx}px, ${viewTy}px) scale(${viewScale})`;
+  }
+
+  function zoomAt(clientX: number, clientY: number, nextScale: number): void {
+    const rect = viewport.getBoundingClientRect();
+    const px = clientX - rect.left;
+    const py = clientY - rect.top;
+    const clamped = Math.min(maxViewScale(), Math.max(1, nextScale));
+    const localX = (px - viewTx) / viewScale;
+    const localY = (py - viewTy) / viewScale;
+    viewScale = clamped;
+    viewTx = px - localX * viewScale;
+    viewTy = py - localY * viewScale;
+    clampView();
+    applyView();
+  }
+
   function resize(): void {
     if (destroyed) return;
     cachedIsDark = detectDarkTheme();
-    const wrapper = canvas.parentElement;
-    if (!wrapper) return;
-
-    const wrapperRect = wrapper.getBoundingClientRect();
+    const wrapperRect = viewport.getBoundingClientRect();
     const availableWidth = wrapperRect.width - padding * 2;
     const availableHeight = wrapperRect.height - padding * 2;
+    if (availableWidth < 2 || availableHeight < 2) return;
     const available = Math.min(availableWidth, availableHeight);
     const n = boardSize();
+    const fitKey = `${n}:${Math.round(available)}`;
+    if (fitKey === lastFitKey && canvasSize > 0) {
+      render();
+      return;
+    }
+    const nChanged = lastFitKey !== "" && !lastFitKey.startsWith(`${n}:`);
+    lastFitKey = fitKey;
     cellSize = Math.max(Math.floor(available / n), 1);
     canvasSize = cellSize * n;
 
@@ -229,6 +321,9 @@ export function createGridBoard(
     canvas.style.width = `${canvasSize}px`;
     canvas.style.height = `${canvasSize}px`;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    if (nChanged) viewScale = 1;
+    clampView();
+    applyView();
     render();
   }
 
@@ -428,14 +523,104 @@ export function createGridBoard(
 
   const onWindowResize = () => resize();
   window.addEventListener("resize", onWindowResize);
+  const visualViewport = window.visualViewport;
+  visualViewport?.addEventListener("resize", onWindowResize);
   const themeObserver = new MutationObserver(() => resize());
   themeObserver.observe(document.documentElement, {
     attributes: true,
     attributeFilter: ["data-theme"],
   });
-  const parent = canvas.parentElement;
-  const ro = parent ? new ResizeObserver(() => resize()) : null;
-  if (parent && ro) ro.observe(parent);
+  const ro = new ResizeObserver(() => resize());
+  ro.observe(viewport);
+
+  if (panEnabled) {
+    viewport.classList.add("is-pan");
+    host?.classList.add("is-pan");
+  }
+
+  function onTouchStart(event: TouchEvent): void {
+    if (!panEnabled || destroyed) return;
+    gestureMoved = false;
+    if (event.touches.length >= 2) {
+      pinchStartDist = touchDist(event.touches[0]!, event.touches[1]!);
+      pinchStartScale = viewScale;
+      dragging = false;
+      event.preventDefault();
+      return;
+    }
+    if (event.touches.length === 1) {
+      pinchStartDist = 0;
+      dragging = true;
+      lastTouchX = event.touches[0]!.clientX;
+      lastTouchY = event.touches[0]!.clientY;
+    }
+  }
+
+  function onTouchMove(event: TouchEvent): void {
+    if (!panEnabled || destroyed) return;
+    if (event.touches.length >= 2) {
+      event.preventDefault();
+      gestureMoved = true;
+      ignoreClickUntil = performance.now() + 400;
+      const a = event.touches[0]!;
+      const b = event.touches[1]!;
+      if (pinchStartDist > 0) {
+        const mid = touchMid(a, b);
+        zoomAt(mid.x, mid.y, pinchStartScale * (touchDist(a, b) / pinchStartDist));
+      }
+      dragging = false;
+      return;
+    }
+    if (!dragging || event.touches.length !== 1) return;
+    const x = event.touches[0]!.clientX;
+    const y = event.touches[0]!.clientY;
+    const dx = x - lastTouchX;
+    const dy = y - lastTouchY;
+    if (viewScale <= 1.001) return;
+    if (!gestureMoved && Math.hypot(dx, dy) < TAP_SLOP) return;
+    event.preventDefault();
+    gestureMoved = true;
+    ignoreClickUntil = performance.now() + 400;
+    lastTouchX = x;
+    lastTouchY = y;
+    viewTx += dx;
+    viewTy += dy;
+    clampView();
+    applyView();
+  }
+
+  function onTouchEnd(event: TouchEvent): void {
+    if (!panEnabled || destroyed) return;
+    if (event.touches.length >= 2) {
+      pinchStartDist = touchDist(event.touches[0]!, event.touches[1]!);
+      pinchStartScale = viewScale;
+      dragging = false;
+      return;
+    }
+    if (event.touches.length === 1) {
+      pinchStartDist = 0;
+      dragging = true;
+      lastTouchX = event.touches[0]!.clientX;
+      lastTouchY = event.touches[0]!.clientY;
+      return;
+    }
+    dragging = false;
+    pinchStartDist = 0;
+  }
+
+  function onClickCapture(event: Event): void {
+    if (performance.now() >= ignoreClickUntil) return;
+    event.stopImmediatePropagation();
+    event.preventDefault();
+  }
+
+  const touchOpts: AddEventListenerOptions = { passive: false };
+  viewport.addEventListener("touchstart", onTouchStart, touchOpts);
+  viewport.addEventListener("touchmove", onTouchMove, touchOpts);
+  viewport.addEventListener("touchend", onTouchEnd);
+  viewport.addEventListener("touchcancel", onTouchEnd);
+  canvas.addEventListener("click", onClickCapture, true);
+
   requestAnimationFrame(() => resize());
 
   function destroy(): void {
@@ -444,8 +629,16 @@ export function createGridBoard(
     hoverCell = null;
     explosionHighlight = null;
     window.removeEventListener("resize", onWindowResize);
+    visualViewport?.removeEventListener("resize", onWindowResize);
     themeObserver.disconnect();
-    ro?.disconnect();
+    ro.disconnect();
+    viewport.removeEventListener("touchstart", onTouchStart);
+    viewport.removeEventListener("touchmove", onTouchMove);
+    viewport.removeEventListener("touchend", onTouchEnd);
+    viewport.removeEventListener("touchcancel", onTouchEnd);
+    canvas.removeEventListener("click", onClickCapture, true);
+    viewport.classList.remove("is-pan");
+    host?.classList.remove("is-pan");
   }
 
   return {
@@ -463,6 +656,9 @@ export function createGridBoard(
     },
     get hover() {
       return hoverCell;
+    },
+    get panEnabled() {
+      return panEnabled;
     },
   };
 }
