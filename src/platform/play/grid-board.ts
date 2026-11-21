@@ -76,7 +76,7 @@ const LIGHT_COLORS: ThemeColors = {
   blueCellBg: "rgba(30, 136, 229, 0.15)",
   lastMove: "rgba(255, 165, 0, 0.8)",
   explosion: "rgba(255, 193, 7, 0.45)",
-  path: "rgba(76, 175, 80, 0.22)",
+  path: "rgba(46, 125, 50, 0.95)",
 };
 
 const DARK_COLORS: ThemeColors = {
@@ -97,7 +97,7 @@ const DARK_COLORS: ThemeColors = {
   blueCellBg: "rgba(66, 165, 245, 0.2)",
   lastMove: "rgba(255, 215, 0, 0.8)",
   explosion: "rgba(255, 213, 79, 0.4)",
-  path: "rgba(76, 175, 80, 0.28)",
+  path: "rgba(129, 199, 132, 0.95)",
 };
 
 function detectDarkTheme(): boolean {
@@ -372,18 +372,15 @@ export function createGridBoard(
       ctx.globalAlpha = 1;
     }
 
-    if (paint.path) {
-      ctx.fillStyle = colors.path;
-      ctx.fillRect(x + 0.5, y + 0.5, cellSize - 1, cellSize - 1);
-    }
-
     if (explosionHighlight?.has(idx)) {
       ctx.fillStyle = colors.explosion;
       ctx.fillRect(x + 0.5, y + 0.5, cellSize - 1, cellSize - 1);
     }
 
-    if (lastMoveCell && lastMoveCell.row === row && lastMoveCell.col === col) {
-      ctx.strokeStyle = colors.lastMove;
+    const isLast =
+      lastMoveCell && lastMoveCell.row === row && lastMoveCell.col === col && !paint.path;
+    if (paint.path || isLast) {
+      ctx.strokeStyle = paint.path ? colors.path : colors.lastMove;
       ctx.lineWidth = 2.5;
       const inset = 2;
       roundRect(ctx, x + inset, y + inset, cellSize - inset * 2, cellSize - inset * 2, 3);

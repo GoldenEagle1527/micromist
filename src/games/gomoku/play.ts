@@ -513,8 +513,6 @@ class GomokuSession implements GameSession {
     } else {
       this.grid?.clearLastMove();
     }
-    if (state?.winLine?.length) this.grid?.setExplosionHighlight(state.winLine);
-    else this.grid?.setExplosionHighlight(null);
     this.grid?.resize();
   }
 
