@@ -716,6 +716,7 @@ class ExplosiveSession implements GameSession {
     };
     canvas.onmouseleave = () => this.renderer?.clearHover();
     canvas.ontouchstart = (e) => {
+      if (renderer.panEnabled) return;
       e.preventDefault();
       const touch = e.touches[0];
       if (touch) this.handlePointer(touch.clientX, touch.clientY);

@@ -495,6 +495,7 @@ class GomokuSession implements GameSession {
     };
     canvas.onmouseleave = () => grid.clearHover();
     canvas.ontouchstart = (event) => {
+      if (grid.panEnabled) return;
       event.preventDefault();
       const touch = event.touches[0];
       const state = this.boardState();

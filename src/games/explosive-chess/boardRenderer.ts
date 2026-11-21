@@ -25,6 +25,7 @@ export type BoardRenderer = {
   setExplosionHighlight: (cells: number[] | null) => void;
   destroy: () => void;
   readonly cellSize: number;
+  readonly panEnabled: boolean;
 };
 
 function accentOf(color: number): GridCellPaint["accent"] {

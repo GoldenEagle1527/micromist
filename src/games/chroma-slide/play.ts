@@ -501,6 +501,7 @@ class ChromaSession implements GameSession {
       grid.clearHover();
     };
     canvas.ontouchstart = (event) => {
+      if (grid.panEnabled) return;
       event.preventDefault();
       const touch = event.touches[0];
       if (!touch || !this.puzzle) return;
