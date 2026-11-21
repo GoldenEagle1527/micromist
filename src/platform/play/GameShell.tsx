@@ -1,13 +1,6 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useLocation, useSearchParams } from "react-router";
-import { CardFx } from "../../components/ChipIcon";
-import { useBoardExpand, usePlayLayout } from "../../components/board-expand-context";
 import { useLocale } from "../../i18n";
-import {
-  START_MAJOR_HEIGHT,
-  START_MAJOR_WIDTH,
-  type PlayPieceSize,
-} from "../../lib/board-expand";
 import { copyText } from "./copy-text";
 import type {
   ConfirmSpec,
@@ -15,7 +8,6 @@ import type {
   GamePreview,
   GameSession,
   GameSnapshot,
-  InvitePane,
   ParamField,
   RecordsPane,
   RoomPane,
@@ -30,98 +22,6 @@ type GameShellProps = {
 };
 
 type SessionCall = (session: GameSession) => void;
-
-type ShellPiece =
-  | { role: "intro"; id: "intro"; size: PlayPieceSize }
-  | { role: "menu"; id: string; itemId: string; label: string; size: PlayPieceSize }
-  | { role: "param"; id: string; field: ParamField; size: PlayPieceSize }
-  | { role: "hud"; id: "hud"; size: PlayPieceSize }
-  | { role: "start"; id: string; action: ShellAction; size: PlayPieceSize }
-  | { role: "action"; id: string; action: ShellAction; size: PlayPieceSize }
-  | { role: "room"; id: "room"; room: RoomPane; size: PlayPieceSize }
-  | { role: "invite"; id: "invite"; invite: InvitePane; size: PlayPieceSize }
-  | { role: "records"; id: "records"; records: RecordsPane; size: PlayPieceSize }
-  | { role: "board"; id: "board"; size: PlayPieceSize };
-
-function collectPieces(snapshot: GameSnapshot, cols: number, viewRows: number): ShellPiece[] {
-  const width = Math.max(1, cols);
-  const pieces: ShellPiece[] = [];
-  if (snapshot.title || snapshot.hint || snapshot.menu?.canBack) {
-    const height = snapshot.title && snapshot.hint ? 2 : 1;
-    pieces.push({ role: "intro", id: "intro", size: { width: Math.min(width, 4), height } });
-  }
-  for (const item of snapshot.menu?.items ?? []) {
-    pieces.push({
-      role: "menu",
-      id: `menu:${item.id}`,
-      itemId: item.id,
-      label: item.label,
-      size: { width: Math.min(3, width), height: 1 },
-    });
-  }
-  for (const field of snapshot.params?.fields ?? []) {
-    pieces.push({
-      role: "param",
-      id: `param:${field.id}`,
-      field,
-      size: { width: Math.min(3, width), height: 1 },
-    });
-  }
-  if ((snapshot.hud && snapshot.hud.length > 0) || snapshot.status) {
-    pieces.push({ role: "hud", id: "hud", size: { width, height: 1 } });
-  }
-  for (const action of snapshot.actions ?? []) {
-    if (action.kind === "primary") {
-      pieces.push({
-        role: "start",
-        id: `action:${action.id}`,
-        action,
-        size: { width: Math.min(START_MAJOR_WIDTH, width), height: START_MAJOR_HEIGHT, gapBefore: 1 },
-      });
-    } else {
-      pieces.push({
-        role: "action",
-        id: `action:${action.id}`,
-        action,
-        size: { width: Math.min(2, width), height: 1 },
-      });
-    }
-  }
-  if (snapshot.room) {
-    pieces.push({
-      role: "room",
-      id: "room",
-      room: snapshot.room,
-      size: { width: Math.min(4, width), height: 2 },
-    });
-  }
-  if (snapshot.invite) {
-    pieces.push({
-      role: "invite",
-      id: "invite",
-      invite: snapshot.invite,
-      size: { width: Math.min(3, width), height: 1 },
-    });
-  }
-  if (snapshot.records) {
-    const filled = snapshot.records.groups.reduce((sum, group) => sum + group.rows.length, 0);
-    const height = filled === 0 ? 2 : Math.max(2, 1 + Math.ceil(filled / 2));
-    pieces.push({
-      role: "records",
-      id: "records",
-      records: snapshot.records,
-      size: { width: Math.min(4, width), height },
-    });
-  }
-  if (snapshot.phase === "play") {
-    pieces.push({
-      role: "board",
-      id: "board",
-      size: { width, height: Math.max(4, viewRows - 1), gapBefore: 1 },
-    });
-  }
-  return pieces;
-}
 
 function BoardHost({ session, active }: { session: GameSession; active: boolean }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -197,9 +97,112 @@ function ParamFieldView({
   );
 }
 
+function actionClass(kind: ShellAction["kind"]): string {
+  if (kind === "primary") return "primary";
+  if (kind === "danger") return "ghost";
+  return "ghost";
+}
+
+function ActionsRow({
+  actions,
+  onRun,
+}: {
+  actions: ShellAction[];
+  onRun: (id: string, confirm?: ConfirmSpec) => void;
+}) {
+  if (actions.length === 0) return null;
+  return (
+    <div className="game-shell-actions">
+      {actions.map((action) => (
+        <button
+          key={action.id}
+          type="button"
+          className={actionClass(action.kind)}
+          disabled={action.disabled}
+          onClick={() => onRun(action.id, action.confirm)}
+        >
+          {action.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function RoomView({
+  room,
+  sharePhase,
+  onCopyShare,
+  onClaim,
+}: {
+  room: RoomPane;
+  sharePhase: "idle" | "ok";
+  onCopyShare: (url: string) => void;
+  onClaim: (id: string) => void;
+}) {
+  return (
+    <section className="game-shell-room" aria-label={room.title}>
+      <h3>{room.title}</h3>
+      {room.status ? <p className="hint">{room.status}</p> : null}
+      {room.code ? <p className="game-shell-room-code">{room.code}</p> : null}
+      {room.shareUrl ? (
+        <button type="button" className="ghost" onClick={() => onCopyShare(room.shareUrl ?? "")}>
+          {sharePhase === "ok" ? (room.copiedLabel ?? room.shareLabel) : room.shareLabel}
+        </button>
+      ) : null}
+      {room.seats && room.seats.length > 0 ? (
+        <ul className="game-shell-seats">
+          {room.seats.map((seat) => (
+            <li key={seat.id}>
+              {seat.canClaim ? (
+                <button type="button" className="ghost" onClick={() => onClaim(seat.id)}>
+                  {seat.label}
+                  {seat.detail ? ` · ${seat.detail}` : ""}
+                </button>
+              ) : (
+                <span>
+                  {seat.label}
+                  {seat.detail ? ` · ${seat.detail}` : ""}
+                </span>
+              )}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </section>
+  );
+}
+
+function RecordsView({ records }: { records: RecordsPane }) {
+  return (
+    <section className="game-shell-records" aria-label={records.title}>
+      <h3>{records.title}</h3>
+      {records.groups.every((group) => group.rows.length === 0) ? (
+        <p className="hint">{records.empty}</p>
+      ) : (
+        records.groups.map((group) =>
+          group.rows.length === 0 ? null : (
+            <div key={group.id} className="game-shell-records-group">
+              <p className="game-shell-records-label">{group.label}</p>
+              <ul>
+                {group.rows.map((row) => (
+                  <li key={row.id}>
+                    {row.badge ? <span className="game-shell-badge">{row.badge}</span> : null}
+                    <span>{row.title}</span>
+                    {row.meta ? <span className="hint">{row.meta}</span> : null}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ),
+        )
+      )}
+    </section>
+  );
+}
+
+
 export function GameShell({ load, preview }: GameShellProps) {
   const { locale } = useLocale();
-  const { cols, rows } = useBoardExpand();
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const module = useLoadedModule(load);
@@ -335,10 +338,6 @@ export function GameShell({ load, preview }: GameShellProps) {
     runSession((current) => current.setParam(id, value));
   };
 
-  const pieces = useMemo(() => collectPieces(snapshot, cols, rows), [snapshot, cols, rows]);
-  const sizes = useMemo(() => pieces.map((piece) => piece.size), [pieces]);
-  const { pieceStyle } = usePlayLayout(sizes);
-
   const dialog = pendingConfirm
     ? {
         id: "confirm-action",
@@ -350,6 +349,25 @@ export function GameShell({ load, preview }: GameShellProps) {
       }
     : snapshot.dialog;
 
+  const dismissDialog = () => {
+    const hadPending = pendingConfirm != null;
+    setPendingConfirm(null);
+    if (!hadPending && snapshot.dialog) {
+      runSession((current) => current.dispatch({ type: "ui", id: "dismiss-dialog" }));
+    }
+  };
+
+  useEffect(() => {
+    if (!dialog) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") dismissDialog();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+    // dismissDialog closes over snapshot; rebind when dialog identity changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dialog?.id, dialog?.actionId]);
+
   const copyInvite = (text: string) => {
     void copyText(text).then((ok) => {
       setInvitePhase(ok ? "ok" : "fail");
@@ -358,212 +376,115 @@ export function GameShell({ load, preview }: GameShellProps) {
     });
   };
 
+  const copyShare = (url: string) => {
+    void copyText(url).then((ok) => {
+      if (!ok) return;
+      setSharePhase("ok");
+      if (shareTimer.current != null) window.clearTimeout(shareTimer.current);
+      shareTimer.current = window.setTimeout(() => setSharePhase("idle"), 2000);
+    });
+  };
+
+  const claimSeat = (id: string) => {
+    runSession((current) => current.dispatch({ type: "claim-seat", id }));
+  };
+
+  const showBoard = snapshot.phase === "play" && Boolean(session);
+
   return (
-    <>
-      {pieces.map((piece, index) => {
-        const style = pieceStyle(index);
-        if (piece.role === "intro") {
-          return (
-            <section key={piece.id} className="board-ink" style={style}>
-              {snapshot.menu?.canBack ? (
-                <button
-                  type="button"
-                  className="ghost"
-                  onClick={() => runSession((current) => current.back())}
-                >
-                  {snapshot.menu.backLabel ?? "←"}
-                </button>
-              ) : null}
-              {snapshot.title ? <h2>{snapshot.title}</h2> : null}
-              {snapshot.hint ? <p>{snapshot.hint}</p> : null}
-            </section>
-          );
-        }
-        if (piece.role === "menu") {
-          return (
-            <button
-              key={piece.id}
-              type="button"
-              className="board-ink"
-              style={style}
-              onClick={() => runSession((current) => current.choose(piece.itemId))}
-            >
-              <h2>{piece.label}</h2>
-            </button>
-          );
-        }
-        if (piece.role === "param") {
-          return (
-            <section key={piece.id} className="board-ink" style={style}>
-              <ParamFieldView field={piece.field} onChange={setParamValue} />
-            </section>
-          );
-        }
-        if (piece.role === "hud") {
-          return (
-            <section key={piece.id} className="board-ink" style={style}>
-              {snapshot.hud && snapshot.hud.length > 0 ? (
-                <div className="game-shell-hud">
-                  {snapshot.hud.map((item) => (
-                    <span key={item.id} className="game-shell-hud-item">
-                      {item.label ? `${item.label}：` : null}
-                      <strong>{item.value}</strong>
-                    </span>
-                  ))}
-                </div>
-              ) : null}
-              {snapshot.status ? <p>{snapshot.status}</p> : null}
-            </section>
-          );
-        }
-        if (piece.role === "start") {
-          const action = piece.action;
-          return (
-            <button
-              key={piece.id}
-              type="button"
-              className="card is-primary is-start"
-              style={style}
-              disabled={action.disabled}
-              onClick={() => runAction(action.id, action.confirm)}
-            >
-              <CardFx />
-              <h2>{action.label}</h2>
-            </button>
-          );
-        }
-        if (piece.role === "action") {
-          const action = piece.action;
-          return (
-            <button
-              key={piece.id}
-              type="button"
-              className="board-ink"
-              style={style}
-              disabled={action.disabled}
-              onClick={() => runAction(action.id, action.confirm)}
-            >
-              <h2>{action.label}</h2>
-            </button>
-          );
-        }
-        if (piece.role === "room") {
-          const room = piece.room;
-          return (
-            <section key={piece.id} className="board-ink" style={style} aria-label={room.title}>
-              <h2>{room.title}</h2>
-              {room.status ? <p>{room.status}</p> : null}
-              {room.code ? <p className="game-shell-room-code">{room.code}</p> : null}
-              {room.shareUrl ? (
-                <button
-                  type="button"
-                  className="ghost"
-                  onClick={() => {
-                    const url = room.shareUrl;
-                    if (!url) return;
-                    void copyText(url).then((ok) => {
-                      if (!ok) return;
-                      setSharePhase("ok");
-                      if (shareTimer.current != null) window.clearTimeout(shareTimer.current);
-                      shareTimer.current = window.setTimeout(() => setSharePhase("idle"), 2000);
-                    });
-                  }}
-                >
-                  {sharePhase === "ok" ? (room.copiedLabel ?? room.shareLabel) : room.shareLabel}
-                </button>
-              ) : null}
-              {room.seats && room.seats.length > 0 ? (
-                <ul className="game-shell-seats">
-                  {room.seats.map((seat) => (
-                    <li key={seat.id}>
-                      {seat.canClaim ? (
-                        <button
-                          type="button"
-                          className="ghost"
-                          onClick={() =>
-                            runSession((current) =>
-                              current.dispatch({ type: "claim-seat", id: seat.id }),
-                            )
-                          }
-                        >
-                          {seat.label}
-                        </button>
-                      ) : (
-                        <span>
-                          {seat.label}
-                          {seat.detail ? ` · ${seat.detail}` : ""}
-                        </span>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              ) : null}
-            </section>
-          );
-        }
-        if (piece.role === "invite") {
-          const invite = piece.invite;
-          return (
-            <button
-              key={piece.id}
-              type="button"
-              className="board-ink"
-              style={style}
-              onClick={() => copyInvite(invite.text)}
-            >
-              <h2>
+    <div className={snapshot.phase === "play" ? "game-shell game-shell-is-play" : "game-shell"}>
+      {snapshot.phase === "menu" ? (
+        <div className="game-shell-setup">
+          <div className="panel">
+            {snapshot.menu?.canBack ? (
+              <button
+                type="button"
+                className="ghost game-shell-back"
+                onClick={() => runSession((current) => current.back())}
+              >
+                {snapshot.menu.backLabel ?? "←"}
+              </button>
+            ) : null}
+            {snapshot.title ? <h2>{snapshot.title}</h2> : null}
+            {snapshot.hint ? <p className="hint">{snapshot.hint}</p> : null}
+            {snapshot.status ? <p className="hint">{snapshot.status}</p> : null}
+            {snapshot.menu?.items && snapshot.menu.items.length > 0 ? (
+              <div className="game-shell-menu">
+                {snapshot.menu.items.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    className="primary"
+                    onClick={() => runSession((current) => current.choose(item.id))}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+            {snapshot.params?.fields && snapshot.params.fields.length > 0 ? (
+              <div className="game-shell-params">
+                {snapshot.params.fields.map((field) => (
+                  <ParamFieldView key={field.id} field={field} onChange={setParamValue} />
+                ))}
+              </div>
+            ) : null}
+            <ActionsRow actions={snapshot.actions ?? []} onRun={runAction} />
+            {snapshot.room ? (
+              <RoomView
+                room={snapshot.room}
+                sharePhase={sharePhase}
+                onCopyShare={copyShare}
+                onClaim={claimSeat}
+              />
+            ) : null}
+            {snapshot.invite ? (
+              <button
+                type="button"
+                className="ghost game-shell-invite"
+                onClick={() => {
+                  const invite = snapshot.invite;
+                  if (invite) copyInvite(invite.text);
+                }}
+              >
                 {invitePhase === "ok"
-                  ? invite.copied
+                  ? snapshot.invite.copied
                   : invitePhase === "fail"
-                    ? invite.failed
-                    : invite.line}
-              </h2>
-            </button>
-          );
-        }
-        if (piece.role === "records") {
-          const records = piece.records;
-          return (
-            <section key={piece.id} className="board-ink" style={style} aria-label={records.title}>
-              <h2>{records.title}</h2>
-              {records.groups.every((group) => group.rows.length === 0) ? (
-                <p>{records.empty}</p>
-              ) : (
-                records.groups.map((group) =>
-                  group.rows.length === 0 ? null : (
-                    <div key={group.id} className="game-shell-records-group">
-                      <p className="game-shell-records-label">{group.label}</p>
-                      <ul>
-                        {group.rows.map((row) => (
-                          <li key={row.id}>
-                            {row.badge ? <span className="game-shell-badge">{row.badge}</span> : null}
-                            <span>{row.title}</span>
-                            {row.meta ? <span className="hint">{row.meta}</span> : null}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  ),
-                )
-              )}
-            </section>
-          );
-        }
-        return (
-          <section key={piece.id} className="board-ink is-board" style={style}>
-            {session ? <BoardHost session={session} active /> : null}
-          </section>
-        );
-      })}
+                    ? snapshot.invite.failed
+                    : snapshot.invite.line}
+              </button>
+            ) : null}
+            {snapshot.records ? <RecordsView records={snapshot.records} /> : null}
+          </div>
+        </div>
+      ) : (
+        <div className="game-shell-play">
+          {snapshot.hud && snapshot.hud.length > 0 ? (
+            <div className="game-shell-hud">
+              {snapshot.hud.map((item) => (
+                <span key={item.id} className="game-shell-hud-item">
+                  {item.label ? `${item.label}：` : null}
+                  <strong>{item.value}</strong>
+                </span>
+              ))}
+            </div>
+          ) : null}
+          {snapshot.status ? <p className="game-shell-status">{snapshot.status}</p> : null}
+          {snapshot.room ? (
+            <RoomView
+              room={snapshot.room}
+              sharePhase={sharePhase}
+              onCopyShare={copyShare}
+              onClaim={claimSeat}
+            />
+          ) : null}
+          {showBoard && session ? <BoardHost session={session} active /> : null}
+          <ActionsRow actions={snapshot.actions ?? []} onRun={runAction} />
+        </div>
+      )}
 
       {dialog ? (
-        <div
-          className="modal-backdrop"
-          role="presentation"
-          onClick={() => {
-            setPendingConfirm(null);
-          }}
-        >
+        <div className="modal-backdrop" role="presentation" onClick={dismissDialog}>
           <div
             className="modal-panel"
             role="dialog"
@@ -577,7 +498,7 @@ export function GameShell({ load, preview }: GameShellProps) {
                 <button
                   type="button"
                   className="icon-btn"
-                  onClick={() => setPendingConfirm(null)}
+                  onClick={dismissDialog}
                   aria-label={dialog.cancel}
                 >
                   <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -589,7 +510,7 @@ export function GameShell({ load, preview }: GameShellProps) {
             <p className="lede modal-body">{dialog.body}</p>
             <div className="modal-actions">
               {dialog.cancel ? (
-                <button type="button" className="ghost" onClick={() => setPendingConfirm(null)}>
+                <button type="button" className="ghost" onClick={dismissDialog}>
                   {dialog.cancel}
                 </button>
               ) : null}
@@ -608,6 +529,6 @@ export function GameShell({ load, preview }: GameShellProps) {
           </div>
         </div>
       ) : null}
-    </>
+    </div>
   );
 }

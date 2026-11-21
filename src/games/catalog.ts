@@ -34,9 +34,9 @@ export type GameMeta = {
   audience?: GameAudience;
   /** When false, never listed. Prefer `audience` for env gates. Default true. */
   listed?: boolean;
-  /** Sync first-paint snapshot. Lives in the main bundle so the shell can paint during expand. */
+  /** Sync first-paint snapshot. Lives in the main bundle so GameShell can paint before the session loads. */
   preview: GamePreview;
-  /** Lazy play session runtime. The generic shell loads this; it must not switch on slug. */
+  /** Lazy play session runtime. PlayPage mounts GameShell with this; the shell must not switch on slug. */
   loadPlay: () => Promise<GamePlayModule>;
 };
 
@@ -71,8 +71,8 @@ export const games: GameMeta[] = [
     mode: "single",
     title: { zh: "滑动色块", en: "Chroma Slide" },
     blurb: {
-      zh: "滑动色块，把每种颜色收成一块实心正方形。本机开局，或把单人谜题交给 Agent。",
-      en: "Slide colored tiles until each hue forms one solid square. Play locally, or hand the solo puzzle to an Agent.",
+      zh: "滑动色块，把每种颜色收成一块实心正方形。本机开局，或用分享链接把单人谜题交给人 / Agent。",
+      en: "Slide colored tiles until each hue forms one solid square. Play locally, or share a solo-puzzle room with a person or Agent.",
     },
     badge: { zh: "单机", en: "Offline" },
     preview: previewChromaSlide,

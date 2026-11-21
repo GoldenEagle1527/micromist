@@ -53,20 +53,21 @@ src/                 React SPA（壳、首页、/play、i18n、主题）
 src/games/<slug>/    各游戏客户端；登记在 src/games/catalog.ts
 src/pages/           HomePage、PlayPage
 src/multiplayer/     共用房间客户端 OnlineRoomClient
-src/platform/play/   一度计划的通用 GameShell（目前未接线）
+src/platform/play/   通用 GameShell（PlayPage 只挂这个壳）
 worker/              Worker 入口、GameRoom、各游戏 adapter
 shared/              SPA 与 Worker 共用的纯逻辑（棋规等）
 public/agent-clients/  爆炸棋、滑动色块的官方 Node/Python HTTP 客户端
 docs/                Agent WebSocket 协议（中英分文件）
 ```
 
-**当前真正生效的页面路径**（2026-11-20 已恢复）：
+**当前真正生效的页面路径**：
 
 1. 首页 `HomePage`：经典玻璃卡片网格。
 2. 点击卡片 **导航** 到独立的 `/play/:slug`（不是 iframe 内嵌，也不是大厅内展开）。
-3. `PlayPage` **按 slug 分支** 挂载 `ExplosiveChessGame` / `ChromaSlideGame` / `GomokuGame`。
+3. `PlayPage` 用 catalog 的 `preview` + `loadPlay` 挂载 `GameShell`。壳不按 slug 分支。
+4. 各游戏在 `src/games/<slug>/play.ts` 实现 `GameSession`：菜单 / HUD / 房间 / 弹层走快照，棋盘只通过 `bindBoard(host)` 挂进去。
 
-`catalog` 里仍有 `preview` 和 `loadPlay`，那是「通用游戏壳」实验留下的字段；`src/platform/play/GameShell.tsx` **没有**接到 `PlayPage`。新增游戏时，登记 catalog 之外，还要在 `PlayPage` 挂上组件，直到有人被明确要求重新做通用壳。
+不要在 `PlayPage` 或 `GameShell` 里为某一款游戏写特殊分支。新增游戏：在 catalog 登记 `preview` / `loadPlay`，并实现 session。
 
 棋规若联机也要用，放在 `shared/<slug>/`，客户端用 `src/games/<slug>/engine.ts` 再导出。不要让 Worker 去 import `src/`。
 
@@ -79,7 +80,7 @@ docs/                Agent WebSocket 协议（中英分文件）
 2026-11-20 用户要求撤销全部大厅进场动效，恢复最初布局。下列文件大多还在磁盘上，但已不再接到 `App` / `Shell` / `HomePage` / `PlayPage`：
 
 - 芯片飞入、iframe 嵌入、数据流溶解：`ChipIcon.tsx`、`GameEmbed.tsx`、`EmbedBridge.tsx`、`src/lib/embed.ts` 等
-- 卡片展开 / 网格滑动 / 「盗梦笔记」式网格生长：`board-expand-context.tsx`、`src/lib/board-expand.ts`、`GameShell` 相关样式
+- 卡片展开 / 网格滑动 / 「盗梦笔记」式网格生长：`board-expand-context.tsx`、`src/lib/board-expand.ts`（`GameShell` 已改成独立 `/play` 玻璃布局，不再依赖这套展开网格）
 
 **不要擅自重新启用这些动效，也不要在没有要求时删除它们。** 用户已明确放弃：芯片飞入标题栏、数据流溶解显现、卡片展开铺满、整页网格横滑、侧边网格上抬再长出新网格。若要再做大厅动效，必须先问用户。
 
@@ -131,8 +132,8 @@ docs/                Agent WebSocket 协议（中英分文件）
 
 ## 新增游戏时的最低步骤
 
-单机：在 `catalog.ts` 登记 → 在 `src/games/<slug>/` 实现 → 在 `PlayPage` 按 slug 挂载 → 补中英文案 → 如仅先上测试站，设 `audience: "staging"`。
+单机：在 `catalog.ts` 登记 `preview` + `loadPlay` → 在 `src/games/<slug>/play.ts` 实现 `GameSession` → 棋盘用 `bindBoard` 挂到壳的 host → 补中英文案 → 如仅先上测试站，设 `audience: "staging"`。
 
-联机：把棋规放到 `shared/<slug>/` → 写 `worker/games/<slug>/` adapter 并注册 → 客户端房间页读取 `?room=`、入座、按服务端状态渲染 → 联机过程不要写 local persist。
+联机：把棋规放到 `shared/<slug>/` → 写 `worker/games/<slug>/` adapter 并注册 → session 读取 `?room=`、入座、按服务端状态出快照并绑定棋盘 → 联机过程不要写 local persist。
 
 若现有联机约定（座位、配置冻结、开始条件）无法表达新需求，先问用户，不要在共用壳里加某个游戏的特殊分支，也不要扩展平台座位枚举来迁就一个游戏的叫法。
