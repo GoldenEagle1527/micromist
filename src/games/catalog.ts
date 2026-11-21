@@ -62,7 +62,6 @@ export const games: GameMeta[] = [
       en: "A 15×15 board. Black goes first. Classic five-in-a-row, or Series decided by captures. Hotseat, built-in AI, or a share-link room.",
     },
     badge: { zh: "单机/联机", en: "Offline / Online" },
-    audience: "staging",
     preview: previewGomoku,
     loadPlay: loadOnce(() => import("./gomoku/play").then((m) => m.playModule)),
   },
