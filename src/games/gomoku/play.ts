@@ -1,5 +1,3 @@
-import { createElement } from "react";
-import { createRoot, type Root } from "react-dom/client";
 import type {
   GameAction,
   GamePlayModule,
@@ -10,9 +8,11 @@ import type {
   SessionContext,
   ShellAction,
 } from "../../platform/play";
+import { createGridBoard, type GridBoard, type GridCellPaint } from "../../platform/play/grid-board";
 import { clearLocalProgress, loadLocalProgress, saveLocalProgress } from "../local-persist";
 import { chooseMove, type Difficulty } from "./ai";
 import {
+  SIZE,
   emptyState,
   isOver,
   isValidState,
@@ -21,7 +21,6 @@ import {
   type GameState,
   type Player,
 } from "./engine";
-import { GomokuBoard } from "./GomokuBoard";
 import { gomokuEn, gomokuZh, type GomokuDict } from "./i18n";
 import {
   GomokuOnlineClient,
@@ -91,8 +90,9 @@ class GomokuSession implements GameSession {
   private state: GameState = emptyState();
   private thinking = false;
   private aiTimer: number | null = null;
-  private root: Root | null = null;
   private boardHost: HTMLElement | null = null;
+  private canvas: HTMLCanvasElement | null = null;
+  private grid: GridBoard | null = null;
 
   private roomCode = "";
   private client: GomokuOnlineClient | null = null;
@@ -214,7 +214,19 @@ class GomokuSession implements GameSession {
   bindBoard(host: HTMLElement) {
     this.destroyBoard();
     this.boardHost = host;
-    this.root = createRoot(host);
+    host.replaceChildren();
+    const canvas = document.createElement("canvas");
+    host.append(canvas);
+    this.canvas = canvas;
+    const session = this;
+    this.grid = createGridBoard(canvas, {
+      get size() {
+        return session.boardState()?.size ?? SIZE;
+      },
+      paintCell: (row, col) => session.paintCell(row, col),
+      isHoverValid: (row, col) => session.canPlayIndex(row * (session.boardState()?.size ?? SIZE) + col),
+    });
+    this.hookCanvas();
     this.paint();
     return {
       destroy: () => {
@@ -438,37 +450,71 @@ class GomokuSession implements GameSession {
     this.listeners.forEach((fn) => fn());
   }
 
-  private paint(): void {
-    if (!this.root) return;
-    const g = dict(this.ctx.locale);
-    const state = this.roomCode ? this.state : this.phase === "play" ? this.state : null;
-    if (!state) {
-      this.root.render(null);
-      return;
+  private boardState(): GameState | null {
+    if (this.roomCode) return this.state;
+    return this.phase === "play" ? this.state : null;
+  }
+
+  private canPlayIndex(index: number): boolean {
+    const state = this.boardState();
+    if (!state || isOver(state)) return false;
+    if (state.board[index] !== 0) return false;
+    if (this.roomCode) {
+      const myColor = this.you ? seatToPlayer(this.you.seat) : null;
+      return Boolean(myColor && this.roomPhase === "playing" && state.turn === myColor);
     }
-    const myColor = this.you ? seatToPlayer(this.you.seat) : null;
-    const canPlay = this.roomCode
-      ? Boolean(
-          myColor &&
-            this.roomPhase === "playing" &&
-            !isOver(state) &&
-            state.turn === myColor,
-        )
-      : !this.thinking && !isOver(state) && (this.settings.opponent !== "ai" || state.turn === this.settings.humanColor);
-    const ghostColor = this.roomCode ? (myColor ?? state.turn) : state.turn;
-    this.root.render(
-      createElement(GomokuBoard, {
-        state,
-        canPlay,
-        ghostColor,
-        boardAria: g.boardAria,
-        emptyAria: g.emptyAria,
-        stoneAria: g.stoneAria,
-        black: g.black,
-        white: g.white,
-        onPointClick: (index) => this.onPointClick(index),
-      }),
-    );
+    return !this.thinking && (this.settings.opponent !== "ai" || state.turn === this.settings.humanColor);
+  }
+
+  private paintCell(row: number, col: number): GridCellPaint {
+    const state = this.boardState();
+    if (!state) return {};
+    const index = row * state.size + col;
+    const stone = state.board[index];
+    const win = state.winLine?.includes(index) ?? false;
+    return {
+      stone: stone === 1 ? "black" : stone === 2 ? "white" : null,
+      path: win,
+    };
+  }
+
+  private hookCanvas(): void {
+    const canvas = this.canvas;
+    const grid = this.grid;
+    if (!canvas || !grid) return;
+    canvas.onclick = (event) => {
+      const cell = grid.pixelToCell(event.clientX, event.clientY);
+      const state = this.boardState();
+      if (!cell || !state) return;
+      this.onPointClick(cell.row * state.size + cell.col);
+    };
+    canvas.onmousemove = (event) => {
+      const cell = grid.pixelToCell(event.clientX, event.clientY);
+      if (cell) grid.setHoverCell(cell.row, cell.col);
+      else grid.clearHover();
+    };
+    canvas.onmouseleave = () => grid.clearHover();
+    canvas.ontouchstart = (event) => {
+      event.preventDefault();
+      const touch = event.touches[0];
+      const state = this.boardState();
+      if (!touch || !state) return;
+      const cell = grid.pixelToCell(touch.clientX, touch.clientY);
+      if (cell) this.onPointClick(cell.row * state.size + cell.col);
+    };
+  }
+
+  private paint(): void {
+    const state = this.boardState();
+    if (state && state.moves.length) {
+      const last = state.moves[state.moves.length - 1]!;
+      this.grid?.setLastMove(Math.floor(last / state.size), last % state.size);
+    } else {
+      this.grid?.clearLastMove();
+    }
+    if (state?.winLine?.length) this.grid?.setExplosionHighlight(state.winLine);
+    else this.grid?.setExplosionHighlight(null);
+    this.grid?.resize();
   }
 
   private onPointClick(index: number): void {
@@ -677,8 +723,9 @@ class GomokuSession implements GameSession {
   }
 
   private destroyBoard(): void {
-    this.root?.unmount();
-    this.root = null;
+    this.grid?.destroy();
+    this.grid = null;
+    this.canvas = null;
     if (this.boardHost) this.boardHost.replaceChildren();
     this.boardHost = null;
   }

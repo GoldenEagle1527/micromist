@@ -65,7 +65,7 @@ docs/                Agent WebSocket 协议（中英分文件）
 1. 首页 `HomePage`：经典玻璃卡片网格。
 2. 点击卡片 **导航** 到独立的 `/play/:slug`（不是 iframe 内嵌，也不是大厅内展开）。
 3. `PlayPage` 用 catalog 的 `preview` + `loadPlay` 挂载 `GameShell`。壳不按 slug 分支。
-4. 各游戏在 `src/games/<slug>/play.ts` 实现 `GameSession`：菜单 / HUD / 房间 / 弹层走快照，棋盘只通过 `bindBoard(host)` 挂进去。
+4. 各游戏在 `src/games/<slug>/play.ts` 实现 `GameSession`：菜单 / HUD / 房间 / 弹层走快照，棋盘只通过 `bindBoard(host)` 挂进去。棋盘只有一套：`src/platform/play/grid-board.ts`（爆炸棋那块 canvas 格子）。新游戏改格子里画什么（点、色、棋子），不要再做第二种棋盘。
 
 不要在 `PlayPage` 或 `GameShell` 里为某一款游戏写特殊分支。新增游戏：在 catalog 登记 `preview` / `loadPlay`，并实现 session。
 
@@ -132,7 +132,7 @@ docs/                Agent WebSocket 协议（中英分文件）
 
 ## 新增游戏时的最低步骤
 
-单机：在 `catalog.ts` 登记 `preview` + `loadPlay` → 在 `src/games/<slug>/play.ts` 实现 `GameSession` → 棋盘用 `bindBoard` 挂到壳的 host → 补中英文案 → 如仅先上测试站，设 `audience: "staging"`。
+单机：在 `catalog.ts` 登记 `preview` + `loadPlay` → 在 `src/games/<slug>/play.ts` 实现 `GameSession` → `bindBoard` 里用 `createGridBoard` 挂爆炸棋那块格子棋盘 → 补中英文案 → 如仅先上测试站，设 `audience: "staging"`。
 
 联机：把棋规放到 `shared/<slug>/` → 写 `worker/games/<slug>/` adapter 并注册 → session 读取 `?room=`、入座、按服务端状态出快照并绑定棋盘 → 联机过程不要写 local persist。
 

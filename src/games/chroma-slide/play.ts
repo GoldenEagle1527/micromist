@@ -6,6 +6,7 @@ import type {
   GameSnapshot,
   SessionContext,
 } from "../../platform/play";
+import { createGridBoard, type GridBoard, type GridCellPaint } from "../../platform/play/grid-board";
 import { clearLocalProgress, loadLocalProgress, saveLocalProgress } from "../local-persist";
 import {
   EMPTY,
@@ -93,92 +94,28 @@ function puzzleFromPublic(pub: ChromaPublicState): PuzzleState | null {
   };
 }
 
-function paintPuzzle(
-  host: HTMLElement,
-  puzzle: PuzzleState,
-  opts: {
-    ch: ChromaDict;
-    won: boolean;
-    disabled: boolean;
-    hoverIndex: number | null;
-    onClick: (index: number) => void;
-    onHover: (index: number | null) => void;
-  },
-): void {
-  const { size, board, emptyIndex } = puzzle;
-  const legalHover =
-    opts.hoverIndex != null &&
-    !opts.won &&
-    !opts.disabled &&
-    isLegalClick(puzzle, opts.hoverIndex);
+function chromaAccent(color: number): GridCellPaint["accent"] {
+  if (color === 0) return "red";
+  if (color === 1) return "blue";
+  return "none";
+}
 
-  let root = host.querySelector<HTMLDivElement>(".chroma-board");
-  if (!root) {
-    host.replaceChildren();
-    root = document.createElement("div");
-    root.className = "chroma-board glass";
-    root.setAttribute("role", "grid");
-    host.append(root);
+function onSlideLine(puzzle: PuzzleState, hoverIndex: number, index: number): boolean {
+  const { size, emptyIndex } = puzzle;
+  const er = Math.floor(emptyIndex / size);
+  const ec = emptyIndex % size;
+  const hr = Math.floor(hoverIndex / size);
+  const hc = hoverIndex % size;
+  const r = Math.floor(index / size);
+  const c = index % size;
+  if (er === hr) {
+    const lo = Math.min(ec, hc);
+    const hi = Math.max(ec, hc);
+    return r === er && c >= lo && c <= hi;
   }
-  root.setAttribute("aria-label", opts.ch.boardAria);
-  root.classList.toggle("chroma-board-won", opts.won);
-  root.style.setProperty("--chroma-size", String(size));
-  root.onmouseleave = () => opts.onHover(null);
-
-  const wanted = board.length;
-  while (root.childElementCount > wanted) root.lastElementChild?.remove();
-  for (let index = 0; index < wanted; index += 1) {
-    let btn = root.children[index] as HTMLButtonElement | undefined;
-    if (!btn) {
-      btn = document.createElement("button");
-      btn.type = "button";
-      btn.setAttribute("role", "gridcell");
-      root.append(btn);
-    }
-    const cell = board[index];
-    const isEmpty = cell === EMPTY || index === emptyIndex;
-    const isHoverTarget = legalHover && opts.hoverIndex === index;
-    const onLine =
-      legalHover &&
-      opts.hoverIndex != null &&
-      (() => {
-        const er = Math.floor(emptyIndex / size);
-        const ec = emptyIndex % size;
-        const hr = Math.floor(opts.hoverIndex / size);
-        const hc = opts.hoverIndex % size;
-        const r = Math.floor(index / size);
-        const c = index % size;
-        if (er === hr) {
-          const lo = Math.min(ec, hc);
-          const hi = Math.max(ec, hc);
-          return r === er && c >= lo && c <= hi;
-        }
-        const lo = Math.min(er, hr);
-        const hi = Math.max(er, hr);
-        return c === ec && r >= lo && r <= hi;
-      })();
-    btn.className = [
-      "chroma-cell",
-      isEmpty ? "chroma-empty" : "",
-      isHoverTarget ? "chroma-cell-target" : "",
-      onLine && !isEmpty ? "chroma-cell-path" : "",
-      opts.won && !isEmpty ? "chroma-cell-won" : "",
-    ]
-      .filter(Boolean)
-      .join(" ");
-    if (isEmpty) btn.style.removeProperty("background-color");
-    else btn.style.backgroundColor = TILE_COLORS[cell] ?? "#888";
-    btn.disabled = opts.disabled || opts.won || isEmpty;
-    btn.setAttribute(
-      "aria-label",
-      isEmpty
-        ? opts.ch.emptyAria
-        : opts.ch.tileAria(cell + 1, Math.floor(index / size) + 1, (index % size) + 1),
-    );
-    btn.onclick = () => opts.onClick(index);
-    btn.onmouseenter = () => opts.onHover(index);
-    btn.onfocus = () => opts.onHover(index);
-  }
+  const lo = Math.min(er, hr);
+  const hi = Math.max(er, hr);
+  return c === ec && r >= lo && r <= hi;
 }
 
 class ChromaSession implements GameSession {
@@ -190,6 +127,8 @@ class ChromaSession implements GameSession {
   private scores: ChromaScores = loadScores();
   private dialog: GameSnapshot["dialog"] = undefined;
   private boardHost: HTMLElement | null = null;
+  private canvas: HTMLCanvasElement | null = null;
+  private grid: GridBoard | null = null;
   private recordedWin = false;
   private startedAt: number | null = null;
 
@@ -238,7 +177,7 @@ class ChromaSession implements GameSession {
   destroy(): void {
     this.leaveRoom(false);
     this.listeners.clear();
-    this.boardHost = null;
+    this.destroyGrid();
   }
 
   choose(itemId: string): void {
@@ -310,12 +249,25 @@ class ChromaSession implements GameSession {
   }
 
   bindBoard(host: HTMLElement) {
+    this.destroyGrid();
     this.boardHost = host;
+    host.replaceChildren();
+    const canvas = document.createElement("canvas");
+    host.append(canvas);
+    this.canvas = canvas;
+    const session = this;
+    this.grid = createGridBoard(canvas, {
+      get size() {
+        return session.puzzle?.size ?? 8;
+      },
+      paintCell: (row, col) => session.paintCell(row, col),
+      isHoverValid: (row, col) => session.hoverValid(row, col),
+    });
+    this.hookCanvas();
     this.paint();
     return {
       destroy: () => {
-        if (this.boardHost === host) this.boardHost = null;
-        host.replaceChildren();
+        if (this.boardHost === host) this.destroyGrid();
       },
     };
   }
@@ -487,31 +439,87 @@ class ChromaSession implements GameSession {
     this.listeners.forEach((fn) => fn());
   }
 
-  private paint(): void {
-    if (!this.boardHost || this.phase !== "play" && !this.roomCode) return;
+  private solving(): boolean {
     const puzzle = this.puzzle;
-    if (!puzzle) {
-      this.boardHost.replaceChildren();
-      return;
+    if (!puzzle) return false;
+    if (this.roomCode) {
+      return this.you?.seat === "player" && this.roomPhase === "playing" && this.pub?.won !== true;
     }
-    const ch = dict(this.ctx.locale);
-    const won = this.roomCode ? this.pub?.won === true || this.roomPhase === "over" : isWon(puzzle);
-    const solving = this.roomCode
-      ? this.you?.seat === "player" && this.roomPhase === "playing" && this.pub?.won !== true
-      : !won && !this.dialog;
-    paintPuzzle(this.boardHost, puzzle, {
-      ch,
-      won,
-      disabled: !solving,
-      hoverIndex: this.roomCode ? null : this.hoverIndex,
-      onClick: (index) => this.clickCell(index),
-      onHover: (index) => {
-        if (this.roomCode) return;
-        if (this.hoverIndex === index) return;
-        this.hoverIndex = index;
-        this.emit();
-      },
-    });
+    return !isWon(puzzle) && !this.dialog;
+  }
+
+  private hoverValid(row: number, col: number): boolean {
+    const puzzle = this.puzzle;
+    if (!puzzle || !this.solving()) return false;
+    return isLegalClick(puzzle, row * puzzle.size + col);
+  }
+
+  private paintCell(row: number, col: number): GridCellPaint {
+    const puzzle = this.puzzle;
+    if (!puzzle) return {};
+    const index = row * puzzle.size + col;
+    const cell = puzzle.board[index] ?? EMPTY;
+    const isEmpty = cell === EMPTY || index === puzzle.emptyIndex;
+    const hoverIndex = this.roomCode ? null : this.hoverIndex;
+    const legalHover =
+      hoverIndex != null && this.solving() && isLegalClick(puzzle, hoverIndex);
+    const path = Boolean(legalHover && hoverIndex != null && onSlideLine(puzzle, hoverIndex, index));
+    if (isEmpty) return { path };
+    return {
+      accent: chromaAccent(cell),
+      fill: TILE_COLORS[cell] ?? null,
+      dots: { count: 1, color: cell === 0 ? "red" : cell === 1 ? "blue" : "neutral" },
+      path,
+    };
+  }
+
+  private hookCanvas(): void {
+    const canvas = this.canvas;
+    const grid = this.grid;
+    if (!canvas || !grid) return;
+    canvas.onclick = (event) => {
+      const cell = grid.pixelToCell(event.clientX, event.clientY);
+      if (!cell || !this.puzzle) return;
+      this.clickCell(cell.row * this.puzzle.size + cell.col);
+    };
+    canvas.onmousemove = (event) => {
+      if (this.roomCode || !this.solving()) {
+        this.hoverIndex = null;
+        grid.clearHover();
+        return;
+      }
+      const cell = grid.pixelToCell(event.clientX, event.clientY);
+      if (!cell || !this.puzzle) {
+        this.hoverIndex = null;
+        grid.clearHover();
+        return;
+      }
+      this.hoverIndex = cell.row * this.puzzle.size + cell.col;
+      grid.setHoverCell(cell.row, cell.col);
+    };
+    canvas.onmouseleave = () => {
+      this.hoverIndex = null;
+      grid.clearHover();
+    };
+    canvas.ontouchstart = (event) => {
+      event.preventDefault();
+      const touch = event.touches[0];
+      if (!touch || !this.puzzle) return;
+      const cell = grid.pixelToCell(touch.clientX, touch.clientY);
+      if (cell) this.clickCell(cell.row * this.puzzle.size + cell.col);
+    };
+  }
+
+  private destroyGrid(): void {
+    this.grid?.destroy();
+    this.grid = null;
+    this.canvas = null;
+    if (this.boardHost) this.boardHost.replaceChildren();
+    this.boardHost = null;
+  }
+
+  private paint(): void {
+    this.grid?.resize();
   }
 
   private clickCell(index: number): void {
