@@ -19,6 +19,7 @@ import {
   cloneState,
   DEFAULT_CAPTURES_TO_WIN,
   emptyState,
+  fitsCapture,
   flipShown,
   isOver,
   liftShown,
@@ -561,12 +562,12 @@ class GomokuSession implements GameSession {
     const stone = state.board[index];
     const pending = state.pending;
     const selected = pending?.kind === "remove" && pending.selected.includes(index);
-    const eligible = pending?.kind === "remove" && pending.eligible.includes(index);
-    const win = state.winLine?.includes(index) ?? false;
+    const choosing = pending?.kind === "remove";
+    const marked = choosing ? canActOn(state, index) : (state.winLine?.includes(index) ?? false);
     const flipping = this.flipHint === index;
     return {
       stone: stone === 1 ? "black" : stone === 2 ? "white" : null,
-      path: win || eligible || flipping,
+      path: marked || flipping,
       accent: selected || flipping ? (state.turn === 1 ? "red" : "blue") : "none",
     };
   }
@@ -729,10 +730,10 @@ class GomokuSession implements GameSession {
   private onSeriesPoint(index: number): void {
     const state = this.state;
     if (state.pending?.kind === "remove") {
-      if (!state.pending.eligible.includes(index)) return;
       const selected = state.pending.selected.includes(index)
         ? state.pending.selected.filter((cell) => cell !== index)
         : state.pending.selected.concat(index);
+      if (!fitsCapture(state.board, state.size, selected)) return;
       if (selected.length < 5) {
         this.state = {
           ...state,
