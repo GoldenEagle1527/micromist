@@ -19,11 +19,15 @@ import {
   cloneState,
   DEFAULT_CAPTURES_TO_WIN,
   emptyState,
+  flipShown,
   isOver,
+  liftShown,
+  other,
   parseState,
+  pickFlipStone,
+  placeShown,
   play,
   playTurn,
-  resolvePendingGreedy,
   type GameState,
   type Player,
   type Rules,
@@ -62,6 +66,7 @@ type You = {
 };
 
 const SLUG = "gomoku";
+const SERIES_BEAT_MS = 500;
 const DEFAULT_SETTINGS: Settings = {
   opponent: "ai",
   difficulty: "normal",
@@ -100,6 +105,9 @@ class GomokuSession implements GameSession {
   private settings: Settings = { ...DEFAULT_SETTINGS };
   private state: GameState = emptyState();
   private thinking = false;
+  private scripting = false;
+  private scriptGen = 0;
+  private flipHint: number | null = null;
   private aiTimer: number | null = null;
   private history: GameState[] = [];
   private roomRules: Rules = "classic";
@@ -461,7 +469,9 @@ class GomokuSession implements GameSession {
   }
 
   private localStatus(g: GomokuDict): string {
-    if (this.thinking) return g.thinking;
+    if (this.thinking || (this.scripting && this.state.turn !== this.settings.humanColor)) {
+      return g.thinking;
+    }
     if (this.state.pending?.kind === "remove") {
       return g.pickRemove(this.state.pending.selected.length);
     }
@@ -537,7 +547,11 @@ class GomokuSession implements GameSession {
       const myColor = this.you ? seatToPlayer(this.you.seat) : null;
       return Boolean(myColor && this.roomPhase === "playing" && state.turn === myColor);
     }
-    return !this.thinking && (this.settings.opponent !== "ai" || state.turn === this.settings.humanColor);
+    return (
+      !this.thinking &&
+      !this.scripting &&
+      (this.settings.opponent !== "ai" || state.turn === this.settings.humanColor)
+    );
   }
 
   private paintCell(row: number, col: number): GridCellPaint {
@@ -549,10 +563,11 @@ class GomokuSession implements GameSession {
     const selected = pending?.kind === "remove" && pending.selected.includes(index);
     const eligible = pending?.kind === "remove" && pending.eligible.includes(index);
     const win = state.winLine?.includes(index) ?? false;
+    const flipping = this.flipHint === index;
     return {
       stone: stone === 1 ? "black" : stone === 2 ? "white" : null,
-      path: win || eligible,
-      accent: selected ? (state.turn === 1 ? "red" : "blue") : "none",
+      path: win || eligible || flipping,
+      accent: selected || flipping ? (state.turn === 1 ? "red" : "blue") : "none",
     };
   }
 
@@ -609,8 +624,12 @@ class GomokuSession implements GameSession {
       this.client?.move(index);
       return;
     }
-    if (this.thinking || isOver(this.state)) return;
+    if (this.thinking || this.scripting || isOver(this.state)) return;
     if (this.settings.opponent === "ai" && this.state.turn !== this.settings.humanColor) return;
+    if (this.settings.opponent === "ai" && this.settings.rules === "series") {
+      this.onSeriesPoint(index);
+      return;
+    }
     const next = play(this.state, index);
     if (!next) return;
     this.history.push(cloneState(this.state));
@@ -693,6 +712,7 @@ class GomokuSession implements GameSession {
   }
 
   private persist(): void {
+    if (this.scripting) return;
     if (this.roomCode || this.phase !== "play") return;
     if (this.settings.opponent === "online") return;
     if (this.state.moves.length === 0 || this.state.winner !== 0) {
@@ -706,6 +726,134 @@ class GomokuSession implements GameSession {
     });
   }
 
+  private onSeriesPoint(index: number): void {
+    const state = this.state;
+    if (state.pending?.kind === "remove") {
+      if (!state.pending.eligible.includes(index)) return;
+      const selected = state.pending.selected.includes(index)
+        ? state.pending.selected.filter((cell) => cell !== index)
+        : state.pending.selected.concat(index);
+      if (selected.length < 5) {
+        this.state = {
+          ...state,
+          pending: { kind: "remove", eligible: state.pending.eligible, selected },
+          winLine: state.pending.eligible,
+        };
+        this.emit();
+        return;
+      }
+      const lifted = liftShown(state, selected);
+      if (!lifted) return;
+      this.continueSeries(lifted, false);
+      return;
+    }
+    if (state.pending?.kind === "flip") {
+      if (state.board[index] !== other(state.turn)) return;
+      this.holdFlip(state, index, false);
+      return;
+    }
+    const placed = placeShown(state, index);
+    if (!placed) return;
+    this.history.push(cloneState(state));
+    this.continueSeries(placed, false);
+  }
+
+  /** Show a five, then the lift, then the flipped stone, each held so a chain stays readable. */
+  private continueSeries(state: GameState, autoFlip: boolean): void {
+    const gen = this.scriptGen;
+    this.flipHint = null;
+    this.state = state;
+    if (state.winner !== 0) {
+      this.scripting = false;
+      this.emit();
+      return;
+    }
+    if (state.pending?.kind === "flip") {
+      if (!autoFlip) {
+        this.scripting = false;
+        this.emit();
+        return;
+      }
+      const flip = pickFlipStone(state);
+      if (flip == null) {
+        this.scripting = false;
+        this.emit();
+        return;
+      }
+      this.holdFlip(state, flip, true);
+      return;
+    }
+    if (state.pending?.kind === "remove") {
+      if (!autoFlip) {
+        this.scripting = false;
+        this.emit();
+        return;
+      }
+      this.scripting = true;
+      this.state = { ...state, winLine: state.pending.eligible };
+      this.emit();
+      this.arm(gen, SERIES_BEAT_MS, () => {
+        const lifted = liftShown(this.state);
+        if (!lifted) {
+          this.scripting = false;
+          this.emit();
+          return;
+        }
+        this.continueSeries(lifted, true);
+      });
+      return;
+    }
+    const line = state.winLine;
+    if (line && line.length >= 5 && !state.pending) {
+      this.scripting = true;
+      this.emit();
+      this.arm(gen, SERIES_BEAT_MS, () => {
+        if (line.length > 5 && !autoFlip) {
+          this.state = { ...state, pending: { kind: "remove", eligible: line.slice(), selected: [] } };
+          this.scripting = false;
+          this.emit();
+          return;
+        }
+        const lifted = liftShown(state);
+        if (!lifted) {
+          this.scripting = false;
+          this.emit();
+          return;
+        }
+        this.continueSeries(lifted, autoFlip);
+      });
+      return;
+    }
+    this.scripting = false;
+    this.emit();
+  }
+
+  private holdFlip(state: GameState, index: number, autoFlip: boolean): void {
+    const gen = this.scriptGen;
+    this.scripting = true;
+    this.flipHint = index;
+    this.state = state;
+    this.emit();
+    this.arm(gen, SERIES_BEAT_MS, () => {
+      this.flipHint = null;
+      const flipped = flipShown(state, index);
+      if (!flipped) {
+        this.scripting = false;
+        this.emit();
+        return;
+      }
+      this.continueSeries(flipped, autoFlip);
+    });
+  }
+
+  private arm(gen: number, ms: number, fn: () => void): void {
+    this.aiTimer = window.setTimeout(() => {
+      this.aiTimer = null;
+      if (gen !== this.scriptGen) return;
+      fn();
+    }, ms);
+  }
+
   private scheduleAi(): void {
     const needsAi =
       !this.roomCode &&
@@ -714,21 +862,32 @@ class GomokuSession implements GameSession {
       !isOver(this.state) &&
       this.state.turn !== this.settings.humanColor;
     if (!needsAi) return;
-    if (this.thinking || this.aiTimer != null) return;
+    if (this.scripting || this.thinking || this.aiTimer != null) return;
     const from = this.state;
     const difficulty = this.settings.difficulty;
+    const gen = this.scriptGen;
     this.thinking = true;
     this.aiTimer = window.setTimeout(() => {
-      const next = from.pending
-        ? resolvePendingGreedy(from)
-        : playTurn(from, chooseMove(from, difficulty));
-      this.thinking = false;
       this.aiTimer = null;
-      const stuck =
-        Boolean(from.pending) &&
-        Boolean(next?.pending) &&
-        next?.pending?.kind === from.pending?.kind;
-      if (next && !stuck) {
+      this.thinking = false;
+      if (gen !== this.scriptGen) return;
+      if (from.rules === "series") {
+        if (from.pending) {
+          this.history.push(cloneState(from));
+          this.continueSeries(from, true);
+          return;
+        }
+        const placed = placeShown(from, chooseMove(from, difficulty));
+        if (!placed) {
+          this.emit();
+          return;
+        }
+        this.history.push(cloneState(from));
+        this.continueSeries(placed, true);
+        return;
+      }
+      const next = playTurn(from, chooseMove(from, difficulty));
+      if (next) {
         this.history.push(cloneState(from));
         this.state = next;
       }
@@ -737,11 +896,14 @@ class GomokuSession implements GameSession {
   }
 
   private clearAi(): void {
+    this.scriptGen += 1;
     if (this.aiTimer != null) {
       window.clearTimeout(this.aiTimer);
       this.aiTimer = null;
     }
     this.thinking = false;
+    this.scripting = false;
+    this.flipHint = null;
   }
 
   private enterRoom(code: string): void {

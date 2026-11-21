@@ -380,6 +380,95 @@ export function playTurn(state: GameState, index: number): GameState | null {
   return resolvePendingGreedy(next);
 }
 
+/**
+ * Series placement that leaves a completed five on the board.
+ * `play` lifts that five immediately; the client holds the line, then calls `liftShown`.
+ */
+export function placeShown(state: GameState, index: number): GameState | null {
+  if (state.rules !== "series") return null;
+  if (state.pending || state.winner !== 0 || !isEmpty(state, index)) return null;
+  const board = state.board.slice() as Stone[];
+  board[index] = state.turn;
+  const base: GameState = {
+    ...state,
+    board,
+    moves: state.moves.concat(index),
+    lastMove: index,
+    winLine: null,
+    pending: null,
+  };
+  const line = stonesInFives(board, state.size, state.turn);
+  if (line.length >= 5) return { ...base, winLine: line };
+  if (boardFull(board)) return decideFullWinner(base);
+  return { ...base, turn: other(state.turn) };
+}
+
+/** Lift five marked stones. A following five or flip is left for the caller to show. */
+export function liftShown(state: GameState, picked?: number[]): GameState | null {
+  if (state.rules !== "series" || state.winner !== 0 || state.pending?.kind === "flip") return null;
+  const eligible =
+    state.pending?.kind === "remove"
+      ? state.pending.eligible
+      : stonesInFives(state.board, state.size, state.turn);
+  if (eligible.length < 5) return null;
+  let chosen = picked;
+  if (!chosen || chosen.length !== 5) {
+    const staged: GameState = {
+      ...state,
+      pending: {
+        kind: "remove",
+        eligible,
+        selected: state.pending?.kind === "remove" ? state.pending.selected : [],
+      },
+      winLine: eligible,
+    };
+    const auto = pickRemoveStones(staged);
+    if (!auto) return null;
+    chosen = auto;
+  }
+  if (chosen.length !== 5 || chosen.some((cell) => !eligible.includes(cell))) return null;
+  const board = state.board.slice() as Stone[];
+  for (const cell of chosen) board[cell] = 0;
+  const captures: [number, number] = [state.captures[0], state.captures[1]];
+  captures[state.turn - 1] += 1;
+  const next: GameState = {
+    ...state,
+    board,
+    captures,
+    pending: null,
+    winLine: null,
+  };
+  if (captureOf(next, next.turn) >= next.capturesToWin) {
+    return { ...next, winner: next.turn };
+  }
+  if (listStones(board, other(next.turn)).length > 0) {
+    return { ...next, pending: { kind: "flip" } };
+  }
+  const leftover = stonesInFives(board, state.size, next.turn);
+  if (leftover.length >= 5) return { ...next, winLine: leftover };
+  if (boardFull(board)) return decideFullWinner(next);
+  return { ...next, turn: other(next.turn) };
+}
+
+/** Flip one stone. A new five stays marked instead of being lifted in the same step. */
+export function flipShown(state: GameState, index: number): GameState | null {
+  if (state.pending?.kind !== "flip" || state.winner !== 0) return null;
+  if (state.board[index] !== other(state.turn)) return null;
+  const board = state.board.slice() as Stone[];
+  board[index] = state.turn;
+  const next: GameState = {
+    ...state,
+    board,
+    lastMove: index,
+    pending: null,
+    winLine: null,
+  };
+  const line = stonesInFives(board, state.size, state.turn);
+  if (line.length >= 5) return { ...next, winLine: line };
+  if (boardFull(board)) return decideFullWinner(next);
+  return { ...next, turn: other(state.turn) };
+}
+
 export function resign(state: GameState, loser: Player): GameState {
   if (state.winner !== 0) return state;
   return {
