@@ -33,9 +33,9 @@
 
 | slug | 中文名 | 模式 | 上架 | 说明 |
 | --- | --- | --- | --- | --- |
-| `explosive-chess` | 爆炸棋 | `single-online` | 测试站 + 正式站 | 本机 AI / 热座 / 分享链接联机（两边都有）。测试站另有 Agent 适配（本机 HTTP + curl）。两座 `red` / `blue`，进房默认观战，`claim_seat` 入座，坐满开局。建房后规则冻结。 |
-| `chroma-slide` | 滑动色块 | catalog 仍标 `single` | 测试站 + 正式站 | 本机单人滑块，也可开分享链接房间，只有一个 `player` 座位（给人打或给 Agent 打），不是双人对战。 |
-| `gomoku` | 五子棋 | `single-online` | 测试站 + 正式站 | 15 路自由五子棋（无禁手），黑先，连五即胜（≥5）。本机热座或对战内置 AI（easy/normal/hard）。联机同样走分享链接：进房观战，执黑 / 执白入座，坐满开局；可认输，终局双方同意再来一局。**不要**在未要求时做 Agent 适配。 |
+| `explosive-chess` | 爆炸棋 | `single-online` | 测试站 + 正式站 | 人机（内置电脑）/ 同屏双人 / 分享链接联机（两边都有）。测试站另有 Agent 适配（本机 HTTP + curl，玩家文案叫「跟 AI 对战」）。两座 `red` / `blue`，进房默认观战，`claim_seat` 入座，坐满开局。建房后规则冻结。 |
+| `chroma-slide` | 滑动色块 | catalog 仍标 `single` | 测试站 + 正式站 | 本机单人滑块，也可开分享链接房间，只有一个 `player` 座位（给人解或发给 AI 解），不是双人对战。 |
+| `gomoku` | 五子棋 | `single-online` | 测试站 + 正式站 | 15 路自由五子棋（无禁手），黑先，连五即胜（≥5）。同屏双人或人机对战（easy/normal/hard）。联机同样走分享链接：进房观战，执黑 / 执白入座，坐满开局；可认输，终局双方同意再来一局。**不要**在未要求时做 Agent 适配。 |
 
 联机座位类型是平台级的 `red` / `blue` / `player` / `spectator`。五子棋**不要**给平台加 `black` / `white` 座位；在适配器和 UI 里把 `red` 显示成黑棋、`blue` 显示成白棋即可。
 
