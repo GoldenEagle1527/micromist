@@ -151,11 +151,8 @@
   min-height: 0;
 }
 
-.game-shell-board-host > canvas,
-.game-shell-board-host > .chroma-board,
-.game-shell-board-host > .gomoku-board-wrap {
+.game-shell-board-host > canvas {
   display: block;
-  width: 100%;
   max-width: 100%;
   max-height: 100%;
 }

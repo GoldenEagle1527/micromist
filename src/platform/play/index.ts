@@ -18,3 +18,12 @@ export type {
   ShellAction,
 } from "./types";
 export { GameShell } from "./GameShell";
+export { createGridBoard } from "./grid-board";
+export type {
+  CellAccent,
+  DotColor,
+  GridBoard,
+  GridBoardSource,
+  GridCellPaint,
+  StoneColor,
+} from "./grid-board";
