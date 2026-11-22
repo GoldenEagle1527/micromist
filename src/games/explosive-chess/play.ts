@@ -5,6 +5,7 @@ import type {
   GameSession,
   GameSnapshot,
   ParamField,
+  PlayChrome,
   SeatChip,
   SessionContext,
   ShellAction,
@@ -66,6 +67,30 @@ type MenuStage = "root" | "solo" | "solo-config" | "online";
 
 function dict(locale: SessionContext["locale"]) {
   return locale === "zh" ? explosiveZh : explosiveEn;
+}
+
+const CHROME_RED = "#e53935";
+const CHROME_BLUE = "#1e88e5";
+
+function explosiveChrome(opts: {
+  turn: PlayerColor;
+  gameOver: boolean;
+  winner: MoveResult["winner"];
+  winMode: WinMode;
+  counts: { red: number; blue: number };
+}): PlayChrome {
+  let active: PlayChrome["active"] = opts.turn === COLOR_RED ? "left" : "right";
+  if (opts.gameOver) {
+    if (opts.winner === COLOR_RED) active = "left";
+    else if (opts.winner === COLOR_BLUE) active = "right";
+    else active = "both";
+  }
+  const showCells = opts.winMode === WIN_MODE_AREA;
+  return {
+    left: { color: CHROME_RED, value: showCells ? String(opts.counts.red) : undefined },
+    right: { color: CHROME_BLUE, value: showCells ? String(opts.counts.blue) : undefined },
+    active,
+  };
 }
 
 class ExplosiveSession implements GameSession {
@@ -497,13 +522,18 @@ class ExplosiveSession implements GameSession {
           online && this.onlineStatus ? ` · ${this.onlineStatus}` : ""
         }`
       : `${this.tip}${online && this.onlineStatus ? ` · ${this.onlineStatus}` : ""}`;
+    const winMode = this.onlineConfig?.winMode ?? this.settings.winMode;
     return {
       phase: "play",
+      chrome: explosiveChrome({
+        turn: this.turn,
+        gameOver: this.gameOver,
+        winner: this.winner,
+        winMode,
+        counts: this.counts,
+      }),
       hud: [
-        { id: "turn", label: ex.turn, value: colorLabel(this.turn, ex) },
         { id: "steps", label: ex.stepsHud, value: String(this.stepCount) },
-        { id: "red", label: ex.colorRed, value: String(this.counts.red) },
-        { id: "blue", label: ex.colorBlue, value: String(this.counts.blue) },
         ...(online
           ? [
               {
