@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "reac
 import { useLocation, useSearchParams } from "react-router";
 import { useLocale } from "../../i18n";
 import { copyText } from "./copy-text";
+import { playFrameStyle, useSetPlayChrome } from "./play-chrome";
 import type {
   ConfirmSpec,
   GamePlayModule,
@@ -203,6 +204,7 @@ function RecordsView({ records }: { records: RecordsPane }) {
 
 export function GameShell({ load, preview }: GameShellProps) {
   const { locale } = useLocale();
+  const setPlayChrome = useSetPlayChrome();
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const module = useLoadedModule(load);
@@ -390,9 +392,20 @@ export function GameShell({ load, preview }: GameShellProps) {
   };
 
   const showBoard = snapshot.phase === "play" && Boolean(session);
+  const playChrome = snapshot.phase === "play" ? snapshot.chrome : undefined;
+
+  useEffect(() => {
+    setPlayChrome(playChrome ?? null);
+  }, [setPlayChrome, playChrome]);
+
+  useEffect(() => () => setPlayChrome(null), [setPlayChrome]);
 
   return (
-    <div className={snapshot.phase === "play" ? "game-shell game-shell-is-play" : "game-shell"}>
+    <div
+      className={snapshot.phase === "play" ? "game-shell game-shell-is-play" : "game-shell"}
+      style={snapshot.phase === "play" ? playFrameStyle(playChrome) : undefined}
+      data-frame-active={playChrome?.active ?? undefined}
+    >
       {snapshot.phase === "menu" ? (
         <div className="game-shell-setup">
           <div className="panel">
@@ -459,17 +472,6 @@ export function GameShell({ load, preview }: GameShellProps) {
         </div>
       ) : (
         <div className="game-shell-play">
-          {snapshot.hud && snapshot.hud.length > 0 ? (
-            <div className="game-shell-hud">
-              {snapshot.hud.map((item) => (
-                <span key={item.id} className="game-shell-hud-item">
-                  {item.label ? `${item.label}：` : null}
-                  <strong>{item.value}</strong>
-                </span>
-              ))}
-            </div>
-          ) : null}
-          {snapshot.status ? <p className="game-shell-status">{snapshot.status}</p> : null}
           {snapshot.room ? (
             <RoomView
               room={snapshot.room}

@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import { NavLink, Outlet, useMatch } from "react-router";
 import { getGame } from "../games/catalog";
 import { useLocale } from "../i18n";
+import { PlayCapsule } from "../platform/play";
 import { useTheme } from "../hooks/useTheme";
 import {
   isFloatEmbed,
@@ -187,9 +188,7 @@ export function Shell() {
           {locale === "zh" ? <span className="brand-en">{t.brandSub}</span> : null}
         </NavLink>
         {playGame ? (
-          <div className="topbar-game" aria-current="page">
-            {playGame.title[locale]}
-          </div>
+          <PlayCapsule fallbackTitle={playGame.title[locale]} />
         ) : (
           <div className="topbar-game topbar-game-empty" aria-hidden="true" />
         )}
