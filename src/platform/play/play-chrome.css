@@ -1,0 +1,162 @@
+/* Topbar split capsule + play-area glow vars. Not drawn on the board. */
+
+.play-capsule {
+  --capsule-left: #e53935;
+  --capsule-right: #1e88e5;
+  --capsule-left-ink: #f7f7f4;
+  --capsule-right-ink: #f7f7f4;
+  justify-self: center;
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(2.6rem, 1fr) auto minmax(2.6rem, 1fr);
+  align-items: stretch;
+  width: min(48vw, 14rem);
+  height: 2.15rem;
+  border-radius: 999px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--md-sys-color-outline-variant) 45%, transparent);
+  background: transparent;
+  pointer-events: none;
+}
+
+.play-capsule-half {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  opacity: 0.32;
+  filter: saturate(0.55);
+  transition: opacity var(--md-sys-motion), filter var(--md-sys-motion);
+}
+
+.play-capsule-half.is-on {
+  opacity: 1;
+  filter: none;
+}
+
+.play-capsule[data-active="none"] .play-capsule-half {
+  opacity: 0.5;
+}
+
+/* Inner edges slope / (top leans right). No stroke over the title. */
+.play-capsule-half.is-left {
+  justify-content: center;
+  padding: 0 0.85rem 0 0.35rem;
+  background: var(--capsule-left);
+  clip-path: polygon(0 0, 100% 0, calc(100% - 1.15rem) 100%, 0 100%);
+}
+
+.play-capsule-half.is-right {
+  justify-content: center;
+  padding: 0 0.35rem 0 0.85rem;
+  background: var(--capsule-right);
+  clip-path: polygon(1.15rem 0, 100% 0, 100% 100%, 0 100%);
+}
+
+.play-capsule-value {
+  position: relative;
+  z-index: 1;
+  font-size: 0.78rem;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+  max-width: 2.4rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: center;
+}
+
+.play-capsule-half.is-left .play-capsule-value {
+  color: var(--capsule-left-ink);
+}
+
+.play-capsule-half.is-right .play-capsule-value {
+  color: var(--capsule-right-ink);
+}
+
+.play-capsule-title {
+  position: relative;
+  z-index: 2;
+  align-self: center;
+  padding: 0 0.45rem;
+  font-size: 0.92rem;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  color: var(--md-sys-color-on-surface);
+  white-space: nowrap;
+  max-width: 5.6rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  background: transparent;
+}
+
+.play-capsule-intro .play-capsule-half.is-left {
+  animation: play-capsule-split-left 0.72s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.play-capsule-intro .play-capsule-half.is-right {
+  animation: play-capsule-split-right 0.72s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.play-capsule-intro .play-capsule-title {
+  animation: play-capsule-title-in 0.55s 0.22s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+@keyframes play-capsule-split-left {
+  from {
+    transform: translateX(42%);
+    opacity: 0.2;
+  }
+  to {
+    transform: none;
+    opacity: inherit;
+  }
+}
+
+@keyframes play-capsule-split-right {
+  from {
+    transform: translateX(-42%);
+    opacity: 0.2;
+  }
+  to {
+    transform: none;
+    opacity: inherit;
+  }
+}
+
+@keyframes play-capsule-title-in {
+  from {
+    opacity: 0;
+    transform: scale(0.86);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .play-capsule-intro .play-capsule-half,
+  .play-capsule-intro .play-capsule-title {
+    animation: none;
+  }
+}
+
+@media (max-width: 719px) {
+  .play-capsule {
+    width: min(44vw, 12rem);
+    height: 1.95rem;
+  }
+
+  .play-capsule-title {
+    font-size: 0.82rem;
+    max-width: 4.4rem;
+    letter-spacing: 0.04em;
+  }
+
+  .play-capsule-value {
+    font-size: 0.7rem;
+    max-width: 1.8rem;
+  }
+}

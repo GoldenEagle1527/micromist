@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { BrowserRouter } from "react-router";
 import { App } from "./App";
 import { LocaleProvider } from "./i18n";
+import { PlayChromeProvider } from "./platform/play";
 import {
   applyResolvedTheme,
   readStoredTheme,
@@ -21,7 +22,9 @@ createRoot(root).render(
   <StrictMode>
     <BrowserRouter>
       <LocaleProvider>
-        <App />
+        <PlayChromeProvider>
+          <App />
+        </PlayChromeProvider>
       </LocaleProvider>
     </BrowserRouter>
   </StrictMode>,

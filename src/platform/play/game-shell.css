@@ -8,10 +8,21 @@
 }
 
 .game-shell-is-play {
+  --play-frame: var(--md-sys-color-primary);
   flex: 1;
   min-height: 0;
   gap: 0.45rem;
   overscroll-behavior: none;
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--play-frame) 42%, transparent),
+    inset 0 0 14px color-mix(in srgb, var(--play-frame) 16%, transparent);
+  transition: box-shadow 280ms ease;
+}
+
+.game-shell-is-play[data-frame-active="none"] {
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--play-frame) 18%, transparent),
+    inset 0 0 10px color-mix(in srgb, var(--play-frame) 8%, transparent);
 }
 
 .game-shell-setup {

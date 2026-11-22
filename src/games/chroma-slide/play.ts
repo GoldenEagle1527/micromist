@@ -4,6 +4,7 @@ import type {
   GamePlayModule,
   GameSession,
   GameSnapshot,
+  PlayChrome,
   SessionContext,
 } from "../../platform/play";
 import { createGridBoard, type GridBoard, type GridCellPaint } from "../../platform/play/grid-board";
@@ -41,6 +42,16 @@ type ChromaPersist = {
 type You = { playerId: string; seat: Seat; name?: string };
 
 const SLUG = "chroma-slide";
+const CHROME_PLAY = TILE_COLORS[0] ?? "#e53935";
+const CHROME_REST = TILE_COLORS[1] ?? "#1e88e5";
+
+function chromaChrome(steps: number, won: boolean): PlayChrome {
+  return {
+    left: { color: CHROME_PLAY, value: String(steps) },
+    right: { color: CHROME_REST },
+    active: won ? "both" : "left",
+  };
+}
 
 function dict(locale: SessionContext["locale"]): ChromaDict {
   return locale === "zh" ? chromaZh : chromaEn;
@@ -311,13 +322,7 @@ class ChromaSession implements GameSession {
     const won = puzzle ? isWon(puzzle) : false;
     return {
       phase: "play",
-      hud: [
-        {
-          id: "steps",
-          label: ch.stepsHud,
-          value: String(puzzle?.steps ?? 0),
-        },
-      ],
+      chrome: chromaChrome(puzzle?.steps ?? 0, won),
       status: won && puzzle ? ch.winMessage(puzzle.steps) : ch.playHint,
       actions: [
         {
@@ -400,14 +405,13 @@ class ChromaSession implements GameSession {
       phase: this.puzzle || pub ? "play" : "menu",
       title: ch.roomTitle,
       hint: this.puzzle || pub ? undefined : status,
+      chrome:
+        this.puzzle || pub
+          ? chromaChrome(pub?.steps ?? this.puzzle?.steps ?? 0, won)
+          : undefined,
       hud: [
         { id: "room", value: ch.roomCode(this.roomCode) },
-        ...(pub
-          ? [
-              { id: "preset", value: String(pub.config.preset) },
-              { id: "steps", label: ch.stepsHud, value: String(pub.steps) },
-            ]
-          : []),
+        ...(pub ? [{ id: "preset", value: String(pub.config.preset) }] : []),
       ],
       status:
         status +

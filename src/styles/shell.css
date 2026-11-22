@@ -45,6 +45,10 @@
   pointer-events: none;
 }
 
+.play-capsule {
+  justify-self: center;
+}
+
 .topbar-game-empty {
   visibility: hidden;
   min-width: 0;

@@ -4,6 +4,7 @@ import type {
   GameSession,
   GameSnapshot,
   ParamField,
+  PlayChrome,
   SeatChip,
   SessionContext,
   ShellAction,
@@ -68,6 +69,30 @@ type You = {
 
 const SLUG = "gomoku";
 const SERIES_BEAT_MS = 500;
+const CHROME_BLACK = "#2b2b30";
+const CHROME_WHITE = "#f3ead8";
+
+function gomokuChrome(state: GameState | null): PlayChrome {
+  const series = state?.rules === "series";
+  let active: PlayChrome["active"] = "none";
+  if (state) {
+    if (state.winner === 1) active = "left";
+    else if (state.winner === 2) active = "right";
+    else if (state.winner === 3) active = "both";
+    else active = state.turn === 1 ? "left" : "right";
+  }
+  return {
+    left: {
+      color: CHROME_BLACK,
+      value: series && state ? String(state.captures[0]) : undefined,
+    },
+    right: {
+      color: CHROME_WHITE,
+      value: series && state ? String(state.captures[1]) : undefined,
+    },
+    active,
+  };
+}
 const DEFAULT_SETTINGS: Settings = {
   opponent: "ai",
   difficulty: "normal",
@@ -375,16 +400,10 @@ class GomokuSession implements GameSession {
         confirm: confirm(g.confirmSetupTitle, g.confirmSetupBody),
       },
     ];
-    const hud = [{ id: "status", value: this.localStatus(g) }];
-    if (this.state.rules === "series") {
-      hud.unshift({
-        id: "captures",
-        value: g.capturesHud(this.state.captures[0], this.state.captures[1], this.state.capturesToWin),
-      });
-    }
     return {
       phase: "play",
-      hud,
+      chrome: gomokuChrome(this.state),
+      status: this.localStatus(g),
       actions,
     };
   }
@@ -414,25 +433,9 @@ class GomokuSession implements GameSession {
       phase: showBoard ? "play" : "menu",
       title: showBoard ? undefined : g.roomCodeLabel(this.roomCode),
       hint: showBoard ? undefined : this.roomStatus(g),
-      hud: showBoard
-        ? [
-            { id: "room", value: g.roomCodeLabel(this.roomCode) },
-            ...(this.roomRules === "series" && this.state
-              ? [
-                  {
-                    id: "captures",
-                    value: g.capturesHud(
-                      this.state.captures[0],
-                      this.state.captures[1],
-                      this.state.capturesToWin,
-                    ),
-                  },
-                ]
-              : []),
-            { id: "status", value: this.roomStatus(g) },
-          ]
-        : undefined,
-      status: showBoard ? undefined : this.roomError || this.peerHint || undefined,
+      chrome: showBoard ? gomokuChrome(this.state) : undefined,
+      hud: showBoard ? [{ id: "room", value: g.roomCodeLabel(this.roomCode) }] : undefined,
+      status: showBoard ? this.roomStatus(g) : this.roomError || this.peerHint || undefined,
       actions,
       room: {
         title: g.roomCodeLabel(this.roomCode),

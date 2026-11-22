@@ -11,6 +11,9 @@ export type {
   InvitePane,
   MenuItem,
   ParamField,
+  PlayChrome,
+  PlayChromeActive,
+  PlayChromeSide,
   RecordsPane,
   RoomPane,
   SeatChip,
@@ -18,6 +21,13 @@ export type {
   ShellAction,
 } from "./types";
 export { GameShell } from "./GameShell";
+export {
+  PlayCapsule,
+  PlayChromeProvider,
+  playFrameStyle,
+  usePlayChrome,
+  useSetPlayChrome,
+} from "./play-chrome";
 export { createGridBoard } from "./grid-board";
 export type {
   CellAccent,

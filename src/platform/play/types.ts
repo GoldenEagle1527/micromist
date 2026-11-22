@@ -113,10 +113,29 @@ export type DialogState = {
   actionId: string;
 };
 
+/** Game-registered topbar capsule + play-area glow. Never drawn on the board. */
+export type PlayChromeSide = {
+  /** CSS color the game owns (not a platform seat name). */
+  color: string;
+  /** Short number for the half-capsule slot (captures, cells, steps). */
+  value?: string;
+};
+
+export type PlayChromeActive = "left" | "right" | "none" | "both";
+
+export type PlayChrome = {
+  /** Defaults to the catalog title in the site header. */
+  title?: string;
+  left: PlayChromeSide;
+  right: PlayChromeSide;
+  active: PlayChromeActive;
+};
+
 export type GameSnapshot = {
   phase: "menu" | "play";
   title?: string;
   hint?: string;
+  chrome?: PlayChrome;
   menu?: {
     items: MenuItem[];
     canBack?: boolean;
