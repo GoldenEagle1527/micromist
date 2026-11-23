@@ -75,6 +75,10 @@
   color: var(--capsule-right-ink);
 }
 
+.play-capsule.has-notice {
+  width: min(62vw, 18rem);
+}
+
 .play-capsule-title {
   position: relative;
   z-index: 2;
@@ -89,6 +93,13 @@
   overflow: hidden;
   text-overflow: ellipsis;
   background: transparent;
+}
+
+.play-capsule-title.is-notice {
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  max-width: 9.5rem;
 }
 
 .play-capsule-intro .play-capsule-half.is-left {
@@ -149,10 +160,19 @@
     height: 1.95rem;
   }
 
+  .play-capsule.has-notice {
+    width: min(58vw, 14.5rem);
+  }
+
   .play-capsule-title {
     font-size: 0.82rem;
     max-width: 4.4rem;
     letter-spacing: 0.04em;
+  }
+
+  .play-capsule-title.is-notice {
+    font-size: 0.72rem;
+    max-width: 7.2rem;
   }
 
   .play-capsule-value {

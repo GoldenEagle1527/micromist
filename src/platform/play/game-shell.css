@@ -211,6 +211,12 @@
   transform-origin: 0 0;
 }
 
+.game-shell-play .game-shell-status {
+  font-size: 0.92rem;
+  font-weight: 550;
+  color: var(--md-sys-color-on-surface-variant);
+}
+
 .game-shell-play .game-shell-actions {
   justify-content: center;
   margin-top: 0.15rem;

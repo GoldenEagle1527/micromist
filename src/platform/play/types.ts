@@ -126,6 +126,8 @@ export type PlayChromeActive = "left" | "right" | "none" | "both";
 export type PlayChrome = {
   /** Defaults to the catalog title in the site header. */
   title?: string;
+  /** Replaces the title in the capsule while set (win, thinking, disconnect). */
+  notice?: string;
   left: PlayChromeSide;
   right: PlayChromeSide;
   active: PlayChromeActive;

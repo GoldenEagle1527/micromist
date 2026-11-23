@@ -120,6 +120,8 @@ export function PlayCapsule({ fallbackTitle }: { fallbackTitle: string }) {
   }
 
   const title = chrome.title?.trim() || fallbackTitle;
+  const notice = chrome.notice?.trim();
+  const center = notice || title;
   const leftInk = inkFor(chrome.left.color);
   const rightInk = inkFor(chrome.right.color);
   const leftOn = chrome.active === "left" || chrome.active === "both";
@@ -127,7 +129,7 @@ export function PlayCapsule({ fallbackTitle }: { fallbackTitle: string }) {
 
   return (
     <div
-      className={`play-capsule${intro ? " play-capsule-intro" : ""}`}
+      className={`play-capsule${intro ? " play-capsule-intro" : ""}${notice ? " has-notice" : ""}`}
       style={
         {
           "--capsule-left": chrome.left.color,
@@ -138,12 +140,12 @@ export function PlayCapsule({ fallbackTitle }: { fallbackTitle: string }) {
       }
       data-active={chrome.active}
       aria-current="page"
-      aria-label={title}
+      aria-label={notice ? `${title} · ${notice}` : title}
     >
       <span className={`play-capsule-half is-left${leftOn ? " is-on" : ""}`}>
         {chrome.left.value ? <span className="play-capsule-value">{chrome.left.value}</span> : null}
       </span>
-      <span className="play-capsule-title">{title}</span>
+      <span className={`play-capsule-title${notice ? " is-notice" : ""}`}>{center}</span>
       <span className={`play-capsule-half is-right${rightOn ? " is-on" : ""}`}>
         {chrome.right.value ? (
           <span className="play-capsule-value">{chrome.right.value}</span>
