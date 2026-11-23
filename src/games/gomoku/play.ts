@@ -115,6 +115,15 @@ function asOpponent(value: string): Opponent {
   return "ai";
 }
 
+function normalizeRoomCode(value: string): string {
+  return value.trim().toLowerCase();
+}
+
+function isRoomCode(value: string): boolean {
+  const code = normalizeRoomCode(value);
+  return code.length >= 4 && /^[a-z0-9]+$/.test(code);
+}
+
 function seatToPlayer(seat: Seat): Player | null {
   if (seat === "red") return 1;
   if (seat === "blue") return 2;
@@ -140,6 +149,8 @@ class GomokuSession implements GameSession {
   private roomCapturesToWin = DEFAULT_CAPTURES_TO_WIN;
   private configSentForRoom = "";
   private pendingConfig: string | null = null;
+  private joinCode = "";
+  private joinError = "";
   private boardHost: HTMLElement | null = null;
   private canvas: HTMLCanvasElement | null = null;
   private grid: GridBoard | null = null;
@@ -208,6 +219,12 @@ class GomokuSession implements GameSession {
   setParam(id: string, value: string | number): void {
     if (this.phase !== "menu" || this.roomCode) return;
     const text = String(value);
+    if (id === "joinCode") {
+      this.joinCode = text;
+      this.joinError = "";
+      this.emit();
+      return;
+    }
     if (id === "mode") this.settings = { ...this.settings, opponent: asOpponent(text) };
     if (id === "difficulty") this.settings = { ...this.settings, difficulty: asDifficulty(text) };
     if (id === "humanColor") this.settings = { ...this.settings, humanColor: text === "2" ? 2 : 1 };
@@ -227,6 +244,10 @@ class GomokuSession implements GameSession {
     }
     if (id === "create-room") {
       this.createRoom();
+      return;
+    }
+    if (id === "join-room") {
+      this.joinRoom();
       return;
     }
     if (id === "undo") {
@@ -356,18 +377,35 @@ class GomokuSession implements GameSession {
       });
     }
     const online = this.settings.opponent === "online";
+    if (online) {
+      fields.push({
+        id: "joinCode",
+        label: g.joinCode,
+        type: "text",
+        value: this.joinCode,
+      });
+    }
     return {
       phase: "menu",
       title: g.setupTitle,
-      hint: this.settings.rules === "series" ? g.seriesHint : g.setupHint,
+      hint: online
+        ? g.onlineSetupHint
+        : this.settings.rules === "series"
+          ? g.seriesHint
+          : g.setupHint,
+      status: this.joinError || undefined,
       params: { fields },
-      actions: [
-        {
-          id: online ? "create-room" : "start",
-          label: online ? g.createRoom : g.start,
-          kind: "primary",
-        },
-      ],
+      actions: online
+        ? [
+            { id: "create-room", label: g.createRoom, kind: "primary" },
+            {
+              id: "join-room",
+              label: g.joinRoom,
+              kind: "ghost",
+              disabled: !isRoomCode(this.joinCode),
+            },
+          ]
+        : [{ id: "start", label: g.start, kind: "primary" }],
     };
   }
 
@@ -714,6 +752,21 @@ class GomokuSession implements GameSession {
   private createRoom(): void {
     const code = generateRoomCode();
     this.pendingConfig = code;
+    this.joinError = "";
+    const next = new URLSearchParams(this.ctx.search);
+    next.set("room", code);
+    this.ctx.setSearch(next, { replace: true });
+  }
+
+  private joinRoom(): void {
+    const code = normalizeRoomCode(this.joinCode);
+    if (!isRoomCode(code)) {
+      this.joinError = dict(this.ctx.locale).needRoomCode;
+      this.emit();
+      return;
+    }
+    this.pendingConfig = null;
+    this.joinError = "";
     const next = new URLSearchParams(this.ctx.search);
     next.set("room", code);
     this.ctx.setSearch(next, { replace: true });
@@ -1040,7 +1093,7 @@ class GomokuSession implements GameSession {
     this.pendingConfig = null;
     this.phase = "menu";
     this.state = emptyState();
-    this.settings = { ...this.settings, opponent: "ai" };
+    this.settings = { ...this.settings, opponent: "online" };
     if (clearUrl) this.ctx.setSearch(new URLSearchParams(), { replace: true });
   }
 
