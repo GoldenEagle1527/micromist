@@ -574,14 +574,6 @@ export function GameShell({ load, preview }: GameShellProps) {
         </div>
       ) : (
         <div className="game-shell-play">
-          {room?.seats?.some((seat) => seat.canClaim) ? (
-            <RoomView
-              room={room}
-              sharePhase={sharePhase}
-              onCopyShare={copyShare}
-              onClaim={claimSeat}
-            />
-          ) : null}
           {showBoard && session ? <BoardHost session={session} active /> : null}
           <ActionsRow actions={snapshot.actions ?? []} onRun={runAction} />
         </div>
