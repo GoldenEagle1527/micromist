@@ -392,7 +392,12 @@ export function GameShell({ load, preview }: GameShellProps) {
   };
 
   const showBoard = snapshot.phase === "play" && Boolean(session);
-  const playChrome = snapshot.phase === "play" ? snapshot.chrome : undefined;
+  const playChrome = useMemo(() => {
+    if (snapshot.phase !== "play" || !snapshot.chrome) return undefined;
+    const notice = snapshot.status?.trim();
+    if (!notice) return snapshot.chrome;
+    return { ...snapshot.chrome, notice };
+  }, [snapshot.phase, snapshot.chrome, snapshot.status]);
 
   useEffect(() => {
     setPlayChrome(playChrome ?? null);

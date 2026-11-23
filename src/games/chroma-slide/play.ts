@@ -323,7 +323,7 @@ class ChromaSession implements GameSession {
     return {
       phase: "play",
       chrome: chromaChrome(puzzle?.steps ?? 0, won),
-      status: won && puzzle ? ch.winMessage(puzzle.steps) : ch.playHint,
+      status: won && puzzle ? ch.winMessage(puzzle.steps) : undefined,
       actions: [
         {
           id: "reshuffle",
@@ -384,7 +384,10 @@ class ChromaSession implements GameSession {
   private roomSnapshot(ch: ChromaDict): GameSnapshot {
     const pub = this.pub;
     const solver = this.roomPlayers.find((p) => p.seat === "player");
-    const won = pub?.won === true || this.roomPhase === "over";
+    const won =
+      pub?.won === true ||
+      this.roomPhase === "over" ||
+      (this.puzzle != null && isWon(this.puzzle));
     const status = this.roomClosed
       ? ch.roomClosed
       : this.roomError
@@ -409,13 +412,14 @@ class ChromaSession implements GameSession {
         this.puzzle || pub
           ? chromaChrome(pub?.steps ?? this.puzzle?.steps ?? 0, won)
           : undefined,
-      hud: [
-        { id: "room", value: ch.roomCode(this.roomCode) },
-        ...(pub ? [{ id: "preset", value: String(pub.config.preset) }] : []),
-      ],
       status:
-        status +
-        (this.you?.seat === "spectator" && this.roomPhase === "playing" ? ` · ${ch.roomSpectatorHint}` : ""),
+        this.puzzle || pub
+          ? won
+            ? ch.roomSolved(pub?.steps ?? this.puzzle?.steps ?? 0)
+            : this.you?.seat === "spectator" && this.roomPhase === "playing"
+              ? ch.roomSpectatorHint
+              : undefined
+          : status,
       actions: [
         ...(canClaim ? [{ id: "claim-player", label: ch.roomClaim, kind: "primary" as const }] : []),
         { id: "leave-room", label: ch.roomBack, kind: "ghost" as const },
