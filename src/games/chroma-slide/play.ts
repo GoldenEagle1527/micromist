@@ -394,43 +394,40 @@ class ChromaSession implements GameSession {
               : solver
                 ? ch.roomWatching(solver.name)
                 : ch.roomWaiting;
-    const canClaim = this.you?.seat === "spectator" && this.roomPhase === "lobby" && !solver;
-    const you = this.you;
-    const solverLabel = solver?.name || "player";
+    const live = this.roomPhase === "playing" || this.roomPhase === "over";
+    const preset = pub?.config ? presetTitle(ch, pub.config.preset) : presetTitle(ch, this.preset);
+    const chrome = live ? chromaChrome(pub?.steps ?? this.puzzle?.steps ?? 0, won) : undefined;
     return {
-      phase: this.puzzle || pub ? "play" : "menu",
-      title: ch.roomTitle,
-      hint: this.puzzle || pub ? undefined : status,
-      chrome:
-        this.puzzle || pub
-          ? chromaChrome(pub?.steps ?? this.puzzle?.steps ?? 0, won)
-          : undefined,
-      status:
-        this.puzzle || pub
-          ? won
-            ? ch.roomSolved(pub?.steps ?? this.puzzle?.steps ?? 0)
-            : this.you?.seat === "spectator" && this.roomPhase === "playing"
-              ? ch.roomSpectatorHint
-              : undefined
-          : status,
-      actions: [
-        ...(canClaim ? [{ id: "claim-player", label: ch.roomClaim, kind: "primary" as const }] : []),
-        { id: "leave-room", label: ch.roomBack, kind: "ghost" as const },
-      ],
+      phase: live ? "play" : "menu",
+      title: live ? undefined : ch.roomTitle,
+      hint: live ? undefined : status,
+      chrome,
+      status: live
+        ? won
+          ? ch.roomSolved(pub?.steps ?? this.puzzle?.steps ?? 0)
+          : this.you?.seat === "spectator"
+            ? ch.roomSpectatorHint
+            : undefined
+        : status,
+      actions: [{ id: "leave-room", label: ch.roomBack, kind: "ghost" as const }],
       room: {
         title: ch.roomTitle,
         status,
         code: this.roomCode,
         shareUrl: playUrl(this.ctx.origin, this.roomCode) ?? undefined,
-        seats: [
-          {
-            id: "player",
-            label: solver ? solverLabel : ch.roomClaim,
-            canClaim,
-            isYou: you?.seat === "player",
-            detail: solver && you?.seat !== "player" ? ch.roomWatching(solver.name) : undefined,
-          },
-        ],
+        shareLabel: ch.copyLink,
+        copiedLabel: ch.linkCopied,
+        rules: {
+          title: ch.rulesTitle,
+          frozen: true,
+          lines: [{ label: ch.difficulty, value: preset }],
+        },
+        roster: {
+          youId: this.you?.playerId,
+          players: this.roomPlayers,
+          claimable: this.roomPhase === "lobby",
+          seats: [{ id: "player", label: ch.seatPlayer, claimLabel: ch.roomClaim }],
+        },
       },
     };
   }
@@ -631,13 +628,13 @@ class ChromaSession implements GameSession {
 
   private enterRoom(code: string): void {
     this.roomCode = code;
-    this.phase = "play";
+    this.phase = "menu";
     const room = new OnlineRoomClient("chroma-slide");
     const playerId = getOrCreatePlayerIdForGame("chroma-slide");
     this.roomClient = room;
     room.connect(code, {
       onOpen: () => {
-        room.join({ playerId, name: "Player" });
+        room.join({ playerId });
         this.emit();
       },
       onWelcome: (payload) => {

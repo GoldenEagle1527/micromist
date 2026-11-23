@@ -81,10 +81,49 @@ export type RecordsPane = {
 
 export type SeatChip = {
   id: string;
+  /** Seat title (Black / Red / Player). */
   label: string;
+  /** Occupant display name when seated. */
+  occupant?: string;
+  /** Empty / online / offline. */
+  status?: string;
   detail?: string;
   canClaim?: boolean;
   isYou?: boolean;
+  claimLabel?: string;
+};
+
+export type RoomRuleLine = {
+  label: string;
+  value: string;
+};
+
+export type RoomSpectator = {
+  id: string;
+  label: string;
+  isYou?: boolean;
+};
+
+export type RoomRosterPlayer = {
+  playerId: string;
+  name: string;
+  seat: string;
+  connected?: boolean;
+  kind?: string;
+};
+
+export type RoomRosterSeat = {
+  id: string;
+  label: string;
+  claimLabel?: string;
+};
+
+/** Raw room list. The shell turns this into seats, spectators, and the name strip. */
+export type RoomRoster = {
+  youId?: string;
+  players: RoomRosterPlayer[];
+  seats: RoomRosterSeat[];
+  claimable?: boolean;
 };
 
 export type RoomPane = {
@@ -94,7 +133,20 @@ export type RoomPane = {
   shareUrl?: string;
   shareLabel?: string;
   copiedLabel?: string;
+  rules?: {
+    title: string;
+    frozen?: boolean;
+    frozenLabel?: string;
+    lines: RoomRuleLine[];
+  };
+  roster?: RoomRoster;
   seats?: SeatChip[];
+  spectators?: {
+    title: string;
+    empty: string;
+    watching?: string;
+    people: RoomSpectator[];
+  };
 };
 
 export type InvitePane = {
@@ -123,6 +175,11 @@ export type PlayChromeSide = {
 
 export type PlayChromeActive = "left" | "right" | "none" | "both";
 
+export type PlayMatchSide = {
+  name: string;
+  vacant?: boolean;
+};
+
 export type PlayChrome = {
   /** Defaults to the catalog title in the site header. */
   title?: string;
@@ -131,6 +188,18 @@ export type PlayChrome = {
   left: PlayChromeSide;
   right: PlayChromeSide;
   active: PlayChromeActive;
+  /**
+   * Names hang under the capsule in the existing topbar–board gap.
+   * Must not grow the topbar: the strip is absolutely positioned.
+   */
+  match?: {
+    left?: PlayMatchSide;
+    right?: PlayMatchSide;
+    rulesShort?: string;
+    rulesDetail?: string;
+    spectatorsLabel?: string;
+    spectators?: string[];
+  };
 };
 
 export type GameSnapshot = {

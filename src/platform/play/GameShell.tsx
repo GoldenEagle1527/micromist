@@ -1,8 +1,15 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useLocation, useSearchParams } from "react-router";
 import { useLocale } from "../../i18n";
+import {
+  USER_NAME_MAX,
+  readUserName,
+  userNameLength,
+  writeUserName,
+} from "../../lib/user-name";
 import { copyText } from "./copy-text";
 import { playFrameStyle, useSetPlayChrome } from "./play-chrome";
+import { decorateRoom, matchFromRoom } from "./room-roster";
 import type {
   ConfirmSpec,
   GamePlayModule,
@@ -140,6 +147,7 @@ function RoomView({
   onCopyShare: (url: string) => void;
   onClaim: (id: string) => void;
 }) {
+  const seats = room.seats ?? [];
   return (
     <section className="game-shell-room" aria-label={room.title}>
       <h3>{room.title}</h3>
@@ -150,24 +158,38 @@ function RoomView({
           {sharePhase === "ok" ? (room.copiedLabel ?? room.shareLabel) : room.shareLabel}
         </button>
       ) : null}
-      {room.seats && room.seats.length > 0 ? (
-        <ul className="game-shell-seats">
-          {room.seats.map((seat) => (
-            <li key={seat.id}>
-              {seat.canClaim ? (
-                <button type="button" className="ghost" onClick={() => onClaim(seat.id)}>
-                  {seat.label}
-                  {seat.detail ? ` · ${seat.detail}` : ""}
-                </button>
-              ) : (
-                <span>
-                  {seat.label}
-                  {seat.detail ? ` · ${seat.detail}` : ""}
-                </span>
-              )}
-            </li>
-          ))}
-        </ul>
+      {seats.length > 0 ? (
+        <div className={`game-shell-vs${seats.length === 1 ? " is-single" : ""}`}>
+          {seats.flatMap((seat, index) => {
+            const card = (
+              <div key={seat.id} className={`game-shell-seat-card${seat.isYou ? " is-you" : ""}`}>
+                <p className="game-shell-seat-label">{seat.label}</p>
+                <p className="game-shell-seat-name">
+                  {seat.occupant || seat.status || seat.detail || ""}
+                </p>
+                {seat.status && seat.occupant ? <p className="hint">{seat.status}</p> : null}
+                {seat.canClaim ? (
+                  <button
+                    type="button"
+                    className="primary game-shell-seat-claim"
+                    onClick={() => onClaim(seat.id)}
+                  >
+                    {seat.claimLabel || seat.detail || seat.label}
+                  </button>
+                ) : null}
+              </div>
+            );
+            if (index === 1) {
+              return [
+                <span key="vs" className="game-shell-vs-mark" aria-hidden="true">
+                  VS
+                </span>,
+                card,
+              ];
+            }
+            return [card];
+          })}
+        </div>
       ) : null}
     </section>
   );
@@ -203,7 +225,7 @@ function RecordsView({ records }: { records: RecordsPane }) {
 
 
 export function GameShell({ load, preview }: GameShellProps) {
-  const { locale } = useLocale();
+  const { locale, t } = useLocale();
   const setPlayChrome = useSetPlayChrome();
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -213,6 +235,10 @@ export function GameShell({ load, preview }: GameShellProps) {
   );
   const [invitePhase, setInvitePhase] = useState<"idle" | "ok" | "fail">("idle");
   const [sharePhase, setSharePhase] = useState<"idle" | "ok">("idle");
+  const [nameDraft, setNameDraft] = useState("");
+  const [nameError, setNameError] = useState(false);
+  const [displayName, setDisplayName] = useState(() => readUserName());
+  const [heldAction, setHeldAction] = useState<string | null>(null);
   const inviteTimer = useRef<number | null>(null);
   const shareTimer = useRef<number | null>(null);
 
@@ -237,10 +263,13 @@ export function GameShell({ load, preview }: GameShellProps) {
   ctxRef.current.search = searchParams;
   if (typeof window !== "undefined") ctxRef.current.origin = window.location.origin;
 
+  const roomInUrl = Boolean(searchParams.get("room"));
+  const blockSession = roomInUrl && !displayName;
+
   const session = useMemo(() => {
-    if (!module) return null;
+    if (!module || blockSession) return null;
     return module.createSession(ctxRef.current);
-  }, [module]);
+  }, [module, blockSession]);
 
   useEffect(() => {
     session?.syncContext();
@@ -328,6 +357,10 @@ export function GameShell({ load, preview }: GameShellProps) {
   );
 
   const runAction = (id: string, confirm?: ConfirmSpec) => {
+    if ((id === "create-room" || id === "join-room") && !readUserName()) {
+      setHeldAction(id);
+      return;
+    }
     if (confirm) {
       setPendingConfirm({ id, confirm });
       return;
@@ -391,13 +424,41 @@ export function GameShell({ load, preview }: GameShellProps) {
     runSession((current) => current.dispatch({ type: "claim-seat", id }));
   };
 
+  const askName = blockSession || heldAction != null;
+
+  const saveDisplayName = () => {
+    const saved = writeUserName(nameDraft);
+    if (!saved) {
+      setNameError(true);
+      return;
+    }
+    setNameError(false);
+    setDisplayName(saved);
+    const action = heldAction;
+    setHeldAction(null);
+    if (action) runSession((current) => current.dispatch({ type: "ui", id: action }));
+  };
+
+  const cancelDisplayName = () => {
+    setHeldAction(null);
+    setNameError(false);
+    if (blockSession) {
+      setSearchRef.current({}, { replace: true });
+    }
+  };
+
   const showBoard = snapshot.phase === "play" && Boolean(session);
+  const room = snapshot.room ? decorateRoom(snapshot.room, t) : undefined;
   const playChrome = useMemo(() => {
     if (snapshot.phase !== "play" || !snapshot.chrome) return undefined;
     const notice = snapshot.status?.trim();
-    if (!notice) return snapshot.chrome;
-    return { ...snapshot.chrome, notice };
-  }, [snapshot.phase, snapshot.chrome, snapshot.status]);
+    const match = matchFromRoom(room, t) ?? snapshot.chrome.match;
+    return {
+      ...snapshot.chrome,
+      ...(notice ? { notice } : {}),
+      ...(match ? { match } : {}),
+    };
+  }, [snapshot.phase, snapshot.chrome, snapshot.status, room, t]);
 
   useEffect(() => {
     setPlayChrome(playChrome ?? null);
@@ -440,7 +501,7 @@ export function GameShell({ load, preview }: GameShellProps) {
                 ))}
               </div>
             ) : null}
-            {snapshot.params?.fields && snapshot.params.fields.length > 0 ? (
+            {!room && snapshot.params?.fields && snapshot.params.fields.length > 0 ? (
               <div className="game-shell-params">
                 {snapshot.params.fields.map((field) => (
                   <ParamFieldView key={field.id} field={field} onChange={setParamValue} />
@@ -448,9 +509,9 @@ export function GameShell({ load, preview }: GameShellProps) {
               </div>
             ) : null}
             <ActionsRow actions={snapshot.actions ?? []} onRun={runAction} />
-            {snapshot.room ? (
+            {room ? (
               <RoomView
-                room={snapshot.room}
+                room={room}
                 sharePhase={sharePhase}
                 onCopyShare={copyShare}
                 onClaim={claimSeat}
@@ -477,20 +538,58 @@ export function GameShell({ load, preview }: GameShellProps) {
         </div>
       ) : (
         <div className="game-shell-play">
-          {snapshot.room ? (
-            <RoomView
-              room={snapshot.room}
-              sharePhase={sharePhase}
-              onCopyShare={copyShare}
-              onClaim={claimSeat}
-            />
-          ) : null}
           {showBoard && session ? <BoardHost session={session} active /> : null}
           <ActionsRow actions={snapshot.actions ?? []} onRun={runAction} />
         </div>
       )}
 
-      {dialog ? (
+      {askName ? (
+        <div className="modal-backdrop" role="presentation">
+          <div
+            className="modal-panel"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="game-shell-name-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="modal-header">
+              <h2 id="game-shell-name-title">{t.displayNameTitle}</h2>
+            </div>
+            <p className="lede modal-body">{t.displayNameBody}</p>
+            <label className="game-shell-param">
+              <span className="hint">
+                {userNameLength(nameDraft)} / {USER_NAME_MAX}
+              </span>
+              <input
+                type="text"
+                maxLength={USER_NAME_MAX * 2}
+                value={nameDraft}
+                placeholder={t.displayNamePlaceholder}
+                autoComplete="nickname"
+                autoFocus
+                onChange={(event) => {
+                  setNameDraft(event.target.value);
+                  setNameError(false);
+                }}
+                onKeyDown={(event) => {
+                  if (event.key !== "Enter") return;
+                  event.preventDefault();
+                  saveDisplayName();
+                }}
+              />
+            </label>
+            {nameError ? <p className="hint">{t.displayNameInvalid}</p> : null}
+            <div className="modal-actions">
+              <button type="button" className="ghost" onClick={cancelDisplayName}>
+                {t.displayNameCancel}
+              </button>
+              <button type="button" className="primary" onClick={saveDisplayName}>
+                {t.displayNameOk}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : dialog ? (
         <div className="modal-backdrop" role="presentation" onClick={dismissDialog}>
           <div
             className="modal-panel"

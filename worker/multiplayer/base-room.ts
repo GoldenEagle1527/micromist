@@ -331,7 +331,7 @@ export class GameRoom extends DurableObject<Env> {
     }
     const name =
       typeof payload.name === "string" && payload.name.trim()
-        ? payload.name.trim().slice(0, 24)
+        ? payload.name.trim().slice(0, 20)
         : "Player";
 
     if (typeof payload.game === "string" && payload.game.trim()) {

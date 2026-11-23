@@ -239,32 +239,66 @@ export function PlayCapsule({ fallbackTitle }: { fallbackTitle: string }) {
   const rightOn = chrome.active === "right" || chrome.active === "both";
 
   return (
+    <div className="play-chrome-stack">
+      <div
+        className={`play-capsule${intro ? " play-capsule-intro" : ""}${notice ? " has-notice" : ""}`}
+        style={
+          {
+            "--capsule-left": chrome.left.color,
+            "--capsule-right": chrome.right.color,
+            "--capsule-left-ink": leftInk,
+            "--capsule-right-ink": rightInk,
+          } as CSSProperties
+        }
+        data-active={chrome.active}
+        aria-current="page"
+        aria-label={notice ? `${title} · ${notice}` : title}
+      >
+        <span className={`play-capsule-half is-left${leftOn ? " is-on" : ""}`}>
+          {chrome.left.value ? <span className="play-capsule-value">{chrome.left.value}</span> : null}
+        </span>
+        <OverflowTitle
+          className={`play-capsule-title${notice ? " is-notice" : ""}`}
+          text={center}
+        />
+        <span className={`play-capsule-half is-right${rightOn ? " is-on" : ""}`}>
+          {chrome.right.value ? (
+            <span className="play-capsule-value">{chrome.right.value}</span>
+          ) : null}
+        </span>
+      </div>
+      {chrome.match ? <PlayMatchStrip match={chrome.match} /> : null}
+    </div>
+  );
+}
+
+function PlayMatchStrip({ match }: { match: NonNullable<PlayChrome["match"]> }) {
+  const hasRight = Boolean(match.right);
+  return (
     <div
-      className={`play-capsule${intro ? " play-capsule-intro" : ""}${notice ? " has-notice" : ""}`}
-      style={
-        {
-          "--capsule-left": chrome.left.color,
-          "--capsule-right": chrome.right.color,
-          "--capsule-left-ink": leftInk,
-          "--capsule-right-ink": rightInk,
-        } as CSSProperties
-      }
-      data-active={chrome.active}
-      aria-current="page"
-      aria-label={notice ? `${title} · ${notice}` : title}
+      className="play-match-strip"
+      data-seats={hasRight ? "2" : "1"}
+      onPointerDown={(event) => event.stopPropagation()}
     >
-      <span className={`play-capsule-half is-left${leftOn ? " is-on" : ""}`}>
-        {chrome.left.value ? <span className="play-capsule-value">{chrome.left.value}</span> : null}
-      </span>
-      <OverflowTitle
-        className={`play-capsule-title${notice ? " is-notice" : ""}`}
-        text={center}
-      />
-      <span className={`play-capsule-half is-right${rightOn ? " is-on" : ""}`}>
-        {chrome.right.value ? (
-          <span className="play-capsule-value">{chrome.right.value}</span>
-        ) : null}
-      </span>
+      {match.left ? (
+        <OverflowTitle
+          className={`play-match-name is-left${match.left.vacant ? " is-vacant" : ""}`}
+          text={match.left.name}
+        />
+      ) : (
+        <span />
+      )}
+      {hasRight ? (
+        <span className="play-match-vs" aria-hidden="true">
+          VS
+        </span>
+      ) : null}
+      {match.right ? (
+        <OverflowTitle
+          className={`play-match-name is-right${match.right.vacant ? " is-vacant" : ""}`}
+          text={match.right.name}
+        />
+      ) : null}
     </div>
   );
 }

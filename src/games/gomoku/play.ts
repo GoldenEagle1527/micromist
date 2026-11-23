@@ -5,7 +5,6 @@ import type {
   GameSnapshot,
   ParamField,
   PlayChrome,
-  SeatChip,
   SessionContext,
   ShellAction,
 } from "../../platform/play";
@@ -164,7 +163,6 @@ class GomokuSession implements GameSession {
   private roomError = "";
   private roomClosed = false;
   private peerHint = "";
-
   private readonly ctx: SessionContext;
 
   constructor(ctx: SessionContext) {
@@ -466,47 +464,45 @@ class GomokuSession implements GameSession {
       });
     }
     actions.push({ id: "leave-room", label: g.leaveRoom, kind: "ghost" });
-    const showBoard = this.state != null;
+    const live = this.roomPhase === "playing" || this.roomPhase === "over";
+    const chrome = live ? gomokuChrome(this.state) : undefined;
     return {
-      phase: showBoard ? "play" : "menu",
-      title: showBoard ? undefined : g.roomCodeLabel(this.roomCode),
-      hint: showBoard ? undefined : this.roomStatus(g),
-      chrome: showBoard ? gomokuChrome(this.state) : undefined,
-      status: showBoard ? this.playNotice(g) : this.roomError || this.peerHint || undefined,
+      phase: live ? "play" : "menu",
+      title: live ? undefined : g.roomCodeLabel(this.roomCode),
+      hint: live ? undefined : this.roomStatus(g),
+      chrome,
+      status: live ? this.playNotice(g) : this.roomError || this.peerHint || undefined,
       actions,
-      room: {
-        title: g.roomCodeLabel(this.roomCode),
-        status: [this.roomStatus(g), this.peerHint, this.roomError].filter(Boolean).join(" · ") || undefined,
-        code: this.roomCode,
-        shareUrl: shareUrl(this.roomCode),
-        shareLabel: g.copyLink,
-        copiedLabel: g.linkCopied,
-        seats: this.seatChips(g),
-      },
+      room: this.roomPane(g),
     };
   }
 
-  private seatChips(g: GomokuDict): SeatChip[] {
-    const black = occupant(this.players, "red");
-    const white = occupant(this.players, "blue");
+  private roomPane(g: GomokuDict): GameSnapshot["room"] {
+    const rulesValue =
+      this.roomRules === "series" ? g.roomRulesSeries(this.roomCapturesToWin) : g.roomRulesClassic;
     const lobby = this.roomPhase === "lobby" || this.roomPhase === "connecting";
-    const line = (seat: "red" | "blue", player: RoomPlayer | undefined, claimLabel: string): SeatChip => {
-      const mine = this.you?.seat === seat;
-      const name = player?.name || (mine ? g.you : "");
-      const online = player ? (player.connected ? g.onlineNow : g.offlineNow) : g.seatEmpty;
-      const taken = Boolean(player);
-      return {
-        id: seat,
-        label: `${seat === "red" ? g.black : g.white} · ${taken ? `${name || g.seatTaken} (${online})` : g.seatEmpty}`,
-        canClaim: Boolean(lobby && (!taken || mine)),
-        isYou: mine,
-        detail: taken ? undefined : claimLabel,
-      };
+    return {
+      title: g.roomCodeLabel(this.roomCode),
+      status: [this.roomStatus(g), this.peerHint, this.roomError].filter(Boolean).join(" · ") || undefined,
+      code: this.roomCode,
+      shareUrl: shareUrl(this.roomCode),
+      shareLabel: g.copyLink,
+      copiedLabel: g.linkCopied,
+      rules: {
+        title: g.rules,
+        frozen: true,
+        lines: [{ label: g.rulesBoard, value: rulesValue }],
+      },
+      roster: {
+        youId: this.you?.playerId,
+        players: this.players,
+        claimable: lobby,
+        seats: [
+          { id: "red", label: g.black, claimLabel: g.claimBlack },
+          { id: "blue", label: g.white, claimLabel: g.claimWhite },
+        ],
+      },
     };
-    return [
-      line("red", black, g.claimBlack),
-      line("blue", white, g.claimWhite),
-    ];
   }
 
   private localStatus(g: GomokuDict): string | undefined {
@@ -1006,7 +1002,7 @@ class GomokuSession implements GameSession {
     this.client = client;
     client.connect(code, {
       onOpen: () => {
-        client.join({ playerId, name: "Player" });
+        client.join({ playerId });
       },
       onWelcome: (payload) => {
         this.you = { playerId: payload.playerId, seat: payload.seat };

@@ -23,6 +23,7 @@
   position: sticky;
   top: 0;
   z-index: 20;
+  overflow: visible;
   background: var(--glass-bg-strong);
   border-bottom: 1px solid var(--glass-border);
   box-shadow: var(--glass-shadow);

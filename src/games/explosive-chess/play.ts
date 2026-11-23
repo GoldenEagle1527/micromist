@@ -5,7 +5,6 @@ import type {
   GameSnapshot,
   ParamField,
   PlayChrome,
-  SeatChip,
   SessionContext,
   ShellAction,
 } from "../../platform/play";
@@ -552,6 +551,12 @@ class ExplosiveSession implements GameSession {
     if (inMenu && this.onlinePhase !== "idle" && this.onlinePhase !== "connecting") {
       /* keep */
     }
+    const board = cfg ? `${cfg.boardSize}×${cfg.boardSize}` : `${this.settings.boardSize}×${this.settings.boardSize}`;
+    const mode = cfg ? winModeLabel(cfg.winMode, ex) : winModeLabel(this.settings.winMode, ex);
+    const param =
+      (cfg?.winMode ?? this.settings.winMode) !== WIN_MODE_ANNIHILATION
+        ? ` (${cfg?.winParam ?? this.settings.winParam})`
+        : "";
     return {
       title: ex.onlineLobby,
       status,
@@ -559,45 +564,24 @@ class ExplosiveSession implements GameSession {
       shareUrl: this.shareLink || undefined,
       shareLabel: ex.copyLink,
       copiedLabel: ex.linkCopied,
-      seats: this.seatChips(ex),
+      rules: {
+        title: ex.rulesTitle,
+        frozen: this.onlinePhase !== "idle",
+        lines: [
+          { label: ex.board, value: board },
+          { label: ex.winMode, value: `${mode}${param}` },
+        ],
+      },
+      roster: {
+        youId: getOrCreatePlayerId(),
+        players: this.onlinePlayers,
+        claimable: this.onlinePhase === "lobby",
+        seats: [
+          { id: "red", label: ex.seatRed, claimLabel: ex.sitRed },
+          { id: "blue", label: ex.seatBlue, claimLabel: ex.sitBlue },
+        ],
+      },
     };
-  }
-
-  private seatChips(ex: Record<string, string>): SeatChip[] {
-    if (this.onlinePlayers.length === 0) return [];
-    const me = getOrCreatePlayerId();
-    const red = this.onlinePlayers.find((p) => p.seat === "red");
-    const blue = this.onlinePlayers.find((p) => p.seat === "blue");
-    const spectators = this.onlinePlayers.filter((p) => p.seat === "spectator");
-    const mine = this.onlinePlayers.find((p) => p.playerId === me);
-    const lobby = this.onlinePhase === "lobby";
-    const describe = (p?: RoomPlayer) => {
-      if (!p) return ex.seatEmpty;
-      return `${p.name}${p.playerId === me ? ` (${ex.you})` : ""}${p.kind === "agent" ? ` · ${ex.agentMark}` : ""} · ${p.role}${
-        p.connected ? "" : ` · ${ex.offline}`
-      }`;
-    };
-    const seat = (id: "red" | "blue", occupant?: RoomPlayer): SeatChip => ({
-      id,
-      label: `${id === "red" ? ex.seatRed : ex.seatBlue} · ${describe(occupant)}`,
-      canClaim: Boolean(lobby && !occupant && mine && mine.seat !== id),
-      isYou: occupant?.playerId === me,
-    });
-    const chips: SeatChip[] = [seat("red", red), seat("blue", blue)];
-    chips.push({
-      id: "spectators",
-      label: `${ex.spectatorsLabel} · ${spectators.length === 0 ? ex.seatEmpty : String(spectators.length)}`,
-    });
-    for (const p of spectators) {
-      chips.push({
-        id: p.playerId,
-        label: `${p.name}${p.playerId === me ? ` (${ex.you})` : ""}${p.kind === "agent" ? ` · ${ex.agentMark}` : ""}${
-          p.connected ? "" : ` · ${ex.offline}`
-        }`,
-        isYou: p.playerId === me,
-      });
-    }
-    return chips;
   }
 
   private emit(): void {
@@ -1083,7 +1067,7 @@ class ExplosiveSession implements GameSession {
     const bindHandlers = (): void => {
       client.connect(trimmed, {
         onOpen: () => {
-          client.join({ playerId: getOrCreatePlayerId(), name: "Player" });
+          client.join({ playerId: getOrCreatePlayerId() });
           this.onlineStatus =
             opts?.keepPlaying || this.phase === "play" ? this.ex().reconnected : this.ex().connectedJoin;
           this.emit();
