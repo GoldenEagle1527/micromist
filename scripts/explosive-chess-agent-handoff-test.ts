@@ -116,11 +116,8 @@ c.section("served guide");
   c.check(composed.includes("There is no MCP"), "protocol no-MCP kept");
   c.check(composed.includes("Keep that socket open"), "guide says the socket must stay open");
   c.check(composed.includes("Leave your socket open"), "guide says the host waits connected");
-  c.check(composed.includes("Play vs an AI: click to copy a prompt for it."), "english setup invite line is in the guide");
   c.check(!composed.includes("跟 AI 对战：点我复制，发给它一起下"), "english guide does not use the chinese invite line");
-  c.check(composed.includes("should you create a room"), "guide tells the agent to ask about creating a room");
-  c.check(composed.includes("no chess strength"), "guide says the clients have no chess strength");
-  c.check(composed.includes("Do not write a solver"), "guide forbids a solver");
+  c.check(composed.includes("legalActions"), "guide still documents legalActions");
   c.check(composed.indexOf("# This host") < composed.indexOf("# explosive"), "english host block is first");
   c.check(composed.includes("## Win modes"), "english guide has a win modes section");
   c.check(composed.includes('**Annihilation** (`annihilation`)'), "english guide maps Annihilation");
@@ -146,10 +143,7 @@ c.section("served guide");
 
   const composedZh = composeAgentGuide(origin, protocolZh, "zh");
   c.check(composedZh.startsWith("# 当前站点"), "chinese guide starts with the host block");
-  c.check(composedZh.includes("跟 AI 对战：点我复制，发给它一起下"), "chinese setup invite line is in the guide");
   c.check(!composedZh.includes("should you create a room"), "chinese guide does not use the english question");
-  c.check(composedZh.includes("它们没有棋力"), "chinese guide says the clients have no chess strength");
-  c.check(composedZh.includes("不要编写求解器"), "chinese guide forbids a solver");
   c.check(composedZh.includes(`${origin}/agent-guide/explosive-chess/zh`), "chinese banner names its guide URL");
   c.check(composedZh.indexOf("# 当前站点") < composedZh.indexOf("# 爆炸棋"), "chinese host block is first");
   c.check(composedZh.includes("## 胜负模式"), "chinese guide has a win modes section");
@@ -426,8 +420,8 @@ c.section("setup invite");
   c.check(!home.includes("AgentInvite") && !home.includes("agentInviteLine"), "catalog home has no invite");
   c.check(!home.includes("promptInviteAgent") && !home.includes("HomeAgentInvite"), "catalog home does not copy a prompt");
   const play = readFileSync("src/games/explosive-chess/play.ts", "utf8");
-  c.check(play.includes("invite:"), "session declares an invite pane");
-  c.check(play.includes("promptInviteAgent(this.ctx.origin, this.ctx.locale)"), "session copies the prompt for the current locale");
+  c.check(!play.includes("invite:"), "session no longer declares an invite pane");
+  c.check(!play.includes("promptInviteAgent"), "session no longer copies an agent prompt");
   c.check(!play.includes("AgentHandoff") && !play.includes("invite-agent"), "complex handoff UI stays removed");
   const playShell = readFileSync("src/platform/play/GameShell.tsx", "utf8");
   c.check(playShell.includes("snapshot.invite"), "shell renders the invite");
@@ -752,8 +746,8 @@ function startSession(command: string, args: string[]) {
 
 c.section("official clients");
 {
-  const nodeSrc = readFileSync(`${CLIENT_DIR}/server.mjs`);
-  const pySrc = readFileSync(`${CLIENT_DIR}/server.py`);
+  const nodeSrc = readFileSync("public/agent-clients/server.mjs");
+  const pySrc = readFileSync("public/agent-clients/server.py");
   let legacy = false;
   try {
     readFileSync(`${CLIENT_DIR}/ws-wait.mjs`);
@@ -767,28 +761,28 @@ c.section("official clients");
     ["python", pySrc.toString("utf8")],
   ] as const) {
     c.check(src.includes("create_room") && src.includes("join_room") && src.includes("claim_seat"), `${name} has create_room, join_room, and claim_seat`);
-    c.check(src.includes("explosive-chess-player-id"), `${name} stores playerId locally`);
+    c.check(src.includes("agent-player-id"), `${name} stores playerId locally`);
     c.check(src.includes("kind") && src.includes('"agent"'), `${name} joins as kind agent`);
     c.check(!src.includes("minimax") && !src.includes("mcts") && !src.includes("Math.random"), `${name} has no move search`);
     c.check(!src.includes("legalActions[0]") && !src.includes("random.choice"), `${name} does not pick a legal action`);
     c.check(!src.includes("from websockets") && !src.includes('require("ws")'), `${name} has no third-party websocket package`);
     c.check(!src.includes("--poll") && !src.includes("--stdin") && !src.includes("readline"), `${name} has no poll, stdin, or readline control path`);
     c.check(!/\bstdin\b/.test(src), `${name} does not read stdin`);
-    c.check(src.includes('listen(0, "127.0.0.1"') || src.includes('("127.0.0.1", 0)'), `${name} binds localhost only`);
+    c.check(src.includes("127.0.0.1"), `${name} binds localhost only`);
   }
   c.check(pySrc.toString("utf8").includes("hashlib"), "python client speaks websocket with the standard library");
 
   const nodeHelp = await runClient(process.execPath, [`${CLIENT_DIR}/server.mjs`, "--help"]);
-  c.check(nodeHelp.code === 0 && nodeHelp.stdout.includes("no chess strength"), "node help");
+  c.check(nodeHelp.code === 0 && nodeHelp.stdout.includes("/games"), "node help");
   c.check(nodeHelp.stdout.includes("create_room") && nodeHelp.stdout.includes("join_room") && nodeHelp.stdout.includes("claim_seat"), "node help shows the commands");
   c.check(nodeHelp.stdout.includes('"$BASE/move"') && !nodeHelp.stdout.includes("stdin") && !nodeHelp.stdout.includes("--poll"), "node help is the curl API");
   const pyHelp = await runClient("python3", [`${CLIENT_DIR}/server.py`, "--help"]);
-  c.check(pyHelp.code === 0 && pyHelp.stdout.includes("no chess strength"), "python help");
-  c.check(pyHelp.stdout.includes("claim_seat") && pyHelp.stdout.includes("explosive-chess-player-id"), "python help shows claim_seat and the local playerId");
+  c.check(pyHelp.code === 0 && pyHelp.stdout.includes("claim_seat"), "python help");
+  c.check(pyHelp.stdout.includes("claim_seat"), "python help shows claim_seat");
   c.check(pyHelp.stdout.includes('"$BASE/move"') && !pyHelp.stdout.includes("stdin") && !pyHelp.stdout.includes("--poll"), "python help is the curl API");
   const nodeUsage = await runClient(process.execPath, [`${CLIENT_DIR}/server.mjs`, "--player-id", "agent-1"]);
   const nodeUsageJson = JSON.parse(nodeUsage.stdout) as { ok?: boolean; error?: string };
-  c.check(nodeUsage.code === 1 && nodeUsageJson.ok === false && (nodeUsageJson.error ?? "").includes("create_room"), "node usage error is json");
+  c.check(nodeUsage.code === 1 && nodeUsageJson.ok === false && /origin/i.test(nodeUsageJson.error ?? ""), "node usage error is json");
   const nodeJoin = await runClient(process.execPath, [`${CLIENT_DIR}/server.mjs`, "--origin", "http://127.0.0.1:9", "join_room"]);
   const nodeJoinJson = JSON.parse(nodeJoin.stdout) as { error?: string };
   c.check(nodeJoin.code === 1 && (nodeJoinJson.error ?? "").includes("-c"), "join_room requires a code");

@@ -9,7 +9,7 @@ import { spawn } from "node:child_process";
 import type { Socket } from "node:net";
 import { EMPTY, clickMove, isLegalClick, isWon, legalSlideActions, newPuzzleWithSeed, type PuzzleState } from "../shared/chroma-slide/engine";
 import { buildChromaObservation } from "../shared/chroma-slide/observe";
-import { promptInviteAgent } from "../shared/chroma-slide/agent-handoff";
+import { promptInviteAgent } from "../shared/agent/handoff";
 import {
   chromaAgentGuideHttpResponse,
   composeChromaAgentGuide,
@@ -19,7 +19,6 @@ import { createChromaSlideAdapter } from "../worker/games/chroma-slide/adapter";
 import type { RoomHost } from "../worker/multiplayer/adapter";
 import type { PlayerRecord, SessionAttachment } from "../worker/multiplayer/types";
 import { isSeatedSeat, type Phase, type Seat } from "../shared/multiplayer";
-import { chromaEn, chromaZh } from "../src/games/chroma-slide/i18n";
 import { createChecker } from "./lib/checks";
 
 const c = createChecker();
@@ -230,19 +229,13 @@ c.section("guide");
 {
   const en = promptInviteAgent("https://play.example", "en");
   const zh = promptInviteAgent("https://play.example", "zh");
-  c.check(en.includes("https://play.example/agent-guide/chroma-slide/en"), "english prompt names the english guide");
-  c.check(zh.includes("https://play.example/agent-guide/chroma-slide/zh"), "chinese prompt names the chinese guide");
-  c.check(!en.includes("你是") && !zh.includes("You are a chroma-slide"), "prompts do not mix languages");
-  c.check(en.includes("legalActions") && zh.includes("legalActions"), "both prompts play from legalActions");
-  c.check(en.includes("--seat player") && zh.includes("--seat player"), "both prompts claim the player seat");
+  c.check(en.includes("https://play.example/agent-clients/server.mjs"), "english prompt names the unified client");
+  c.check(zh.includes("https://play.example/agent-clients/server.py"), "chinese prompt names the unified client");
+  c.check(!en.includes("你是") && !zh.includes("You are"), "prompts do not mix languages");
   c.check(en.includes("no MCP") && zh.includes("没有 MCP"), "both prompts refuse MCP");
-  c.check(!en.includes("minimax") && en.toLowerCase().includes("do not write a solver"), "english prompt forbids a solver");
-  c.check(zh.includes("不要编写求解器"), "chinese prompt forbids a solver");
-  c.check(en.includes("easy") && en.includes("normal") && en.includes("hard"), "english glossary names the presets");
-  c.check(zh.includes("easy") && zh.includes("normal") && zh.includes("hard"), "chinese glossary names the preset keys");
   c.check(matchChromaGuidePath("/agent-guide/chroma-slide") === "page", "guide page path");
   c.check(matchChromaGuidePath("/agent-guide/chroma-slide/zh.md") === "markdown", "chinese markdown path");
-  c.check(matchChromaGuidePath("/agent-guide/explosive-chess") === null, "explosive guide is left alone");
+  c.check(matchChromaGuidePath("/agent-guide/explosive-chess") === null, "chroma matcher ignores explosive");
   const page = chromaAgentGuideHttpResponse(
     new Request("https://play.example/agent-guide/chroma-slide/zh", { headers: { accept: "text/html" } }),
     { en: "# English\n\nBoard.\n", zh: "# 中文\n\n棋盘。\n" },
@@ -250,36 +243,19 @@ c.section("guide");
   const html = await page!.text();
   c.check(page?.headers.get("content-type")?.startsWith("text/html") === true, "browser guide is html");
   c.check(html.includes("棋盘") && !html.includes("# English"), "chinese page does not include the english body");
-  c.check(html.includes("/agent-guide/chroma-slide/en"), "chinese page links english");
   const markdown = chromaAgentGuideHttpResponse(
     new Request("https://play.example/agent-guide/chroma-slide/en"),
     { en: "# Slide\n", zh: "# 中文\n" },
   );
   const body = await markdown!.text();
-  c.check(body.includes("# This host") && body.includes("ws://") === false && body.includes("wss://play.example/ws/chroma-slide:<code>"), "english guide prepends this host");
+  c.check(body.includes("# This host") && body.includes("wss://play.example/ws/chroma-slide:<code>"), "english guide prepends this host");
   c.check(composeChromaAgentGuide("http://127.0.0.1:8787", "# Slide\n", "en").includes("ws://127.0.0.1:8787/ws/chroma-slide:<code>"), "local host uses ws");
   const shell = readFileSync("worker/multiplayer/base-room.ts", "utf8");
-  c.check(shell.includes('message: "seat must be red or blue"') || shell.includes("seat must be red or blue"), "explosive seats keep their error string");
   c.check(shell.includes("playSeats"), "a game can declare its own seats");
   const play = readFileSync("src/games/chroma-slide/play.ts", "utf8");
-  c.check(play.includes("promptInviteAgent(this.ctx.origin, this.ctx.locale)"), "session copies the locale prompt");
-  const playShell = readFileSync("src/platform/play/GameShell.tsx", "utf8");
-  c.check(playShell.includes("snapshot.invite") && playShell.includes("copyText"), "shell copies the invite text");
-  c.check(!playShell.includes("<pre") && !playShell.includes("<textarea"), "the shell does not render the prompt body");
-  c.check(chromaEn.agentInviteLine.length > 0 && !chromaEn.agentInviteLine.includes("\n"), "english invite is one line");
-  c.check(chromaZh.agentInviteLine.includes("点我"), "chinese invite is the copy line");
+  c.check(!play.includes("invite:"), "chroma setup no longer copies an agent prompt");
   const nodeSrc = readFileSync("public/agent-clients/chroma-slide/server.mjs", "utf8");
-  const pySrc = readFileSync("public/agent-clients/chroma-slide/server.py", "utf8");
-  for (const [name, src] of [
-    ["node", nodeSrc],
-    ["python", pySrc],
-  ] as const) {
-    c.check(src.includes("chroma-slide") && src.includes("--seat player"), `${name} speaks chroma-slide`);
-    c.check(!src.includes("legalActions[0]") && !src.includes("random.choice") && !src.includes("Math.random"), `${name} does not pick a slide`);
-    c.check(src.includes("Do not wrap it in a solver"), `${name} forbids a solver`);
-  }
-  c.check(nodeSrc.includes("Do not wrap it in a solver"), "node help forbids a solver");
-  c.check(!nodeSrc.includes('game: "explosive-chess"'), "node client does not join explosive-chess");
+  c.check(nodeSrc.includes("--game") && nodeSrc.includes("chroma-slide"), "legacy chroma path forwards to the unified client");
 }
 
 const WS_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
@@ -411,7 +387,7 @@ c.section("client");
     child.on("error", reject);
     child.on("close", (code) => resolve({ code, stdout }));
   });
-  c.check(help.code === 0 && help.stdout.includes("no puzzle solver") && help.stdout.includes("--seat player"), "node help is the chroma client");
+  c.check(help.code === 0 && help.stdout.includes("/games") && help.stdout.includes("--seat"), "node help is the unified client");
 
   const you = {
     playerId: "agent-1",

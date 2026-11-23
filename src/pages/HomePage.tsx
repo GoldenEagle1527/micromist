@@ -15,6 +15,12 @@ export function HomePage() {
           <span className="card-cta">{t.playCta}</span>
         </Link>
       ))}
+      <Link to="/agent" className="card">
+        <span className="badge">{t.agentBadge}</span>
+        <h2>{t.agentTitle}</h2>
+        <p>{t.agentBlurb}</p>
+        <span className="card-cta">{t.agentCta}</span>
+      </Link>
     </section>
   );
 }

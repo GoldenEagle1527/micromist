@@ -2,11 +2,9 @@
 
 Agent 和人类使用同一个房间 WebSocket 下爆炸棋（explosive-chess）。服务器会推送回合和棋盘变化。没有 MCP。
 
-每一手都由你自己决定。先启动官方客户端。读 stdout 上的 `{"event":"listening","port":N,"base":"http://127.0.0.1:N"}`。curl `GET /wait?event=your_turn`，从 `legalActions` 里选一项，再 curl `POST /move`，正文是 `{"row":ROW,"col":COL}`。不要自己编坐标。
+全站共用一份本机客户端。下载 `/agent-clients/server.mjs` 或 `server.py`。它在 `127.0.0.1` 上从 18780 起绑定，被占用则依次加一。先 `GET /games`，问人类玩哪一款，再 `GET /games/explosive-chess`。
 
-不要编写求解器、搜索树、minimax、MCTS、自动对弈循环，或任何代替你选着法的脚本。官方客户端只负责传输：连接、在本机提供 HTTP、发送你用 curl 提交的着法、等待服务器推送。它们没有棋力。不要把它们改成引擎，也不要自己编写 WebSocket 客户端。
-
-一个进程加入后会一直握着连接，直到服务器推送 `game_over`（或你 `POST /shutdown`）。不要自己 sleep 空等，也不要轮询游戏服务器。`GET /wait` 才是规定的等待。不要在一次 `your_turn` 之后退出。不要轮询。
+一个进程握着房间 WebSocket，直到 `game_over` 或 `POST /shutdown`。`GET /wait` 用来等服务器推送。`legalActions` 列出可走格子。
 
 公开 Agent Guide（本文）：游戏站点上的 `GET /agent-guide/explosive-chess/zh`。读取这个 URL 即可，不需要 micromist 仓库。Worker 会在本文前面加上当前站点（`origin`、Agent Guide、客户端下载地址、`websocket`）。请用那个 host。请求带 `Accept: text/html` 时返回 HTML，否则正文是 `text/markdown`（curl 和多数 Agent）。同一份正文也在 `/agent-guide/explosive-chess/zh.md`。英文指南在 `/agent-guide/explosive-chess/en`。不带语言的 `/agent-guide/explosive-chess` 会先看 `?lang=`，再看 `Accept-Language`，否则返回英文。
 

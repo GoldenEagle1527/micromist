@@ -1,4 +1,3 @@
-import { promptInviteAgent } from "../../../shared/chroma-slide/agent-handoff";
 import type {
   GameAction,
   GamePlayModule,
@@ -309,12 +308,6 @@ class ChromaSession implements GameSession {
         },
         actions: [{ id: "start", label: ch.start, kind: "primary" }],
         records: this.records(ch),
-        invite: {
-          line: ch.agentInviteLine,
-          copied: ch.agentInviteCopied,
-          failed: ch.agentInviteFailed,
-          text: promptInviteAgent(this.ctx.origin, this.ctx.locale),
-        },
       };
     }
 

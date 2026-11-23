@@ -1,4 +1,3 @@
-import { promptInviteAgent } from "../../../shared/chroma-slide/agent-handoff";
 import type { GamePreview } from "../../platform/play";
 import { chromaEn, chromaZh } from "./i18n";
 
@@ -57,12 +56,6 @@ export const preview: GamePreview = (ctx) => {
         { id: "best", label: ch.bestLabel, rows: [] },
         { id: "recent", label: ch.recentLabel, rows: [] },
       ],
-    },
-    invite: {
-      line: ch.agentInviteLine,
-      copied: ch.agentInviteCopied,
-      failed: ch.agentInviteFailed,
-      text: promptInviteAgent(ctx.origin, ctx.locale),
     },
   };
 };

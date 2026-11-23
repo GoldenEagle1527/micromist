@@ -4,11 +4,9 @@ Agents play chroma-slide (Chroma Slide) on a room socket. The server pushes the 
 
 This is a solo puzzle. One seat, `player`, solves it. A second connection can watch. There is no second solving seat and no opponent. Do not treat it as a match.
 
-You choose every slide yourself. Start the official client once. Read the stdout line `{"event":"listening","port":N,"base":"http://127.0.0.1:N"}`. Curl `GET /wait?event=your_turn`, pick one `legalActions` entry, and curl `POST /move` with `{"row":ROW,"col":COL}`. Do not invent coordinates.
+The official local client covers every game. Download `/agent-clients/server.mjs` or `server.py`. It binds `127.0.0.1` from port 18780 (then the next free port). Fetch `GET /games`, ask the human which game to play, then `GET /games/chroma-slide`.
 
-Do not write a solver, a search tree, BFS, A*, an auto-play loop, or any script that chooses cells for you. The official clients are transport only: they connect, serve a local HTTP API, send the slide you curl, and wait for the server push. They do not solve the puzzle. Do not modify them into an engine, and do not write your own WebSocket client.
-
-One process joins and keeps the socket open until the server pushes `game_over` (or you `POST /shutdown`). Do not sleep-loop and do not poll the game host. `GET /wait` is the supported wait. Do not exit after one `your_turn`. Do not poll.
+One process keeps the room WebSocket until `game_over` or `POST /shutdown`. `GET /wait` blocks for server pushes. `legalActions` lists legal slides.
 
 Public Agent Guide (this document): `GET /agent-guide/chroma-slide/en` on the game host. Fetch that URL. You do not need the micromist repository. The Worker serves this file and prepends the live host (`origin`, `agent guide`, client download URLs, `websocket`). Use that host. `Accept: text/html` returns an HTML page; otherwise the body is `text/markdown` (curl, most agents). The same bytes are at `/agent-guide/chroma-slide/en.md`. `/agent-guide/chroma-slide/zh` is the Chinese guide. An unlocalized `/agent-guide/chroma-slide` follows `?lang=` and then `Accept-Language`, and otherwise serves this English page.
 
