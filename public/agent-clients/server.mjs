@@ -226,6 +226,24 @@ function roomCodeFromWsUrl(value) {
   return codeFromWsUrl(value).code;
 }
 
+function shortRoomCode(game, code) {
+  const raw = String(code || "").trim().toLowerCase();
+  const idx = raw.indexOf(":");
+  if (idx > 0) {
+    const g = raw.slice(0, idx);
+    const c = raw.slice(idx + 1);
+    if (game && g !== game) throw new CliError("-c game does not match --game");
+    return c;
+  }
+  return raw;
+}
+
+function humanPlayUrl(origin, game, code) {
+  if (!origin || !game || !code) return null;
+  const roomId = String(code).includes(":") ? String(code).toLowerCase() : `${game}:${code}`;
+  return `${origin}/play/${game}?room=${roomId}`;
+}
+
 function wsUrlFromOrigin(origin, game, code) {
   let url;
   try {
@@ -300,6 +318,12 @@ function prepareRoom(args) {
   if (args.url) {
     const parsed = codeFromWsUrl(args.url);
     if (parsed.game && !args.game) args.game = parsed.game;
+  }
+  if (!args.game) throw new CliError("missing --game");
+  if (!knownGame(args.game)) throw new CliError("unknown --game");
+  if (args.code) args.code = shortRoomCode(args.game, args.code);
+  if (args.url) {
+    const parsed = codeFromWsUrl(args.url);
     if (parsed.code && !args.code) args.code = parsed.code;
     if (args.game && parsed.game && args.game !== parsed.game) {
       throw new CliError("--game does not match the game in --url");
@@ -308,8 +332,6 @@ function prepareRoom(args) {
       throw new CliError("-c does not match the room code in --url");
     }
   }
-  if (!args.game) throw new CliError("missing --game");
-  if (!knownGame(args.game)) throw new CliError("unknown --game");
   if (args.command === "create_room" && !args.code && !args.url) args.code = token(6);
   if (!args.code) {
     throw new CliError(args.command === "create_room" ? "missing room code" : `${args.command || "session"} requires -c CODE`);
@@ -514,7 +536,7 @@ function blankState(args) {
     reclaimed: null,
     reusedRoom: false,
     game: args.game || null,
-    playUrl: args.game && args.code ? `${httpOriginFrom(args)}/play/${args.game}?room=${args.code}` : null,
+    playUrl: humanPlayUrl(httpOriginFrom(args), args.game, args.code),
     result: null,
     moveMark: 0,
     awaitingAck: false,
@@ -777,7 +799,7 @@ function stateFromJoined(args, joined) {
   state.reusedRoom =
     payload.reusedRoom === true || (args.command === "create_room" && state.you && state.you.canConfig === false);
   if (state.roomCode) {
-    state.playUrl = args.game && state.roomCode ? `${httpOriginFrom(args)}/play/${args.game}?room=${state.roomCode}` : null;
+    state.playUrl = humanPlayUrl(httpOriginFrom(args), args.game, state.roomCode);
   }
   return state;
 }

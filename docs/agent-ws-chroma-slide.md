@@ -10,7 +10,7 @@ One process keeps the room WebSocket until `game_over` or `POST /shutdown`. `GET
 
 Public Agent Guide (this document): `GET /agent-guide/chroma-slide/en` on the game host. Fetch that URL. You do not need the micromist repository. The Worker serves this file and prepends the live host (`origin`, `agent guide`, client download URLs, `websocket`). Use that host. `Accept: text/html` returns an HTML page; otherwise the body is `text/markdown` (curl, most agents). The same bytes are at `/agent-guide/chroma-slide/en.md`. `/agent-guide/chroma-slide/zh` is the Chinese guide. An unlocalized `/agent-guide/chroma-slide` follows `?lang=` and then `Accept-Language`, and otherwise serves this English page.
 
-On `/play/chroma-slide` the setup panel ends with one line — "Let an AI solve it: click to copy a prompt." That whole line is the copy control. The prompt is not shown on the page. The copied prompt tells you to fetch this guide in the current UI language, then ask the human in chat before you connect: solve a puzzle? which difficulty? should you create a room, or do they already have a room code? The guide URL in the prompt is absolute for the page origin. If a pasted prompt also contains a websocket URL, use that exact URL. A link `/play/chroma-slide?room=<code>` opens that room in the browser as a spectator. The human can watch your slides. They can claim `player` only while the seat is empty.
+On `/play/chroma-slide` the setup panel ends with one line — "Let an AI solve it: click to copy a prompt." That whole line is the copy control. The prompt is not shown on the page. The copied prompt tells you to fetch this guide in the current UI language, then ask the human in chat before you connect: solve a puzzle? which difficulty? should you create a room, or do they already have a room code? The guide URL in the prompt is absolute for the page origin. If a pasted prompt also contains a websocket URL, use that exact URL. A link `/play/chroma-slide?room=chroma-slide:<code>` opens that room in the browser as a spectator. The human can watch your slides. They can claim `player` only while the seat is empty.
 
 Examples below use staging `wss://micromist-staging.goldeneaglepersonal.dpdns.org` and local `ws://127.0.0.1:8787`. If this page was served from another host, use the host in the fetched guide or in the human's prompt. `ORIGIN` below means the `http`/`https` origin from the host block. `WS_ORIGIN` means the matching `ws`/`wss` origin.
 
@@ -86,7 +86,7 @@ Check `you.canConfig` on the `joined` line before you rely on `--config`. `you.r
 
 Stdout is one JSON object per line (logs go to stderr). Relevant lines:
 
-- `event` `joined` — the room is open. `roomCode` is the code to share. `playUrl` is the human link (`/play/chroma-slide?room=<code>`). `canConfig` and `reusedRoom` are on this line.
+- `event` `joined` — the room is open. `roomCode` is the code to share. `playUrl` is the human link (`/play/chroma-slide?room=chroma-slide:<code>`). `canConfig` and `reusedRoom` are on this line.
 - `event` `listening` — the local HTTP server is up. `port` and `base` are how you curl it. This is the first line after listen.
 - `event` `your_turn` — the puzzle is waiting for your slide. `legalActions` is copied through. `board` is the grid. `steps` is the slides already played. `empty` is the hole. `preset` is the difficulty. The client does not select a cell.
 - `event` `game_over` — the puzzle is solved. `result.winReason` is `solved`. `result.winner` is `player`. The process then exits 0.

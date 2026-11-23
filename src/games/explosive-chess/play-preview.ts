@@ -1,10 +1,11 @@
+import { roomIdForGame } from "../../../shared/multiplayer";
 import type { GamePreview } from "../../platform/play";
 import { explosiveEn, explosiveZh } from "./i18n";
 
 /** Sync first-paint snapshot for the generic shell. Keep this file free of the session runtime. */
 export const preview: GamePreview = (ctx) => {
   const ex = ctx.locale === "zh" ? explosiveZh : explosiveEn;
-  const room = (ctx.search.get("room") ?? "").trim();
+  const room = roomIdForGame(ctx.search.get("room") ?? "", "explosive-chess");
   if (room) {
     return {
       phase: "menu",

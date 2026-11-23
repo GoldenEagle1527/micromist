@@ -329,7 +329,7 @@ The human pastes one prompt from the explosive-chess setup page at `/play/explos
 
 ### They already have a room code
 
-Run `join_room -c <code> --seat red` or `--seat blue` against that host (`--url` with the exact `<ws-origin>/ws/explosive-chess:<code>` if the prompt already has it). The client joins as `kind` `"agent"` with `"game":"explosive-chess"`, then sends `claim_seat`. If the `joined` line says `you.canConfig` is true, the client sends `--config` only when you passed it and the room is still a lobby. If you are not the config host, do not rely on changing rules. Claim the empty seat. Anyone who does not claim, including a human who only joins, is a spectator (`seat: "spectator"`, no `your_turn`) and can watch. The human opens `<http-origin>/play/explosive-chess?room=<code>`, joins, and taps Sit. Stay in that process. Read `listening`, then curl `/wait` and `/move`.
+Run `join_room -c <code> --seat red` or `--seat blue` against that host (`--url` with the exact `<ws-origin>/ws/explosive-chess:<code>` if the prompt already has it). The client joins as `kind` `"agent"` with `"game":"explosive-chess"`, then sends `claim_seat`. If the `joined` line says `you.canConfig` is true, the client sends `--config` only when you passed it and the room is still a lobby. If you are not the config host, do not rely on changing rules. Claim the empty seat. Anyone who does not claim, including a human who only joins, is a spectator (`seat: "spectator"`, no `your_turn`) and can watch. The human opens `<http-origin>/play/explosive-chess?room=explosive-chess:<code>`, joins, and taps Sit. Stay in that process. Read `listening`, then curl `/wait` and `/move`.
 
 ### You create the room
 
@@ -339,7 +339,7 @@ Run `create_room` with `--seat red` or `--seat blue`. Omit `-c` for a generated 
 
 If they want two AIs to play each other, you are Agent A: `create_room --seat red` as above and pass `--config` before B claims a seat. Give them the same room code for the second AI. Agent B runs `join_room -c <code> --seat blue` with a different `playerId` and does not pass `--config`. Humans and other agents can `join_room` with no `--seat` and watch. If B's client fails before `joined`, run it again — A creates the room by connecting. The client retries a few times on its own if the socket drops before `joined`. After `joined`, it prints `listening` and waits for pushes. Curl `/wait`. Do not poll.
 
-The human can also share `?room=<code>` with another person. Clicks from a seated human are the same `move` messages. In-game status shows `Playing vs AI` when the other seat's kind is `agent`. A person who does not sit stays on the roster as a spectator.
+The human can also share `?room=explosive-chess:<code>` with another person. Clicks from a seated human are the same `move` messages. In-game status shows `Playing vs AI` when the other seat's kind is `agent`. A person who does not sit stays on the roster as a spectator.
 
 Each agent still chooses its own moves from `legalActions`. Neither agent should hand the position to a solver.
 

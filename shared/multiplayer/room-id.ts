@@ -16,7 +16,7 @@ export function formatRoomId(game: string, code: string): string {
   return `${g}:${c}`;
 }
 
-/** `game:code`. Bare codes are invalid. */
+/** Human share ids and `?room=` must be `game:code`. Bare codes are invalid. */
 export function parseRoomId(raw: string): ParsedRoomId | null {
   let trimmed = raw.trim();
   try {
@@ -30,6 +30,32 @@ export function parseRoomId(raw: string): ParsedRoomId | null {
   const code = trimmed.slice(idx + 1).trim();
   if (!game || !code) return null;
   return { game, code, roomId: formatRoomId(game, code) };
+}
+
+export function isShareRoomId(raw: string): boolean {
+  const parsed = parseRoomId(raw);
+  if (!parsed) return false;
+  if (!/^[a-z0-9-]+$/.test(parsed.game)) return false;
+  return parsed.code.length >= 4 && /^[a-z0-9]+$/.test(parsed.code);
+}
+
+/** Full `game:code` when `raw` is that game; otherwise null. */
+export function roomIdForGame(raw: string, slug: string): string | null {
+  const parsed = parseRoomId(raw);
+  if (!parsed || parsed.game !== slug.trim().toLowerCase()) return null;
+  return isShareRoomId(parsed.roomId) ? parsed.roomId : null;
+}
+
+export function playUrl(origin: string, roomId: string): string | null {
+  const parsed = parseRoomId(roomId);
+  if (!parsed) return null;
+  let base = origin.trim();
+  try {
+    base = new URL(origin).origin;
+  } catch {
+    base = origin.replace(/\/$/, "");
+  }
+  return `${base}/play/${parsed.game}?room=${parsed.roomId}`;
 }
 
 export function generateRoomCode(length = 6): string {

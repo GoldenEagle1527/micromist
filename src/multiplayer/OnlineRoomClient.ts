@@ -3,7 +3,6 @@
  * Games wrap this and add typed helpers (move, setConfig, …).
  */
 import {
-  formatRoomId,
   parseRoomId,
   type Phase,
   type PlayerKind,
@@ -97,14 +96,11 @@ export class OnlineRoomClient {
     return this.ws?.readyState === WebSocket.OPEN;
   }
 
-  /** Page `?room=` is a short code; the socket always uses `game:code`. */
+  /** Socket id must already be `game:code` for this client's game. */
   connect(codeOrRoomId: string, handlers: CommonHandlers): void {
     this.close();
-    const namespaced = codeOrRoomId.includes(":")
-      ? codeOrRoomId
-      : formatRoomId(this.gameSlug, codeOrRoomId);
-    const parsed = parseRoomId(namespaced);
-    if (!parsed) return;
+    const parsed = parseRoomId(codeOrRoomId);
+    if (!parsed || parsed.game !== this.gameSlug) return;
     this.roomId = parsed.roomId;
     this.handlers = handlers;
     this.openSocket();

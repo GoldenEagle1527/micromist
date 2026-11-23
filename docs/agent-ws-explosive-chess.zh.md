@@ -331,7 +331,7 @@ websocat "wss://micromist-staging.goldeneaglepersonal.dpdns.org/ws/explosive-che
 
 ### 对方已经有房间码
 
-对该 host 运行 `join_room -c <code> --seat red` 或 `--seat blue`（如果提示词里已经有完整的 `<ws-origin>/ws/explosive-chess:<code>`，用 `--url` 原样传入）。客户端会以 `kind` `"agent"` 加入，游戏名是 `"explosive-chess"`，然后发送 `claim_seat`。如果 `joined` 行里 `you.canConfig` 为 true，并且你在命令上带了 `--config`、房间仍是 lobby，客户端才会发送它。你不是配置 host 时不要靠它改规则。占那个空着的座位。没有占座的人，包括只加入的人类，都是旁观（`seat: "spectator"`，没有 `your_turn`），可以看棋。人类打开 `<http-origin>/play/explosive-chess?room=<code>`，加入，再点入座。留在这个进程里。读到 `listening` 之后，curl `/wait` 和 `/move`。
+对该 host 运行 `join_room -c <code> --seat red` 或 `--seat blue`（如果提示词里已经有完整的 `<ws-origin>/ws/explosive-chess:<code>`，用 `--url` 原样传入）。客户端会以 `kind` `"agent"` 加入，游戏名是 `"explosive-chess"`，然后发送 `claim_seat`。如果 `joined` 行里 `you.canConfig` 为 true，并且你在命令上带了 `--config`、房间仍是 lobby，客户端才会发送它。你不是配置 host 时不要靠它改规则。占那个空着的座位。没有占座的人，包括只加入的人类，都是旁观（`seat: "spectator"`，没有 `your_turn`），可以看棋。人类打开 `<http-origin>/play/explosive-chess?room=explosive-chess:<code>`，加入，再点入座。留在这个进程里。读到 `listening` 之后，curl `/wait` 和 `/move`。
 
 ### 由你建房
 
@@ -341,7 +341,7 @@ websocat "wss://micromist-staging.goldeneaglepersonal.dpdns.org/ws/explosive-che
 
 如果他们想让两个 AI 对打，你是 Agent A：按上面的方式 `create_room --seat red`，并在 B 占座前带上 `--config`。把同一个房间码交给第二个 AI。Agent B 用不同的 `playerId` 运行 `join_room -c <code> --seat blue`，并且不要带 `--config`。人类和其他 Agent 可以不带 `--seat` 地 `join_room`，然后旁观。如果 B 的客户端在 `joined` 之前失败，再运行一次——A 一连接就会建房。连接在 `joined` 之前掉线时，客户端自己会重试几次。`joined` 之后它会打印 `listening` 并等待推送。请 curl `/wait`。不要轮询。
 
-人类也可以把 `?room=<code>` 分享给另一个人。已经入座的人类点击同样是 `move` 消息。对方座位的 kind 是 `agent` 时，对局状态会显示 `跟 AI 对战`。没有入座的人留在名单里当旁观。
+人类也可以把 `?room=explosive-chess:<code>` 分享给另一个人。已经入座的人类点击同样是 `move` 消息。对方座位的 kind 是 `agent` 时，对局状态会显示 `跟 AI 对战`。没有入座的人留在名单里当旁观。
 
 每个 Agent 仍然自己从 `legalActions` 里选着法。不要把局面交给求解器。
 

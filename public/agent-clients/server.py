@@ -493,6 +493,23 @@ def code_from_ws_url(value):
     return {"game": "".join(slug), "code": "".join(code)}
 
 
+def short_room_code(game, code):
+    raw = (code or "").strip().lower()
+    if ":" in raw:
+        g, c = raw.split(":", 1)
+        if game and g != game:
+            raise CliError("-c game does not match --game")
+        return c
+    return raw
+
+
+def human_play_url(origin, game, code):
+    if not origin or not game or not code:
+        return None
+    room_id = code.lower() if ":" in code else "%s:%s" % (game, code)
+    return "%s/play/%s?room=%s" % (origin, game, room_id)
+
+
 def ws_url_from_origin(origin, game, code):
     parsed = urlparse(origin)
     if parsed.scheme not in ("http", "https") or not parsed.netloc:
@@ -622,16 +639,20 @@ def prepare_room(args):
         parsed = code_from_ws_url(args.url)
         if parsed["game"] and not args.game:
             args.game = parsed["game"]
+    if not args.game:
+        raise CliError("missing --game")
+    if not known_game(args.game):
+        raise CliError("unknown --game")
+    if args.code:
+        args.code = short_room_code(args.game, args.code)
+    if args.url:
+        parsed = code_from_ws_url(args.url)
         if parsed["code"] and not args.code:
             args.code = parsed["code"]
         if args.game and parsed["game"] and args.game != parsed["game"]:
             raise CliError("--game does not match the game in --url")
         if args.code and parsed["code"] and args.code != parsed["code"]:
             raise CliError("-c does not match the room code in --url")
-    if not args.game:
-        raise CliError("missing --game")
-    if not known_game(args.game):
-        raise CliError("unknown --game")
     if args.command == "create_room" and not args.code and not args.url:
         args.code = token(6)
     if not args.code:
@@ -741,11 +762,7 @@ def blank_state(args):
         "phase": None,
         "reclaimed": None,
         "reusedRoom": False,
-        "playUrl": (
-            "%s/play/%s?room=%s" % (http_origin_from(args), args.game, args.code)
-            if args.game and args.code
-            else None
-        ),
+        "playUrl": human_play_url(http_origin_from(args), args.game, args.code),
         "result": None,
         "moveMark": 0,
         "awaitingAck": False,
@@ -801,7 +818,7 @@ def state_from_joined(args, joined):
         reused = True
     state["reusedRoom"] = reused
     if state["roomCode"]:
-        state["playUrl"] = "%s/play/%s?room=%s" % (http_origin_from(args), args.game, state["roomCode"])
+        state["playUrl"] = human_play_url(http_origin_from(args), args.game, state["roomCode"])
     return state
 
 

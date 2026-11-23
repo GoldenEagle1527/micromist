@@ -25,6 +25,7 @@ import {
   type PlayerColor,
   type WinMode,
 } from "./engine";
+import { isShareRoomId, parseRoomId, roomIdForGame } from "../../../shared/multiplayer";
 import { explosiveEn, explosiveZh } from "./i18n";
 import {
   formatWinReason,
@@ -72,12 +73,12 @@ function asOpponent(value: string): OpponentMode {
 }
 
 function normalizeRoomCode(value: string): string {
-  return value.trim().toLowerCase();
+  const raw = value.trim().toLowerCase();
+  return parseRoomId(raw)?.roomId ?? raw;
 }
 
 function isRoomCode(value: string): boolean {
-  const code = normalizeRoomCode(value);
-  return code.length >= 4 && /^[a-z0-9]+$/.test(code);
+  return isShareRoomId(value);
 }
 
 const CHROME_RED = "#e53935";
@@ -156,8 +157,8 @@ class ExplosiveSession implements GameSession {
 
   constructor(ctx: SessionContext) {
     this.ctx = ctx;
-    const roomFromQuery = (ctx.search.get("room") ?? "").trim().toLowerCase();
-    this.pendingRestore = loadSoloPersist(roomFromQuery);
+    const roomFromQuery = roomIdForGame(ctx.search.get("room") ?? "", "explosive-chess");
+    this.pendingRestore = loadSoloPersist(roomFromQuery ?? "");
     this.settings = loadSettings();
     this.tip = this.ex().tipClick;
     if (roomFromQuery) {
@@ -188,7 +189,7 @@ class ExplosiveSession implements GameSession {
   }
 
   syncContext(): void {
-    const room = (this.ctx.search.get("room") ?? "").trim().toLowerCase();
+    const room = roomIdForGame(this.ctx.search.get("room") ?? "", "explosive-chess");
     if (room && room !== this.roomCode && this.onlinePhase === "idle") {
       this.pendingRestore = null;
       this.settings = { ...this.settings, opponent: "online" };
@@ -295,7 +296,8 @@ class ExplosiveSession implements GameSession {
     }
     if (id === "reconnect") {
       this.reconnectAttempts = 0;
-      const code = this.roomCode || (this.ctx.search.get("room") ?? "").trim().toLowerCase();
+      const code =
+        this.roomCode || roomIdForGame(this.ctx.search.get("room") ?? "", "explosive-chess") || "";
       if (code) this.connectToRoom(code, { keepPlaying: this.phase === "play" });
       return;
     }
@@ -976,11 +978,19 @@ class ExplosiveSession implements GameSession {
       this.emit();
       return;
     }
+    const parsed = parseRoomId(code);
+    if (!parsed) {
+      this.onlineStatus = this.ex().needShareLink;
+      this.emit();
+      return;
+    }
     this.pendingConfig = null;
     clearLocalProgress(SOLO_PROGRESS_SLUG);
     this.pendingRestore = null;
     this.settings = { ...this.settings, opponent: "online" };
-    this.connectToRoom(code);
+    this.ctx.setSearch(new URLSearchParams({ room: parsed.roomId }), { replace: true });
+    if (parsed.game !== "explosive-chess") return;
+    this.connectToRoom(parsed.roomId);
   }
 
   private disconnectOnline(): void {

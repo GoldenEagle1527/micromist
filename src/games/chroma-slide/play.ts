@@ -28,6 +28,7 @@ import {
   type RoomPlayer,
   type Seat,
 } from "../../multiplayer/OnlineRoomClient";
+import { playUrl, roomIdForGame } from "../../../shared/multiplayer";
 import type { ChromaPublicState } from "../../../shared/chroma-slide/observe";
 import { loadScores, recordWin, type ChromaRunRecord, type ChromaScores } from "./scores";
 import "./chroma-slide.css";
@@ -155,8 +156,8 @@ class ChromaSession implements GameSession {
 
   constructor(ctx: SessionContext) {
     this.ctx = ctx;
-    const room = (ctx.search.get("room") ?? "").trim().toLowerCase();
-    if (/^[a-z0-9]+$/.test(room)) {
+    const room = roomIdForGame(ctx.search.get("room") ?? "", SLUG);
+    if (room) {
       this.enterRoom(room);
       return;
     }
@@ -171,14 +172,13 @@ class ChromaSession implements GameSession {
   }
 
   syncContext(): void {
-    const room = (this.ctx.search.get("room") ?? "").trim().toLowerCase();
-    const valid = /^[a-z0-9]+$/.test(room);
-    if (valid && room !== this.roomCode) {
+    const room = roomIdForGame(this.ctx.search.get("room") ?? "", SLUG);
+    if (room && room !== this.roomCode) {
       this.leaveRoom(false);
       this.enterRoom(room);
       return;
     }
-    if (!valid && this.roomCode) {
+    if (!room && this.roomCode) {
       this.leaveRoom(false);
     }
     this.emit();
@@ -421,6 +421,7 @@ class ChromaSession implements GameSession {
         title: ch.roomTitle,
         status,
         code: this.roomCode,
+        shareUrl: playUrl(this.ctx.origin, this.roomCode) ?? undefined,
         seats: [
           {
             id: "player",
