@@ -61,10 +61,23 @@ import {
 import "./explosive-chess.css";
 
 type OnlinePhase = Phase | "idle" | "connecting" | "reconnecting";
-type MenuStage = "root" | "solo" | "solo-config" | "online";
 
 function dict(locale: SessionContext["locale"]) {
   return locale === "zh" ? explosiveZh : explosiveEn;
+}
+
+function asOpponent(value: string): OpponentMode {
+  if (value === "local" || value === "online") return value;
+  return "ai";
+}
+
+function normalizeRoomCode(value: string): string {
+  return value.trim().toLowerCase();
+}
+
+function isRoomCode(value: string): boolean {
+  const code = normalizeRoomCode(value);
+  return code.length >= 4 && /^[a-z0-9]+$/.test(code);
 }
 
 const CHROME_RED = "#e53935";
@@ -94,8 +107,8 @@ function explosiveChrome(opts: {
 class ExplosiveSession implements GameSession {
   private listeners = new Set<() => void>();
   private phase: "menu" | "play" = "menu";
-  private menuStage: MenuStage = "root";
   private settings: Settings;
+  private joinCode = "";
   private pendingRestore: SoloPersist | null;
   private localSession = 0;
 
@@ -146,13 +159,12 @@ class ExplosiveSession implements GameSession {
     const roomFromQuery = (ctx.search.get("room") ?? "").trim().toLowerCase();
     this.pendingRestore = loadSoloPersist(roomFromQuery);
     this.settings = loadSettings();
+    this.tip = this.ex().tipClick;
     if (roomFromQuery) {
       clearLocalProgress(SOLO_PROGRESS_SLUG);
       this.pendingRestore = null;
       this.settings = { ...this.settings, opponent: "online" };
-      this.roomCode = roomFromQuery;
-      this.menuStage = "online";
-      this.onlineStatus = this.ex().openShare;
+      this.connectToRoom(roomFromQuery);
     } else if (this.pendingRestore) {
       this.settings = {
         ...this.settings,
@@ -162,7 +174,6 @@ class ExplosiveSession implements GameSession {
       this.localSession = this.pendingRestore.localSession ?? 0;
       this.phase = "play";
     }
-    this.tip = this.ex().tipClick;
   }
 
   private ex() {
@@ -179,12 +190,10 @@ class ExplosiveSession implements GameSession {
   syncContext(): void {
     const room = (this.ctx.search.get("room") ?? "").trim().toLowerCase();
     if (room && room !== this.roomCode && this.onlinePhase === "idle") {
-      this.roomCode = room;
-      this.settings = { ...this.settings, opponent: "online" };
-      this.menuStage = "online";
       this.pendingRestore = null;
-      clearLocalProgress(SOLO_PROGRESS_SLUG);
-      this.onlineStatus = this.ex().openShare;
+      this.settings = { ...this.settings, opponent: "online" };
+      this.connectToRoom(room);
+      return;
     }
     this.emit();
   }
@@ -200,29 +209,7 @@ class ExplosiveSession implements GameSession {
   }
 
   choose(itemId: string): void {
-    if (itemId === "solo") {
-      this.disconnectOnline();
-      this.ctx.setSearch(new URLSearchParams(), { replace: true });
-      this.menuStage = "solo";
-      if (this.settings.opponent === "online") {
-        this.settings = { ...this.settings, opponent: "ai" };
-      }
-      this.emit();
-      return;
-    }
-    if (itemId === "online") {
-      clearLocalProgress(SOLO_PROGRESS_SLUG);
-      this.pendingRestore = null;
-      this.settings = { ...this.settings, opponent: "online" };
-      this.menuStage = "online";
-      this.emit();
-      return;
-    }
-    if (itemId === "ai" || itemId === "local") {
-      this.settings = { ...this.settings, opponent: itemId };
-      this.menuStage = "solo-config";
-      this.emit();
-    }
+    if (itemId === "start") this.startLocalGame();
   }
 
   back(): void {
@@ -230,21 +217,34 @@ class ExplosiveSession implements GameSession {
       this.backToSetup();
       return;
     }
-    if (this.menuStage === "solo-config") {
-      this.menuStage = "solo";
-      this.emit();
-      return;
-    }
-    if (this.menuStage === "solo" || this.menuStage === "online") {
-      if (this.menuStage === "online") this.disconnectOnline();
-      this.menuStage = "root";
+    if (this.roomCode) {
+      this.disconnectOnline();
+      this.ctx.setSearch(new URLSearchParams(), { replace: true });
+      this.roomCode = "";
+      this.shareLink = "";
+      this.onlineStatus = this.ex().leftRoom;
       this.emit();
     }
   }
 
   setParam(id: string, value: string | number): void {
+    if (id === "joinCode") {
+      this.joinCode = String(value);
+      this.emit();
+      return;
+    }
     if (this.onlineConfig && this.onlinePhase !== "idle") return;
     const next = { ...this.settings };
+    if (id === "mode") {
+      const opponent = asOpponent(String(value));
+      if (opponent !== "online" && this.settings.opponent === "online") {
+        this.disconnectOnline();
+        this.ctx.setSearch(new URLSearchParams(), { replace: true });
+        this.roomCode = "";
+        this.shareLink = "";
+      }
+      next.opponent = opponent;
+    }
     if (id === "boardSize") next.boardSize = Number(value) as 9 | 11 | 13;
     if (id === "winMode") next.winMode = String(value) as WinMode;
     if (id === "winParam") next.winParam = Math.max(1, Number(value) || 1);
@@ -306,7 +306,6 @@ class ExplosiveSession implements GameSession {
     if (id === "rematch") {
       this.client?.rematch();
       this.phase = "menu";
-      this.menuStage = "online";
       this.destroyBoard();
       this.emit();
       return;
@@ -341,84 +340,66 @@ class ExplosiveSession implements GameSession {
   snapshot(): GameSnapshot {
     const ex = this.ex();
     if (this.phase === "play") return this.playSnapshot(ex);
-
-    const canBack = this.menuStage !== "root";
+    const online = this.settings.opponent === "online";
     const fields = this.paramFields(ex);
-    const snap: GameSnapshot = {
+    return {
       phase: "menu",
       title: ex.setupTitle,
-      hint: ex.setupHint,
-      menu: {
-        items: this.menuItems(ex),
-        canBack,
-        backLabel: ex.backSetup,
-      },
-      params: fields.length ? { fields } : undefined,
+      hint: online ? ex.onlineHint : ex.setupHint,
+      params: { fields },
       actions: this.menuActions(ex),
-      room: this.menuStage === "online" ? this.roomPane(ex, true) : undefined,
-      status: this.menuStage === "online" ? undefined : undefined,
+      room: online && this.onlinePhase !== "idle" ? this.roomPane(ex, true) : undefined,
     };
-    return snap;
-  }
-
-  private menuItems(ex: Record<string, string>) {
-    if (this.menuStage === "root") {
-      return [
-        { id: "solo", label: ex.solo },
-        { id: "online", label: ex.online },
-      ];
-    }
-    if (this.menuStage === "solo") {
-      return [
-        { id: "ai", label: ex.vsAi },
-        { id: "local", label: ex.hotseat },
-      ];
-    }
-    return [];
   }
 
   private menuActions(ex: Record<string, string>): ShellAction[] {
-    if (this.menuStage === "solo-config") {
+    if (this.settings.opponent !== "online") {
       return [{ id: "start", label: ex.start, kind: "primary" }];
     }
-    if (this.menuStage === "online") {
-      const actions: ShellAction[] = [];
-      const roomFromQuery = (this.ctx.search.get("room") ?? "").trim();
-      if (this.onlinePhase === "idle" || this.onlinePhase === "connecting" || this.onlinePhase === "reconnecting") {
-        if (!roomFromQuery && this.onlinePhase !== "reconnecting") {
-          actions.push({
-            id: "create-room",
-            label: ex.createRoom,
-            kind: "primary",
-            disabled: this.onlinePhase === "connecting",
-          });
-        } else {
-          actions.push({
-            id: "join-room",
-            label: this.onlinePhase === "reconnecting" ? ex.reconnecting : ex.joinRoom,
-            kind: "primary",
-            disabled: this.onlinePhase === "connecting" || this.onlinePhase === "reconnecting",
-          });
-        }
+    const actions: ShellAction[] = [];
+    const busy = this.onlinePhase === "connecting" || this.onlinePhase === "reconnecting";
+    if (this.onlinePhase === "idle" || busy) {
+      if (this.onlinePhase !== "reconnecting") {
+        actions.push({
+          id: "create-room",
+          label: ex.createRoom,
+          kind: "primary",
+          disabled: busy,
+        });
       }
-      if (this.onlinePhase === "lobby" || this.onlinePhase === "connecting") {
-        actions.push({ id: "leave-room", label: ex.leaveRoom, kind: "ghost" });
-      }
-      return actions;
+      actions.push({
+        id: "join-room",
+        label: this.onlinePhase === "reconnecting" ? ex.reconnecting : ex.joinRoom,
+        kind: "ghost",
+        disabled: busy || !isRoomCode(this.joinCode),
+      });
     }
-    return [];
+    if (this.onlinePhase === "lobby" || this.onlinePhase === "connecting") {
+      actions.push({ id: "leave-room", label: ex.leaveRoom, kind: "ghost" });
+    }
+    return actions;
   }
 
   private paramFields(ex: Record<string, string>): ParamField[] {
-    const online = this.menuStage === "online" || this.settings.opponent === "online";
-    const inConfig = this.menuStage === "solo-config" || this.menuStage === "online";
-    if (!inConfig) return [];
+    const online = this.settings.opponent === "online";
     const locked = online && this.onlinePhase !== "idle";
     const cfg = this.onlineConfig;
     const boardSize = cfg?.boardSize ?? this.settings.boardSize;
     const winMode = cfg?.winMode ?? this.settings.winMode;
     const winParam = cfg?.winParam ?? this.settings.winParam;
     const fields: ParamField[] = [
+      {
+        id: "mode",
+        label: ex.mode,
+        type: "select",
+        value: this.settings.opponent,
+        disabled: locked,
+        options: [
+          { value: "ai", label: ex.vsAi },
+          { value: "local", label: ex.hotseat },
+          { value: "online", label: ex.online },
+        ],
+      },
       {
         id: "boardSize",
         label: ex.board,
@@ -454,7 +435,7 @@ class ExplosiveSession implements GameSession {
         disabled: locked,
       });
     }
-    if (this.menuStage === "solo-config" && this.settings.opponent === "ai") {
+    if (this.settings.opponent === "ai") {
       fields.push(
         {
           id: "difficulty",
@@ -480,18 +461,28 @@ class ExplosiveSession implements GameSession {
         },
       );
     }
-    if (this.menuStage === "online" && (this.onlinePhase === "idle" || cfg) && !this.ctx.search.get("room")) {
-      fields.push({
-        id: "hostColor",
-        label: ex.myColor,
-        type: "select",
-        value: cfg?.hostColor ?? this.settings.hostColor,
-        disabled: locked,
-        options: [
-          { value: "red", label: ex.redFirstSeat },
-          { value: "blue", label: ex.blueSecond },
-        ],
-      });
+    if (online) {
+      if (this.onlinePhase === "idle" || cfg) {
+        fields.push({
+          id: "hostColor",
+          label: ex.myColor,
+          type: "select",
+          value: cfg?.hostColor ?? this.settings.hostColor,
+          disabled: locked,
+          options: [
+            { value: "red", label: ex.redFirstSeat },
+            { value: "blue", label: ex.blueSecond },
+          ],
+        });
+      }
+      if (this.onlinePhase === "idle") {
+        fields.push({
+          id: "joinCode",
+          label: ex.joinCode,
+          type: "text",
+          value: this.joinCode,
+        });
+      }
     }
     return fields;
   }
@@ -956,11 +947,9 @@ class ExplosiveSession implements GameSession {
         this.ctx.setSearch(new URLSearchParams(), { replace: true });
         this.roomCode = "";
       }
-      this.menuStage = "online";
     } else {
       clearLocalProgress(SOLO_PROGRESS_SLUG);
       this.pendingRestore = null;
-      this.menuStage = "solo-config";
     }
     this.phase = "menu";
     this.clearMoveLock();
@@ -981,12 +970,13 @@ class ExplosiveSession implements GameSession {
   }
 
   private joinRoom(): void {
-    const code = (this.ctx.search.get("room") ?? "").trim().toLowerCase() || this.roomCode;
-    if (!code) {
+    const code = normalizeRoomCode(this.joinCode || this.ctx.search.get("room") || this.roomCode);
+    if (!isRoomCode(code)) {
       this.onlineStatus = this.ex().needShareLink;
       this.emit();
       return;
     }
+    this.pendingConfig = null;
     clearLocalProgress(SOLO_PROGRESS_SLUG);
     this.pendingRestore = null;
     this.settings = { ...this.settings, opponent: "online" };
@@ -1061,7 +1051,6 @@ class ExplosiveSession implements GameSession {
       this.client?.close();
       this.destroyBoard();
       this.phase = "menu";
-      this.menuStage = "online";
       this.gameOver = false;
       this.winner = null;
       this.winReason = "";
@@ -1227,7 +1216,6 @@ class ExplosiveSession implements GameSession {
           this.tip = this.ex().roomClosedTip;
           this.destroyBoard();
           this.phase = "menu";
-          this.menuStage = "online";
           this.gameOver = false;
           this.emit();
         },

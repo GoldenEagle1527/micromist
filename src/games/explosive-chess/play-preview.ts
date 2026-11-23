@@ -9,22 +9,73 @@ export const preview: GamePreview = (ctx) => {
     return {
       phase: "menu",
       title: ex.setupTitle,
-      hint: ex.setupHint,
+      hint: ex.onlineHint,
       status: ex.connecting,
-      actions: [{ id: "join-room", label: ex.joinRoom, kind: "primary", disabled: true }],
     };
   }
   return {
     phase: "menu",
     title: ex.setupTitle,
     hint: ex.setupHint,
-    menu: {
-      items: [
-        { id: "solo", label: ex.solo },
-        { id: "online", label: ex.online },
+    params: {
+      fields: [
+        {
+          id: "mode",
+          label: ex.mode,
+          type: "select",
+          value: "ai",
+          options: [
+            { value: "ai", label: ex.vsAi },
+            { value: "local", label: ex.hotseat },
+            { value: "online", label: ex.online },
+          ],
+        },
+        {
+          id: "boardSize",
+          label: ex.board,
+          type: "select",
+          value: "9",
+          options: [
+            { value: "9", label: "9×9" },
+            { value: "11", label: "11×11" },
+            { value: "13", label: "13×13" },
+          ],
+        },
+        {
+          id: "winMode",
+          label: ex.winMode,
+          type: "select",
+          value: "annihilation",
+          options: [
+            { value: "annihilation", label: ex.annihilation },
+            { value: "steps", label: ex.steps },
+            { value: "area", label: ex.area },
+          ],
+        },
+        {
+          id: "difficulty",
+          label: ex.aiDifficulty,
+          type: "select",
+          value: "medium",
+          options: [
+            { value: "easy", label: ex.easy },
+            { value: "medium", label: ex.medium },
+            { value: "hard", label: ex.hard },
+            { value: "hell", label: ex.hell },
+          ],
+        },
+        {
+          id: "redOwner",
+          label: ex.redFirst,
+          type: "select",
+          value: "player",
+          options: [
+            { value: "player", label: ex.me },
+            { value: "ai", label: ex.ai },
+          ],
+        },
       ],
-      canBack: false,
-      backLabel: ex.backSetup,
     },
+    actions: [{ id: "start", label: ex.start, kind: "primary" }],
   };
 };

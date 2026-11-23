@@ -86,6 +86,7 @@
 .game-shell-param select,
 .game-shell-param input {
   width: 100%;
+  flex: none;
   font: inherit;
   background: var(--md-sys-color-surface-container-highest);
   color: var(--md-sys-color-on-surface);
@@ -94,6 +95,11 @@
   padding: 0.55rem 0.7rem;
   min-height: 2.5rem;
   outline: none;
+}
+
+.game-shell-param input[type="text"] {
+  height: 2.5rem;
+  max-height: 2.5rem;
 }
 
 .game-shell-param select:focus,

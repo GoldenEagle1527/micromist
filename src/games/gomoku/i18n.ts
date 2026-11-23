@@ -36,6 +36,10 @@ export type GomokuDict = {
   white: string;
   online: string;
   createRoom: string;
+  joinRoom: string;
+  joinCode: string;
+  onlineSetupHint: string;
+  needRoomCode: string;
   roomCodeLabel: (code: string) => string;
   copyLink: string;
   linkCopied: string;
@@ -112,6 +116,10 @@ export const gomokuZh: GomokuDict = {
   white: "白棋",
   online: "联机对战",
   createRoom: "创建房间",
+  joinRoom: "加入房间",
+  joinCode: "房间码",
+  onlineSetupHint: "创建房间后把链接发给对方，或输入房间码加入。进房先旁观，执黑 / 执白入座后开局。",
+  needRoomCode: "请输入有效的房间码。",
   roomCodeLabel: (code) => `房间 ${code}`,
   copyLink: "复制邀请链接",
   linkCopied: "链接已复制",
@@ -189,6 +197,10 @@ export const gomokuEn: GomokuDict = {
   white: "White",
   online: "Online",
   createRoom: "Create room",
+  joinRoom: "Join room",
+  joinCode: "Room code",
+  onlineSetupHint: "Create a room and share the link, or type a code to join. You enter as a spectator, then sit as Black or White.",
+  needRoomCode: "Enter a valid room code.",
   roomCodeLabel: (code) => `Room ${code}`,
   copyLink: "Copy invite link",
   linkCopied: "Link copied",

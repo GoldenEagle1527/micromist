@@ -2,7 +2,7 @@ export type ExplosiveDict = Record<string, string>;
 
 export const explosiveEn: ExplosiveDict = {
     setupTitle: "Match setup",
-    setupHint: "Pick mode and rules, then enter the board. Online: you join as a spectator and sit to play. The match starts when both seats are filled.",
+    setupHint: "Pick mode and rules, then enter the board. Online: create a room or type a code to join. You enter as a spectator and sit to play.",
     mode: "Mode",
     solo: "Solo",
     online: "Online",
@@ -31,12 +31,13 @@ export const explosiveEn: ExplosiveDict = {
     onlineLobby: "Online room",
     onlineConfigLocked: "Set board, rules, and your color below, then create the room. Config is read-only afterward — make a new room to change it.",
     onlineHint:
-      "Create a room and share the link. Everyone joins as a spectator. Sit as Red or Blue to play. The match starts when both seats are filled. Others can watch.",
+      "Create a room and share the link, or type a room code and join. Everyone enters as a spectator. Sit as Red or Blue to play. The match starts when both seats are filled.",
     youAreRed: "You are Red.",
     youAreBlue: "You are Blue.",
     youAreSpectator: "You are spectating.",
     createRoom: "Create room",
-    joinRoom: "Join this room",
+    joinRoom: "Join room",
+    joinCode: "Room code",
     reconnecting: "Reconnecting…",
     leaveRoom: "Leave room",
     roomCode: "Room code",
@@ -115,7 +116,7 @@ export const explosiveEn: ExplosiveDict = {
 
 export const explosiveZh: ExplosiveDict = {
     setupTitle: "对局设置",
-    setupHint: "先选好模式与规则，再进入棋盘。联机先以旁观加入，入座后才下棋。红蓝都有人后才开局。",
+    setupHint: "先选好模式与规则，再进入棋盘。联机可创建房间，或输入房间码加入。先进房旁观，入座后才下棋。",
     mode: "模式",
     solo: "单人",
     online: "联机",
@@ -144,12 +145,13 @@ export const explosiveZh: ExplosiveDict = {
     onlineLobby: "联机房间",
     onlineConfigLocked: "先在下方选好棋盘、规则和你的颜色，再创建房间；建房后配置只读，改规则请新建房间。",
     onlineHint:
-      "创建房间后分享链接。所有人都先以旁观加入。点「坐红方」或「坐蓝方」才下棋。红蓝都有人后才开局。其他人可以旁观。",
+      "创建房间后分享链接，或输入房间码加入。所有人都先以旁观进房。点「坐红方」或「坐蓝方」才下棋。红蓝都有人后才开局。",
     youAreRed: "你是红方。",
     youAreBlue: "你是蓝方。",
     youAreSpectator: "你是旁观。",
     createRoom: "创建房间",
-    joinRoom: "加入此房间",
+    joinRoom: "加入房间",
+    joinCode: "房间码",
     reconnecting: "重连中…",
     leaveRoom: "离开房间",
     roomCode: "房间码",
