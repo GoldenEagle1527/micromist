@@ -434,8 +434,7 @@ class GomokuSession implements GameSession {
       title: showBoard ? undefined : g.roomCodeLabel(this.roomCode),
       hint: showBoard ? undefined : this.roomStatus(g),
       chrome: showBoard ? gomokuChrome(this.state) : undefined,
-      hud: showBoard ? [{ id: "room", value: g.roomCodeLabel(this.roomCode) }] : undefined,
-      status: showBoard ? this.roomStatus(g) : this.roomError || this.peerHint || undefined,
+      status: showBoard ? this.playNotice(g) : this.roomError || this.peerHint || undefined,
       actions,
       room: {
         title: g.roomCodeLabel(this.roomCode),
@@ -472,7 +471,7 @@ class GomokuSession implements GameSession {
     ];
   }
 
-  private localStatus(g: GomokuDict): string {
+  private localStatus(g: GomokuDict): string | undefined {
     if (this.thinking || (this.scripting && this.state.turn !== this.settings.humanColor)) {
       return g.thinking;
     }
@@ -487,7 +486,30 @@ class GomokuSession implements GameSession {
       }
       return this.state.winner === 1 ? g.blackWins : g.whiteWins;
     }
-    return this.state.turn === 1 ? g.turnBlack : g.turnWhite;
+    return undefined;
+  }
+
+  /** Notices that are not whose-turn (capsule already shows that). */
+  private playNotice(g: GomokuDict): string | undefined {
+    if (this.roomClosed) return g.roomClosed;
+    if (this.roomError) return this.roomError;
+    if (this.peerHint) return this.peerHint;
+    if (!this.state) return undefined;
+    if (this.state.pending?.kind === "remove") {
+      return g.pickRemove(this.state.pending.selected.length);
+    }
+    if (this.state.pending?.kind === "flip") return g.pickFlip;
+    if (this.roomPhase === "over" || isOver(this.state)) {
+      const myColor = this.you ? seatToPlayer(this.you.seat) : null;
+      if (this.state.winner === 3) return g.draw;
+      if (myColor && (this.state.winner === 1 || this.state.winner === 2)) {
+        return this.state.winner === myColor ? g.youWin : g.youLose;
+      }
+      if (this.state.winner === 1 || this.state.winner === 2) {
+        return this.state.winner === 1 ? g.blackWins : g.whiteWins;
+      }
+    }
+    return undefined;
   }
 
   private roomStatus(g: GomokuDict): string {

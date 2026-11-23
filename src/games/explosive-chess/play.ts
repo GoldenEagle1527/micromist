@@ -28,7 +28,6 @@ import {
 } from "./engine";
 import { explosiveEn, explosiveZh } from "./i18n";
 import {
-  colorLabel,
   formatWinReason,
   seatLabel,
   seatToPlayerColor,
@@ -102,7 +101,6 @@ class ExplosiveSession implements GameSession {
   private localSession = 0;
 
   private turn: PlayerColor = COLOR_RED;
-  private stepCount = 0;
   private counts = { red: 0, blue: 0 };
   private gameOver = false;
   private winReason = "";
@@ -517,11 +515,7 @@ class ExplosiveSession implements GameSession {
     } else if (this.onlinePhase === "over" && this.myColor != null) {
       actions.push({ id: "rematch", label: ex.rematch, kind: "primary" });
     }
-    const status = this.gameOver
-      ? `${winnerLabel(this.winner, ex)}${this.winReason ? ` · ${formatWinReason(this.winReason, ex)}` : ""}${
-          online && this.onlineStatus ? ` · ${this.onlineStatus}` : ""
-        }`
-      : `${this.tip}${online && this.onlineStatus ? ` · ${this.onlineStatus}` : ""}`;
+    const status = this.playStatus(ex, online);
     const winMode = this.onlineConfig?.winMode ?? this.settings.winMode;
     return {
       phase: "play",
@@ -532,22 +526,30 @@ class ExplosiveSession implements GameSession {
         winMode,
         counts: this.counts,
       }),
-      hud: [
-        { id: "steps", label: ex.stepsHud, value: String(this.stepCount) },
-        ...(online
-          ? [
-              {
-                id: "you",
-                label: ex.you,
-                value: this.myColor != null ? colorLabel(this.myColor, ex) : ex.youAreSpectator,
-              },
-            ]
-          : []),
-      ],
       status,
       actions,
       room: online && this.onlinePlayers.length > 0 ? this.roomPane(ex, false) : undefined,
     };
+  }
+
+  private playStatus(ex: Record<string, string>, online: boolean): string | undefined {
+    if (this.gameOver) {
+      return `${winnerLabel(this.winner, ex)}${this.winReason ? ` · ${formatWinReason(this.winReason, ex)}` : ""}${
+        online && this.onlineStatus ? ` · ${this.onlineStatus}` : ""
+      }`;
+    }
+    if (online && this.onlineStatus) return this.onlineStatus;
+    const turnTips = new Set([
+      ex.tipClick,
+      ex.tipYourTurn,
+      ex.tipAiTurn,
+      ex.tipOppTurn,
+      ex.redToMove,
+      ex.blueToMove,
+      ex.youAreSpectator,
+    ]);
+    if (this.tip && !turnTips.has(this.tip)) return this.tip;
+    return undefined;
   }
 
   private roomPane(ex: Record<string, string>, inMenu: boolean): GameSnapshot["room"] {
@@ -618,7 +620,6 @@ class ExplosiveSession implements GameSession {
 
   private syncHud(game: GameInstance): void {
     this.turn = game.currentTurn;
-    this.stepCount = game.stepCount;
     this.counts = game.getCellCounts();
     this.gameOver = game.gameOver;
     this.winner = game.winner;
