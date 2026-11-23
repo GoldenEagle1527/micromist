@@ -316,6 +316,16 @@ export function play(state: GameState, index: number): GameState | null {
   return placeStone(state, index);
 }
 
+export function legalActions(state: GameState): { index: number; row: number; col: number }[] {
+  const size = state.size;
+  const out: { index: number; row: number; col: number }[] = [];
+  for (let index = 0; index < state.board.length; index += 1) {
+    if (!canActOn(state, index)) continue;
+    out.push({ index, row: rowOf(index, size), col: colOf(index, size) });
+  }
+  return out;
+}
+
 export function canActOn(state: GameState, index: number): boolean {
   if (state.winner !== 0) return false;
   if (state.pending?.kind === "remove") {
