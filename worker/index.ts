@@ -7,15 +7,12 @@ export { GameRoom, ExplosiveChessMcp };
 
 /**
  * Route WebSocket upgrades to a Durable Object named `gameSlug:code`.
- * Bare codes are treated as explosive-chess (legacy share links).
+ * `/ws/<code>` without a game prefix is rejected.
  */
-function roomIdFromPath(pathname: string): string | null {
-  if (pathname === "/ws" || pathname === "/ws/") {
-    return null;
-  }
+function wsPathSegment(pathname: string): string | undefined {
+  if (pathname === "/ws" || pathname === "/ws/") return "";
   const match = pathname.match(/^\/ws\/([^/]+)$/);
-  if (!match?.[1]) return null;
-  return parseRoomId(match[1]).roomId;
+  return match ? match[1] : undefined;
 }
 
 export default {
@@ -45,15 +42,17 @@ export default {
       );
     }
 
-    const roomId = roomIdFromPath(url.pathname);
+    const segment = wsPathSegment(url.pathname);
 
-    if (url.pathname === "/ws" || url.pathname === "/ws/" || roomId !== null) {
-      if (roomId === null) {
+    if (segment !== undefined) {
+      const parsed = parseRoomId(segment);
+      if (!parsed) {
         return Response.json(
-          { error: "Missing room id. Upgrade at /ws/:roomId (game:code)" },
+          { error: "Room id must be game:code. Upgrade at /ws/:roomId" },
           { status: 400 },
         );
       }
+      const roomId = parsed.roomId;
 
       const upgrade = request.headers.get("Upgrade");
       if (!upgrade || upgrade.toLowerCase() !== "websocket") {

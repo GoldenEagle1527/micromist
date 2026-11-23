@@ -43,8 +43,10 @@ export class GameRoom extends DurableObject<Env> {
     const name = this.ctx.id.name;
     if (name) {
       const parsed = parseRoomId(name);
-      this.gameSlug = parsed.game;
-      this.roomCode = parsed.code;
+      if (parsed) {
+        this.gameSlug = parsed.game;
+        this.roomCode = parsed.code;
+      }
     }
 
     // Snapshot reload marks every seat offline. Overlay hibernated sockets
@@ -158,8 +160,10 @@ export class GameRoom extends DurableObject<Env> {
     const match = url.pathname.match(/\/ws\/([^/]+)$/);
     if (match?.[1]) {
       const parsed = parseRoomId(match[1]);
-      this.gameSlug = parsed.game;
-      this.roomCode = parsed.code;
+      if (parsed) {
+        this.gameSlug = parsed.game;
+        this.roomCode = parsed.code;
+      }
     }
     this.ensureAdapter();
     if (!this.adapter) {

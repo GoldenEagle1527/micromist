@@ -41,7 +41,10 @@ export type CommonHandlers = {
 
 export function roomSocketUrl(roomId: string): string {
   const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-  const canonical = parseRoomId(roomId).roomId;
+  const canonical = parseRoomId(roomId)?.roomId;
+  if (!canonical) {
+    throw new Error("Room id must be game:code");
+  }
   return `${protocol}//${window.location.host}/ws/${encodeURIComponent(canonical)}`;
 }
 
@@ -94,12 +97,14 @@ export class OnlineRoomClient {
     return this.ws?.readyState === WebSocket.OPEN;
   }
 
-  /** `code` may be bare or already `game:code`. */
+  /** Page `?room=` is a short code; the socket always uses `game:code`. */
   connect(codeOrRoomId: string, handlers: CommonHandlers): void {
     this.close();
-    const parsed = parseRoomId(
-      codeOrRoomId.includes(":") ? codeOrRoomId : formatRoomId(this.gameSlug, codeOrRoomId),
-    );
+    const namespaced = codeOrRoomId.includes(":")
+      ? codeOrRoomId
+      : formatRoomId(this.gameSlug, codeOrRoomId);
+    const parsed = parseRoomId(namespaced);
+    if (!parsed) return;
     this.roomId = parsed.roomId;
     this.handlers = handlers;
     this.openSocket();

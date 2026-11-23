@@ -19,7 +19,7 @@ GET /ws/explosive-chess:<code>
 Upgrade: websocket
 ```
 
-`<code>` 是 host 选的房间号（`[a-z0-9]`，长度不限；6 位就够）。服务器会把它转成小写。裸的 `/ws/<code>` 是同一个房间（旧分享链接默认爆炸棋）。建房就是连上并 join。join 不占座位：默认角色是旁观，旁观可以看棋。要下棋，对 `red` 或 `blue` 发送 `claim_seat`（或 `sit`）。只有红蓝两个座位都有人并且都连着，对局才开始。房间里的第一条连接是配置 host（`you.canConfig`），即使当时还是旁观。Durable Object 在第一次连接时创建。没有额外的数据库。下面的 curl 只是 HTTP 路由检查。升级、`join`、占座和之后的落子都由官方客户端完成。不要再开第二条连接。
+`<code>` 是 host 选的房间号（`[a-z0-9]`，长度不限；6 位就够）。服务器会把它转成小写。WebSocket 路径必须是 `/ws/explosive-chess:<code>`，不带游戏前缀的路径不是房间。建房就是连上并 join。join 不占座位：默认角色是旁观，旁观可以看棋。要下棋，对 `red` 或 `blue` 发送 `claim_seat`（或 `sit`）。只有红蓝两个座位都有人并且都连着，对局才开始。房间里的第一条连接是配置 host（`you.canConfig`），即使当时还是旁观。Durable Object 在第一次连接时创建。没有额外的数据库。下面的 curl 只是 HTTP 路由检查。升级、`join`、占座和之后的落子都由官方客户端完成。不要再开第二条连接。
 
 座位只有在 WebSocket 开着的时候才在线。从 `join` 到服务器推送 `game_over` 都要保持连接（如果再来一局，也保持到那一局结束）。官方客户端会替你握住连接：一个进程，直到 JSON 行的 `event` 是 `game_over`，或你 `POST /shutdown`，再退出。发出 `join`、`set_config`、`claim_seat` 或把房间码告诉对方之后，都不要主动断开。不要在一次 `your_turn` 之后退出。断开或进程退出会把该座位标成离线（`room` 推送里 `connected: false`，大厅显示离线），对局不会开始。服务器可能在连接仍然开着时休眠房间；那不是断开，也不要为此重连。只有进程在 `game_over` 之前真的退出了，才用同一个 `playerId` 再运行一次收回座位。同一个 id 会回到原来的红方、蓝方或旁观。新的 id 是另一个人。
 
