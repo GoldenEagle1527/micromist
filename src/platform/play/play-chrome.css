@@ -93,6 +93,26 @@
   overflow: hidden;
   text-overflow: ellipsis;
   background: transparent;
+  pointer-events: auto;
+  cursor: default;
+}
+
+.play-overflow-tip {
+  position: fixed;
+  box-sizing: border-box;
+  padding: 0.42rem 0.72rem;
+  border-radius: 0.7rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  line-height: 1.35;
+  color: var(--md-sys-color-on-surface);
+  background: var(--glass-bg-strong);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow);
+  backdrop-filter: var(--backdrop);
+  -webkit-backdrop-filter: var(--backdrop);
+  pointer-events: none;
 }
 
 .play-capsule-title.is-notice {
