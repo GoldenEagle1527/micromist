@@ -34,6 +34,7 @@ import {
   type Player,
   type Rules,
 } from "./engine";
+import { readUserName } from "../../lib/user-name";
 import { isShareRoomId, parseRoomId, roomIdForGame } from "../../../shared/multiplayer";
 import { gomokuEn, gomokuZh, type GomokuDict } from "./i18n";
 import {
@@ -164,6 +165,8 @@ class GomokuSession implements GameSession {
   private roomError = "";
   private roomClosed = false;
   private peerHint = "";
+  private askName = false;
+  private pendingNameRoom: string | null = null;
 
   private readonly ctx: SessionContext;
 
@@ -171,7 +174,7 @@ class GomokuSession implements GameSession {
     this.ctx = ctx;
     const room = roomIdForGame(ctx.search.get("room") ?? "", SLUG);
     if (room) {
-      this.enterRoom(room);
+      this.wantRoom(room);
       return;
     }
     this.hydrate();
@@ -187,8 +190,12 @@ class GomokuSession implements GameSession {
   syncContext(): void {
     const room = roomIdForGame(this.ctx.search.get("room") ?? "", SLUG);
     if (room && room !== this.roomCode) {
+      if (this.askName && this.pendingNameRoom === room) {
+        this.emit();
+        return;
+      }
       this.leaveRoom(false);
-      this.enterRoom(room);
+      this.wantRoom(room);
       return;
     }
     if (!room && this.roomCode) {
@@ -274,6 +281,22 @@ class GomokuSession implements GameSession {
       this.leaveRoom(true);
       return;
     }
+    if (id === "display-name-ready") {
+      this.askName = false;
+      const next = this.pendingNameRoom;
+      this.pendingNameRoom = null;
+      if (next) this.wantRoom(next);
+      return;
+    }
+    if (id === "display-name-cancel") {
+      this.askName = false;
+      this.pendingNameRoom = null;
+      if (this.ctx.search.get("room")) {
+        this.ctx.setSearch(new URLSearchParams(), { replace: true });
+      }
+      this.emit();
+      return;
+    }
     if (id === "dismiss-dialog") {
       return;
     }
@@ -312,6 +335,9 @@ class GomokuSession implements GameSession {
 
   snapshot(): GameSnapshot {
     const g = dict(this.ctx.locale);
+    if (this.askName && !this.roomCode) {
+      return { ...this.menuSnapshot(g), askName: true };
+    }
     if (this.roomCode) return this.roomSnapshot(g);
     if (this.phase === "menu") return this.menuSnapshot(g);
     return this.playSnapshot(g);
@@ -467,22 +493,70 @@ class GomokuSession implements GameSession {
     }
     actions.push({ id: "leave-room", label: g.leaveRoom, kind: "ghost" });
     const showBoard = this.state != null;
+    const chrome = showBoard ? gomokuChrome(this.state) : undefined;
     return {
       phase: showBoard ? "play" : "menu",
       title: showBoard ? undefined : g.roomCodeLabel(this.roomCode),
       hint: showBoard ? undefined : this.roomStatus(g),
-      chrome: showBoard ? gomokuChrome(this.state) : undefined,
+      chrome: chrome ? { ...chrome, match: this.matchChrome(g) } : undefined,
       status: showBoard ? this.playNotice(g) : this.roomError || this.peerHint || undefined,
       actions,
-      room: {
-        title: g.roomCodeLabel(this.roomCode),
-        status: [this.roomStatus(g), this.peerHint, this.roomError].filter(Boolean).join(" · ") || undefined,
-        code: this.roomCode,
-        shareUrl: shareUrl(this.roomCode),
-        shareLabel: g.copyLink,
-        copiedLabel: g.linkCopied,
-        seats: this.seatChips(g),
+      room: this.roomPane(g),
+    };
+  }
+
+  private roomPane(g: GomokuDict): GameSnapshot["room"] {
+    const specs = this.players.filter((p) => p.seat === "spectator");
+    const me = this.you?.playerId;
+    const rulesValue =
+      this.roomRules === "series" ? g.roomRulesSeries(this.roomCapturesToWin) : g.roomRulesClassic;
+    return {
+      title: g.roomCodeLabel(this.roomCode),
+      status: [this.roomStatus(g), this.peerHint, this.roomError].filter(Boolean).join(" · ") || undefined,
+      code: this.roomCode,
+      shareUrl: shareUrl(this.roomCode),
+      shareLabel: g.copyLink,
+      copiedLabel: g.linkCopied,
+      rules: {
+        title: g.rules,
+        frozen: true,
+        frozenLabel: g.rulesFrozen,
+        lines: [{ label: g.rulesBoard, value: rulesValue }],
       },
+      seats: this.seatChips(g),
+      spectators: {
+        title: g.spectatorsLabel,
+        empty: g.spectatorsEmpty,
+        watching: this.you?.seat === "spectator" ? g.staySpectating : undefined,
+        people: specs.map((p) => ({
+          id: p.playerId,
+          label: `${p.name}${p.playerId === me ? ` (${g.you})` : ""}${p.connected ? "" : ` · ${g.offlineNow}`}`,
+          isYou: p.playerId === me,
+        })),
+      },
+    };
+  }
+
+  private matchChrome(g: GomokuDict): NonNullable<PlayChrome["match"]> {
+    const black = occupant(this.players, "red");
+    const white = occupant(this.players, "blue");
+    const specs = this.players.filter((p) => p.seat === "spectator");
+    const me = this.you?.playerId;
+    const tag = (p: RoomPlayer | undefined, vacant: string) => {
+      if (!p) return { name: vacant, vacant: true as const };
+      const mine = p.playerId === me;
+      return { name: mine ? `${p.name} (${g.you})` : p.name };
+    };
+    const rulesShort = this.roomRules === "series" ? g.rulesSeries : g.rulesClassic;
+    const rulesDetail =
+      this.roomRules === "series" ? g.roomRulesSeries(this.roomCapturesToWin) : g.roomRulesClassic;
+    return {
+      left: tag(black, g.seatEmpty),
+      right: tag(white, g.seatEmpty),
+      rulesShort,
+      rulesDetail: `${g.rulesBoard} · ${rulesDetail}`,
+      spectatorsLabel: `${g.spectatorsLabel} ${specs.length}`,
+      spectators: specs.map((p) => p.name),
     };
   }
 
@@ -492,15 +566,16 @@ class GomokuSession implements GameSession {
     const lobby = this.roomPhase === "lobby" || this.roomPhase === "connecting";
     const line = (seat: "red" | "blue", player: RoomPlayer | undefined, claimLabel: string): SeatChip => {
       const mine = this.you?.seat === seat;
-      const name = player?.name || (mine ? g.you : "");
-      const online = player ? (player.connected ? g.onlineNow : g.offlineNow) : g.seatEmpty;
       const taken = Boolean(player);
+      const name = player?.name || (mine ? g.you : "");
       return {
         id: seat,
-        label: `${seat === "red" ? g.black : g.white} · ${taken ? `${name || g.seatTaken} (${online})` : g.seatEmpty}`,
+        label: seat === "red" ? g.black : g.white,
+        occupant: taken ? name || g.seatTaken : undefined,
+        status: taken ? (player?.connected ? g.onlineNow : g.offlineNow) : g.seatEmpty,
         canClaim: Boolean(lobby && (!taken || mine)),
         isYou: mine,
-        detail: taken ? undefined : claimLabel,
+        claimLabel,
       };
     };
     return [
@@ -985,6 +1060,19 @@ class GomokuSession implements GameSession {
     this.flipHint = null;
   }
 
+  private wantRoom(code: string): void {
+    if (this.roomCode === code) return;
+    if (!readUserName()) {
+      this.askName = true;
+      this.pendingNameRoom = code;
+      this.emit();
+      return;
+    }
+    this.askName = false;
+    this.pendingNameRoom = null;
+    this.enterRoom(code);
+  }
+
   private enterRoom(code: string): void {
     this.clearAi();
     clearLocalProgress(SLUG);
@@ -1006,7 +1094,7 @@ class GomokuSession implements GameSession {
     this.client = client;
     client.connect(code, {
       onOpen: () => {
-        client.join({ playerId, name: "Player" });
+        client.join({ playerId, name: readUserName() ?? "Player" });
       },
       onWelcome: (payload) => {
         this.you = { playerId: payload.playerId, seat: payload.seat };

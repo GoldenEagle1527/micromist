@@ -28,6 +28,7 @@ import {
   type RoomPlayer,
   type Seat,
 } from "../../multiplayer/OnlineRoomClient";
+import { readUserName } from "../../lib/user-name";
 import { playUrl, roomIdForGame } from "../../../shared/multiplayer";
 import type { ChromaPublicState } from "../../../shared/chroma-slide/observe";
 import { loadScores, recordWin, type ChromaRunRecord, type ChromaScores } from "./scores";
@@ -151,6 +152,8 @@ class ChromaSession implements GameSession {
   private pub: ChromaPublicState | null = null;
   private roomError = "";
   private roomClosed = false;
+  private askName = false;
+  private pendingNameRoom: string | null = null;
 
   private readonly ctx: SessionContext;
 
@@ -158,7 +161,7 @@ class ChromaSession implements GameSession {
     this.ctx = ctx;
     const room = roomIdForGame(ctx.search.get("room") ?? "", SLUG);
     if (room) {
-      this.enterRoom(room);
+      this.wantRoom(room);
       return;
     }
     this.hydrate();
@@ -174,8 +177,12 @@ class ChromaSession implements GameSession {
   syncContext(): void {
     const room = roomIdForGame(this.ctx.search.get("room") ?? "", SLUG);
     if (room && room !== this.roomCode) {
+      if (this.askName && this.pendingNameRoom === room) {
+        this.emit();
+        return;
+      }
       this.leaveRoom(false);
-      this.enterRoom(room);
+      this.wantRoom(room);
       return;
     }
     if (!room && this.roomCode) {
@@ -249,6 +256,22 @@ class ChromaSession implements GameSession {
       this.leaveRoom(true);
       return;
     }
+    if (id === "display-name-ready") {
+      this.askName = false;
+      const next = this.pendingNameRoom;
+      this.pendingNameRoom = null;
+      if (next) this.wantRoom(next);
+      return;
+    }
+    if (id === "display-name-cancel") {
+      this.askName = false;
+      this.pendingNameRoom = null;
+      if (this.ctx.search.get("room")) {
+        this.ctx.setSearch(new URLSearchParams(), { replace: true });
+      }
+      this.emit();
+      return;
+    }
     if (action.type === "claim-seat" || id === "claim-player") {
       this.roomClient?.send("claim_seat", { seat: "player" });
       return;
@@ -308,6 +331,7 @@ class ChromaSession implements GameSession {
         },
         actions: [{ id: "start", label: ch.start, kind: "primary" }],
         records: this.records(ch),
+        askName: this.askName,
       };
     }
 
@@ -396,15 +420,28 @@ class ChromaSession implements GameSession {
                 : ch.roomWaiting;
     const canClaim = this.you?.seat === "spectator" && this.roomPhase === "lobby" && !solver;
     const you = this.you;
-    const solverLabel = solver?.name || "player";
+    const specs = this.roomPlayers.filter((p) => p.seat === "spectator");
+    const me = you?.playerId;
+      const preset = pub?.config ? presetTitle(ch, pub.config.preset) : presetTitle(ch, this.preset);
+    const chrome = this.puzzle || pub ? chromaChrome(pub?.steps ?? this.puzzle?.steps ?? 0, won) : undefined;
     return {
       phase: this.puzzle || pub ? "play" : "menu",
       title: ch.roomTitle,
       hint: this.puzzle || pub ? undefined : status,
-      chrome:
-        this.puzzle || pub
-          ? chromaChrome(pub?.steps ?? this.puzzle?.steps ?? 0, won)
-          : undefined,
+      chrome: chrome
+        ? {
+            ...chrome,
+            match: {
+              left: solver
+                ? { name: solver.name }
+                : { name: ch.seatEmpty, vacant: true },
+              rulesShort: ch.rulesTitle,
+              rulesDetail: preset,
+              spectatorsLabel: `${ch.spectatorsLabel} ${specs.length}`,
+              spectators: specs.map((p) => p.name),
+            },
+          }
+        : undefined,
       status:
         this.puzzle || pub
           ? won
@@ -422,15 +459,35 @@ class ChromaSession implements GameSession {
         status,
         code: this.roomCode,
         shareUrl: playUrl(this.ctx.origin, this.roomCode) ?? undefined,
+        shareLabel: ch.copyLink,
+        copiedLabel: ch.linkCopied,
+        rules: {
+          title: ch.rulesTitle,
+          frozen: true,
+          frozenLabel: ch.rulesFrozen,
+          lines: [{ label: ch.difficulty, value: preset }],
+        },
         seats: [
           {
             id: "player",
-            label: solver ? solverLabel : ch.roomClaim,
+            label: ch.seatPlayer,
+            occupant: solver?.name,
+            status: solver ? undefined : ch.seatEmpty,
             canClaim,
             isYou: you?.seat === "player",
-            detail: solver && you?.seat !== "player" ? ch.roomWatching(solver.name) : undefined,
+            claimLabel: ch.roomClaim,
           },
         ],
+        spectators: {
+          title: ch.spectatorsLabel,
+          empty: ch.spectatorsEmpty,
+          watching: you?.seat === "spectator" ? ch.staySpectating : undefined,
+          people: specs.map((p) => ({
+            id: p.playerId,
+            label: p.name,
+            isYou: p.playerId === me,
+          })),
+        },
       },
     };
   }
@@ -629,6 +686,19 @@ class ChromaSession implements GameSession {
     });
   }
 
+  private wantRoom(code: string): void {
+    if (this.roomCode === code) return;
+    if (!readUserName()) {
+      this.askName = true;
+      this.pendingNameRoom = code;
+      this.emit();
+      return;
+    }
+    this.askName = false;
+    this.pendingNameRoom = null;
+    this.enterRoom(code);
+  }
+
   private enterRoom(code: string): void {
     this.roomCode = code;
     this.phase = "play";
@@ -637,7 +707,7 @@ class ChromaSession implements GameSession {
     this.roomClient = room;
     room.connect(code, {
       onOpen: () => {
-        room.join({ playerId, name: "Player" });
+        room.join({ playerId, name: readUserName() ?? "Player" });
         this.emit();
       },
       onWelcome: (payload) => {

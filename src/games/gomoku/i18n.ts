@@ -76,6 +76,11 @@ export type GomokuDict = {
   capturesHud: (black: number, white: number, goal: number) => string;
   roomRulesClassic: string;
   roomRulesSeries: (goal: number) => string;
+  spectatorsLabel: string;
+  spectatorsEmpty: string;
+  staySpectating: string;
+  rulesFrozen: string;
+  rulesBoard: string;
 };
 
 export const gomokuZh: GomokuDict = {
@@ -156,6 +161,11 @@ export const gomokuZh: GomokuDict = {
   capturesHud: (black, white, goal) => `提子 黑 ${black} · 白 ${white} / ${goal}`,
   roomRulesClassic: "经典规则，连五即胜。",
   roomRulesSeries: (goal) => `连战 · 先提 ${goal} 次者胜。`,
+  spectatorsLabel: "旁观",
+  spectatorsEmpty: "还没有人旁观",
+  staySpectating: "进房默认旁观，入座后才下棋。",
+  rulesFrozen: "建房后冻结",
+  rulesBoard: "15 × 15",
 };
 
 export const gomokuEn: GomokuDict = {
@@ -237,4 +247,9 @@ export const gomokuEn: GomokuDict = {
   capturesHud: (black, white, goal) => `Captures Black ${black} · White ${white} / ${goal}`,
   roomRulesClassic: "Classic rules: five in a row wins.",
   roomRulesSeries: (goal) => `Series · first to ${goal} captures wins.`,
+  spectatorsLabel: "Spectators",
+  spectatorsEmpty: "No spectators yet",
+  staySpectating: "You enter as a spectator. Sit to play.",
+  rulesFrozen: "Frozen after create",
+  rulesBoard: "15 × 15",
 };

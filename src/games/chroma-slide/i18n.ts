@@ -47,6 +47,15 @@ export type ChromaDict = {
   roomCode: (code: string) => string;
   roomConnecting: string;
   roomSpectatorHint: string;
+  copyLink: string;
+  linkCopied: string;
+  spectatorsLabel: string;
+  spectatorsEmpty: string;
+  staySpectating: string;
+  rulesTitle: string;
+  rulesFrozen: string;
+  seatPlayer: string;
+  seatEmpty: string;
 };
 
 function formatDurationEn(ms: number): string {
@@ -130,6 +139,15 @@ export const chromaEn: ChromaDict = {
   roomCode: (code) => `Room ${code}`,
   roomConnecting: "Connecting…",
   roomSpectatorHint: "You are watching. Slides come from the seated player.",
+  copyLink: "Copy share link",
+  linkCopied: "Link copied",
+  spectatorsLabel: "Spectators",
+  spectatorsEmpty: "No spectators yet",
+  staySpectating: "You enter as a spectator. Sit to solve.",
+  rulesTitle: "This puzzle",
+  rulesFrozen: "Frozen after create",
+  seatPlayer: "Player",
+  seatEmpty: "Open",
 };
 
 export const chromaZh: ChromaDict = {
@@ -191,4 +209,13 @@ export const chromaZh: ChromaDict = {
   roomCode: (code) => `房间 ${code}`,
   roomConnecting: "正在连接…",
   roomSpectatorHint: "你在旁观。滑动来自已入座的那一位。",
+  copyLink: "复制分享链接",
+  linkCopied: "链接已复制",
+  spectatorsLabel: "旁观",
+  spectatorsEmpty: "还没有人旁观",
+  staySpectating: "进房默认旁观，入座后才解题。",
+  rulesTitle: "本局规则",
+  rulesFrozen: "建房后冻结",
+  seatPlayer: "解题",
+  seatEmpty: "空位",
 };

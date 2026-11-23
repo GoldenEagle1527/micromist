@@ -112,6 +112,10 @@ export const explosiveEn: ExplosiveDict = {
     sitBlue: "Sit as Blue",
     spectatorsLabel: "Spectators",
     rosterTitle: "Seats",
+    spectatorsEmpty: "No spectators yet",
+    staySpectating: "You enter as a spectator. Sit to play.",
+    rulesFrozen: "Frozen after create",
+    rulesTitle: "This match",
 };
 
 export const explosiveZh: ExplosiveDict = {
@@ -226,4 +230,8 @@ export const explosiveZh: ExplosiveDict = {
     sitBlue: "坐蓝方",
     spectatorsLabel: "旁观",
     rosterTitle: "座位",
+    spectatorsEmpty: "还没有人旁观",
+    staySpectating: "进房默认旁观，入座后才下棋。",
+    rulesFrozen: "建房后冻结",
+    rulesTitle: "本局规则",
 };
