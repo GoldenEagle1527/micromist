@@ -3,12 +3,13 @@ import { useLocation, useSearchParams } from "react-router";
 import { useLocale } from "../../i18n";
 import {
   USER_NAME_MAX,
-  normalizeUserName,
+  readUserName,
   userNameLength,
   writeUserName,
 } from "../../lib/user-name";
 import { copyText } from "./copy-text";
 import { playFrameStyle, useSetPlayChrome } from "./play-chrome";
+import { decorateRoom, matchFromRoom } from "./room-roster";
 import type {
   ConfirmSpec,
   GamePlayModule,
@@ -272,6 +273,8 @@ export function GameShell({ load, preview }: GameShellProps) {
   const [sharePhase, setSharePhase] = useState<"idle" | "ok">("idle");
   const [nameDraft, setNameDraft] = useState("");
   const [nameError, setNameError] = useState(false);
+  const [displayName, setDisplayName] = useState(() => readUserName());
+  const [heldAction, setHeldAction] = useState<string | null>(null);
   const inviteTimer = useRef<number | null>(null);
   const shareTimer = useRef<number | null>(null);
 
@@ -296,10 +299,13 @@ export function GameShell({ load, preview }: GameShellProps) {
   ctxRef.current.search = searchParams;
   if (typeof window !== "undefined") ctxRef.current.origin = window.location.origin;
 
+  const roomInUrl = Boolean(searchParams.get("room"));
+  const blockSession = roomInUrl && !displayName;
+
   const session = useMemo(() => {
-    if (!module) return null;
+    if (!module || blockSession) return null;
     return module.createSession(ctxRef.current);
-  }, [module]);
+  }, [module, blockSession]);
 
   useEffect(() => {
     session?.syncContext();
@@ -387,6 +393,10 @@ export function GameShell({ load, preview }: GameShellProps) {
   );
 
   const runAction = (id: string, confirm?: ConfirmSpec) => {
+    if ((id === "create-room" || id === "join-room") && !readUserName()) {
+      setHeldAction(id);
+      return;
+    }
     if (confirm) {
       setPendingConfirm({ id, confirm });
       return;
@@ -450,13 +460,41 @@ export function GameShell({ load, preview }: GameShellProps) {
     runSession((current) => current.dispatch({ type: "claim-seat", id }));
   };
 
+  const askName = blockSession || heldAction != null;
+
+  const saveDisplayName = () => {
+    const saved = writeUserName(nameDraft);
+    if (!saved) {
+      setNameError(true);
+      return;
+    }
+    setNameError(false);
+    setDisplayName(saved);
+    const action = heldAction;
+    setHeldAction(null);
+    if (action) runSession((current) => current.dispatch({ type: "ui", id: action }));
+  };
+
+  const cancelDisplayName = () => {
+    setHeldAction(null);
+    setNameError(false);
+    if (blockSession) {
+      setSearchRef.current({}, { replace: true });
+    }
+  };
+
   const showBoard = snapshot.phase === "play" && Boolean(session);
+  const room = snapshot.room ? decorateRoom(snapshot.room, t) : undefined;
   const playChrome = useMemo(() => {
     if (snapshot.phase !== "play" || !snapshot.chrome) return undefined;
     const notice = snapshot.status?.trim();
-    if (!notice) return snapshot.chrome;
-    return { ...snapshot.chrome, notice };
-  }, [snapshot.phase, snapshot.chrome, snapshot.status]);
+    const match = matchFromRoom(room, t) ?? snapshot.chrome.match;
+    return {
+      ...snapshot.chrome,
+      ...(notice ? { notice } : {}),
+      ...(match ? { match } : {}),
+    };
+  }, [snapshot.phase, snapshot.chrome, snapshot.status, room, t]);
 
   useEffect(() => {
     setPlayChrome(playChrome ?? null);
@@ -507,9 +545,9 @@ export function GameShell({ load, preview }: GameShellProps) {
               </div>
             ) : null}
             <ActionsRow actions={snapshot.actions ?? []} onRun={runAction} />
-            {snapshot.room ? (
+            {room ? (
               <RoomView
-                room={snapshot.room}
+                room={room}
                 sharePhase={sharePhase}
                 onCopyShare={copyShare}
                 onClaim={claimSeat}
@@ -536,9 +574,9 @@ export function GameShell({ load, preview }: GameShellProps) {
         </div>
       ) : (
         <div className="game-shell-play">
-          {snapshot.room?.seats?.some((seat) => seat.canClaim) ? (
+          {room?.seats?.some((seat) => seat.canClaim) ? (
             <RoomView
-              room={snapshot.room}
+              room={room}
               sharePhase={sharePhase}
               onCopyShare={copyShare}
               onClaim={claimSeat}
@@ -549,7 +587,7 @@ export function GameShell({ load, preview }: GameShellProps) {
         </div>
       )}
 
-      {snapshot.askName ? (
+      {askName ? (
         <div className="modal-backdrop" role="presentation">
           <div
             className="modal-panel"
@@ -580,42 +618,16 @@ export function GameShell({ load, preview }: GameShellProps) {
                 onKeyDown={(event) => {
                   if (event.key !== "Enter") return;
                   event.preventDefault();
-                  const saved = writeUserName(nameDraft);
-                  if (!saved) {
-                    setNameError(true);
-                    return;
-                  }
-                  setNameError(false);
-                  runSession((current) =>
-                    current.dispatch({ type: "ui", id: "display-name-ready", name: saved }),
-                  );
+                  saveDisplayName();
                 }}
               />
             </label>
             {nameError ? <p className="hint">{t.displayNameInvalid}</p> : null}
             <div className="modal-actions">
-              <button
-                type="button"
-                className="ghost"
-                onClick={() => runSession((current) => current.dispatch({ type: "ui", id: "display-name-cancel" }))}
-              >
+              <button type="button" className="ghost" onClick={cancelDisplayName}>
                 {t.displayNameCancel}
               </button>
-              <button
-                type="button"
-                className="primary"
-                onClick={() => {
-                  const saved = writeUserName(nameDraft);
-                  if (!saved || !normalizeUserName(nameDraft)) {
-                    setNameError(true);
-                    return;
-                  }
-                  setNameError(false);
-                  runSession((current) =>
-                    current.dispatch({ type: "ui", id: "display-name-ready", name: saved }),
-                  );
-                }}
-              >
+              <button type="button" className="primary" onClick={saveDisplayName}>
                 {t.displayNameOk}
               </button>
             </div>

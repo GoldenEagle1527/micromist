@@ -74,6 +74,15 @@ export type Dict = {
   displayNameOk: string;
   displayNameCancel: string;
   displayNameInvalid: string;
+  roomSpectators: string;
+  roomSpectatorsEmpty: string;
+  roomStaySpectating: string;
+  roomYou: string;
+  roomSeatEmpty: string;
+  roomOnline: string;
+  roomOffline: string;
+  roomAgent: string;
+  roomRulesFrozen: string;
   explosive: ExplosiveDict;
   chroma: ChromaDict;
   gomoku: GomokuDict;

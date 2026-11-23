@@ -11,6 +11,7 @@ import {
   type Seat,
 } from "../../shared/multiplayer";
 import { gameStoreGet, gameStoreSet } from "../lib/game-store";
+import { normalizeUserName, readUserName } from "../lib/user-name";
 
 export type { Phase, PlayerKind, Role, RoomPlayer, Seat };
 
@@ -194,9 +195,10 @@ export class OnlineRoomClient {
   }
 
   join(opts: { playerId: string; name?: string; password?: string }): boolean {
+    const name = normalizeUserName(opts.name ?? "") ?? readUserName() ?? "Player";
     return this.send("join", {
       playerId: opts.playerId,
-      name: opts.name ?? "",
+      name,
       password: opts.password ?? "",
       game: this.gameSlug,
     });

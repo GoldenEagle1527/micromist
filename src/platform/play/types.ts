@@ -104,6 +104,28 @@ export type RoomSpectator = {
   isYou?: boolean;
 };
 
+export type RoomRosterPlayer = {
+  playerId: string;
+  name: string;
+  seat: string;
+  connected?: boolean;
+  kind?: string;
+};
+
+export type RoomRosterSeat = {
+  id: string;
+  label: string;
+  claimLabel?: string;
+};
+
+/** Raw room list. The shell turns this into seats, spectators, and the name strip. */
+export type RoomRoster = {
+  youId?: string;
+  players: RoomRosterPlayer[];
+  seats: RoomRosterSeat[];
+  claimable?: boolean;
+};
+
 export type RoomPane = {
   title: string;
   status?: string;
@@ -117,6 +139,7 @@ export type RoomPane = {
     frozenLabel?: string;
     lines: RoomRuleLine[];
   };
+  roster?: RoomRoster;
   seats?: SeatChip[];
   spectators?: {
     title: string;
@@ -199,8 +222,6 @@ export type GameSnapshot = {
   room?: RoomPane;
   invite?: InvitePane;
   dialog?: DialogState;
-  /** Ask for localStorage `user_name` (1–20) before joining a room. */
-  askName?: boolean;
 };
 
 export type BoardHandle = {
