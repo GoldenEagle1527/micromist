@@ -2,6 +2,7 @@ import { lazy, Suspense } from "react";
 import { Route, Routes } from "react-router";
 import { Shell } from "./components/Shell";
 import { useLocale } from "./i18n";
+import { AgentPage } from "./pages/AgentPage";
 import { HomePage } from "./pages/HomePage";
 import { NotFoundPage } from "./pages/NotFoundPage";
 
@@ -17,6 +18,7 @@ export function App() {
       <Routes>
         <Route element={<Shell />}>
           <Route index element={<HomePage />} />
+          <Route path="agent" element={<AgentPage />} />
           <Route path="play/:slug" element={<PlayPage />} />
           <Route path="*" element={<NotFoundPage />} />
         </Route>

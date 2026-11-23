@@ -35,6 +35,14 @@ export type Dict = {
   floatAdBadge: string;
   floatAdTitle: string;
   playCta: string;
+  agentBadge: string;
+  agentTitle: string;
+  agentBlurb: string;
+  agentCta: string;
+  agentBody: string;
+  agentCopy: string;
+  agentCopied: string;
+  agentCopyFailed: string;
   lobbyBack: string;
   notFoundTitle: string;
   notFoundBody: string;

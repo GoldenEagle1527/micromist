@@ -33,9 +33,9 @@
 
 | slug | 中文名 | 模式 | 上架 | 说明 |
 | --- | --- | --- | --- | --- |
-| `explosive-chess` | 爆炸棋 | `single-online` | 测试站 + 正式站 | 人机（内置电脑）/ 同屏双人 / 分享链接联机（两边都有）。测试站另有 Agent 适配（本机 HTTP + curl，玩家文案叫「跟 AI 对战」）。两座 `red` / `blue`，进房默认观战，`claim_seat` 入座，坐满开局。建房后规则冻结。 |
-| `chroma-slide` | 滑动色块 | catalog 仍标 `single` | 测试站 + 正式站 | 本机单人滑块，也可开分享链接房间，只有一个 `player` 座位（给人解或发给 AI 解），不是双人对战。 |
-| `gomoku` | 五子棋 | `single-online` | 测试站 + 正式站 | 15 路自由五子棋（无禁手），黑先，连五即胜（≥5）。同屏双人或人机对战（easy/normal/hard）。联机同样走分享链接：进房观战，执黑 / 执白入座，坐满开局；可认输，终局双方同意再来一局。**不要**在未要求时做 Agent 适配。 |
+| `explosive-chess` | 爆炸棋 | `single-online` | 测试站 + 正式站 | 人机（内置电脑）/ 同屏双人 / 分享链接联机。两座 `red` / `blue`，进房默认观战，`claim_seat` 入座，坐满开局。建房后规则冻结。跟 AI 玩走首页卡片，不在游戏内复制。 |
+| `chroma-slide` | 滑动色块 | catalog 仍标 `single` | 测试站 + 正式站 | 本机单人滑块，也可开分享链接房间，只有一个 `player` 座位，不是双人对战。 |
+| `gomoku` | 五子棋 | `single-online` | 测试站 + 正式站 | 15 路自由五子棋（无禁手），黑先，连五即胜（≥5）。同屏双人或人机对战（easy/normal/hard）。联机同样走分享链接：进房观战，执黑 / 执白入座，坐满开局；可认输，终局双方同意再来一局。座位仍是 `red`（黑）/ `blue`（白）。 |
 
 联机座位类型是平台级的 `red` / `blue` / `player` / `spectator`。五子棋**不要**给平台加 `black` / `white` 座位；在适配器和 UI 里把 `red` 显示成黑棋、`blue` 显示成白棋即可。
 
@@ -46,7 +46,7 @@
 ```
 src/                 React SPA（壳、首页、/play、i18n、主题）
 src/games/<slug>/    各游戏客户端；登记在 src/games/catalog.ts
-src/pages/           HomePage、PlayPage
+src/pages/           HomePage、PlayPage、AgentPage（/agent）
 src/multiplayer/     共用房间客户端 OnlineRoomClient
 src/platform/play/   通用 GameShell（PlayPage 只挂这个壳）
 worker/              Worker 入口、GameRoom、各游戏 adapter
@@ -104,15 +104,15 @@ docs/                Agent WebSocket 协议（中英分文件）
 
 也不要为它们写「已下架」说明。没有用户的明确指令，不要改写 git 历史、不要 force-push。
 
-## Agent 游玩（仅爆炸棋、滑动色块）
+## Agent 游玩
 
-目前只在测试站提供。正式站的 `main` 还没有 `docs/`、`public/agent-clients/` 或 Agent 指南路由。改协议或发版时必须分清影响面，不要默认正式站已经有同一套 Agent 能力。约定：
+入口是首页卡片「跟 AI 玩」→ `/agent`，展示一段可复制文本。不要再在各游戏设置页里放复制提示。提示词只说明如何下载与使用，不限制、也不引导 AI 怎么选着。
 
-- 官方客户端：长挂进程，监听 `127.0.0.1` 随机端口，用 curl 发请求；底层仍是房间 WebSocket。入口在 `/agent-clients/<slug>/` 的 `server.mjs` / `server.py`。
-- 盘面必须是结构化观测（含 `legalActions` 等），不要让 Agent 靠截图下棋。
-- 落子由 Agent 根据返回的 `legalActions` 自己选。传输层只做连房、发招、等对方，**禁止**求解器、搜索树或自动对战脚本代替下棋。
-- 交给人类去复制给 AI 的提示词与指南必须中英分版，随站点当前语言只出对应语言，不要中英混在同一段。指南由 Worker 在 `/agent-guide/<slug>` 与 `/agent-guide/<slug>/zh|en` 提供，不能落到 SPA 壳。协议正文在 `docs/agent-ws-*.md`。
-- 没有要求时，不要给五子棋做 Agent 适配。
+- 官方客户端一份：`/agent-clients/server.mjs` 与 `server.py`。先在 `127.0.0.1` 监听（默认 18780，占用则依次加一），`GET /games` 拉列表，问用户玩哪一款，再 `GET /games/<slug>` 拉规则，然后 `POST /session` 连房。底层仍是房间 WebSocket。
+- 游戏列表与规则的权威在站点：`GET /agent-guide`（`Accept: application/json` 给机器）和 `GET /agent-guide/<slug>`。协议正文在 `docs/agent-ws-*.md`（中英分文件）。
+- 盘面必须是结构化观测（含 `legalActions`），不要让 Agent 靠截图下棋。
+- 交给人类复制给 AI 的提示词与指南必须中英分版，随站点当前语言只出对应语言，不要中英混在同一段。指南由 Worker 提供，不能落到 SPA 壳（`/agent` 页只给人看提示词）。
+- 三款都进清单：爆炸棋、五子棋、滑动色块。五子棋不要给平台加 `black` / `white` 座位。
 
 ## 日常改动流程
 

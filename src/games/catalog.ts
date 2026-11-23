@@ -46,8 +46,8 @@ export const games: GameMeta[] = [
     mode: "single-online",
     title: { zh: "爆炸棋", en: "Explosive Chess" },
     blurb: {
-      zh: "落子叠满即爆，连锁改色占盘。可人机对战或同屏双人；联机靠分享链接，也可发给 AI 一起下。",
-      en: "Place until cells burst and recolor neighbors. Solo vs computer or pass-and-play; online via share link, including an AI.",
+      zh: "落子叠满即爆，连锁改色占盘。可人机对战或同屏双人；联机靠分享链接。",
+      en: "Place until cells burst and recolor neighbors. Solo vs computer or pass-and-play; online via share link.",
     },
     badge: { zh: "单机/联机", en: "Offline / Online" },
     preview: previewExplosiveChess,
@@ -70,8 +70,8 @@ export const games: GameMeta[] = [
     mode: "single",
     title: { zh: "滑动色块", en: "Chroma Slide" },
     blurb: {
-      zh: "滑动色块，把每种颜色收成一块实心正方形。本机开局，或用分享链接把谜题交给人来解，也可发给 AI 来解。",
-      en: "Slide colored tiles until each hue forms one solid square. Play locally, or share a solo-puzzle room with a person or an AI.",
+      zh: "滑动色块，把每种颜色收成一块实心正方形。本机开局，或用分享链接把谜题交给人来解。",
+      en: "Slide colored tiles until each hue forms one solid square. Play locally, or share a solo-puzzle room.",
     },
     badge: { zh: "单机", en: "Offline" },
     preview: previewChromaSlide,

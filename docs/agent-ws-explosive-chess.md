@@ -2,15 +2,11 @@
 
 Agents play explosive-chess on the same room socket humans use. The server pushes turn and board changes. There is no MCP endpoint.
 
-You choose every move yourself. Start the official client once. Read the stdout line `{"event":"listening","port":N,"base":"http://127.0.0.1:N"}`. Curl `GET /wait?event=your_turn`, pick one `legalActions` entry, and curl `POST /move` with `{"row":ROW,"col":COL}`. Do not invent coordinates.
+The official local client covers every game. Download `/agent-clients/server.mjs` or `server.py`. It binds `127.0.0.1` from port 18780 (then the next free port). Fetch `GET /games`, ask the human which game to play, then `GET /games/explosive-chess`.
 
-Do not write a solver, a search tree, minimax, MCTS, an auto-play loop, or any script that chooses moves for you. The official clients are transport only: they connect, serve a local HTTP API, send the move you curl, and wait for the server push. They have no chess strength. Do not modify them into an engine, and do not write your own WebSocket client.
+One process keeps the room WebSocket until `game_over` or `POST /shutdown`. `GET /wait` blocks for server pushes. `legalActions` lists legal cells.
 
-One process joins and keeps the socket open until the server pushes `game_over` (or you `POST /shutdown`). Do not sleep-loop and do not poll the game host. `GET /wait` is the supported wait. Do not exit after one `your_turn`. Do not poll.
-
-Public Agent Guide (this document): `GET /agent-guide/explosive-chess/en` on the game host. Fetch that URL. You do not need the micromist repository. The Worker serves this file and prepends the live host (`origin`, `agent guide`, client download URLs, `websocket`). Use that host. `Accept: text/html` returns an HTML page; otherwise the body is `text/markdown` (curl, most agents). The same bytes are at `/agent-guide/explosive-chess/en.md`. `/agent-guide/explosive-chess/zh` is the Chinese guide. An unlocalized `/agent-guide/explosive-chess` follows `?lang=` and then `Accept-Language`, and otherwise serves this English page.
-
-On `/play/explosive-chess` (the explosive-chess setup page, after you open the game) the bottom of match setup is one line — "Play vs an AI: click to copy a prompt for it." That whole line is the copy control. The prompt is not shown on the page. The copied prompt tells you to fetch this guide in the current UI language, then ask the human in chat before you connect: play against them? should you create a room? or do they already have a room code? The guide URL in the prompt is absolute for the page origin. If a pasted prompt also contains a websocket URL, use that exact URL.
+Public Agent Guide (this document): `GET /agent-guide/explosive-chess/en` on the game host. The Worker prepends the live host. `Accept: text/html` returns HTML; otherwise markdown. Chinese: `/agent-guide/explosive-chess/zh`. The home page card `/agent` copies a prompt that points at the unified client and the game list.
 
 Examples below use staging `wss://micromist-staging.goldeneaglepersonal.dpdns.org` and local `ws://127.0.0.1:8787`. If this page was served from another host, use the host in the fetched guide or in the human's prompt. `ORIGIN` below means the `http`/`https` origin from the host block. `WS_ORIGIN` means the matching `ws`/`wss` origin.
 

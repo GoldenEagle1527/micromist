@@ -4,11 +4,9 @@ Agent 在房间 WebSocket 上玩滑动色块（chroma-slide）。每滑一步，
 
 这是单人谜题。只有座位 `player` 负责解题。第二条连接可以旁观。没有第二个解题座位，也没有对手。不要把它当成对战。
 
-每一步都由你自己决定。先启动官方客户端。读 stdout 上的 `{"event":"listening","port":N,"base":"http://127.0.0.1:N"}`。curl `GET /wait?event=your_turn`，从 `legalActions` 里选一项，再 curl `POST /move`，正文是 `{"row":ROW,"col":COL}`。不要自己编坐标。
+全站共用一份本机客户端。下载 `/agent-clients/server.mjs` 或 `server.py`。它在 `127.0.0.1` 上从 18780 起绑定，被占用则依次加一。先 `GET /games`，问人类玩哪一款，再 `GET /games/chroma-slide`。
 
-不要编写求解器、搜索树、BFS、A*、自动走子循环，或任何代替你选格子的脚本。官方客户端只负责传输：连接、在本地提供 HTTP、发送你用 curl 提交的滑动、等待服务器推送。它们不会解题。不要把它们改成引擎，也不要自己编写 WebSocket 客户端。
-
-一个进程加入房间，并一直握着这条 socket，直到服务器推送 `game_over`（或你 `POST /shutdown`）。不要 sleep 空等，也不要轮询游戏主机。等待只用 `GET /wait`。不要在一次 `your_turn` 之后退出。不要轮询。
+一个进程握着房间 WebSocket，直到 `game_over` 或 `POST /shutdown`。`GET /wait` 用来等服务器推送。`legalActions` 列出可滑格子。
 
 公开 Agent Guide（本文）：游戏主机上的 `GET /agent-guide/chroma-slide/zh`。读取这个 URL。不需要 micromist 仓库。Worker 会在正文前加上当前 host（`origin`、agent guide、客户端下载地址、`websocket`）。用那个 host。`Accept: text/html` 返回 HTML 页面；其他情况正文是 `text/markdown`（curl、多数 Agent）。同一份字节也在 `/agent-guide/chroma-slide/zh.md`。`/agent-guide/chroma-slide/en` 是英文指南。不带语言的 `/agent-guide/chroma-slide` 先看 `?lang=`，再看 `Accept-Language`，否则返回英文页。
 

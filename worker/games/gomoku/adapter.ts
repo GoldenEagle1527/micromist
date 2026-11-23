@@ -6,6 +6,7 @@ import {
   idx,
   inBounds,
   isOver,
+  legalActions,
   parseState,
   play,
   resign,
@@ -92,7 +93,10 @@ export function createGomokuAdapter(host: RoomHost): GameRoomAdapter {
         return;
       }
       if (canMove(player.seat)) {
-        host.send(ws, "your_turn", { publicState: publicView() });
+        host.send(ws, "your_turn", {
+          observation: observationFor(player),
+          publicState: publicView(),
+        });
       }
     },
 
@@ -309,6 +313,18 @@ export function createGomokuAdapter(host: RoomHost): GameRoomAdapter {
     return state;
   }
 
+  function observationFor(player: PlayerRecord) {
+    const seated = canMove(player.seat);
+    return {
+      phase: host.phase,
+      you: youFrom(player),
+      config: api.getPublicConfig(),
+      publicState: publicView(),
+      legalActions: seated && state ? legalActions(state) : [],
+      effects: [],
+    };
+  }
+
   function canMove(seat: Seat): boolean {
     if (host.phase !== "playing" || !state || isOver(state)) return false;
     return seatToPlayer(seat) === state.turn;
@@ -318,7 +334,12 @@ export function createGomokuAdapter(host: RoomHost): GameRoomAdapter {
     if (!state) return;
     for (const [ws, session] of host.sessions) {
       if (!session.playerId || !canMove(session.seat)) continue;
-      host.send(ws, "your_turn", { publicState: publicView() });
+      const player = host.players.get(session.playerId);
+      if (!player) continue;
+      host.send(ws, "your_turn", {
+        observation: observationFor(player),
+        publicState: publicView(),
+      });
     }
   }
 

@@ -1,4 +1,3 @@
-import { promptInviteAgent } from "../../../shared/explosive-chess/agent-handoff";
 import type { GamePreview } from "../../platform/play";
 import { explosiveEn, explosiveZh } from "./i18n";
 
@@ -26,12 +25,6 @@ export const preview: GamePreview = (ctx) => {
       ],
       canBack: false,
       backLabel: ex.backSetup,
-    },
-    invite: {
-      line: ex.agentInviteLine,
-      copied: ex.agentInviteCopied,
-      failed: ex.agentInviteFailed,
-      text: promptInviteAgent(ctx.origin, ctx.locale),
     },
   };
 };

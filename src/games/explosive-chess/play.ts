@@ -1,4 +1,3 @@
-import { promptInviteAgent } from "../../../shared/explosive-chess/agent-handoff";
 import type {
   GameAction,
   GamePlayModule,
@@ -357,12 +356,6 @@ class ExplosiveSession implements GameSession {
       params: fields.length ? { fields } : undefined,
       actions: this.menuActions(ex),
       room: this.menuStage === "online" ? this.roomPane(ex, true) : undefined,
-      invite: {
-        line: ex.agentInviteLine,
-        copied: ex.agentInviteCopied,
-        failed: ex.agentInviteFailed,
-        text: promptInviteAgent(this.ctx.origin, this.ctx.locale),
-      },
       status: this.menuStage === "online" ? undefined : undefined,
     };
     return snap;
