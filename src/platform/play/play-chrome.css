@@ -1,5 +1,13 @@
 /* Topbar split capsule + play-area glow vars. Not drawn on the board. */
 
+.play-chrome-stack {
+  justify-self: center;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
 .play-capsule {
   --capsule-left: #e53935;
   --capsule-right: #1e88e5;
@@ -17,6 +25,98 @@
   border: 1px solid color-mix(in srgb, var(--md-sys-color-outline-variant) 45%, transparent);
   background: transparent;
   pointer-events: none;
+}
+
+.play-match-strip {
+  position: absolute;
+  top: calc(100% + 0.12rem);
+  left: 0;
+  right: 0;
+  z-index: 22;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 0.25rem;
+  pointer-events: none;
+  line-height: 1.1;
+}
+
+.play-match-strip[data-seats="1"] {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.play-match-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.68rem;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+  color: var(--md-sys-color-on-surface);
+  pointer-events: auto;
+  cursor: default;
+}
+
+.play-match-name.is-right {
+  text-align: right;
+}
+
+.play-match-name.is-vacant {
+  font-weight: 500;
+  color: var(--md-sys-color-on-surface-variant);
+}
+
+.play-match-meta {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.2rem;
+  pointer-events: auto;
+  justify-self: center;
+}
+
+.play-match-chip {
+  margin: 0;
+  padding: 0 0.28rem;
+  border: 0;
+  background: transparent;
+  color: var(--md-sys-color-on-surface-variant);
+  font-size: 0.62rem;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  line-height: 1.2;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.play-match-chip.is-on,
+.play-match-chip:hover {
+  color: var(--md-sys-color-primary);
+}
+
+.play-match-pop {
+  position: absolute;
+  top: calc(100% + 0.35rem);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 24;
+  box-sizing: border-box;
+  min-width: 8rem;
+  max-width: min(72vw, 16rem);
+  padding: 0.42rem 0.72rem;
+  border-radius: 0.7rem;
+  font-size: 0.78rem;
+  font-weight: 550;
+  line-height: 1.4;
+  color: var(--md-sys-color-on-surface);
+  background: var(--glass-bg-strong);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow);
+  backdrop-filter: var(--backdrop);
+  -webkit-backdrop-filter: var(--backdrop);
+  white-space: normal;
+  text-align: left;
 }
 
 .play-capsule-half {

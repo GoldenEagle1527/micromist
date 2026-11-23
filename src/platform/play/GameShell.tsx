@@ -1,6 +1,12 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useLocation, useSearchParams } from "react-router";
 import { useLocale } from "../../i18n";
+import {
+  USER_NAME_MAX,
+  normalizeUserName,
+  userNameLength,
+  writeUserName,
+} from "../../lib/user-name";
 import { copyText } from "./copy-text";
 import { playFrameStyle, useSetPlayChrome } from "./play-chrome";
 import type {
@@ -140,6 +146,8 @@ function RoomView({
   onCopyShare: (url: string) => void;
   onClaim: (id: string) => void;
 }) {
+  const seats = room.seats ?? [];
+  const people = room.spectators?.people ?? [];
   return (
     <section className="game-shell-room" aria-label={room.title}>
       <h3>{room.title}</h3>
@@ -150,24 +158,73 @@ function RoomView({
           {sharePhase === "ok" ? (room.copiedLabel ?? room.shareLabel) : room.shareLabel}
         </button>
       ) : null}
-      {room.seats && room.seats.length > 0 ? (
-        <ul className="game-shell-seats">
-          {room.seats.map((seat) => (
-            <li key={seat.id}>
-              {seat.canClaim ? (
-                <button type="button" className="ghost" onClick={() => onClaim(seat.id)}>
-                  {seat.label}
-                  {seat.detail ? ` · ${seat.detail}` : ""}
-                </button>
-              ) : (
-                <span>
-                  {seat.label}
-                  {seat.detail ? ` · ${seat.detail}` : ""}
-                </span>
-              )}
-            </li>
-          ))}
-        </ul>
+      {room.rules && room.rules.lines.length > 0 ? (
+        <div className="game-shell-room-mod">
+          <p className="game-shell-room-mod-title">
+            {room.rules.title}
+            {room.rules.frozen ? (
+              <span className="hint">{room.rules.frozenLabel ?? ""}</span>
+            ) : null}
+          </p>
+          <dl className="game-shell-rules">
+            {room.rules.lines.map((line) => (
+              <div key={line.label}>
+                <dt>{line.label}</dt>
+                <dd>{line.value}</dd>
+              </div>
+            ))}
+          </dl>
+        </div>
+      ) : null}
+      {seats.length > 0 ? (
+        <div className={`game-shell-vs${seats.length === 1 ? " is-single" : ""}`}>
+          {seats.flatMap((seat, index) => {
+            const card = (
+              <div key={seat.id} className={`game-shell-seat-card${seat.isYou ? " is-you" : ""}`}>
+                <p className="game-shell-seat-label">{seat.label}</p>
+                <p className="game-shell-seat-name">
+                  {seat.occupant || seat.status || seat.detail || ""}
+                </p>
+                {seat.status && seat.occupant ? <p className="hint">{seat.status}</p> : null}
+                {seat.canClaim ? (
+                  <button
+                    type="button"
+                    className="primary game-shell-seat-claim"
+                    onClick={() => onClaim(seat.id)}
+                  >
+                    {seat.claimLabel || seat.detail || seat.label}
+                  </button>
+                ) : null}
+              </div>
+            );
+            if (index === 1) {
+              return [
+                <span key="vs" className="game-shell-vs-mark" aria-hidden="true">
+                  VS
+                </span>,
+                card,
+              ];
+            }
+            return [card];
+          })}
+        </div>
+      ) : null}
+      {room.spectators ? (
+        <div className="game-shell-room-mod">
+          <p className="game-shell-room-mod-title">{room.spectators.title}</p>
+          {room.spectators.watching ? <p className="hint">{room.spectators.watching}</p> : null}
+          {people.length === 0 ? (
+            <p className="hint">{room.spectators.empty}</p>
+          ) : (
+            <ul className="game-shell-spec-list">
+              {people.map((person) => (
+                <li key={person.id} className={person.isYou ? "is-you" : undefined}>
+                  {person.label}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       ) : null}
     </section>
   );
@@ -203,7 +260,7 @@ function RecordsView({ records }: { records: RecordsPane }) {
 
 
 export function GameShell({ load, preview }: GameShellProps) {
-  const { locale } = useLocale();
+  const { locale, t } = useLocale();
   const setPlayChrome = useSetPlayChrome();
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -213,6 +270,8 @@ export function GameShell({ load, preview }: GameShellProps) {
   );
   const [invitePhase, setInvitePhase] = useState<"idle" | "ok" | "fail">("idle");
   const [sharePhase, setSharePhase] = useState<"idle" | "ok">("idle");
+  const [nameDraft, setNameDraft] = useState("");
+  const [nameError, setNameError] = useState(false);
   const inviteTimer = useRef<number | null>(null);
   const shareTimer = useRef<number | null>(null);
 
@@ -477,7 +536,7 @@ export function GameShell({ load, preview }: GameShellProps) {
         </div>
       ) : (
         <div className="game-shell-play">
-          {snapshot.room ? (
+          {snapshot.room?.seats?.some((seat) => seat.canClaim) ? (
             <RoomView
               room={snapshot.room}
               sharePhase={sharePhase}
@@ -490,7 +549,79 @@ export function GameShell({ load, preview }: GameShellProps) {
         </div>
       )}
 
-      {dialog ? (
+      {snapshot.askName ? (
+        <div className="modal-backdrop" role="presentation">
+          <div
+            className="modal-panel"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="game-shell-name-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="modal-header">
+              <h2 id="game-shell-name-title">{t.displayNameTitle}</h2>
+            </div>
+            <p className="lede modal-body">{t.displayNameBody}</p>
+            <label className="game-shell-param">
+              <span className="hint">
+                {userNameLength(nameDraft)} / {USER_NAME_MAX}
+              </span>
+              <input
+                type="text"
+                maxLength={USER_NAME_MAX * 2}
+                value={nameDraft}
+                placeholder={t.displayNamePlaceholder}
+                autoComplete="nickname"
+                autoFocus
+                onChange={(event) => {
+                  setNameDraft(event.target.value);
+                  setNameError(false);
+                }}
+                onKeyDown={(event) => {
+                  if (event.key !== "Enter") return;
+                  event.preventDefault();
+                  const saved = writeUserName(nameDraft);
+                  if (!saved) {
+                    setNameError(true);
+                    return;
+                  }
+                  setNameError(false);
+                  runSession((current) =>
+                    current.dispatch({ type: "ui", id: "display-name-ready", name: saved }),
+                  );
+                }}
+              />
+            </label>
+            {nameError ? <p className="hint">{t.displayNameInvalid}</p> : null}
+            <div className="modal-actions">
+              <button
+                type="button"
+                className="ghost"
+                onClick={() => runSession((current) => current.dispatch({ type: "ui", id: "display-name-cancel" }))}
+              >
+                {t.displayNameCancel}
+              </button>
+              <button
+                type="button"
+                className="primary"
+                onClick={() => {
+                  const saved = writeUserName(nameDraft);
+                  if (!saved || !normalizeUserName(nameDraft)) {
+                    setNameError(true);
+                    return;
+                  }
+                  setNameError(false);
+                  runSession((current) =>
+                    current.dispatch({ type: "ui", id: "display-name-ready", name: saved }),
+                  );
+                }}
+              >
+                {t.displayNameOk}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : dialog ? (
         <div className="modal-backdrop" role="presentation" onClick={dismissDialog}>
           <div
             className="modal-panel"

@@ -68,6 +68,12 @@ export type Dict = {
   storageUnknownGame: string;
   storageRefresh: string;
   storageLegacyNote: string;
+  displayNameTitle: string;
+  displayNameBody: string;
+  displayNamePlaceholder: string;
+  displayNameOk: string;
+  displayNameCancel: string;
+  displayNameInvalid: string;
   explosive: ExplosiveDict;
   chroma: ChromaDict;
   gomoku: GomokuDict;
