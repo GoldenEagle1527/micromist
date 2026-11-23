@@ -273,9 +273,7 @@ export function PlayCapsule({ fallbackTitle }: { fallbackTitle: string }) {
 }
 
 function PlayMatchStrip({ match }: { match: NonNullable<PlayChrome["match"]> }) {
-  const [open, setOpen] = useState<"rules" | "spec" | null>(null);
   const hasRight = Boolean(match.right);
-  const specCount = match.spectators?.length ?? 0;
   return (
     <div
       className="play-match-strip"
@@ -290,48 +288,17 @@ function PlayMatchStrip({ match }: { match: NonNullable<PlayChrome["match"]> }) 
       ) : (
         <span />
       )}
-      <div className="play-match-meta">
-        {match.rulesShort ? (
-          <button
-            type="button"
-            className={`play-match-chip${open === "rules" ? " is-on" : ""}`}
-            aria-expanded={open === "rules"}
-            onClick={() => setOpen((cur) => (cur === "rules" ? null : "rules"))}
-          >
-            {match.rulesShort}
-          </button>
-        ) : null}
-        {match.spectatorsLabel ? (
-          <button
-            type="button"
-            className={`play-match-chip${open === "spec" ? " is-on" : ""}`}
-            aria-expanded={open === "spec"}
-            onClick={() => setOpen((cur) => (cur === "spec" ? null : "spec"))}
-          >
-            {match.spectatorsLabel}
-          </button>
-        ) : null}
-        {open === "rules" && match.rulesDetail ? (
-          <div className="play-match-pop" role="tooltip">
-            {match.rulesDetail}
-          </div>
-        ) : null}
-        {open === "spec" ? (
-          <div className="play-match-pop" role="tooltip">
-            {specCount === 0
-              ? match.spectatorsLabel
-              : (match.spectators ?? []).join(" · ")}
-          </div>
-        ) : null}
-      </div>
+      {hasRight ? (
+        <span className="play-match-vs" aria-hidden="true">
+          VS
+        </span>
+      ) : null}
       {match.right ? (
         <OverflowTitle
           className={`play-match-name is-right${match.right.vacant ? " is-vacant" : ""}`}
           text={match.right.name}
         />
-      ) : (
-        <span />
-      )}
+      ) : null}
     </div>
   );
 }

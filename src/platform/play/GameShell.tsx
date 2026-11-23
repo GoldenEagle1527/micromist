@@ -148,7 +148,6 @@ function RoomView({
   onClaim: (id: string) => void;
 }) {
   const seats = room.seats ?? [];
-  const people = room.spectators?.people ?? [];
   return (
     <section className="game-shell-room" aria-label={room.title}>
       <h3>{room.title}</h3>
@@ -158,24 +157,6 @@ function RoomView({
         <button type="button" className="ghost" onClick={() => onCopyShare(room.shareUrl ?? "")}>
           {sharePhase === "ok" ? (room.copiedLabel ?? room.shareLabel) : room.shareLabel}
         </button>
-      ) : null}
-      {room.rules && room.rules.lines.length > 0 ? (
-        <div className="game-shell-room-mod">
-          <p className="game-shell-room-mod-title">
-            {room.rules.title}
-            {room.rules.frozen ? (
-              <span className="hint">{room.rules.frozenLabel ?? ""}</span>
-            ) : null}
-          </p>
-          <dl className="game-shell-rules">
-            {room.rules.lines.map((line) => (
-              <div key={line.label}>
-                <dt>{line.label}</dt>
-                <dd>{line.value}</dd>
-              </div>
-            ))}
-          </dl>
-        </div>
       ) : null}
       {seats.length > 0 ? (
         <div className={`game-shell-vs${seats.length === 1 ? " is-single" : ""}`}>
@@ -208,23 +189,6 @@ function RoomView({
             }
             return [card];
           })}
-        </div>
-      ) : null}
-      {room.spectators ? (
-        <div className="game-shell-room-mod">
-          <p className="game-shell-room-mod-title">{room.spectators.title}</p>
-          {room.spectators.watching ? <p className="hint">{room.spectators.watching}</p> : null}
-          {people.length === 0 ? (
-            <p className="hint">{room.spectators.empty}</p>
-          ) : (
-            <ul className="game-shell-spec-list">
-              {people.map((person) => (
-                <li key={person.id} className={person.isYou ? "is-you" : undefined}>
-                  {person.label}
-                </li>
-              ))}
-            </ul>
-          )}
         </div>
       ) : null}
     </section>
@@ -537,7 +501,7 @@ export function GameShell({ load, preview }: GameShellProps) {
                 ))}
               </div>
             ) : null}
-            {snapshot.params?.fields && snapshot.params.fields.length > 0 ? (
+            {!room && snapshot.params?.fields && snapshot.params.fields.length > 0 ? (
               <div className="game-shell-params">
                 {snapshot.params.fields.map((field) => (
                   <ParamFieldView key={field.id} field={field} onChange={setParamValue} />
