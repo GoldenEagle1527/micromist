@@ -464,14 +464,14 @@ class GomokuSession implements GameSession {
       });
     }
     actions.push({ id: "leave-room", label: g.leaveRoom, kind: "ghost" });
-    const showBoard = this.state != null;
-    const chrome = showBoard ? gomokuChrome(this.state) : undefined;
+    const live = this.roomPhase === "playing" || this.roomPhase === "over";
+    const chrome = live ? gomokuChrome(this.state) : undefined;
     return {
-      phase: showBoard ? "play" : "menu",
-      title: showBoard ? undefined : g.roomCodeLabel(this.roomCode),
-      hint: showBoard ? undefined : this.roomStatus(g),
+      phase: live ? "play" : "menu",
+      title: live ? undefined : g.roomCodeLabel(this.roomCode),
+      hint: live ? undefined : this.roomStatus(g),
       chrome,
-      status: showBoard ? this.playNotice(g) : this.roomError || this.peerHint || undefined,
+      status: live ? this.playNotice(g) : this.roomError || this.peerHint || undefined,
       actions,
       room: this.roomPane(g),
     };

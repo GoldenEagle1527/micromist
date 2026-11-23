@@ -394,26 +394,22 @@ class ChromaSession implements GameSession {
               : solver
                 ? ch.roomWatching(solver.name)
                 : ch.roomWaiting;
-    const canClaim = this.you?.seat === "spectator" && this.roomPhase === "lobby" && !solver;
+    const live = this.roomPhase === "playing" || this.roomPhase === "over";
     const preset = pub?.config ? presetTitle(ch, pub.config.preset) : presetTitle(ch, this.preset);
-    const chrome = this.puzzle || pub ? chromaChrome(pub?.steps ?? this.puzzle?.steps ?? 0, won) : undefined;
+    const chrome = live ? chromaChrome(pub?.steps ?? this.puzzle?.steps ?? 0, won) : undefined;
     return {
-      phase: this.puzzle || pub ? "play" : "menu",
-      title: ch.roomTitle,
-      hint: this.puzzle || pub ? undefined : status,
+      phase: live ? "play" : "menu",
+      title: live ? undefined : ch.roomTitle,
+      hint: live ? undefined : status,
       chrome,
-      status:
-        this.puzzle || pub
-          ? won
-            ? ch.roomSolved(pub?.steps ?? this.puzzle?.steps ?? 0)
-            : this.you?.seat === "spectator" && this.roomPhase === "playing"
-              ? ch.roomSpectatorHint
-              : undefined
-          : status,
-      actions: [
-        ...(canClaim ? [{ id: "claim-player", label: ch.roomClaim, kind: "primary" as const }] : []),
-        { id: "leave-room", label: ch.roomBack, kind: "ghost" as const },
-      ],
+      status: live
+        ? won
+          ? ch.roomSolved(pub?.steps ?? this.puzzle?.steps ?? 0)
+          : this.you?.seat === "spectator"
+            ? ch.roomSpectatorHint
+            : undefined
+        : status,
+      actions: [{ id: "leave-room", label: ch.roomBack, kind: "ghost" as const }],
       room: {
         title: ch.roomTitle,
         status,
@@ -632,7 +628,7 @@ class ChromaSession implements GameSession {
 
   private enterRoom(code: string): void {
     this.roomCode = code;
-    this.phase = "play";
+    this.phase = "menu";
     const room = new OnlineRoomClient("chroma-slide");
     const playerId = getOrCreatePlayerIdForGame("chroma-slide");
     this.roomClient = room;
