@@ -1,7 +1,12 @@
 /**
  * Explosive Chess online — thin wrapper over shared OnlineRoomClient.
  */
-import { generateRoomCode as sharedGenerateRoomCode } from "../../../shared/multiplayer";
+import {
+  formatRoomId,
+  generateRoomCode as sharedGenerateRoomCode,
+  parseRoomId,
+  playUrl,
+} from "../../../shared/multiplayer";
 import {
   OnlineRoomClient,
   getOrCreatePlayerIdForGame,
@@ -47,14 +52,16 @@ export function getOrCreatePlayerId(): string {
 }
 
 export function generateRoomCode(): string {
-  return sharedGenerateRoomCode(6);
+  return formatRoomId(GAME_SLUG, sharedGenerateRoomCode(6));
 }
 
 export function shareUrl(roomCode: string): string {
+  const parsed = parseRoomId(roomCode) ?? parseRoomId(formatRoomId(GAME_SLUG, roomCode));
+  const href = parsed ? playUrl(window.location.origin, parsed.roomId) : null;
+  if (href) return href;
   const url = new URL(window.location.href);
   url.pathname = "/play/explosive-chess";
-  // Short code in the link; client namespaces when connecting.
-  url.search = `?room=${encodeURIComponent(roomCode.trim().toLowerCase())}`;
+  url.search = "";
   url.hash = "";
   return url.toString();
 }

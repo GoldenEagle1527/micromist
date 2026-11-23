@@ -69,7 +69,7 @@ npm run deploy
 
 即 `vite build` 后 `wrangler deploy`。需 Cloudflare 账号并已 `wrangler login`。构建产物会把 assets 指到客户端输出，并保持 `not_found_handling: "single-page-application"`，刷新子路径可用。
 
-WebSocket：`GET /ws/:roomId`（`Upgrade: websocket`）→ `GameRoom`。
+WebSocket：`GET /ws/<slug>:<code>`（`Upgrade: websocket`）→ `GameRoom`。
 
 爆炸棋 Agent 联机与人类走同一房间 WebSocket。官方 Node 与 Python 客户端（一个进程握着 WebSocket，在 `127.0.0.1` 上提供 HTTP，用 curl 走子）是 `/agent-clients/explosive-chess/` 下的 `server.mjs` 与 `server.py`。协议正文：[`docs/agent-ws-explosive-chess.md`](docs/agent-ws-explosive-chess.md)，由 Worker 公开在 `/agent-guide/explosive-chess`。进入爆炸棋后的设置页（`/play/explosive-chess`）在「对局设置」底部有一行可点文字。点它会把当前 host 的 Agent Guide 和客户端下载地址复制到剪贴板，页面上不展示提示正文。
 

@@ -1,9 +1,7 @@
 /**
  * Room DO names: `gameSlug:code` so games never collide.
- * Bare codes (legacy) default to explosive-chess.
+ * WebSocket path and Durable Object name must include both parts.
  */
-
-export const DEFAULT_GAME_SLUG = "explosive-chess";
 
 export type ParsedRoomId = {
   game: string;
@@ -18,19 +16,46 @@ export function formatRoomId(game: string, code: string): string {
   return `${g}:${c}`;
 }
 
-export function parseRoomId(raw: string): ParsedRoomId {
-  const trimmed = decodeURIComponent(raw).trim().toLowerCase();
-  const idx = trimmed.indexOf(":");
-  if (idx > 0) {
-    const game = trimmed.slice(0, idx);
-    const code = trimmed.slice(idx + 1);
-    return { game, code, roomId: formatRoomId(game, code) };
+/** Human share ids and `?room=` must be `game:code`. Bare codes are invalid. */
+export function parseRoomId(raw: string): ParsedRoomId | null {
+  let trimmed = raw.trim();
+  try {
+    trimmed = decodeURIComponent(trimmed).trim().toLowerCase();
+  } catch {
+    return null;
   }
-  return {
-    game: DEFAULT_GAME_SLUG,
-    code: trimmed,
-    roomId: formatRoomId(DEFAULT_GAME_SLUG, trimmed),
-  };
+  const idx = trimmed.indexOf(":");
+  if (idx <= 0) return null;
+  const game = trimmed.slice(0, idx).trim();
+  const code = trimmed.slice(idx + 1).trim();
+  if (!game || !code) return null;
+  return { game, code, roomId: formatRoomId(game, code) };
+}
+
+export function isShareRoomId(raw: string): boolean {
+  const parsed = parseRoomId(raw);
+  if (!parsed) return false;
+  if (!/^[a-z0-9-]+$/.test(parsed.game)) return false;
+  return parsed.code.length >= 4 && /^[a-z0-9]+$/.test(parsed.code);
+}
+
+/** Full `game:code` when `raw` is that game; otherwise null. */
+export function roomIdForGame(raw: string, slug: string): string | null {
+  const parsed = parseRoomId(raw);
+  if (!parsed || parsed.game !== slug.trim().toLowerCase()) return null;
+  return isShareRoomId(parsed.roomId) ? parsed.roomId : null;
+}
+
+export function playUrl(origin: string, roomId: string): string | null {
+  const parsed = parseRoomId(roomId);
+  if (!parsed) return null;
+  let base = origin.trim();
+  try {
+    base = new URL(origin).origin;
+  } catch {
+    base = origin.replace(/\/$/, "");
+  }
+  return `${base}/play/${parsed.game}?room=${parsed.roomId}`;
 }
 
 export function generateRoomCode(length = 6): string {

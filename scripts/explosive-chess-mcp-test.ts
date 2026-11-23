@@ -128,7 +128,7 @@ c.section("session");
   fake.push(yourTurn());
   const created = await pending;
   c.check(created.ok === true && created.event === "joined" && created.roomCode === "ab12cd", "create_room lowercases the code", JSON.stringify(created));
-  c.check(String(created.playUrl).includes("/play/explosive-chess?room=ab12cd"), "create_room returns the human play url");
+  c.check(String(created.playUrl).includes("/play/explosive-chess?room=explosive-chess:ab12cd"), "create_room returns the human play url");
   c.check(fake.closed === false, "socket stays open after create_room");
 
   const turn = await session.waitForTurn(50);

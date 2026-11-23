@@ -1,10 +1,11 @@
+import { roomIdForGame } from "../../../shared/multiplayer";
 import type { GamePreview } from "../../platform/play";
 import { gomokuEn, gomokuZh } from "./i18n";
 
 export const preview: GamePreview = (ctx) => {
   const g = ctx.locale === "zh" ? gomokuZh : gomokuEn;
-  const room = (ctx.search.get("room") ?? "").trim().toLowerCase();
-  if (/^[a-z0-9]+$/.test(room)) {
+  const room = roomIdForGame(ctx.search.get("room") ?? "", "gomoku");
+  if (room) {
     return {
       phase: "menu",
       title: g.roomCodeLabel(room),

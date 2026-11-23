@@ -3,7 +3,6 @@
  * Games wrap this and add typed helpers (move, setConfig, …).
  */
 import {
-  formatRoomId,
   parseRoomId,
   type Phase,
   type PlayerKind,
@@ -41,7 +40,10 @@ export type CommonHandlers = {
 
 export function roomSocketUrl(roomId: string): string {
   const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-  const canonical = parseRoomId(roomId).roomId;
+  const canonical = parseRoomId(roomId)?.roomId;
+  if (!canonical) {
+    throw new Error("Room id must be game:code");
+  }
   return `${protocol}//${window.location.host}/ws/${encodeURIComponent(canonical)}`;
 }
 
@@ -94,12 +96,11 @@ export class OnlineRoomClient {
     return this.ws?.readyState === WebSocket.OPEN;
   }
 
-  /** `code` may be bare or already `game:code`. */
+  /** Socket id must already be `game:code` for this client's game. */
   connect(codeOrRoomId: string, handlers: CommonHandlers): void {
     this.close();
-    const parsed = parseRoomId(
-      codeOrRoomId.includes(":") ? codeOrRoomId : formatRoomId(this.gameSlug, codeOrRoomId),
-    );
+    const parsed = parseRoomId(codeOrRoomId);
+    if (!parsed || parsed.game !== this.gameSlug) return;
     this.roomId = parsed.roomId;
     this.handlers = handlers;
     this.openSocket();

@@ -4,6 +4,7 @@
  * existing Durable Object migration still has its binding. Game state stays in GameRoom.
  */
 import { DurableObject } from "cloudflare:workers";
+import { parseRoomId } from "../shared/multiplayer";
 import {
   explosiveChessMcpHttp,
   legacySseResponse,
@@ -37,8 +38,7 @@ async function socketFromResponse(response: Response): Promise<RoomSocket> {
 function roomCodeFromWsUrl(wsUrl: string): string {
   const httpUrl = wsUrl.replace(/^ws:/i, "http:").replace(/^wss:/i, "https:");
   const segment = decodeURIComponent(new URL(httpUrl).pathname.replace(/^\/ws\//, ""));
-  const idx = segment.indexOf(":");
-  return (idx >= 0 ? segment.slice(idx + 1) : segment).trim().toLowerCase();
+  return parseRoomId(segment)?.code ?? "";
 }
 
 /**

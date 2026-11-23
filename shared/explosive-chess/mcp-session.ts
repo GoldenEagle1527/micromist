@@ -5,7 +5,7 @@
  * row,col is accepted only when it is already in the server's legalActions.
  * This module does not search the board or choose a move.
  */
-import { generateRoomCode } from "../multiplayer";
+import { formatRoomId, generateRoomCode, playUrl } from "../multiplayer";
 import { explosiveChessWsUrl } from "./agent-guide";
 import {
   boardSizeFromCounts,
@@ -15,8 +15,8 @@ import {
 } from "./observe";
 
 function explosiveChessPlayUrl(origin: string, roomCode: string): string {
-  const code = roomCode.trim().toLowerCase();
-  return `${new URL(origin).origin}/play/explosive-chess?room=${code}`;
+  const id = roomCode.includes(":") ? roomCode : formatRoomId("explosive-chess", roomCode);
+  return playUrl(origin, id) ?? `${new URL(origin).origin}/play/explosive-chess?room=${id}`;
 }
 
 export const JOIN_TIMEOUT_MS = 10_000;

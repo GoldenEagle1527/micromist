@@ -34,6 +34,7 @@ import {
   type Player,
   type Rules,
 } from "./engine";
+import { isShareRoomId, parseRoomId, roomIdForGame } from "../../../shared/multiplayer";
 import { gomokuEn, gomokuZh, type GomokuDict } from "./i18n";
 import {
   GomokuOnlineClient,
@@ -116,12 +117,12 @@ function asOpponent(value: string): Opponent {
 }
 
 function normalizeRoomCode(value: string): string {
-  return value.trim().toLowerCase();
+  const raw = value.trim().toLowerCase();
+  return parseRoomId(raw)?.roomId ?? raw;
 }
 
 function isRoomCode(value: string): boolean {
-  const code = normalizeRoomCode(value);
-  return code.length >= 4 && /^[a-z0-9]+$/.test(code);
+  return isShareRoomId(value);
 }
 
 function seatToPlayer(seat: Seat): Player | null {
@@ -168,8 +169,8 @@ class GomokuSession implements GameSession {
 
   constructor(ctx: SessionContext) {
     this.ctx = ctx;
-    const room = (ctx.search.get("room") ?? "").trim().toLowerCase();
-    if (/^[a-z0-9]+$/.test(room)) {
+    const room = roomIdForGame(ctx.search.get("room") ?? "", SLUG);
+    if (room) {
       this.enterRoom(room);
       return;
     }
@@ -184,14 +185,13 @@ class GomokuSession implements GameSession {
   }
 
   syncContext(): void {
-    const room = (this.ctx.search.get("room") ?? "").trim().toLowerCase();
-    const valid = /^[a-z0-9]+$/.test(room);
-    if (valid && room !== this.roomCode) {
+    const room = roomIdForGame(this.ctx.search.get("room") ?? "", SLUG);
+    if (room && room !== this.roomCode) {
       this.leaveRoom(false);
       this.enterRoom(room);
       return;
     }
-    if (!valid && this.roomCode) {
+    if (!room && this.roomCode) {
       this.leaveRoom(false);
     }
     this.emit();

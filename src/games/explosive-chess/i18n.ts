@@ -2,7 +2,7 @@ export type ExplosiveDict = Record<string, string>;
 
 export const explosiveEn: ExplosiveDict = {
     setupTitle: "Match setup",
-    setupHint: "Pick mode and rules, then enter the board. Online: create a room or type a code to join. You enter as a spectator and sit to play.",
+    setupHint: "Pick mode and rules, then enter the board. Online: create a room or type a room id like explosive-chess:ab12cd. You enter as a spectator and sit to play.",
     mode: "Mode",
     solo: "Solo",
     online: "Online",
@@ -31,7 +31,7 @@ export const explosiveEn: ExplosiveDict = {
     onlineLobby: "Online room",
     onlineConfigLocked: "Set board, rules, and your color below, then create the room. Config is read-only afterward — make a new room to change it.",
     onlineHint:
-      "Create a room and share the link, or type a room code and join. Everyone enters as a spectator. Sit as Red or Blue to play. The match starts when both seats are filled.",
+      "Create a room and share the link, or type a room id like explosive-chess:ab12cd. Everyone enters as a spectator. Sit as Red or Blue to play. The match starts when both seats are filled.",
     youAreRed: "You are Red.",
     youAreBlue: "You are Blue.",
     youAreSpectator: "You are spectating.",
@@ -88,8 +88,8 @@ export const explosiveEn: ExplosiveDict = {
     moveTimeoutTip: "Slow or broken link; tap again",
     notConnected: "Not connected — reconnecting…",
     sendFail: "Send failed — retry or wait for reconnect",
-    missingCode: "Missing room code — use a share link",
-    needShareLink: "Join via the host's share link",
+    missingCode: "Missing room id — use a share link",
+    needShareLink: "Enter a room id such as explosive-chess:ab12cd, or open the host's share link",
     openShare: "Share link opened — tap Join this room",
     reconnectFail: "Reconnect failed — tap Reconnect or refresh",
     disconnected: "Disconnected",
@@ -116,7 +116,7 @@ export const explosiveEn: ExplosiveDict = {
 
 export const explosiveZh: ExplosiveDict = {
     setupTitle: "对局设置",
-    setupHint: "先选好模式与规则，再进入棋盘。联机可创建房间，或输入房间码加入。先进房旁观，入座后才下棋。",
+    setupHint: "先选好模式与规则，再进入棋盘。联机可创建房间，或输入房间码（形如 explosive-chess:ab12cd）加入。先进房旁观，入座后才下棋。",
     mode: "模式",
     solo: "单人",
     online: "联机",
@@ -145,7 +145,7 @@ export const explosiveZh: ExplosiveDict = {
     onlineLobby: "联机房间",
     onlineConfigLocked: "先在下方选好棋盘、规则和你的颜色，再创建房间；建房后配置只读，改规则请新建房间。",
     onlineHint:
-      "创建房间后分享链接，或输入房间码加入。所有人都先以旁观进房。点「坐红方」或「坐蓝方」才下棋。红蓝都有人后才开局。",
+      "创建房间后分享链接，或输入房间码（形如 explosive-chess:ab12cd）加入。所有人都先以旁观进房。点「坐红方」或「坐蓝方」才下棋。红蓝都有人后才开局。",
     youAreRed: "你是红方。",
     youAreBlue: "你是蓝方。",
     youAreSpectator: "你是旁观。",
@@ -203,7 +203,7 @@ export const explosiveZh: ExplosiveDict = {
     notConnected: "未连接，正在尝试重连…",
     sendFail: "发送失败，请重试或等待重连",
     missingCode: "缺少房间码，请通过分享链接加入",
-    needShareLink: "请通过房主分享的链接加入房间",
+    needShareLink: "请输入房间码（形如 explosive-chess:ab12cd），或打开房主分享的链接",
     openShare: "已打开分享链接，点「加入此房间」即可进入",
     reconnectFail: "重连失败，请点「重新连接」或刷新页面",
     disconnected: "连接已断开",

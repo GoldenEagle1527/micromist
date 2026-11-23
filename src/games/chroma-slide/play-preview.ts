@@ -1,3 +1,4 @@
+import { roomIdForGame } from "../../../shared/multiplayer";
 import type { GamePreview } from "../../platform/play";
 import { chromaEn, chromaZh } from "./i18n";
 
@@ -20,8 +21,8 @@ function presetTitle(locale: "zh" | "en", id: PresetId): string {
 /** Sync first-paint snapshot for the generic shell. Keep this file free of the session runtime. */
 export const preview: GamePreview = (ctx) => {
   const ch = ctx.locale === "zh" ? chromaZh : chromaEn;
-  const room = (ctx.search.get("room") ?? "").trim().toLowerCase();
-  if (/^[a-z0-9]+$/.test(room)) {
+  const room = roomIdForGame(ctx.search.get("room") ?? "", "chroma-slide");
+  if (room) {
     return {
       phase: "menu",
       title: ch.roomTitle,
