@@ -3,12 +3,15 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
   type CSSProperties,
+  type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from "react";
+import { createPortal } from "react-dom";
 import type { PlayChrome } from "./types";
 import "./play-chrome.css";
 
@@ -89,6 +92,118 @@ export function playFrameStyle(chrome: PlayChrome | null | undefined): CSSProper
 
 const INTRO_MS = 780;
 
+function OverflowTitle({
+  className,
+  text,
+  current,
+}: {
+  className: string;
+  text: string;
+  current?: boolean;
+}) {
+  const ref = useRef<HTMLSpanElement>(null);
+  const tipRef = useRef<HTMLDivElement>(null);
+  const [open, setOpen] = useState(false);
+
+  const overflowing = useCallback(() => {
+    const el = ref.current;
+    return !!el && el.scrollWidth > el.clientWidth + 1;
+  }, []);
+
+  const show = useCallback(() => {
+    if (overflowing()) setOpen(true);
+  }, [overflowing]);
+
+  const hide = useCallback(() => setOpen(false), []);
+
+  useEffect(() => {
+    setOpen(false);
+  }, [text]);
+
+  useLayoutEffect(() => {
+    if (!open) return;
+    const el = ref.current;
+    const tip = tipRef.current;
+    if (!el || !tip) return;
+    const place = () => {
+      if (!overflowing()) {
+        setOpen(false);
+        return;
+      }
+      const r = el.getBoundingClientRect();
+      const pad = 8;
+      const maxW = Math.min(window.innerWidth - pad * 2, 288);
+      tip.style.maxWidth = `${maxW}px`;
+      const tw = tip.offsetWidth;
+      const th = tip.offsetHeight;
+      let left = r.left + r.width / 2 - tw / 2;
+      left = Math.min(Math.max(pad, left), window.innerWidth - tw - pad);
+      let top = r.bottom + 6;
+      if (top + th > window.innerHeight - pad) {
+        top = Math.max(pad, r.top - th - 6);
+      }
+      tip.style.left = `${left}px`;
+      tip.style.top = `${top}px`;
+    };
+    place();
+    window.addEventListener("resize", place);
+    window.addEventListener("scroll", place, true);
+    return () => {
+      window.removeEventListener("resize", place);
+      window.removeEventListener("scroll", place, true);
+    };
+  }, [open, overflowing, text]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: PointerEvent) => {
+      if (ref.current?.contains(e.target as Node)) return;
+      setOpen(false);
+    };
+    document.addEventListener("pointerdown", onDown);
+    return () => document.removeEventListener("pointerdown", onDown);
+  }, [open]);
+
+  const onPointerEnter = (e: ReactPointerEvent<HTMLSpanElement>) => {
+    if (e.pointerType === "mouse") show();
+  };
+  const onPointerLeave = (e: ReactPointerEvent<HTMLSpanElement>) => {
+    if (e.pointerType === "mouse") hide();
+  };
+  const onPointerDown = (e: ReactPointerEvent<HTMLSpanElement>) => {
+    if (e.pointerType === "mouse") return;
+    show();
+  };
+
+  return (
+    <>
+      <span
+        ref={ref}
+        className={className}
+        aria-current={current ? "page" : undefined}
+        onPointerEnter={onPointerEnter}
+        onPointerLeave={onPointerLeave}
+        onPointerDown={onPointerDown}
+      >
+        {text}
+      </span>
+      {open
+        ? createPortal(
+            <div
+              ref={tipRef}
+              className="play-overflow-tip"
+              role="tooltip"
+              style={{ position: "fixed", left: 0, top: 0, zIndex: 80 }}
+            >
+              {text}
+            </div>,
+            document.body,
+          )
+        : null}
+    </>
+  );
+}
+
 export function PlayCapsule({ fallbackTitle }: { fallbackTitle: string }) {
   const chrome = usePlayChrome();
   const [intro, setIntro] = useState(false);
@@ -112,11 +227,7 @@ export function PlayCapsule({ fallbackTitle }: { fallbackTitle: string }) {
   }, [chrome]);
 
   if (!chrome) {
-    return (
-      <div className="topbar-game" aria-current="page">
-        {fallbackTitle}
-      </div>
-    );
+    return <OverflowTitle className="topbar-game" text={fallbackTitle} current />;
   }
 
   const title = chrome.title?.trim() || fallbackTitle;
@@ -145,7 +256,10 @@ export function PlayCapsule({ fallbackTitle }: { fallbackTitle: string }) {
       <span className={`play-capsule-half is-left${leftOn ? " is-on" : ""}`}>
         {chrome.left.value ? <span className="play-capsule-value">{chrome.left.value}</span> : null}
       </span>
-      <span className={`play-capsule-title${notice ? " is-notice" : ""}`}>{center}</span>
+      <OverflowTitle
+        className={`play-capsule-title${notice ? " is-notice" : ""}`}
+        text={center}
+      />
       <span className={`play-capsule-half is-right${rightOn ? " is-on" : ""}`}>
         {chrome.right.value ? (
           <span className="play-capsule-value">{chrome.right.value}</span>

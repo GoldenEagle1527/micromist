@@ -42,7 +42,8 @@
   letter-spacing: 0.08em;
   color: var(--md-sys-color-on-surface);
   text-align: center;
-  pointer-events: none;
+  pointer-events: auto;
+  cursor: default;
 }
 
 .play-capsule {
