@@ -383,6 +383,7 @@ export function createGridBoard(
     viewTy = py - localY * viewScale;
     clampView();
     applyView();
+    render();
   }
 
   function resize(): void {
@@ -475,9 +476,10 @@ export function createGridBoard(
       lastMoveCell && lastMoveCell.row === row && lastMoveCell.col === col && !paint.path;
     if (paint.path || isLast) {
       ctx.strokeStyle = paint.path ? colors.path : colors.lastMove;
-      ctx.lineWidth = 2.5;
-      const inset = 2;
-      roundRect(ctx, x + inset, y + inset, cellSize - inset * 2, cellSize - inset * 2, 3);
+      const zoom = Math.max(viewScale, 1);
+      ctx.lineWidth = 2.5 / zoom;
+      const inset = 2 / zoom;
+      roundRect(ctx, x + inset, y + inset, cellSize - inset * 2, cellSize - inset * 2, 3 / zoom);
       ctx.stroke();
     }
 
