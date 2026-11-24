@@ -239,6 +239,7 @@ export function createGridBoard(
   const TAP_SLOP = 12;
   let lastFitKey = "";
   let panAnimId = 0;
+  let rasterScale = 1;
 
   function boardSize(): number {
     return Math.max(1, source.size);
@@ -301,8 +302,34 @@ export function createGridBoard(
       canvas.style.transform = "";
       return;
     }
+    const bake = Math.max(rasterScale, 1);
     canvas.style.transformOrigin = "0 0";
-    canvas.style.transform = `translate(${viewTx}px, ${viewTy}px) scale(${viewScale})`;
+    canvas.style.transform = `translate(${viewTx}px, ${viewTy}px) scale(${viewScale / bake})`;
+  }
+
+  /** Draw at the current zoom so CSS does not upscale a small bitmap. Returns true if the buffer was reallocated. */
+  function layoutCanvas(): boolean {
+    if (canvasSize < 1) return false;
+    const dpr = window.devicePixelRatio || 1;
+    const wanted = panEnabled ? viewScale : 1;
+    const maxDim = 8192;
+    const bake = Math.min(wanted, Math.max(1, maxDim / Math.max(canvasSize * dpr, 1)));
+    const pixel = Math.max(1, Math.round(canvasSize * bake * dpr));
+    const same =
+      canvas.width === pixel &&
+      canvas.height === pixel &&
+      Math.abs(rasterScale - bake) < 0.0005;
+    rasterScale = bake;
+    canvas.style.width = `${canvasSize * bake}px`;
+    canvas.style.height = `${canvasSize * bake}px`;
+    if (same) {
+      ctx.setTransform(dpr * bake, 0, 0, dpr * bake, 0, 0);
+      return false;
+    }
+    canvas.width = pixel;
+    canvas.height = pixel;
+    ctx.setTransform(dpr * bake, 0, 0, dpr * bake, 0, 0);
+    return true;
   }
 
   function cancelPanAnim(): void {
@@ -411,17 +438,12 @@ export function createGridBoard(
     cellSize = Math.max(Math.floor(available / n), 1);
     canvasSize = cellSize * n;
 
-    const dpr = window.devicePixelRatio || 1;
-    canvas.width = canvasSize * dpr;
-    canvas.height = canvasSize * dpr;
-    canvas.style.width = `${canvasSize}px`;
-    canvas.style.height = `${canvasSize}px`;
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     if (panEnabled && (firstFit || nChanged)) {
       cancelPanAnim();
       viewScale = defaultViewScale();
       centerView();
     }
+    layoutCanvas();
     clampView();
     applyView();
     render();
@@ -710,6 +732,8 @@ export function createGridBoard(
     }
     dragging = false;
     pinchStartDist = 0;
+    if (layoutCanvas()) render();
+    applyView();
   }
 
   function onClickCapture(event: Event): void {
