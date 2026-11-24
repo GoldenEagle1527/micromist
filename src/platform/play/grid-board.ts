@@ -270,6 +270,12 @@ export function createGridBoard(
     return Math.min(maxViewScale(), Math.max(1, scaleForCell(MIN_CELL_PX)));
   }
 
+  /** Last-move stroke matches desktop at the default phone zoom, then scales with the cells. */
+  function markStrokeScale(): number {
+    if (!panEnabled) return 1;
+    return Math.max(cellSize, 1) / MIN_CELL_PX;
+  }
+
   function centerView(): void {
     const rect = viewport.getBoundingClientRect();
     const scaled = canvasSize * viewScale;
@@ -383,7 +389,6 @@ export function createGridBoard(
     viewTy = py - localY * viewScale;
     clampView();
     applyView();
-    render();
   }
 
   function resize(): void {
@@ -476,10 +481,10 @@ export function createGridBoard(
       lastMoveCell && lastMoveCell.row === row && lastMoveCell.col === col && !paint.path;
     if (paint.path || isLast) {
       ctx.strokeStyle = paint.path ? colors.path : colors.lastMove;
-      const zoom = Math.max(viewScale, 1);
-      ctx.lineWidth = 2.5 / zoom;
-      const inset = 2 / zoom;
-      roundRect(ctx, x + inset, y + inset, cellSize - inset * 2, cellSize - inset * 2, 3 / zoom);
+      const mark = markStrokeScale();
+      ctx.lineWidth = 2.5 * mark;
+      const inset = 2 * mark;
+      roundRect(ctx, x + inset, y + inset, cellSize - inset * 2, cellSize - inset * 2, 3 * mark);
       ctx.stroke();
     }
 
