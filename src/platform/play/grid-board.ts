@@ -33,7 +33,7 @@ export type GridBoard = {
   destroy: () => void;
   readonly cellSize: number;
   readonly hover: { row: number; col: number } | null;
-  /** Mobile UA: board fills the host, but can be pinched and panned. */
+  /** Mobile UA: starts zoomed to a usable cell size; pinch and pan to see the rest. */
   readonly panEnabled: boolean;
 };
 
@@ -228,6 +228,7 @@ export function createGridBoard(
   let viewScale = 1;
   let viewTx = 0;
   let viewTy = 0;
+  const MIN_CELL_PX = 48;
   let ignoreClickUntil = 0;
   let dragging = false;
   let pinchStartDist = 0;
@@ -253,11 +254,26 @@ export function createGridBoard(
     return isDark() ? DARK_COLORS : LIGHT_COLORS;
   }
 
+  function scaleForCell(px: number): number {
+    if (canvasSize <= 0) return 1;
+    return (px * boardSize()) / canvasSize;
+  }
+
   function maxViewScale(): number {
-    const n = boardSize();
-    const minCell = 48;
-    const needed = canvasSize > 0 ? (minCell * n) / canvasSize : 3;
-    return Math.min(8, Math.max(3, needed));
+    return Math.min(8, Math.max(3, scaleForCell(MIN_CELL_PX)));
+  }
+
+  /** On phone, show a slice of the board at a tappable cell size instead of fitting n×n. */
+  function defaultViewScale(): number {
+    if (!panEnabled) return 1;
+    return Math.min(maxViewScale(), Math.max(1, scaleForCell(MIN_CELL_PX)));
+  }
+
+  function centerView(): void {
+    const rect = viewport.getBoundingClientRect();
+    const scaled = canvasSize * viewScale;
+    viewTx = (rect.width - scaled) / 2;
+    viewTy = (rect.height - scaled) / 2;
   }
 
   function clampAxis(offset: number, scaled: number, span: number): number {
@@ -310,6 +326,7 @@ export function createGridBoard(
       render();
       return;
     }
+    const firstFit = lastFitKey === "";
     const nChanged = lastFitKey !== "" && !lastFitKey.startsWith(`${n}:`);
     lastFitKey = fitKey;
     cellSize = Math.max(Math.floor(available / n), 1);
@@ -321,7 +338,10 @@ export function createGridBoard(
     canvas.style.width = `${canvasSize}px`;
     canvas.style.height = `${canvasSize}px`;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    if (nChanged) viewScale = 1;
+    if (panEnabled && (firstFit || nChanged)) {
+      viewScale = defaultViewScale();
+      centerView();
+    }
     clampView();
     applyView();
     render();
