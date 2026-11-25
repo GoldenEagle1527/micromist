@@ -45,8 +45,9 @@ const SLUG = "chroma-slide";
 const CHROME_PLAY = TILE_COLORS[0] ?? "#e53935";
 const CHROME_REST = TILE_COLORS[1] ?? "#1e88e5";
 
-function chromaChrome(steps: number, won: boolean): PlayChrome {
+function chromaChrome(steps: number, won: boolean, resetKey: number): PlayChrome {
   return {
+    resetKey,
     left: { color: CHROME_PLAY, value: String(steps) },
     right: { color: CHROME_REST },
     active: won ? "both" : "left",
@@ -142,6 +143,7 @@ class ChromaSession implements GameSession {
   private grid: GridBoard | null = null;
   private recordedWin = false;
   private startedAt: number | null = null;
+  private matchEpoch = 0;
 
   private roomCode = "";
   private roomClient: OnlineRoomClient | null = null;
@@ -228,6 +230,7 @@ class ChromaSession implements GameSession {
       this.dialog = undefined;
       this.startedAt = Date.now();
       this.recordedWin = false;
+      this.matchEpoch += 1;
       this.persist();
       this.emit();
       return;
@@ -315,7 +318,7 @@ class ChromaSession implements GameSession {
     const won = puzzle ? isWon(puzzle) : false;
     return {
       phase: "play",
-      chrome: chromaChrome(puzzle?.steps ?? 0, won),
+      chrome: chromaChrome(puzzle?.steps ?? 0, won, this.matchEpoch),
       status: won && puzzle ? ch.winMessage(puzzle.steps) : undefined,
       actions: [
         {
@@ -396,7 +399,7 @@ class ChromaSession implements GameSession {
                 : ch.roomWaiting;
     const live = this.roomPhase === "playing" || this.roomPhase === "over";
     const preset = pub?.config ? presetTitle(ch, pub.config.preset) : presetTitle(ch, this.preset);
-    const chrome = live ? chromaChrome(pub?.steps ?? this.puzzle?.steps ?? 0, won) : undefined;
+    const chrome = live ? chromaChrome(pub?.steps ?? this.puzzle?.steps ?? 0, won, this.matchEpoch) : undefined;
     return {
       phase: live ? "play" : "menu",
       title: live ? undefined : ch.roomTitle,
@@ -570,6 +573,7 @@ class ChromaSession implements GameSession {
     this.dialog = undefined;
     this.startedAt = Date.now();
     this.recordedWin = false;
+    this.matchEpoch += 1;
     this.phase = "play";
     this.persist();
     this.emit();
@@ -642,8 +646,15 @@ class ChromaSession implements GameSession {
         this.emit();
       },
       onRoom: (payload) => {
+        const leavingMatch =
+          payload.phase === "lobby" &&
+          (this.roomPhase === "playing" || this.roomPhase === "over");
         this.roomPhase = payload.phase;
         this.roomPlayers = payload.players;
+        if (leavingMatch) {
+          this.pub = null;
+          this.puzzle = null;
+        }
         this.emit();
       },
       onError: (payload) => {
@@ -664,6 +675,7 @@ class ChromaSession implements GameSession {
             }
           }
         }
+        if (type === "start") this.matchEpoch += 1;
         const next = readPublic(payload);
         if (next && (type === "state" || type === "move_applied" || type === "your_turn" || type === "observation")) {
           this.pub = next;

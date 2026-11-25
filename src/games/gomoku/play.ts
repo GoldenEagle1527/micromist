@@ -72,7 +72,7 @@ const SERIES_BEAT_MS = 500;
 const CHROME_BLACK = "#2b2b30";
 const CHROME_WHITE = "#f3ead8";
 
-function gomokuChrome(state: GameState | null): PlayChrome {
+function gomokuChrome(state: GameState | null, resetKey: number): PlayChrome {
   const series = state?.rules === "series";
   let active: PlayChrome["active"] = "none";
   if (state) {
@@ -82,6 +82,7 @@ function gomokuChrome(state: GameState | null): PlayChrome {
     else active = state.turn === 1 ? "left" : "right";
   }
   return {
+    resetKey,
     left: {
       color: CHROME_BLACK,
       value: series && state ? String(state.captures[0]) : undefined,
@@ -147,6 +148,7 @@ class GomokuSession implements GameSession {
   private history: GameState[] = [];
   private roomRules: Rules = "classic";
   private roomCapturesToWin = DEFAULT_CAPTURES_TO_WIN;
+  private matchEpoch = 0;
   private configSentForRoom = "";
   private pendingConfig: string | null = null;
   private joinCode = "";
@@ -438,7 +440,7 @@ class GomokuSession implements GameSession {
     ];
     return {
       phase: "play",
-      chrome: gomokuChrome(this.state),
+      chrome: gomokuChrome(this.state, this.matchEpoch),
       status: this.localStatus(g),
       actions,
     };
@@ -465,7 +467,7 @@ class GomokuSession implements GameSession {
     }
     actions.push({ id: "leave-room", label: g.leaveRoom, kind: "ghost" });
     const live = this.roomPhase === "playing" || this.roomPhase === "over";
-    const chrome = live ? gomokuChrome(this.state) : undefined;
+    const chrome = live ? gomokuChrome(this.state, this.matchEpoch) : undefined;
     return {
       phase: live ? "play" : "menu",
       title: live ? undefined : g.roomCodeLabel(this.roomCode),
@@ -720,10 +722,15 @@ class GomokuSession implements GameSession {
     });
   }
 
+  private beginBoard(state: GameState): void {
+    this.matchEpoch += 1;
+    this.state = state;
+  }
+
   private startLocal(): void {
     this.clearAi();
     this.history = [];
-    this.state = this.freshState();
+    this.beginBoard(this.freshState());
     this.phase = "play";
     this.emit();
   }
@@ -732,7 +739,7 @@ class GomokuSession implements GameSession {
     if (this.roomCode) return;
     this.clearAi();
     this.history = [];
-    this.state = this.freshState();
+    this.beginBoard(this.freshState());
     this.emit();
   }
 
@@ -1022,6 +1029,9 @@ class GomokuSession implements GameSession {
         this.emit();
       },
       onRoom: (payload) => {
+        const leavingMatch =
+          payload.phase === "lobby" &&
+          (this.roomPhase === "playing" || this.roomPhase === "over");
         this.roomPhase = payload.phase;
         this.players = payload.players;
         const self = payload.players.find((p) => p.playerId === playerId);
@@ -1031,12 +1041,27 @@ class GomokuSession implements GameSession {
           this.roomRules = asRules(cfg.rules);
           this.roomCapturesToWin = clampCapturesToWin(cfg.capturesToWin);
         }
+        if (leavingMatch) {
+          this.state = emptyState({
+            rules: this.roomRules,
+            capturesToWin: this.roomCapturesToWin,
+          });
+        }
         this.emit();
       },
       onStart: () => {
+        const fresh = !this.state || isOver(this.state) || this.state.moves.length === 0;
         this.roomPhase = "playing";
         this.roomError = "";
         this.peerHint = "";
+        if (fresh) {
+          this.beginBoard(
+            emptyState({
+              rules: this.roomRules,
+              capturesToWin: this.roomCapturesToWin,
+            }),
+          );
+        }
         this.emit();
       },
       onState: (payload) => {
