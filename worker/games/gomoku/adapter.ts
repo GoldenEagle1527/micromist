@@ -1,6 +1,7 @@
 import {
   asRules,
   clampCapturesToWin,
+  cloneState,
   DEFAULT_CAPTURES_TO_WIN,
   emptyState,
   idx,
@@ -27,6 +28,8 @@ type Serialized = {
   state: GameState | null;
   config: RoomConfig;
   configFrozen: boolean;
+  history: GameState[];
+  undoFrom: string | null;
 };
 
 function seatToPlayer(seat: Seat): Player | null {
@@ -43,6 +46,8 @@ export function createGomokuAdapter(host: RoomHost): GameRoomAdapter {
   let state: GameState | null = null;
   let config: RoomConfig = defaultConfig();
   let configFrozen = false;
+  let history: GameState[] = [];
+  let undoFrom: string | null = null;
 
   const api: GameRoomAdapter = {
     slug: "gomoku",
@@ -52,12 +57,13 @@ export function createGomokuAdapter(host: RoomHost): GameRoomAdapter {
       size: state?.size ?? 15,
       rules: config.rules,
       capturesToWin: config.capturesToWin,
+      undoRequest: undoFrom,
     }),
 
     hostSeat: () => "red",
 
     onRecycle: () => {
-      state = null;
+      resetMatch();
       config = defaultConfig();
       configFrozen = false;
     },
@@ -91,6 +97,9 @@ export function createGomokuAdapter(host: RoomHost): GameRoomAdapter {
       if (host.phase === "over" || isOver(state)) {
         host.send(ws, "game_over", gameOverBody());
         return;
+      }
+      if (undoFrom) {
+        host.send(ws, "undo_requested", undoEventBody());
       }
       if (canMove(player.seat)) {
         host.send(ws, "your_turn", {
@@ -127,6 +136,7 @@ export function createGomokuAdapter(host: RoomHost): GameRoomAdapter {
       if (!black || !white) return;
 
       configFrozen = true;
+      resetMatch();
       state = emptyState(config);
       host.setPhase("playing");
       for (const p of seated) {
@@ -154,15 +164,21 @@ export function createGomokuAdapter(host: RoomHost): GameRoomAdapter {
         case "rematch":
           handleRematch(ws);
           return true;
+        case "undo_request":
+          handleUndoRequest(ws);
+          return true;
+        case "undo_respond":
+          handleUndoRespond(ws, payload);
+          return true;
         default:
           return false;
       }
     },
 
-    serialize: (): Serialized => ({ state, config, configFrozen }),
+    serialize: (): Serialized => ({ state, config, configFrozen, history, undoFrom }),
 
     hydrate: (blob: unknown) => {
-      state = null;
+      resetMatch();
       config = defaultConfig();
       configFrozen = false;
       if (!blob || typeof blob !== "object") return;
@@ -176,6 +192,14 @@ export function createGomokuAdapter(host: RoomHost): GameRoomAdapter {
       if (data.configFrozen === true) configFrozen = true;
       const parsed = parseState(data.state);
       if (parsed) state = parsed;
+      if (Array.isArray(data.history)) {
+        history = data.history
+          .map((entry) => parseState(entry))
+          .filter((entry): entry is GameState => entry != null);
+      }
+      if (typeof data.undoFrom === "string" && data.undoFrom.length > 0) {
+        undoFrom = data.undoFrom;
+      }
     },
   };
 
@@ -221,6 +245,8 @@ export function createGomokuAdapter(host: RoomHost): GameRoomAdapter {
       host.send(ws, "error", { message: "Invalid move" });
       return;
     }
+    clearUndoRequest("move");
+    history.push(cloneState(state));
     state = next;
     if (isOver(state)) host.setPhase("over");
     const view = publicView();
@@ -257,6 +283,7 @@ export function createGomokuAdapter(host: RoomHost): GameRoomAdapter {
       host.send(ws, "error", { message: "Spectators cannot resign" });
       return;
     }
+    clearUndoRequest("cancelled");
     state = resign(state, color);
     host.setPhase("over");
     const view = publicView();
@@ -287,7 +314,7 @@ export function createGomokuAdapter(host: RoomHost): GameRoomAdapter {
         p.rematch = false;
         p.ready = false;
       }
-      state = null;
+      resetMatch();
       host.setPhase("lobby");
       host.broadcastRoom();
       api.tryStartGame();
@@ -295,6 +322,130 @@ export function createGomokuAdapter(host: RoomHost): GameRoomAdapter {
     }
     host.broadcastRoom();
     void host.persist();
+  }
+
+  function handleUndoRequest(ws: WebSocket) {
+    const session = host.requireJoined(ws);
+    if (!session) return;
+    const player = host.players.get(session.playerId);
+    if (!player) {
+      host.send(ws, "error", { message: "Join first" });
+      return;
+    }
+    if (host.phase !== "playing" || !state || isOver(state)) {
+      host.send(ws, "error", { message: "Game not in progress" });
+      return;
+    }
+    if (seatToPlayer(session.seat) === null) {
+      host.send(ws, "error", { message: "Spectators cannot undo" });
+      return;
+    }
+    if (history.length === 0) {
+      host.send(ws, "error", { message: "Nothing to undo" });
+      return;
+    }
+    if (undoFrom === session.playerId) {
+      host.send(ws, "error", { message: "Undo already requested" });
+      return;
+    }
+    if (undoFrom) {
+      host.send(ws, "error", { message: "Answer the pending undo first" });
+      return;
+    }
+    undoFrom = session.playerId;
+    host.broadcast("undo_requested", undoEventBody());
+    host.broadcastRoom();
+    void host.persist();
+  }
+
+  function handleUndoRespond(ws: WebSocket, payload: Record<string, unknown>) {
+    const session = host.requireJoined(ws);
+    if (!session) return;
+    const player = host.players.get(session.playerId);
+    if (!player) {
+      host.send(ws, "error", { message: "Join first" });
+      return;
+    }
+    if (!undoFrom) {
+      host.send(ws, "error", { message: "No pending undo" });
+      return;
+    }
+    if (host.phase !== "playing" || !state || isOver(state)) {
+      host.send(ws, "error", { message: "Game not in progress" });
+      return;
+    }
+    if (seatToPlayer(session.seat) === null) {
+      host.send(ws, "error", { message: "Spectators cannot undo" });
+      return;
+    }
+    const accept = payload.accept === true;
+    if (accept) {
+      if (session.playerId === undoFrom) {
+        host.send(ws, "error", { message: "Only the opponent can accept undo" });
+        return;
+      }
+      applyUndo(player);
+      return;
+    }
+    if (session.playerId !== undoFrom && session.playerId !== opponentId(undoFrom)) {
+      host.send(ws, "error", { message: "Not part of this undo request" });
+      return;
+    }
+    const reason = session.playerId === undoFrom ? "cancelled" : "rejected";
+    clearUndoRequest(reason);
+    host.broadcastRoom();
+    void host.persist();
+  }
+
+  function applyUndo(by: PlayerRecord) {
+    const prev = history.pop();
+    if (!prev) {
+      clearUndoRequest("cancelled");
+      host.broadcastRoom();
+      void host.persist();
+      return;
+    }
+    const from = undoEventBody();
+    undoFrom = null;
+    state = prev;
+    const view = publicView();
+    host.broadcast("undo_resolved", {
+      accepted: true,
+      reason: "accepted",
+      ...from,
+      by: youFrom(by),
+      publicState: view,
+    });
+    host.broadcast("state", { publicState: view, undoRequest: null });
+    pushYourTurn();
+    host.broadcastRoom();
+    void host.persist();
+  }
+
+  function clearUndoRequest(reason: "rejected" | "cancelled" | "move") {
+    if (!undoFrom) return;
+    const body = { ...undoEventBody(), accepted: false, reason };
+    undoFrom = null;
+    host.broadcast("undo_resolved", body);
+  }
+
+  function undoEventBody() {
+    const player = undoFrom ? host.players.get(undoFrom) : undefined;
+    return {
+      from: player ? youFrom(player) : undoFrom ? { playerId: undoFrom } : null,
+    };
+  }
+
+  function opponentId(playerId: string): string | null {
+    const seated = host.seatedPlayers();
+    const other = seated.find((p) => p.playerId !== playerId);
+    return other?.playerId ?? null;
+  }
+
+  function resetMatch() {
+    state = null;
+    history = [];
+    undoFrom = null;
   }
 
   function youFrom(player: PlayerRecord) {
