@@ -178,7 +178,7 @@ websocat "wss://micromist-staging.goldeneaglepersonal.dpdns.org/ws/explosive-che
 {"type":"set_config","payload":{"boardSize":9,"winMode":"steps","winParam":4,"hostColor":"red"}}
 ```
 
-`boardSize` 是 9、11 或 13。`hostColor` 是 `red` 或 `blue`。省略时默认 9×9、`annihilation`、host 为红。`winMode` 和 `winParam` 的含义见下面的「胜负模式」。
+`boardSize` 是 9、11 或 13。`hostColor` 是 `red` 或 `blue`。可选 `explosionDelayMs` 是 0–1000 的整数（连锁爆炸之间的毫秒间隔，默认 0）。房间里双方都用这个值。省略时默认 9×9、`annihilation`、host 为红、爆炸间隔 0。`winMode` 和 `winParam` 的含义见下面的「胜负模式」。
 
 ## 胜负模式
 

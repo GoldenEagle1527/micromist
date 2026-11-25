@@ -20,6 +20,7 @@ const config: ExplosivePublicConfig = {
   winMode: WIN_MODE_ANNIHILATION,
   winParam: 50,
   hostColor: "red",
+  explosionDelayMs: 0,
 };
 const redYou: ExplosiveYou = {
   playerId: "red-agent",

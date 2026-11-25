@@ -5,9 +5,12 @@ import {
   type GameInstance,
   type WinMode,
 } from "./engine";
+import { clampExplosionDelay } from "../../../shared/explosive-chess/config";
 import type { HostColor } from "./online";
 import { clearLocalProgress, loadLocalProgress, saveLocalProgress } from "../local-persist";
 import { gameStoreGet, gameStoreSet } from "../../lib/game-store";
+
+export { EXPLOSION_DELAY_MAX_MS, clampExplosionDelay } from "../../../shared/explosive-chess/config";
 
 export type OpponentMode = "ai" | "local" | "online";
 export type RedOwner = "player" | "ai";
@@ -29,13 +32,6 @@ export type Settings = {
 /** @deprecated localStorage key — migrated into IndexedDB on boot. */
 export const SETTINGS_KEY = "micromist.explosive-chess.settings";
 export const SOLO_PROGRESS_SLUG = "explosive-chess";
-export const EXPLOSION_DELAY_MAX_MS = 1000;
-
-export function clampExplosionDelay(value: unknown): number {
-  const n = Math.floor(Number(value));
-  if (!Number.isFinite(n)) return 0;
-  return Math.min(EXPLOSION_DELAY_MAX_MS, Math.max(0, n));
-}
 
 export type SoloPersist = {
   settings: Settings;

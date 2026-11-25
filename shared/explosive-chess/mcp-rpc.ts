@@ -46,6 +46,12 @@ const configSchema = {
     },
     winParam: { type: "integer", minimum: 1 },
     hostColor: { type: "string", enum: ["red", "blue"] },
+    explosionDelayMs: {
+      type: "integer",
+      minimum: 0,
+      maximum: 1000,
+      description: "Delay in ms after one explosion before the next. Default 0.",
+    },
   },
 };
 

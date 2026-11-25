@@ -13,6 +13,7 @@ import {
   type Winner,
   type WinMode,
 } from "./engine";
+import { clampExplosionDelay } from "./config";
 import type { Phase, PlayerKind, Role, Seat } from "../multiplayer";
 
 export type CellColorName = "empty" | "red" | "blue";
@@ -36,6 +37,7 @@ export type ExplosivePublicConfig = {
   winMode: WinMode;
   winParam: number;
   hostColor: "red" | "blue";
+  explosionDelayMs: number;
 };
 
 /** Shared view. `fullState` matches the human `state` payload. */
@@ -138,6 +140,7 @@ export function buildPublicState(
     winMode: config.winMode,
     winParam: config.winParam,
     hostColor: config.hostColor,
+    explosionDelayMs: clampExplosionDelay(config.explosionDelayMs),
   };
   if (!game) {
     return { config: publicConfig, fullState: null, board: [], turn: null };

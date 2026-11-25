@@ -26,6 +26,7 @@ export type RoomConfig = {
   winMode: WinMode;
   winParam: number;
   hostColor: HostColor;
+  explosionDelayMs: number;
 };
 
 export type ServerHandlers = {

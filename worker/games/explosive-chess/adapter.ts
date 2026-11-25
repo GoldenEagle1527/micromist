@@ -21,6 +21,7 @@ import {
   type ExplosiveObservation,
   type ExplosiveYou,
 } from "../../../shared/explosive-chess/observe";
+import { clampExplosionDelay } from "../../../shared/explosive-chess/config";
 import { isSeatedSeat, normalizePlayerKind, type Seat } from "../../../shared/multiplayer";
 import type { GameRoomAdapter, RoomHost } from "../../multiplayer/adapter";
 import type { PlayerRecord } from "../../multiplayer/types";
@@ -32,6 +33,7 @@ type RoomConfig = {
   winMode: WinMode;
   winParam: number;
   hostColor: HostColor;
+  explosionDelayMs: number;
 };
 
 type Serialized = {
@@ -47,6 +49,7 @@ const DEFAULT_CONFIG: RoomConfig = {
   winMode: WIN_MODE_ANNIHILATION,
   winParam: 50,
   hostColor: "red",
+  explosionDelayMs: 0,
 };
 
 function seatToColor(seat: Seat): PlayerColor | null {
@@ -78,6 +81,7 @@ export function createExplosiveChessAdapter(host: RoomHost): GameRoomAdapter {
       winMode: config.winMode,
       winParam: config.winParam,
       hostColor: config.hostColor,
+      explosionDelayMs: config.explosionDelayMs,
     }),
 
     hostSeat: () => config.hostColor,
@@ -148,6 +152,9 @@ export function createExplosiveChessAdapter(host: RoomHost): GameRoomAdapter {
       }
       if (payload.hostColor === "red" || payload.hostColor === "blue") {
         next.hostColor = payload.hostColor;
+      }
+      if (payload.explosionDelayMs !== undefined) {
+        next.explosionDelayMs = clampExplosionDelay(payload.explosionDelayMs);
       }
       config = next;
       // Seats are claimed explicitly. hostColor is a preference, not an assignment.
@@ -238,6 +245,7 @@ export function createExplosiveChessAdapter(host: RoomHost): GameRoomAdapter {
       const data = blob as Partial<Serialized>;
       if (data.config && typeof data.config === "object") {
         config = { ...DEFAULT_CONFIG, ...data.config };
+        config.explosionDelayMs = clampExplosionDelay(config.explosionDelayMs);
       }
       configFrozen = Boolean(data.configFrozen);
       if (data.fullState && typeof data.fullState === "object") {

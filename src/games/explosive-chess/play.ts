@@ -240,11 +240,6 @@ class ExplosiveSession implements GameSession {
       this.emit();
       return;
     }
-    if (id === "explosionDelayMs") {
-      this.settings = { ...this.settings, explosionDelayMs: clampExplosionDelay(value) };
-      this.emit();
-      return;
-    }
     if (this.onlineConfig && this.onlinePhase !== "idle") return;
     const next = { ...this.settings };
     if (id === "mode") {
@@ -263,6 +258,7 @@ class ExplosiveSession implements GameSession {
     if (id === "difficulty") next.difficulty = String(value) as AiDifficulty;
     if (id === "redOwner") next.redOwner = value === "ai" ? "ai" : "player";
     if (id === "hostColor") next.hostColor = value === "blue" ? "blue" : "red";
+    if (id === "explosionDelayMs") next.explosionDelayMs = clampExplosionDelay(value);
     this.settings = next;
     this.emit();
   }
@@ -401,6 +397,7 @@ class ExplosiveSession implements GameSession {
     const boardSize = cfg?.boardSize ?? this.settings.boardSize;
     const winMode = cfg?.winMode ?? this.settings.winMode;
     const winParam = cfg?.winParam ?? this.settings.winParam;
+    const explosionDelayMs = clampExplosionDelay(cfg?.explosionDelayMs ?? this.settings.explosionDelayMs);
     const fields: ParamField[] = [
       {
         id: "mode",
@@ -442,9 +439,10 @@ class ExplosiveSession implements GameSession {
         id: "explosionDelayMs",
         label: ex.explosionDelay,
         type: "number",
-        value: this.settings.explosionDelayMs,
+        value: explosionDelayMs,
         min: 0,
         max: EXPLOSION_DELAY_MAX_MS,
+        disabled: locked,
       },
     ];
     if (winMode !== WIN_MODE_ANNIHILATION) {
@@ -568,7 +566,7 @@ class ExplosiveSession implements GameSession {
     if (cfg && this.onlineRole !== "host" && (this.onlinePhase === "lobby" || this.onlinePhase === "connecting")) {
       status = `${status} · ${ex.configLabel}${cfg.boardSize}×${cfg.boardSize} · ${winModeLabel(cfg.winMode, ex)}${
         cfg.winMode !== WIN_MODE_ANNIHILATION ? ` (${cfg.winParam})` : ""
-      } · ${ex.hostLabel} ${cfg.hostColor === "red" ? ex.colorRed : ex.colorBlue}`;
+      } · ${ex.explosionDelay} ${clampExplosionDelay(cfg.explosionDelayMs)} · ${ex.hostLabel} ${cfg.hostColor === "red" ? ex.colorRed : ex.colorBlue}`;
     }
     if (inMenu && this.onlinePhase !== "idle" && this.onlinePhase !== "connecting") {
       /* keep */
@@ -642,6 +640,14 @@ class ExplosiveSession implements GameSession {
     }
   }
 
+  private matchExplosionDelay(): number {
+    const raw =
+      this.settings.opponent === "online"
+        ? (this.onlineConfig?.explosionDelayMs ?? this.settings.explosionDelayMs)
+        : this.settings.explosionDelayMs;
+    return clampExplosionDelay(raw);
+  }
+
   private async playFrames(frames: AnimationFrame[], renderer: BoardRenderer): Promise<void> {
     if (frames.length === 0) {
       renderer.setExplosionHighlight(null);
@@ -652,7 +658,7 @@ class ExplosiveSession implements GameSession {
     for (const frame of frames) {
       renderer.setExplosionHighlight([frame.explodedCell, ...frame.affectedCells]);
       renderer.render();
-      const delay = clampExplosionDelay(this.settings.explosionDelayMs);
+      const delay = this.matchExplosionDelay();
       if (delay > 0) await new Promise((r) => setTimeout(r, delay));
     }
     renderer.setExplosionHighlight(null);
@@ -675,8 +681,7 @@ class ExplosiveSession implements GameSession {
     const renderer = this.renderer;
     const mode = this.settings.opponent;
     if (!game || !renderer) return;
-    const delay = clampExplosionDelay(this.settings.explosionDelayMs);
-    if (delay > 0 && result.animationFrames.length > 0) {
+    if (this.matchExplosionDelay() > 0 && result.animationFrames.length > 0) {
       this.busy = true;
       await this.playFrames(result.animationFrames, renderer);
     } else {
@@ -896,7 +901,7 @@ class ExplosiveSession implements GameSession {
     game.loadFullState(fullState);
     if (lastMove) renderer.setLastMove(lastMove.row, lastMove.col);
     renderer.render();
-    if (clampExplosionDelay(this.settings.explosionDelayMs) > 0 && animationFrames && animationFrames.length > 0) {
+    if (this.matchExplosionDelay() > 0 && animationFrames && animationFrames.length > 0) {
       this.busy = true;
       await this.playFrames(animationFrames, renderer);
     }
@@ -1127,6 +1132,7 @@ class ExplosiveSession implements GameSession {
               winMode: s.winMode,
               winParam: s.winParam,
               hostColor: s.hostColor,
+              explosionDelayMs: s.explosionDelayMs,
             });
           }
           this.emit();
