@@ -208,14 +208,19 @@ export function PlayCapsule({ fallbackTitle }: { fallbackTitle: string }) {
   const chrome = usePlayChrome();
   const [intro, setIntro] = useState(false);
   const seen = useRef(false);
+  const lastReset = useRef<number | undefined>(undefined);
 
   useEffect(() => {
     if (!chrome) {
       seen.current = false;
+      lastReset.current = undefined;
       setIntro(false);
       return;
     }
-    if (seen.current) return;
+    const resetChanged =
+      chrome.resetKey !== undefined && chrome.resetKey !== lastReset.current;
+    if (chrome.resetKey !== undefined) lastReset.current = chrome.resetKey;
+    if (seen.current && !resetChanged) return;
     seen.current = true;
     const reduce =
       typeof window !== "undefined" &&

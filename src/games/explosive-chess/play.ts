@@ -89,6 +89,7 @@ function explosiveChrome(opts: {
   winner: MoveResult["winner"];
   winMode: WinMode;
   counts: { red: number; blue: number };
+  resetKey: number;
 }): PlayChrome {
   let active: PlayChrome["active"] = opts.turn === COLOR_RED ? "left" : "right";
   if (opts.gameOver) {
@@ -98,6 +99,7 @@ function explosiveChrome(opts: {
   }
   const showCells = opts.winMode === WIN_MODE_AREA;
   return {
+    resetKey: opts.resetKey,
     left: { color: CHROME_RED, value: showCells ? String(opts.counts.red) : undefined },
     right: { color: CHROME_BLUE, value: showCells ? String(opts.counts.blue) : undefined },
     active,
@@ -114,6 +116,7 @@ class ExplosiveSession implements GameSession {
 
   private turn: PlayerColor = COLOR_RED;
   private counts = { red: 0, blue: 0 };
+  private matchEpoch = 0;
   private gameOver = false;
   private winReason = "";
   private winner: MoveResult["winner"] = null;
@@ -268,6 +271,7 @@ class ExplosiveSession implements GameSession {
       clearLocalProgress(SOLO_PROGRESS_SLUG);
       this.pendingRestore = null;
       this.localSession += 1;
+      this.matchEpoch += 1;
       this.mountLocalBoard();
       this.emit();
       return;
@@ -510,6 +514,7 @@ class ExplosiveSession implements GameSession {
         winner: this.winner,
         winMode,
         counts: this.counts,
+        resetKey: this.matchEpoch,
       }),
       status,
       actions,
@@ -586,6 +591,14 @@ class ExplosiveSession implements GameSession {
 
   private emit(): void {
     this.listeners.forEach((fn) => fn());
+  }
+
+  private resetMatchHud(): void {
+    this.gameOver = false;
+    this.winner = null;
+    this.winReason = "";
+    this.turn = COLOR_RED;
+    this.counts = { red: 0, blue: 0 };
   }
 
   private syncHud(game: GameInstance): void {
@@ -918,6 +931,7 @@ class ExplosiveSession implements GameSession {
     this.ctx.setSearch(new URLSearchParams(), { replace: true });
     this.phase = "play";
     this.localSession += 1;
+    this.matchEpoch += 1;
     this.emit();
     queueMicrotask(() => {
       this.mountLocalBoard();
@@ -1103,7 +1117,9 @@ class ExplosiveSession implements GameSession {
           this.onlinePlayers = payload.players;
           this.onlineConfig = payload.config;
           if (payload.phase === "lobby") {
+            const leavingMatch = this.onlinePhase === "playing" || this.onlinePhase === "over";
             this.onlinePhase = "lobby";
+            if (leavingMatch) this.resetMatchHud();
             if (this.phase !== "play") this.tip = this.ex().tipWaitJoin;
           } else if (payload.phase === "playing") {
             this.onlinePhase = "playing";
@@ -1129,6 +1145,11 @@ class ExplosiveSession implements GameSession {
           this.emit();
         },
         onGameStart: (payload) => {
+          const newMatch =
+            this.gameOver ||
+            this.onlinePhase === "over" ||
+            this.onlinePhase === "lobby" ||
+            this.game == null;
           this.reconnectAttempts = 0;
           this.onlinePhase = "playing";
           this.onlineStatus = this.ex().gameStart;
@@ -1136,6 +1157,10 @@ class ExplosiveSession implements GameSession {
           this.pendingOnlineStart = { config: payload.config, yourColor };
           if (yourColor == null) this.myColor = null;
           this.phase = "play";
+          if (newMatch) {
+            this.resetMatchHud();
+            this.matchEpoch += 1;
+          }
           this.clearMoveLock();
           this.emit();
           queueMicrotask(() => {

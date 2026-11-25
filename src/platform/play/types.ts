@@ -185,6 +185,11 @@ export type PlayChrome = {
   title?: string;
   /** Replaces the title in the capsule while set (win, thinking, disconnect). */
   notice?: string;
+  /**
+   * Bump when a new match starts (rematch / restart) so the capsule
+   * replays its split intro even if the same side is still to move.
+   */
+  resetKey?: number;
   left: PlayChromeSide;
   right: PlayChromeSide;
   active: PlayChromeActive;

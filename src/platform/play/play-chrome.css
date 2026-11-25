@@ -193,22 +193,18 @@
 @keyframes play-capsule-split-left {
   from {
     transform: translateX(42%);
-    opacity: 0.2;
   }
   to {
     transform: none;
-    opacity: inherit;
   }
 }
 
 @keyframes play-capsule-split-right {
   from {
     transform: translateX(-42%);
-    opacity: 0.2;
   }
   to {
     transform: none;
-    opacity: inherit;
   }
 }
 

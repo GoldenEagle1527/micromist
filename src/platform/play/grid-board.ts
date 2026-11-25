@@ -33,7 +33,7 @@ export type GridBoard = {
   destroy: () => void;
   readonly cellSize: number;
   readonly hover: { row: number; col: number } | null;
-  /** Mobile UA: board fills the host, but can be pinched and panned. */
+  /** Mobile UA: starts zoomed to a usable cell size; pinch and pan to see the rest. */
   readonly panEnabled: boolean;
 };
 
@@ -228,6 +228,7 @@ export function createGridBoard(
   let viewScale = 1;
   let viewTx = 0;
   let viewTy = 0;
+  const MIN_CELL_PX = 48;
   let ignoreClickUntil = 0;
   let dragging = false;
   let pinchStartDist = 0;
@@ -237,6 +238,8 @@ export function createGridBoard(
   let gestureMoved = false;
   const TAP_SLOP = 12;
   let lastFitKey = "";
+  let panAnimId = 0;
+  let rasterScale = 1;
 
   function boardSize(): number {
     return Math.max(1, source.size);
@@ -253,11 +256,32 @@ export function createGridBoard(
     return isDark() ? DARK_COLORS : LIGHT_COLORS;
   }
 
+  function scaleForCell(px: number): number {
+    if (canvasSize <= 0) return 1;
+    return (px * boardSize()) / canvasSize;
+  }
+
   function maxViewScale(): number {
-    const n = boardSize();
-    const minCell = 48;
-    const needed = canvasSize > 0 ? (minCell * n) / canvasSize : 3;
-    return Math.min(8, Math.max(3, needed));
+    return Math.min(8, Math.max(3, scaleForCell(MIN_CELL_PX)));
+  }
+
+  /** On phone, show a slice of the board at a tappable cell size instead of fitting n×n. */
+  function defaultViewScale(): number {
+    if (!panEnabled) return 1;
+    return Math.min(maxViewScale(), Math.max(1, scaleForCell(MIN_CELL_PX)));
+  }
+
+  /** Last-move stroke matches desktop at the default phone zoom, then scales with the cells. */
+  function markStrokeScale(): number {
+    if (!panEnabled) return 1;
+    return Math.max(cellSize, 1) / MIN_CELL_PX;
+  }
+
+  function centerView(): void {
+    const rect = viewport.getBoundingClientRect();
+    const scaled = canvasSize * viewScale;
+    viewTx = (rect.width - scaled) / 2;
+    viewTy = (rect.height - scaled) / 2;
   }
 
   function clampAxis(offset: number, scaled: number, span: number): number {
@@ -278,8 +302,106 @@ export function createGridBoard(
       canvas.style.transform = "";
       return;
     }
+    const bake = Math.max(rasterScale, 1);
     canvas.style.transformOrigin = "0 0";
-    canvas.style.transform = `translate(${viewTx}px, ${viewTy}px) scale(${viewScale})`;
+    canvas.style.transform = `translate(${viewTx}px, ${viewTy}px) scale(${viewScale / bake})`;
+  }
+
+  /** Draw at the current zoom so CSS does not upscale a small bitmap. Returns true if the buffer was reallocated. */
+  function layoutCanvas(): boolean {
+    if (canvasSize < 1) return false;
+    const dpr = window.devicePixelRatio || 1;
+    const wanted = panEnabled ? viewScale : 1;
+    const maxDim = 8192;
+    const bake = Math.min(wanted, Math.max(1, maxDim / Math.max(canvasSize * dpr, 1)));
+    const pixel = Math.max(1, Math.round(canvasSize * bake * dpr));
+    const same =
+      canvas.width === pixel &&
+      canvas.height === pixel &&
+      Math.abs(rasterScale - bake) < 0.0005;
+    rasterScale = bake;
+    canvas.style.width = `${canvasSize * bake}px`;
+    canvas.style.height = `${canvasSize * bake}px`;
+    if (same) {
+      ctx.setTransform(dpr * bake, 0, 0, dpr * bake, 0, 0);
+      return false;
+    }
+    canvas.width = pixel;
+    canvas.height = pixel;
+    ctx.setTransform(dpr * bake, 0, 0, dpr * bake, 0, 0);
+    return true;
+  }
+
+  function cancelPanAnim(): void {
+    if (!panAnimId) return;
+    cancelAnimationFrame(panAnimId);
+    panAnimId = 0;
+  }
+
+  function easeOutCubic(t: number): number {
+    return 1 - (1 - t) ** 3;
+  }
+
+  function animatePan(toTx: number, toTy: number): void {
+    cancelPanAnim();
+    const fromTx = viewTx;
+    const fromTy = viewTy;
+    const dist = Math.hypot(toTx - fromTx, toTy - fromTy);
+    if (dist < 0.5) return;
+    const duration = Math.min(420, Math.max(240, dist * 0.55));
+    const started = performance.now();
+    function tick(now: number): void {
+      if (destroyed) {
+        panAnimId = 0;
+        return;
+      }
+      const t = Math.min(1, (now - started) / duration);
+      const e = easeOutCubic(t);
+      viewTx = fromTx + (toTx - fromTx) * e;
+      viewTy = fromTy + (toTy - fromTy) * e;
+      applyView();
+      if (t < 1) {
+        panAnimId = requestAnimationFrame(tick);
+        return;
+      }
+      panAnimId = 0;
+    }
+    panAnimId = requestAnimationFrame(tick);
+  }
+
+  /** Pan just enough to bring a cell on-screen. No-op when the full board already fits. */
+  function revealCell(row: number, col: number): void {
+    if (!panEnabled || destroyed || viewScale <= 1.001) return;
+    if (pinchStartDist > 0 || (dragging && gestureMoved)) return;
+    const rect = viewport.getBoundingClientRect();
+    const scaled = canvasSize * viewScale;
+    if (scaled <= rect.width + 0.5 && scaled <= rect.height + 0.5) return;
+    const span = cellSize * viewScale;
+    const inset = Math.max(
+      8,
+      Math.min(span * 0.35, 28, rect.width * 0.1, rect.height * 0.1),
+    );
+    const x0 = col * cellSize * viewScale + viewTx;
+    const y0 = row * cellSize * viewScale + viewTy;
+    let dx = 0;
+    let dy = 0;
+    if (span + inset * 2 >= rect.width) {
+      dx = (rect.width - span) / 2 - x0;
+    } else if (x0 < inset) {
+      dx = inset - x0;
+    } else if (x0 + span > rect.width - inset) {
+      dx = rect.width - inset - (x0 + span);
+    }
+    if (span + inset * 2 >= rect.height) {
+      dy = (rect.height - span) / 2 - y0;
+    } else if (y0 < inset) {
+      dy = inset - y0;
+    } else if (y0 + span > rect.height - inset) {
+      dy = rect.height - inset - (y0 + span);
+    }
+    const toTx = clampAxis(viewTx + dx, scaled, rect.width);
+    const toTy = clampAxis(viewTy + dy, scaled, rect.height);
+    animatePan(toTx, toTy);
   }
 
   function zoomAt(clientX: number, clientY: number, nextScale: number): void {
@@ -310,18 +432,18 @@ export function createGridBoard(
       render();
       return;
     }
+    const firstFit = lastFitKey === "";
     const nChanged = lastFitKey !== "" && !lastFitKey.startsWith(`${n}:`);
     lastFitKey = fitKey;
     cellSize = Math.max(Math.floor(available / n), 1);
     canvasSize = cellSize * n;
 
-    const dpr = window.devicePixelRatio || 1;
-    canvas.width = canvasSize * dpr;
-    canvas.height = canvasSize * dpr;
-    canvas.style.width = `${canvasSize}px`;
-    canvas.style.height = `${canvasSize}px`;
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    if (nChanged) viewScale = 1;
+    if (panEnabled && (firstFit || nChanged)) {
+      cancelPanAnim();
+      viewScale = defaultViewScale();
+      centerView();
+    }
+    layoutCanvas();
     clampView();
     applyView();
     render();
@@ -381,9 +503,10 @@ export function createGridBoard(
       lastMoveCell && lastMoveCell.row === row && lastMoveCell.col === col && !paint.path;
     if (paint.path || isLast) {
       ctx.strokeStyle = paint.path ? colors.path : colors.lastMove;
-      ctx.lineWidth = 2.5;
-      const inset = 2;
-      roundRect(ctx, x + inset, y + inset, cellSize - inset * 2, cellSize - inset * 2, 3);
+      const mark = markStrokeScale();
+      ctx.lineWidth = 2.5 * mark;
+      const inset = 2 * mark;
+      roundRect(ctx, x + inset, y + inset, cellSize - inset * 2, cellSize - inset * 2, 3 * mark);
       ctx.stroke();
     }
 
@@ -507,7 +630,12 @@ export function createGridBoard(
   }
 
   function setLastMove(row: number | null, col: number | null): void {
-    lastMoveCell = row !== null && col !== null ? { row, col } : null;
+    const next = row !== null && col !== null ? { row, col } : null;
+    const changed =
+      (lastMoveCell?.row ?? null) !== (next?.row ?? null) ||
+      (lastMoveCell?.col ?? null) !== (next?.col ?? null);
+    lastMoveCell = next;
+    if (changed && next) revealCell(next.row, next.col);
   }
 
   function clearLastMove(): void {
@@ -537,6 +665,7 @@ export function createGridBoard(
 
   function onTouchStart(event: TouchEvent): void {
     if (!panEnabled || destroyed) return;
+    cancelPanAnim();
     gestureMoved = false;
     if (event.touches.length >= 2) {
       pinchStartDist = touchDist(event.touches[0]!, event.touches[1]!);
@@ -603,6 +732,8 @@ export function createGridBoard(
     }
     dragging = false;
     pinchStartDist = 0;
+    if (layoutCanvas()) render();
+    applyView();
   }
 
   function onClickCapture(event: Event): void {
@@ -622,6 +753,7 @@ export function createGridBoard(
 
   function destroy(): void {
     destroyed = true;
+    cancelPanAnim();
     lastMoveCell = null;
     hoverCell = null;
     explosionHighlight = null;
