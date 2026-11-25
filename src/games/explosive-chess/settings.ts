@@ -22,12 +22,20 @@ export type Settings = {
   redOwner: RedOwner;
   /** Online: host seat color chosen before creating the room. */
   hostColor: HostColor;
+  /** Delay in ms after one explosion before the next in a chain. */
+  explosionDelayMs: number;
 };
 
 /** @deprecated localStorage key — migrated into IndexedDB on boot. */
 export const SETTINGS_KEY = "micromist.explosive-chess.settings";
 export const SOLO_PROGRESS_SLUG = "explosive-chess";
-export const FRAME_DELAY_MS = 70;
+export const EXPLOSION_DELAY_MAX_MS = 1000;
+
+export function clampExplosionDelay(value: unknown): number {
+  const n = Math.floor(Number(value));
+  if (!Number.isFinite(n)) return 0;
+  return Math.min(EXPLOSION_DELAY_MAX_MS, Math.max(0, n));
+}
 
 export type SoloPersist = {
   settings: Settings;
@@ -43,6 +51,7 @@ export const DEFAULT_SETTINGS: Settings = {
   difficulty: "medium",
   redOwner: "player",
   hostColor: "red",
+  explosionDelayMs: 0,
 };
 
 export function loadSoloPersist(roomFromQuery: string): SoloPersist | null {
@@ -82,6 +91,7 @@ export function loadSettings(): Settings {
     if (!parsed) return { ...DEFAULT_SETTINGS };
     const merged = { ...DEFAULT_SETTINGS, ...parsed };
     if (merged.hostColor !== "red" && merged.hostColor !== "blue") merged.hostColor = "red";
+    merged.explosionDelayMs = clampExplosionDelay(merged.explosionDelayMs);
     return merged;
   } catch {
     return { ...DEFAULT_SETTINGS };

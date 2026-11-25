@@ -48,8 +48,9 @@ import {
 } from "./online";
 import { clearLocalProgress } from "../local-persist";
 import {
-  FRAME_DELAY_MS,
+  EXPLOSION_DELAY_MAX_MS,
   SOLO_PROGRESS_SLUG,
+  clampExplosionDelay,
   loadSettings,
   loadSoloPersist,
   persistSoloProgress,
@@ -173,6 +174,9 @@ class ExplosiveSession implements GameSession {
         ...this.settings,
         ...this.pendingRestore.settings,
         opponent: this.pendingRestore.settings.opponent,
+        explosionDelayMs: clampExplosionDelay(
+          this.pendingRestore.settings.explosionDelayMs ?? this.settings.explosionDelayMs,
+        ),
       };
       this.localSession = this.pendingRestore.localSession ?? 0;
       this.phase = "play";
@@ -233,6 +237,11 @@ class ExplosiveSession implements GameSession {
   setParam(id: string, value: string | number): void {
     if (id === "joinCode") {
       this.joinCode = String(value);
+      this.emit();
+      return;
+    }
+    if (id === "explosionDelayMs") {
+      this.settings = { ...this.settings, explosionDelayMs: clampExplosionDelay(value) };
       this.emit();
       return;
     }
@@ -428,6 +437,14 @@ class ExplosiveSession implements GameSession {
           { value: WIN_MODE_STEPS, label: ex.steps },
           { value: WIN_MODE_AREA, label: ex.area },
         ],
+      },
+      {
+        id: "explosionDelayMs",
+        label: ex.explosionDelay,
+        type: "number",
+        value: this.settings.explosionDelayMs,
+        min: 0,
+        max: EXPLOSION_DELAY_MAX_MS,
       },
     ];
     if (winMode !== WIN_MODE_ANNIHILATION) {
@@ -635,7 +652,8 @@ class ExplosiveSession implements GameSession {
     for (const frame of frames) {
       renderer.setExplosionHighlight([frame.explodedCell, ...frame.affectedCells]);
       renderer.render();
-      await new Promise((r) => setTimeout(r, FRAME_DELAY_MS));
+      const delay = clampExplosionDelay(this.settings.explosionDelayMs);
+      if (delay > 0) await new Promise((r) => setTimeout(r, delay));
     }
     renderer.setExplosionHighlight(null);
     renderer.render();
@@ -657,8 +675,8 @@ class ExplosiveSession implements GameSession {
     const renderer = this.renderer;
     const mode = this.settings.opponent;
     if (!game || !renderer) return;
-    const shouldAnimate = mode === "local" || mode === "online" || this.settings.difficulty === "easy";
-    if (shouldAnimate && result.animationFrames.length > 0) {
+    const delay = clampExplosionDelay(this.settings.explosionDelayMs);
+    if (delay > 0 && result.animationFrames.length > 0) {
       this.busy = true;
       await this.playFrames(result.animationFrames, renderer);
     } else {
@@ -878,7 +896,7 @@ class ExplosiveSession implements GameSession {
     game.loadFullState(fullState);
     if (lastMove) renderer.setLastMove(lastMove.row, lastMove.col);
     renderer.render();
-    if (animationFrames && animationFrames.length > 0) {
+    if (clampExplosionDelay(this.settings.explosionDelayMs) > 0 && animationFrames && animationFrames.length > 0) {
       this.busy = true;
       await this.playFrames(animationFrames, renderer);
     }
