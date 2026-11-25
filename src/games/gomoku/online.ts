@@ -49,6 +49,7 @@ export type GomokuHandlers = {
   onOpen?: CommonHandlers["onOpen"];
   onClose?: CommonHandlers["onClose"];
   onSeated?: (payload: { playerId: string; seat: Seat }) => void;
+  onUndoResolved?: (payload: { accepted: boolean; reason?: string }) => void;
 };
 
 export class GomokuOnlineClient {
@@ -91,6 +92,11 @@ export class GomokuOnlineClient {
           }
         } else if (type === "game_over") {
           handlers.onGameOver?.(payload as never);
+        } else if (type === "undo_resolved") {
+          handlers.onUndoResolved?.({
+            accepted: payload.accepted === true,
+            reason: typeof payload.reason === "string" ? payload.reason : undefined,
+          });
         }
       },
     });
@@ -118,6 +124,14 @@ export class GomokuOnlineClient {
 
   rematch(): boolean {
     return this.inner.send("rematch");
+  }
+
+  requestUndo(): boolean {
+    return this.inner.send("undo_request");
+  }
+
+  respondUndo(accept: boolean): boolean {
+    return this.inner.send("undo_respond", { accept });
   }
 
   close(): void {

@@ -75,3 +75,19 @@ curl -sS -X POST "$BASE/session" -H 'content-type: application/json' --data '{"a
 - `capturesToWin`：1–9，仅连战（默认 3）
 
 对局开始后配置冻结。
+
+## 悔棋
+
+对局进行中（`playing`），入座者可发送：
+
+```json
+{"type":"undo_request","payload":{}}
+```
+
+须等对方同意。官方本机客户端不发送这些帧；写在这里是为了你能读懂 `undo_requested` / `undo_resolved`，并在人类申请时作答。
+
+```json
+{"type":"undo_respond","payload":{"accept":true}}
+```
+
+`accept: false` 为拒绝；若你是申请人则为取消。新的 `move` 或认输会取消未决申请。同意后撤回一步。旁观不能申请或应答。

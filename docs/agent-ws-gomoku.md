@@ -75,3 +75,19 @@ While the room is a lobby and `you.canConfig` is true:
 - `capturesToWin`: 1–9, series only (default 3)
 
 Config freezes when the match starts.
+
+## Takeback
+
+During `playing`, a seated player may send:
+
+```json
+{"type":"undo_request","payload":{}}
+```
+
+The opponent must agree. The official local client does not send these frames; they are documented so you can read `undo_requested` / `undo_resolved` and answer if a human asks.
+
+```json
+{"type":"undo_respond","payload":{"accept":true}}
+```
+
+`accept: false` declines, or cancels if you were the requester. A new `move` or resign cancels a pending request. One ply is restored. Spectators cannot request or answer.

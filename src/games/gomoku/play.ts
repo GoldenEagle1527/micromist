@@ -165,6 +165,7 @@ class GomokuSession implements GameSession {
   private roomError = "";
   private roomClosed = false;
   private peerHint = "";
+  private undoFrom: string | null = null;
   private readonly ctx: SessionContext;
 
   constructor(ctx: SessionContext) {
@@ -254,6 +255,10 @@ class GomokuSession implements GameSession {
       this.onUndo();
       return;
     }
+    if (id === "undo-accept") {
+      this.client?.respondUndo(true);
+      return;
+    }
     if (id === "restart") {
       this.doRestart();
       return;
@@ -275,6 +280,7 @@ class GomokuSession implements GameSession {
       return;
     }
     if (id === "dismiss-dialog") {
+      this.onDismissDialog();
       return;
     }
     if (action.type === "claim-seat" && (action.id === "red" || action.id === "blue")) {
@@ -447,14 +453,33 @@ class GomokuSession implements GameSession {
   }
 
   private roomSnapshot(g: GomokuDict): GameSnapshot {
+    const confirm = (title: string, body: string) => ({
+      title,
+      body,
+      ok: g.confirmOk,
+      cancel: g.confirmCancel,
+    });
     const myColor = this.you ? seatToPlayer(this.you.seat) : null;
     const askedRematch = Boolean(
       this.you && this.players.find((p) => p.playerId === this.you?.playerId)?.rematch,
     );
     const playing = this.roomPhase === "playing" && this.state && !isOver(this.state);
     const over = this.roomPhase === "over" || (this.state != null && isOver(this.state));
+    const myUndo = Boolean(this.you && this.undoFrom === this.you.playerId);
+    const incomingUndo = Boolean(this.undoFrom && this.you && this.undoFrom !== this.you.playerId && myColor);
     const actions: ShellAction[] = [];
     if (playing && myColor) {
+      const canUndo = this.state.moves.length > 0 && !incomingUndo;
+      actions.push({
+        id: "undo",
+        label: myUndo ? g.undoWaiting : g.undo,
+        kind: "ghost",
+        disabled: !canUndo || myUndo,
+        confirm:
+          myUndo || !canUndo
+            ? undefined
+            : confirm(g.confirmUndoTitle, g.confirmUndoBody),
+      });
       actions.push({ id: "surrender", label: g.resign, kind: "ghost" });
     }
     if (over && myColor) {
@@ -476,6 +501,16 @@ class GomokuSession implements GameSession {
       status: live ? this.playNotice(g) : this.roomError || this.peerHint || undefined,
       actions,
       room: this.roomPane(g),
+      dialog: incomingUndo
+        ? {
+            id: "undo-request",
+            title: g.undoIncomingTitle,
+            body: g.undoIncomingBody,
+            ok: g.undoAccept,
+            cancel: g.undoDecline,
+            actionId: "undo-accept",
+          }
+        : undefined,
     };
   }
 
@@ -530,6 +565,11 @@ class GomokuSession implements GameSession {
     if (this.roomClosed) return g.roomClosed;
     if (this.roomError) return this.roomError;
     if (this.peerHint) return this.peerHint;
+    if (this.you && this.undoFrom === this.you.playerId) return g.undoWaiting;
+    if (this.undoFrom && this.you && this.undoFrom !== this.you.playerId) {
+      const seated = seatToPlayer(this.you.seat) != null;
+      if (seated) return g.undoIncomingTitle;
+    }
     if (!this.state) return undefined;
     if (this.state.pending?.kind === "remove") {
       return g.pickRemove(this.state.pending.selected.length);
@@ -699,8 +739,20 @@ class GomokuSession implements GameSession {
     this.emit();
   }
 
+  private onDismissDialog(): void {
+    if (this.roomCode && this.undoFrom && this.you && this.undoFrom !== this.you.playerId) {
+      this.client?.respondUndo(false);
+    }
+  }
+
   private onUndo(): void {
-    if (this.roomCode || this.thinking || this.history.length === 0) return;
+    if (this.roomCode) {
+      if (!this.you || this.undoFrom) return;
+      this.peerHint = "";
+      this.client?.requestUndo();
+      return;
+    }
+    if (this.thinking || this.history.length === 0) return;
     this.clearAi();
     const classicAi =
       this.settings.opponent === "ai" &&
@@ -999,6 +1051,7 @@ class GomokuSession implements GameSession {
     this.roomClosed = false;
     this.roomError = "";
     this.peerHint = "";
+    this.undoFrom = null;
     this.you = null;
     this.players = [];
     this.configSentForRoom = "";
@@ -1040,6 +1093,7 @@ class GomokuSession implements GameSession {
         if (cfg && typeof cfg === "object") {
           this.roomRules = asRules(cfg.rules);
           this.roomCapturesToWin = clampCapturesToWin(cfg.capturesToWin);
+          this.undoFrom = typeof cfg.undoRequest === "string" ? cfg.undoRequest : null;
         }
         if (leavingMatch) {
           this.state = emptyState({
@@ -1054,6 +1108,7 @@ class GomokuSession implements GameSession {
         this.roomPhase = "playing";
         this.roomError = "";
         this.peerHint = "";
+        this.undoFrom = null;
         if (fresh) {
           this.beginBoard(
             emptyState({
@@ -1077,6 +1132,11 @@ class GomokuSession implements GameSession {
       },
       onGameOver: () => {
         this.roomPhase = "over";
+        this.emit();
+      },
+      onUndoResolved: (payload) => {
+        if (payload.accepted) this.peerHint = "";
+        else if (payload.reason === "rejected") this.peerHint = dict(this.ctx.locale).undoRejected;
         this.emit();
       },
       onSeated: (payload) => {
@@ -1109,6 +1169,7 @@ class GomokuSession implements GameSession {
     this.roomError = "";
     this.roomClosed = false;
     this.peerHint = "";
+    this.undoFrom = null;
     this.roomPhase = "connecting";
     this.configSentForRoom = "";
     this.pendingConfig = null;

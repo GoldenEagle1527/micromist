@@ -65,6 +65,14 @@ export type GomokuDict = {
   resign: string;
   rematch: string;
   rematchWaiting: string;
+  undoWaiting: string;
+  undoIncomingTitle: string;
+  undoIncomingBody: string;
+  undoAccept: string;
+  undoDecline: string;
+  undoRejected: string;
+  confirmUndoTitle: string;
+  confirmUndoBody: string;
   leaveRoom: string;
   rules: string;
   rulesClassic: string;
@@ -150,6 +158,14 @@ export const gomokuZh: GomokuDict = {
   resign: "认输",
   rematch: "再来一局",
   rematchWaiting: "已申请再来一局，等待对方同意",
+  undoWaiting: "已申请悔棋，等待对方同意",
+  undoIncomingTitle: "对方申请悔棋",
+  undoIncomingBody: "同意后撤回上一步。拒绝则继续当前棋局。",
+  undoAccept: "同意",
+  undoDecline: "拒绝",
+  undoRejected: "对方拒绝了悔棋",
+  confirmUndoTitle: "申请悔棋？",
+  confirmUndoBody: "将向对方发送申请，对方同意后才撤回上一步。",
   leaveRoom: "离开房间",
   rules: "胜负规则",
   rulesClassic: "经典（连五即胜）",
@@ -236,6 +252,14 @@ export const gomokuEn: GomokuDict = {
   resign: "Resign",
   rematch: "Rematch",
   rematchWaiting: "Rematch requested — waiting for the other player",
+  undoWaiting: "Takeback requested — waiting for the other player",
+  undoIncomingTitle: "Takeback request",
+  undoIncomingBody: "Agreeing undoes the last move. Declining keeps the current board.",
+  undoAccept: "Agree",
+  undoDecline: "Decline",
+  undoRejected: "The other player declined the takeback",
+  confirmUndoTitle: "Request a takeback?",
+  confirmUndoBody: "The other player must agree before the last move is undone.",
   leaveRoom: "Leave room",
   rules: "Win condition",
   rulesClassic: "Classic (five in a row)",
