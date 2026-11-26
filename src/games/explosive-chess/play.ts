@@ -3,13 +3,14 @@ import type {
   GamePlayModule,
   GameSession,
   GameSnapshot,
+  GridBoard,
   ParamField,
   PlayChrome,
   SessionContext,
   ShellAction,
 } from "../../platform/play";
 import { createAI, type AiDifficulty, type AiInstance } from "./ai";
-import { createBoardRenderer, type BoardRenderer } from "./boardRenderer";
+import { createBoardRenderer, type BoardMarks } from "./boardRenderer";
 import {
   COLOR_BLUE,
   COLOR_RED,
@@ -135,7 +136,8 @@ class ExplosiveSession implements GameSession {
   private myColor: PlayerColor | null = null;
 
   private game: GameInstance | null = null;
-  private renderer: BoardRenderer | null = null;
+  private renderer: GridBoard | null = null;
+  private boardMarks: BoardMarks = { lastMove: null, flash: null };
   private ai: AiInstance | null = null;
   private animating = false;
   private playerColor: PlayerColor = COLOR_RED;
@@ -643,20 +645,20 @@ class ExplosiveSession implements GameSession {
     return clampExplosionDelay(raw);
   }
 
-  private async playFrames(frames: AnimationFrame[], renderer: BoardRenderer): Promise<void> {
+  private async playFrames(frames: AnimationFrame[], renderer: GridBoard): Promise<void> {
     if (frames.length === 0) {
-      renderer.setExplosionHighlight(null);
+      this.boardMarks.flash = null;
       renderer.render();
       return;
     }
     this.animating = true;
     for (const frame of frames) {
-      renderer.setExplosionHighlight([frame.explodedCell, ...frame.affectedCells]);
+      this.boardMarks.flash = new Set([frame.explodedCell, ...frame.affectedCells]);
       renderer.render();
       const delay = this.matchExplosionDelay();
       if (delay > 0) await new Promise((r) => setTimeout(r, delay));
     }
-    renderer.setExplosionHighlight(null);
+    this.boardMarks.flash = null;
     renderer.render();
     this.animating = false;
   }
@@ -668,6 +670,8 @@ class ExplosiveSession implements GameSession {
     this.ai = null;
     this.renderer?.destroy();
     this.renderer = null;
+    this.boardMarks.lastMove = null;
+    this.boardMarks.flash = null;
     this.game = null;
   }
 
@@ -680,7 +684,7 @@ class ExplosiveSession implements GameSession {
       this.busy = true;
       await this.playFrames(result.animationFrames, renderer);
     } else {
-      renderer.setExplosionHighlight(null);
+      this.boardMarks.flash = null;
       renderer.render();
     }
     this.syncHud(game);
@@ -723,11 +727,17 @@ class ExplosiveSession implements GameSession {
       this.emit();
       return;
     }
-    renderer.setLastMove(move.row, move.col);
+    this.markLast(move.row, move.col);
     await this.afterMove(result);
   }
 
-  private hookCanvas(): void {
+  private markLast(row: number, col: number): void {
+    const prev = this.boardMarks.lastMove;
+    this.boardMarks.lastMove = { row, col };
+    if (prev?.row !== row || prev?.col !== col) this.renderer?.revealCell(row, col);
+  }
+
+  private hookBoard(): void {
     const renderer = this.renderer;
     if (!renderer) return;
     const surface = renderer.surface;
@@ -793,10 +803,10 @@ class ExplosiveSession implements GameSession {
       this.playerColor = COLOR_RED;
       this.aiColor = COLOR_BLUE;
     }
-    const renderer = createBoardRenderer(host, game);
+    const renderer = createBoardRenderer(host, game, this.boardMarks);
     this.renderer = renderer;
     renderer.resize();
-    this.hookCanvas();
+    this.hookBoard();
     this.syncHud(game);
     this.updateTip(game, this.settings.opponent);
     this.busy = false;
@@ -812,12 +822,12 @@ class ExplosiveSession implements GameSession {
     }
   }
 
-  private attachCanvas(game: GameInstance): void {
+  private attachBoard(game: GameInstance): void {
     if (!this.host || this.renderer) return;
-    const renderer = createBoardRenderer(this.host, game);
+    const renderer = createBoardRenderer(this.host, game, this.boardMarks);
     this.renderer = renderer;
     renderer.resize();
-    this.hookCanvas();
+    this.hookBoard();
   }
 
   private tryMountOnlineBoard(): void {
@@ -826,7 +836,7 @@ class ExplosiveSession implements GameSession {
       this.pendingOnlineStart = null;
       this.mountOnlineBoard(pending.config, pending.yourColor);
     } else if (this.game) {
-      this.attachCanvas(this.game);
+      this.attachBoard(this.game);
     }
     const buffered = this.pendingOnlineState;
     if (this.game && this.renderer && buffered) {
@@ -853,7 +863,7 @@ class ExplosiveSession implements GameSession {
     this.renderer?.destroy();
     this.renderer = null;
     this.game = game;
-    this.attachCanvas(game);
+    this.attachBoard(game);
     this.syncHud(game);
     this.updateTip(game, "online");
     this.busy = false;
@@ -894,7 +904,7 @@ class ExplosiveSession implements GameSession {
       return;
     }
     game.loadFullState(fullState);
-    if (lastMove) renderer.setLastMove(lastMove.row, lastMove.col);
+    if (lastMove) this.markLast(lastMove.row, lastMove.col);
     renderer.render();
     if (this.matchExplosionDelay() > 0 && animationFrames && animationFrames.length > 0) {
       this.busy = true;
@@ -937,7 +947,7 @@ class ExplosiveSession implements GameSession {
     if (!cell || !game.isValidMove(cell.row, cell.col, game.currentTurn)) return;
     const result = game.makeMove(cell.row, cell.col, game.currentTurn);
     if (!result) return;
-    renderer.setLastMove(cell.row, cell.col);
+    this.markLast(cell.row, cell.col);
     void this.afterMove(result);
   }
 
