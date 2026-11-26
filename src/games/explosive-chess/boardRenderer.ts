@@ -1,5 +1,5 @@
 /**
- * Explosive chess paints on the shared canvas grid board.
+ * Explosive chess paints on the shared grid board.
  */
 
 import {
@@ -7,42 +7,27 @@ import {
   type GridBoard,
   type GridCellPaint,
 } from "../../platform/play/grid-board";
-import {
-  COLOR_BLUE,
-  COLOR_RED,
-  type GameInstance,
-  type PlayerColor,
-} from "./engine";
+import { COLOR_BLUE, COLOR_RED, type GameInstance } from "./engine";
+import boardCss from "./board-cells.css?raw";
 
-export type BoardRenderer = {
-  resize: () => void;
-  render: () => void;
-  pixelToCell: (px: number, py: number) => { row: number; col: number } | null;
-  setHoverCell: (row: number | null, col: number | null) => void;
-  clearHover: () => void;
+export type BoardRenderer = GridBoard & {
   setLastMove: (row: number | null, col: number | null) => void;
   clearLastMove: () => void;
   setExplosionHighlight: (cells: number[] | null) => void;
-  destroy: () => void;
-  readonly cellSize: number;
-  readonly panEnabled: boolean;
 };
 
-function accentOf(color: number): GridCellPaint["accent"] {
-  if (color === COLOR_RED) return "red";
-  if (color === COLOR_BLUE) return "blue";
-  return "none";
+function seatClass(color: number): string {
+  if (color === COLOR_RED) return "seat-red";
+  if (color === COLOR_BLUE) return "seat-blue";
+  return "";
 }
 
-function dotColorOf(color: number): "red" | "blue" {
-  return color === COLOR_RED ? "red" : "blue";
-}
+export function createBoardRenderer(mount: HTMLElement, game: GameInstance): BoardRenderer {
+  let lastMove: { row: number; col: number } | null = null;
+  let flash: Set<number> | null = null;
 
-export function createBoardRenderer(
-  canvas: HTMLCanvasElement,
-  game: GameInstance,
-): BoardRenderer {
-  const board: GridBoard = createGridBoard(canvas, {
+  const board = createGridBoard(mount, {
+    css: boardCss,
     get size() {
       return game.boardSize;
     },
@@ -50,17 +35,31 @@ export function createBoardRenderer(
       const idx = game.cellIndex(row, col);
       const count = game.counts[idx] ?? 0;
       const color = game.colors[idx] ?? 0;
-      return {
-        accent: accentOf(color),
-        dots:
-          count > 0
-            ? { count, color: dotColorOf(color as PlayerColor | 0) }
-            : undefined,
-      };
+      const classes = [seatClass(color)];
+      if (count > 0) classes.push(`dots-${Math.min(count, 4)}`);
+      if (flash?.has(idx)) classes.push("emphasis");
+      if (lastMove && lastMove.row === row && lastMove.col === col) classes.push("last");
+      return { className: classes.filter(Boolean).join(" ") };
     },
     isHoverValid(row, col) {
       return game.isValidMove(row, col, game.currentTurn);
     },
   });
-  return board;
+
+  return Object.assign(board, {
+    setLastMove(row: number | null, col: number | null) {
+      const next = row !== null && col !== null ? { row, col } : null;
+      const changed =
+        (lastMove?.row ?? null) !== (next?.row ?? null) ||
+        (lastMove?.col ?? null) !== (next?.col ?? null);
+      lastMove = next;
+      if (changed && next) board.revealCell(next.row, next.col);
+    },
+    clearLastMove() {
+      lastMove = null;
+    },
+    setExplosionHighlight(cells: number[] | null) {
+      flash = cells ? new Set(cells) : null;
+    },
+  });
 }

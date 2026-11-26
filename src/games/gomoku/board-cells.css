@@ -1,0 +1,45 @@
+.grid-cell.seat-red {
+  background-image: linear-gradient(var(--grid-tint-red), var(--grid-tint-red));
+}
+
+.grid-cell.seat-blue {
+  background-image: linear-gradient(var(--grid-tint-blue), var(--grid-tint-blue));
+}
+
+.grid-cell.hint {
+  box-shadow: inset 0 0 0 calc(2.5px * var(--grid-mark-scale, 1)) var(--grid-ring-hint);
+  border-radius: calc(3px * var(--grid-mark-scale, 1));
+}
+
+.grid-cell.last {
+  box-shadow: inset 0 0 0 calc(2.5px * var(--grid-mark-scale, 1)) var(--grid-ring-last);
+  border-radius: calc(3px * var(--grid-mark-scale, 1));
+}
+
+.grid-cell.disc-black::after,
+.grid-cell.disc-white::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 44%;
+  height: 44%;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.28) 0 35%, transparent 36%),
+    var(--piece-color);
+  box-shadow: 0 calc(var(--grid-cell-size, 32px) * 0.026) 0 var(--grid-piece-shadow);
+}
+
+.grid-cell.disc-black::after {
+  --piece-color: var(--grid-piece-black);
+}
+
+.grid-cell.disc-white::after {
+  --piece-color: var(--grid-piece-white);
+  box-shadow:
+    0 calc(var(--grid-cell-size, 32px) * 0.026) 0 var(--grid-piece-shadow),
+    inset 0 0 0 calc(var(--grid-cell-size, 32px) * 0.03) var(--grid-piece-white-edge);
+}

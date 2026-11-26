@@ -134,7 +134,6 @@ class ExplosiveSession implements GameSession {
   private onlineStatus = "";
   private myColor: PlayerColor | null = null;
 
-  private canvas: HTMLCanvasElement | null = null;
   private game: GameInstance | null = null;
   private renderer: BoardRenderer | null = null;
   private ai: AiInstance | null = null;
@@ -330,9 +329,6 @@ class ExplosiveSession implements GameSession {
   bindBoard(host: HTMLElement) {
     this.host = host;
     host.replaceChildren();
-    const canvas = document.createElement("canvas");
-    host.append(canvas);
-    this.canvas = canvas;
     if (this.phase === "play") {
       if (this.settings.opponent === "online") this.tryMountOnlineBoard();
       else this.mountLocalBoard();
@@ -340,7 +336,6 @@ class ExplosiveSession implements GameSession {
     return {
       destroy: () => {
         if (this.host === host) this.host = null;
-        this.canvas = null;
         this.destroyBoard();
         host.replaceChildren();
       },
@@ -733,11 +728,11 @@ class ExplosiveSession implements GameSession {
   }
 
   private hookCanvas(): void {
-    const canvas = this.canvas;
     const renderer = this.renderer;
-    if (!canvas || !renderer) return;
-    canvas.onclick = (e) => this.handlePointer(e.clientX, e.clientY);
-    canvas.onmousemove = (e) => {
+    if (!renderer) return;
+    const surface = renderer.surface;
+    surface.onclick = (e) => this.handlePointer(e.clientX, e.clientY);
+    surface.onmousemove = (e) => {
       const game = this.game;
       if (!this.renderer || !game || game.gameOver) {
         this.renderer?.clearHover();
@@ -751,8 +746,8 @@ class ExplosiveSession implements GameSession {
       if (cell) this.renderer.setHoverCell(cell.row, cell.col);
       else this.renderer.clearHover();
     };
-    canvas.onmouseleave = () => this.renderer?.clearHover();
-    canvas.ontouchstart = (e) => {
+    surface.onmouseleave = () => this.renderer?.clearHover();
+    surface.ontouchstart = (e) => {
       if (renderer.panEnabled) return;
       e.preventDefault();
       const touch = e.touches[0];
@@ -772,8 +767,8 @@ class ExplosiveSession implements GameSession {
   }
 
   private mountLocalBoard(): void {
-    const canvas = this.canvas;
-    if (!canvas || this.settings.opponent === "online") {
+    const host = this.host;
+    if (!host || this.settings.opponent === "online") {
       if (this.settings.opponent === "online") clearLocalProgress(SOLO_PROGRESS_SLUG);
       return;
     }
@@ -798,7 +793,7 @@ class ExplosiveSession implements GameSession {
       this.playerColor = COLOR_RED;
       this.aiColor = COLOR_BLUE;
     }
-    const renderer = createBoardRenderer(canvas, game);
+    const renderer = createBoardRenderer(host, game);
     this.renderer = renderer;
     renderer.resize();
     this.hookCanvas();
@@ -818,8 +813,8 @@ class ExplosiveSession implements GameSession {
   }
 
   private attachCanvas(game: GameInstance): void {
-    if (!this.canvas || this.renderer) return;
-    const renderer = createBoardRenderer(this.canvas, game);
+    if (!this.host || this.renderer) return;
+    const renderer = createBoardRenderer(this.host, game);
     this.renderer = renderer;
     renderer.resize();
     this.hookCanvas();

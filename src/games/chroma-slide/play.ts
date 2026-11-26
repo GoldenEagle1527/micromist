@@ -106,10 +106,17 @@ function puzzleFromPublic(pub: ChromaPublicState): PuzzleState | null {
   };
 }
 
-function chromaAccent(color: number): GridCellPaint["accent"] {
-  if (color === 0) return "red";
-  if (color === 1) return "blue";
-  return "none";
+function chromaBoardCss(): string {
+  const tiles = TILE_COLORS.map(
+    (hex, i) =>
+      `.grid-cell.tile-${i}{background-image:linear-gradient(color-mix(in srgb, ${hex} 82%, transparent),color-mix(in srgb, ${hex} 82%, transparent))}`,
+  );
+  return `${tiles.join("\n")}
+.grid-cell.hint {
+  box-shadow: inset 0 0 0 calc(2.5px * var(--grid-mark-scale, 1)) var(--grid-ring-hint);
+  border-radius: calc(3px * var(--grid-mark-scale, 1));
+}
+`;
 }
 
 function onSlideLine(puzzle: PuzzleState, hoverIndex: number, index: number): boolean {
@@ -139,7 +146,6 @@ class ChromaSession implements GameSession {
   private scores: ChromaScores = loadScores();
   private dialog: GameSnapshot["dialog"] = undefined;
   private boardHost: HTMLElement | null = null;
-  private canvas: HTMLCanvasElement | null = null;
   private grid: GridBoard | null = null;
   private recordedWin = false;
   private startedAt: number | null = null;
@@ -265,11 +271,9 @@ class ChromaSession implements GameSession {
     this.destroyGrid();
     this.boardHost = host;
     host.replaceChildren();
-    const canvas = document.createElement("canvas");
-    host.append(canvas);
-    this.canvas = canvas;
     const session = this;
-    this.grid = createGridBoard(canvas, {
+    this.grid = createGridBoard(host, {
+      css: chromaBoardCss(),
       get size() {
         return session.puzzle?.size ?? 8;
       },
@@ -466,24 +470,22 @@ class ChromaSession implements GameSession {
     const legalHover =
       hoverIndex != null && this.solving() && isLegalClick(puzzle, hoverIndex);
     const path = Boolean(legalHover && hoverIndex != null && onSlideLine(puzzle, hoverIndex, index));
-    if (isEmpty) return { path };
-    return {
-      accent: chromaAccent(cell),
-      fill: TILE_COLORS[cell] ?? null,
-      path,
-    };
+    if (isEmpty) return { className: path ? "hint" : "" };
+    const classes = [`tile-${cell}`];
+    if (path) classes.push("hint");
+    return { className: classes.join(" ") };
   }
 
   private hookCanvas(): void {
-    const canvas = this.canvas;
     const grid = this.grid;
-    if (!canvas || !grid) return;
-    canvas.onclick = (event) => {
+    if (!grid) return;
+    const surface = grid.surface;
+    surface.onclick = (event) => {
       const cell = grid.pixelToCell(event.clientX, event.clientY);
       if (!cell || !this.puzzle) return;
       this.clickCell(cell.row * this.puzzle.size + cell.col);
     };
-    canvas.onmousemove = (event) => {
+    surface.onmousemove = (event) => {
       if (this.roomCode || !this.solving()) {
         this.hoverIndex = null;
         grid.clearHover();
@@ -498,11 +500,11 @@ class ChromaSession implements GameSession {
       this.hoverIndex = cell.row * this.puzzle.size + cell.col;
       grid.setHoverCell(cell.row, cell.col);
     };
-    canvas.onmouseleave = () => {
+    surface.onmouseleave = () => {
       this.hoverIndex = null;
       grid.clearHover();
     };
-    canvas.ontouchstart = (event) => {
+    surface.ontouchstart = (event) => {
       if (grid.panEnabled) return;
       event.preventDefault();
       const touch = event.touches[0];
@@ -515,7 +517,6 @@ class ChromaSession implements GameSession {
   private destroyGrid(): void {
     this.grid?.destroy();
     this.grid = null;
-    this.canvas = null;
     if (this.boardHost) this.boardHost.replaceChildren();
     this.boardHost = null;
   }
