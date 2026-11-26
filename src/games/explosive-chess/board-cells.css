@@ -33,56 +33,115 @@
 .grid-cell.dots-2::after,
 .grid-cell.dots-3::after,
 .grid-cell.dots-4::after {
-  --dot: calc(var(--grid-cell-size, 32px) * 0.24);
-  --spread: calc(var(--grid-cell-size, 32px) * 0.25);
-  --dot-y: calc(var(--grid-cell-size, 32px) * 0.024);
+  --r: max(2px, calc(var(--grid-cell-size, 32px) * 0.12));
+  --s: calc(var(--grid-cell-size, 32px) * 0.25);
+  --sy: max(0.5px, calc(var(--r) * 0.15));
+  --hr: calc(var(--r) * 0.35);
+  --ho: calc(var(--r) * -0.3);
+  --hl1: radial-gradient(
+    circle at calc(var(--x1) + var(--ho)) calc(var(--y1) + var(--ho)),
+    rgba(255, 255, 255, 0.35) 0 var(--hr),
+    transparent calc(var(--hr) + 0.5px)
+  );
+  --hl2: radial-gradient(
+    circle at calc(var(--x2) + var(--ho)) calc(var(--y2) + var(--ho)),
+    rgba(255, 255, 255, 0.35) 0 var(--hr),
+    transparent calc(var(--hr) + 0.5px)
+  );
+  --hl3: radial-gradient(
+    circle at calc(var(--x3) + var(--ho)) calc(var(--y3) + var(--ho)),
+    rgba(255, 255, 255, 0.35) 0 var(--hr),
+    transparent calc(var(--hr) + 0.5px)
+  );
+  --hl4: radial-gradient(
+    circle at calc(var(--x4) + var(--ho)) calc(var(--y4) + var(--ho)),
+    rgba(255, 255, 255, 0.35) 0 var(--hr),
+    transparent calc(var(--hr) + 0.5px)
+  );
+  --fill1: radial-gradient(
+    circle at var(--x1) var(--y1),
+    var(--piece-color) 0 var(--r),
+    transparent calc(var(--r) + 0.5px)
+  );
+  --fill2: radial-gradient(
+    circle at var(--x2) var(--y2),
+    var(--piece-color) 0 var(--r),
+    transparent calc(var(--r) + 0.5px)
+  );
+  --fill3: radial-gradient(
+    circle at var(--x3) var(--y3),
+    var(--piece-color) 0 var(--r),
+    transparent calc(var(--r) + 0.5px)
+  );
+  --fill4: radial-gradient(
+    circle at var(--x4) var(--y4),
+    var(--piece-color) 0 var(--r),
+    transparent calc(var(--r) + 0.5px)
+  );
+  --sh1: radial-gradient(
+    circle at var(--x1) calc(var(--y1) + var(--sy)),
+    var(--grid-piece-shadow) 0 var(--r),
+    transparent calc(var(--r) + 0.5px)
+  );
+  --sh2: radial-gradient(
+    circle at var(--x2) calc(var(--y2) + var(--sy)),
+    var(--grid-piece-shadow) 0 var(--r),
+    transparent calc(var(--r) + 0.5px)
+  );
+  --sh3: radial-gradient(
+    circle at var(--x3) calc(var(--y3) + var(--sy)),
+    var(--grid-piece-shadow) 0 var(--r),
+    transparent calc(var(--r) + 0.5px)
+  );
+  --sh4: radial-gradient(
+    circle at var(--x4) calc(var(--y4) + var(--sy)),
+    var(--grid-piece-shadow) 0 var(--r),
+    transparent calc(var(--r) + 0.5px)
+  );
   content: "";
   position: absolute;
-  left: 50%;
-  top: 50%;
-  width: var(--dot);
-  height: var(--dot);
-  border-radius: 50%;
-  transform: translate(-50%, -50%);
+  inset: 0;
   pointer-events: none;
 }
 
 .grid-cell.dots-1::after {
-  background:
-    radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.35) 0 35%, transparent 36%),
-    var(--piece-color);
-  box-shadow: 0 var(--dot-y) 0 var(--grid-piece-shadow);
+  --x1: 50%;
+  --y1: 50%;
+  background-image: var(--hl1), var(--fill1), var(--sh1);
 }
 
 .grid-cell.dots-2::after {
-  background: transparent;
-  box-shadow:
-    calc(var(--spread) * -1) calc(var(--spread) + var(--dot-y)) 0 var(--grid-piece-shadow),
-    var(--spread) calc(var(--spread) * -1 + var(--dot-y)) 0 var(--grid-piece-shadow),
-    calc(var(--spread) * -1) var(--spread) 0 var(--piece-color),
-    var(--spread) calc(var(--spread) * -1) 0 var(--piece-color);
+  --x1: calc(50% - var(--s));
+  --y1: calc(50% + var(--s));
+  --x2: calc(50% + var(--s));
+  --y2: calc(50% - var(--s));
+  background-image: var(--hl1), var(--hl2), var(--fill1), var(--fill2), var(--sh1), var(--sh2);
 }
 
 .grid-cell.dots-3::after {
-  background: transparent;
-  box-shadow:
-    0 calc(var(--spread) * -1 + var(--dot-y)) 0 var(--grid-piece-shadow),
-    calc(var(--spread) * -1) calc(var(--spread) * 0.7 + var(--dot-y)) 0 var(--grid-piece-shadow),
-    var(--spread) calc(var(--spread) * 0.7 + var(--dot-y)) 0 var(--grid-piece-shadow),
-    0 calc(var(--spread) * -1) 0 var(--piece-color),
-    calc(var(--spread) * -1) calc(var(--spread) * 0.7) 0 var(--piece-color),
-    var(--spread) calc(var(--spread) * 0.7) 0 var(--piece-color);
+  --x1: 50%;
+  --y1: calc(50% - var(--s));
+  --x2: calc(50% - var(--s));
+  --y2: calc(50% + var(--s) * 0.7);
+  --x3: calc(50% + var(--s));
+  --y3: calc(50% + var(--s) * 0.7);
+  background-image:
+    var(--hl1), var(--hl2), var(--hl3),
+    var(--fill1), var(--fill2), var(--fill3),
+    var(--sh1), var(--sh2), var(--sh3);
 }
 
 .grid-cell.dots-4::after {
-  background: transparent;
-  box-shadow:
-    calc(var(--spread) * -1) calc(var(--spread) * -1 + var(--dot-y)) 0 var(--grid-piece-shadow),
-    var(--spread) calc(var(--spread) * -1 + var(--dot-y)) 0 var(--grid-piece-shadow),
-    calc(var(--spread) * -1) calc(var(--spread) + var(--dot-y)) 0 var(--grid-piece-shadow),
-    var(--spread) calc(var(--spread) + var(--dot-y)) 0 var(--grid-piece-shadow),
-    calc(var(--spread) * -1) calc(var(--spread) * -1) 0 var(--piece-color),
-    var(--spread) calc(var(--spread) * -1) 0 var(--piece-color),
-    calc(var(--spread) * -1) var(--spread) 0 var(--piece-color),
-    var(--spread) var(--spread) 0 var(--piece-color);
+  --x1: calc(50% - var(--s));
+  --y1: calc(50% - var(--s));
+  --x2: calc(50% + var(--s));
+  --y2: calc(50% - var(--s));
+  --x3: calc(50% - var(--s));
+  --y3: calc(50% + var(--s));
+  --x4: calc(50% + var(--s));
+  --y4: calc(50% + var(--s));
+  background-image:
+    var(--hl1), var(--hl2), var(--hl3), var(--hl4),
+    var(--fill1), var(--fill2), var(--fill3), var(--fill4),
+    var(--sh1), var(--sh2), var(--sh3), var(--sh4);
 }

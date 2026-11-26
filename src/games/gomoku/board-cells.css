@@ -18,19 +18,32 @@
 
 .grid-cell.disc-black::after,
 .grid-cell.disc-white::after {
+  --r: max(3px, calc(var(--grid-cell-size, 32px) * 0.22));
+  --sy: calc(var(--r) * 0.12);
+  --hr: calc(var(--r) * 0.28);
+  --ho: calc(var(--r) * -0.28);
+  --edge: max(1px, calc(var(--grid-cell-size, 32px) * 0.03));
+  --edge-half: calc(var(--edge) / 2);
   content: "";
   position: absolute;
-  left: 50%;
-  top: 50%;
-  width: 44%;
-  height: 44%;
-  border-radius: 50%;
-  transform: translate(-50%, -50%);
+  inset: 0;
   pointer-events: none;
-  background:
-    radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.28) 0 35%, transparent 36%),
-    var(--piece-color);
-  box-shadow: 0 calc(var(--grid-cell-size, 32px) * 0.026) 0 var(--grid-piece-shadow);
+  background-image:
+    radial-gradient(
+      circle at calc(50% + var(--ho)) calc(50% + var(--ho)),
+      rgba(255, 255, 255, 0.28) 0 var(--hr),
+      transparent calc(var(--hr) + 0.5px)
+    ),
+    radial-gradient(
+      circle at 50% 50%,
+      var(--piece-color) 0 var(--r),
+      transparent calc(var(--r) + 0.5px)
+    ),
+    radial-gradient(
+      circle at 50% calc(50% + var(--sy)),
+      var(--grid-piece-shadow) 0 var(--r),
+      transparent calc(var(--r) + 0.5px)
+    );
 }
 
 .grid-cell.disc-black::after {
@@ -39,7 +52,27 @@
 
 .grid-cell.disc-white::after {
   --piece-color: var(--grid-piece-white);
-  box-shadow:
-    0 calc(var(--grid-cell-size, 32px) * 0.026) 0 var(--grid-piece-shadow),
-    inset 0 0 0 calc(var(--grid-cell-size, 32px) * 0.03) var(--grid-piece-white-edge);
+  background-image:
+    radial-gradient(
+      circle at calc(50% + var(--ho)) calc(50% + var(--ho)),
+      rgba(255, 255, 255, 0.28) 0 var(--hr),
+      transparent calc(var(--hr) + 0.5px)
+    ),
+    radial-gradient(
+      circle at 50% 50%,
+      transparent 0 calc(var(--r) - var(--edge-half)),
+      var(--grid-piece-white-edge) calc(var(--r) - var(--edge-half)),
+      var(--grid-piece-white-edge) calc(var(--r) + var(--edge-half)),
+      transparent calc(var(--r) + var(--edge-half) + 0.5px)
+    ),
+    radial-gradient(
+      circle at 50% 50%,
+      var(--piece-color) 0 var(--r),
+      transparent calc(var(--r) + 0.5px)
+    ),
+    radial-gradient(
+      circle at 50% calc(50% + var(--sy)),
+      var(--grid-piece-shadow) 0 var(--r),
+      transparent calc(var(--r) + 0.5px)
+    );
 }
