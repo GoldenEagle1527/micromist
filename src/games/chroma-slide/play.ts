@@ -280,7 +280,7 @@ class ChromaSession implements GameSession {
       paintCell: (row, col) => session.paintCell(row, col),
       isHoverValid: (row, col) => session.hoverValid(row, col),
     });
-    this.hookCanvas();
+    this.hookBoard();
     this.paint();
     return {
       destroy: () => {
@@ -476,7 +476,7 @@ class ChromaSession implements GameSession {
     return { className: classes.join(" ") };
   }
 
-  private hookCanvas(): void {
+  private hookBoard(): void {
     const grid = this.grid;
     if (!grid) return;
     const surface = grid.surface;

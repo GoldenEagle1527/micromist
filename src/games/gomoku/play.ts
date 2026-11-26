@@ -306,7 +306,7 @@ class GomokuSession implements GameSession {
       paintCell: (row, col) => session.paintCell(row, col),
       isHoverValid: (row, col) => session.canPlayIndex(row * (session.boardState()?.size ?? SIZE) + col),
     });
-    this.hookCanvas();
+    this.hookBoard();
     this.paint();
     return {
       destroy: () => {
@@ -676,7 +676,7 @@ class GomokuSession implements GameSession {
     return { className: classes.join(" ") };
   }
 
-  private hookCanvas(): void {
+  private hookBoard(): void {
     const grid = this.grid;
     if (!grid) return;
     const surface = grid.surface;
