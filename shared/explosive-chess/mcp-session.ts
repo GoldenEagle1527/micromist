@@ -7,6 +7,7 @@
  */
 import { formatRoomId, generateRoomCode, playUrl } from "../multiplayer";
 import { explosiveChessWsUrl } from "./agent-guide";
+import { EXPLOSION_DELAY_MAX_MS } from "./config";
 import {
   boardSizeFromCounts,
   effectsFromAnimationFrames,
@@ -96,7 +97,7 @@ function readYou(value: Record<string, unknown>): YouView {
 export function parseMatchConfig(input: unknown): ToolBody | string {
   const rec = asRecord(input);
   if (!rec) return "config object required";
-  const { boardSize, winMode, winParam, hostColor } = rec;
+  const { boardSize, winMode, winParam, hostColor, explosionDelayMs } = rec;
   if (boardSize !== 9 && boardSize !== 11 && boardSize !== 13) {
     return "boardSize must be 9, 11, or 13";
   }
@@ -107,7 +108,22 @@ export function parseMatchConfig(input: unknown): ToolBody | string {
     return "winParam must be an integer >= 1";
   }
   if (hostColor !== "red" && hostColor !== "blue") return "hostColor must be red or blue";
-  return { boardSize, winMode, winParam, hostColor };
+  if (
+    explosionDelayMs !== undefined &&
+    (typeof explosionDelayMs !== "number" ||
+      !Number.isInteger(explosionDelayMs) ||
+      explosionDelayMs < 0 ||
+      explosionDelayMs > EXPLOSION_DELAY_MAX_MS)
+  ) {
+    return "explosionDelayMs must be an integer 0–1000";
+  }
+  return {
+    boardSize,
+    winMode,
+    winParam,
+    hostColor,
+    explosionDelayMs: explosionDelayMs === undefined ? 0 : explosionDelayMs,
+  };
 }
 
 function nodeProcess(): { versions?: { node?: string } } | undefined {

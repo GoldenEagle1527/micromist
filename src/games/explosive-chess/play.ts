@@ -3,13 +3,14 @@ import type {
   GamePlayModule,
   GameSession,
   GameSnapshot,
+  GridBoard,
   ParamField,
   PlayChrome,
   SessionContext,
   ShellAction,
 } from "../../platform/play";
 import { createAI, type AiDifficulty, type AiInstance } from "./ai";
-import { createBoardRenderer, type BoardRenderer } from "./boardRenderer";
+import { createBoardRenderer, type BoardMarks } from "./boardRenderer";
 import {
   COLOR_BLUE,
   COLOR_RED,
@@ -48,8 +49,9 @@ import {
 } from "./online";
 import { clearLocalProgress } from "../local-persist";
 import {
-  FRAME_DELAY_MS,
+  EXPLOSION_DELAY_MAX_MS,
   SOLO_PROGRESS_SLUG,
+  clampExplosionDelay,
   loadSettings,
   loadSoloPersist,
   persistSoloProgress,
@@ -133,9 +135,9 @@ class ExplosiveSession implements GameSession {
   private onlineStatus = "";
   private myColor: PlayerColor | null = null;
 
-  private canvas: HTMLCanvasElement | null = null;
   private game: GameInstance | null = null;
-  private renderer: BoardRenderer | null = null;
+  private renderer: GridBoard | null = null;
+  private boardMarks: BoardMarks = { lastMove: null, flash: null };
   private ai: AiInstance | null = null;
   private animating = false;
   private playerColor: PlayerColor = COLOR_RED;
@@ -173,6 +175,9 @@ class ExplosiveSession implements GameSession {
         ...this.settings,
         ...this.pendingRestore.settings,
         opponent: this.pendingRestore.settings.opponent,
+        explosionDelayMs: clampExplosionDelay(
+          this.pendingRestore.settings.explosionDelayMs ?? this.settings.explosionDelayMs,
+        ),
       };
       this.localSession = this.pendingRestore.localSession ?? 0;
       this.phase = "play";
@@ -254,6 +259,7 @@ class ExplosiveSession implements GameSession {
     if (id === "difficulty") next.difficulty = String(value) as AiDifficulty;
     if (id === "redOwner") next.redOwner = value === "ai" ? "ai" : "player";
     if (id === "hostColor") next.hostColor = value === "blue" ? "blue" : "red";
+    if (id === "explosionDelayMs") next.explosionDelayMs = clampExplosionDelay(value);
     this.settings = next;
     this.emit();
   }
@@ -325,9 +331,6 @@ class ExplosiveSession implements GameSession {
   bindBoard(host: HTMLElement) {
     this.host = host;
     host.replaceChildren();
-    const canvas = document.createElement("canvas");
-    host.append(canvas);
-    this.canvas = canvas;
     if (this.phase === "play") {
       if (this.settings.opponent === "online") this.tryMountOnlineBoard();
       else this.mountLocalBoard();
@@ -335,7 +338,6 @@ class ExplosiveSession implements GameSession {
     return {
       destroy: () => {
         if (this.host === host) this.host = null;
-        this.canvas = null;
         this.destroyBoard();
         host.replaceChildren();
       },
@@ -392,6 +394,7 @@ class ExplosiveSession implements GameSession {
     const boardSize = cfg?.boardSize ?? this.settings.boardSize;
     const winMode = cfg?.winMode ?? this.settings.winMode;
     const winParam = cfg?.winParam ?? this.settings.winParam;
+    const explosionDelayMs = clampExplosionDelay(cfg?.explosionDelayMs ?? this.settings.explosionDelayMs);
     const fields: ParamField[] = [
       {
         id: "mode",
@@ -428,6 +431,15 @@ class ExplosiveSession implements GameSession {
           { value: WIN_MODE_STEPS, label: ex.steps },
           { value: WIN_MODE_AREA, label: ex.area },
         ],
+      },
+      {
+        id: "explosionDelayMs",
+        label: ex.explosionDelay,
+        type: "number",
+        value: explosionDelayMs,
+        min: 0,
+        max: EXPLOSION_DELAY_MAX_MS,
+        disabled: locked,
       },
     ];
     if (winMode !== WIN_MODE_ANNIHILATION) {
@@ -551,7 +563,7 @@ class ExplosiveSession implements GameSession {
     if (cfg && this.onlineRole !== "host" && (this.onlinePhase === "lobby" || this.onlinePhase === "connecting")) {
       status = `${status} · ${ex.configLabel}${cfg.boardSize}×${cfg.boardSize} · ${winModeLabel(cfg.winMode, ex)}${
         cfg.winMode !== WIN_MODE_ANNIHILATION ? ` (${cfg.winParam})` : ""
-      } · ${ex.hostLabel} ${cfg.hostColor === "red" ? ex.colorRed : ex.colorBlue}`;
+      } · ${ex.explosionDelay} ${clampExplosionDelay(cfg.explosionDelayMs)} · ${ex.hostLabel} ${cfg.hostColor === "red" ? ex.colorRed : ex.colorBlue}`;
     }
     if (inMenu && this.onlinePhase !== "idle" && this.onlinePhase !== "connecting") {
       /* keep */
@@ -625,19 +637,28 @@ class ExplosiveSession implements GameSession {
     }
   }
 
-  private async playFrames(frames: AnimationFrame[], renderer: BoardRenderer): Promise<void> {
+  private matchExplosionDelay(): number {
+    const raw =
+      this.settings.opponent === "online"
+        ? (this.onlineConfig?.explosionDelayMs ?? this.settings.explosionDelayMs)
+        : this.settings.explosionDelayMs;
+    return clampExplosionDelay(raw);
+  }
+
+  private async playFrames(frames: AnimationFrame[], renderer: GridBoard): Promise<void> {
     if (frames.length === 0) {
-      renderer.setExplosionHighlight(null);
+      this.boardMarks.flash = null;
       renderer.render();
       return;
     }
     this.animating = true;
     for (const frame of frames) {
-      renderer.setExplosionHighlight([frame.explodedCell, ...frame.affectedCells]);
+      this.boardMarks.flash = new Set([frame.explodedCell, ...frame.affectedCells]);
       renderer.render();
-      await new Promise((r) => setTimeout(r, FRAME_DELAY_MS));
+      const delay = this.matchExplosionDelay();
+      if (delay > 0) await new Promise((r) => setTimeout(r, delay));
     }
-    renderer.setExplosionHighlight(null);
+    this.boardMarks.flash = null;
     renderer.render();
     this.animating = false;
   }
@@ -649,6 +670,8 @@ class ExplosiveSession implements GameSession {
     this.ai = null;
     this.renderer?.destroy();
     this.renderer = null;
+    this.boardMarks.lastMove = null;
+    this.boardMarks.flash = null;
     this.game = null;
   }
 
@@ -657,12 +680,11 @@ class ExplosiveSession implements GameSession {
     const renderer = this.renderer;
     const mode = this.settings.opponent;
     if (!game || !renderer) return;
-    const shouldAnimate = mode === "local" || mode === "online" || this.settings.difficulty === "easy";
-    if (shouldAnimate && result.animationFrames.length > 0) {
+    if (this.matchExplosionDelay() > 0 && result.animationFrames.length > 0) {
       this.busy = true;
       await this.playFrames(result.animationFrames, renderer);
     } else {
-      renderer.setExplosionHighlight(null);
+      this.boardMarks.flash = null;
       renderer.render();
     }
     this.syncHud(game);
@@ -705,16 +727,22 @@ class ExplosiveSession implements GameSession {
       this.emit();
       return;
     }
-    renderer.setLastMove(move.row, move.col);
+    this.markLast(move.row, move.col);
     await this.afterMove(result);
   }
 
-  private hookCanvas(): void {
-    const canvas = this.canvas;
+  private markLast(row: number, col: number): void {
+    const prev = this.boardMarks.lastMove;
+    this.boardMarks.lastMove = { row, col };
+    if (prev?.row !== row || prev?.col !== col) this.renderer?.revealCell(row, col);
+  }
+
+  private hookBoard(): void {
     const renderer = this.renderer;
-    if (!canvas || !renderer) return;
-    canvas.onclick = (e) => this.handlePointer(e.clientX, e.clientY);
-    canvas.onmousemove = (e) => {
+    if (!renderer) return;
+    const surface = renderer.surface;
+    surface.onclick = (e) => this.handlePointer(e.clientX, e.clientY);
+    surface.onmousemove = (e) => {
       const game = this.game;
       if (!this.renderer || !game || game.gameOver) {
         this.renderer?.clearHover();
@@ -728,8 +756,8 @@ class ExplosiveSession implements GameSession {
       if (cell) this.renderer.setHoverCell(cell.row, cell.col);
       else this.renderer.clearHover();
     };
-    canvas.onmouseleave = () => this.renderer?.clearHover();
-    canvas.ontouchstart = (e) => {
+    surface.onmouseleave = () => this.renderer?.clearHover();
+    surface.ontouchstart = (e) => {
       if (renderer.panEnabled) return;
       e.preventDefault();
       const touch = e.touches[0];
@@ -749,8 +777,8 @@ class ExplosiveSession implements GameSession {
   }
 
   private mountLocalBoard(): void {
-    const canvas = this.canvas;
-    if (!canvas || this.settings.opponent === "online") {
+    const host = this.host;
+    if (!host || this.settings.opponent === "online") {
       if (this.settings.opponent === "online") clearLocalProgress(SOLO_PROGRESS_SLUG);
       return;
     }
@@ -775,10 +803,10 @@ class ExplosiveSession implements GameSession {
       this.playerColor = COLOR_RED;
       this.aiColor = COLOR_BLUE;
     }
-    const renderer = createBoardRenderer(canvas, game);
+    const renderer = createBoardRenderer(host, game, this.boardMarks);
     this.renderer = renderer;
     renderer.resize();
-    this.hookCanvas();
+    this.hookBoard();
     this.syncHud(game);
     this.updateTip(game, this.settings.opponent);
     this.busy = false;
@@ -794,12 +822,12 @@ class ExplosiveSession implements GameSession {
     }
   }
 
-  private attachCanvas(game: GameInstance): void {
-    if (!this.canvas || this.renderer) return;
-    const renderer = createBoardRenderer(this.canvas, game);
+  private attachBoard(game: GameInstance): void {
+    if (!this.host || this.renderer) return;
+    const renderer = createBoardRenderer(this.host, game, this.boardMarks);
     this.renderer = renderer;
     renderer.resize();
-    this.hookCanvas();
+    this.hookBoard();
   }
 
   private tryMountOnlineBoard(): void {
@@ -808,7 +836,7 @@ class ExplosiveSession implements GameSession {
       this.pendingOnlineStart = null;
       this.mountOnlineBoard(pending.config, pending.yourColor);
     } else if (this.game) {
-      this.attachCanvas(this.game);
+      this.attachBoard(this.game);
     }
     const buffered = this.pendingOnlineState;
     if (this.game && this.renderer && buffered) {
@@ -835,7 +863,7 @@ class ExplosiveSession implements GameSession {
     this.renderer?.destroy();
     this.renderer = null;
     this.game = game;
-    this.attachCanvas(game);
+    this.attachBoard(game);
     this.syncHud(game);
     this.updateTip(game, "online");
     this.busy = false;
@@ -876,9 +904,9 @@ class ExplosiveSession implements GameSession {
       return;
     }
     game.loadFullState(fullState);
-    if (lastMove) renderer.setLastMove(lastMove.row, lastMove.col);
+    if (lastMove) this.markLast(lastMove.row, lastMove.col);
     renderer.render();
-    if (animationFrames && animationFrames.length > 0) {
+    if (this.matchExplosionDelay() > 0 && animationFrames && animationFrames.length > 0) {
       this.busy = true;
       await this.playFrames(animationFrames, renderer);
     }
@@ -919,7 +947,7 @@ class ExplosiveSession implements GameSession {
     if (!cell || !game.isValidMove(cell.row, cell.col, game.currentTurn)) return;
     const result = game.makeMove(cell.row, cell.col, game.currentTurn);
     if (!result) return;
-    renderer.setLastMove(cell.row, cell.col);
+    this.markLast(cell.row, cell.col);
     void this.afterMove(result);
   }
 
@@ -1109,6 +1137,7 @@ class ExplosiveSession implements GameSession {
               winMode: s.winMode,
               winParam: s.winParam,
               hostColor: s.hostColor,
+              explosionDelayMs: s.explosionDelayMs,
             });
           }
           this.emit();

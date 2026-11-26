@@ -9,6 +9,7 @@ import type {
   ShellAction,
 } from "../../platform/play";
 import { createGridBoard, type GridBoard, type GridCellPaint } from "../../platform/play/grid-board";
+import boardCss from "./board-cells.css?raw";
 import { clearLocalProgress, loadLocalProgress, saveLocalProgress } from "../local-persist";
 import { chooseMove, type Difficulty } from "./ai";
 import {
@@ -154,8 +155,8 @@ class GomokuSession implements GameSession {
   private joinCode = "";
   private joinError = "";
   private boardHost: HTMLElement | null = null;
-  private canvas: HTMLCanvasElement | null = null;
   private grid: GridBoard | null = null;
+  private revealedMove: number | null = null;
 
   private roomCode = "";
   private client: GomokuOnlineClient | null = null;
@@ -296,18 +297,16 @@ class GomokuSession implements GameSession {
     this.destroyBoard();
     this.boardHost = host;
     host.replaceChildren();
-    const canvas = document.createElement("canvas");
-    host.append(canvas);
-    this.canvas = canvas;
     const session = this;
-    this.grid = createGridBoard(canvas, {
+    this.grid = createGridBoard(host, {
+      css: boardCss,
       get size() {
         return session.boardState()?.size ?? SIZE;
       },
       paintCell: (row, col) => session.paintCell(row, col),
       isHoverValid: (row, col) => session.canPlayIndex(row * (session.boardState()?.size ?? SIZE) + col),
     });
-    this.hookCanvas();
+    this.hookBoard();
     this.paint();
     return {
       destroy: () => {
@@ -666,30 +665,34 @@ class GomokuSession implements GameSession {
     const choosing = pending?.kind === "remove";
     const marked = choosing ? canActOn(state, index) : (state.winLine?.includes(index) ?? false);
     const flipping = this.flipHint === index;
-    return {
-      stone: stone === 1 ? "black" : stone === 2 ? "white" : null,
-      path: marked || flipping,
-      accent: selected || flipping ? (state.turn === 1 ? "red" : "blue") : "none",
-    };
+    const last = state.lastMove;
+    const isLast = last != null && last === index && Boolean(state.board[last]) && !marked && !flipping;
+    const classes: string[] = [];
+    if (marked || flipping) classes.push("hint");
+    else if (isLast) classes.push("last");
+    if (selected || flipping) classes.push(state.turn === 1 ? "seat-red" : "seat-blue");
+    if (stone === 1) classes.push("disc-black");
+    if (stone === 2) classes.push("disc-white");
+    return { className: classes.join(" ") };
   }
 
-  private hookCanvas(): void {
-    const canvas = this.canvas;
+  private hookBoard(): void {
     const grid = this.grid;
-    if (!canvas || !grid) return;
-    canvas.onclick = (event) => {
+    if (!grid) return;
+    const surface = grid.surface;
+    surface.onclick = (event) => {
       const cell = grid.pixelToCell(event.clientX, event.clientY);
       const state = this.boardState();
       if (!cell || !state) return;
       this.onPointClick(cell.row * state.size + cell.col);
     };
-    canvas.onmousemove = (event) => {
+    surface.onmousemove = (event) => {
       const cell = grid.pixelToCell(event.clientX, event.clientY);
       if (cell) grid.setHoverCell(cell.row, cell.col);
       else grid.clearHover();
     };
-    canvas.onmouseleave = () => grid.clearHover();
-    canvas.ontouchstart = (event) => {
+    surface.onmouseleave = () => grid.clearHover();
+    surface.ontouchstart = (event) => {
       if (grid.panEnabled) return;
       event.preventDefault();
       const touch = event.touches[0];
@@ -703,11 +706,11 @@ class GomokuSession implements GameSession {
   private paint(): void {
     const state = this.boardState();
     const last = state?.lastMove;
-    if (state && last != null && state.board[last]) {
-      this.grid?.setLastMove(Math.floor(last / state.size), last % state.size);
-    } else {
-      this.grid?.clearLastMove();
+    const idx = state && last != null && state.board[last] ? last : null;
+    if (state && idx != null && idx !== this.revealedMove) {
+      this.grid?.revealCell(Math.floor(idx / state.size), idx % state.size);
     }
+    this.revealedMove = idx;
     this.grid?.resize();
   }
 
@@ -1182,7 +1185,7 @@ class GomokuSession implements GameSession {
   private destroyBoard(): void {
     this.grid?.destroy();
     this.grid = null;
-    this.canvas = null;
+    this.revealedMove = null;
     if (this.boardHost) this.boardHost.replaceChildren();
     this.boardHost = null;
   }

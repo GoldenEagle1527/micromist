@@ -1,0 +1,58 @@
+---
+description: 共用棋盘壳 createGridBoard 的约定。新增或改棋盘游戏、格子外观、bindBoard、grid-board 时使用。不要给格子加绘制字段或第二套棋盘。
+globs: src/platform/play/grid-board.ts,src/platform/play/grid-board-shadow.css,src/platform/play/game-shell.css,src/games/**/*.ts,src/games/**/*.css
+alwaysApply: false
+---
+
+# 棋盘壳
+
+只有一套棋盘：`src/platform/play/grid-board.ts`。`GameShell` / `PlayPage` 不按 slug 分支。新游戏不要做第二种棋盘、不要 canvas、不要给 `GridCellPaint` 加字段。
+
+## 分工
+
+- **平台**：n×n 方格、浅/深底、网格缝、悬停绿/红、浅色/深色变量、手机捏合平移。
+- **游戏**：注入 CSS + 每格 `className`。点、子、色块、描边、闪底都在游戏样式里画。
+
+格子 DOM 固定为 `.grid-cell` + 内部 `.grid-cell-hover`。游戏不能往格子里塞子节点。多子（如爆炸棋 1–4 点）用游戏 CSS 的 `::after` / `box-shadow`，不要向棋盘要 `piece[]`。
+
+## 接线
+
+`bindBoard(host)` 里：
+
+```ts
+this.grid = createGridBoard(host, {
+  css: boardCss, // `import boardCss from "./board-cells.css?raw"`
+  get size() { return n; },
+  paintCell: (row, col) => ({ className: "…" }),
+  isHoverValid: (row, col) => /* 这格能不能下；不传则一律合法 */,
+});
+this.grid.surface.onclick = (e) => {
+  const cell = this.grid.pixelToCell(e.clientX, e.clientY);
+};
+```
+
+盘面变了调 `render()` 或 `resize()`。手机放大后要把某格挪进视野：`revealCell(row, col)`（只跟视口，不画画）。
+
+上一手、爆发高亮是游戏自己的 class + 自己的状态，不是棋盘方法。
+
+## 平台占用（游戏 class 不要用这些）
+
+`grid-cell` `is-light` `is-dark` `is-hover-valid` `is-hover-invalid` `grid-cell-hover`
+
+注入 CSS 与悬停层同在 shadow 里，可覆盖 `.is-hover-valid > .grid-cell-hover` 改悬停色。
+
+## 可选色板（host 上的 CSS 变量，浅/深会换）
+
+壳：`--grid-bg` `--grid-line` `--grid-cell-light` `--grid-cell-dark` `--grid-hover-valid` `--grid-hover-invalid` `--grid-n` `--grid-cell-size` `--grid-mark-scale`
+
+内容可用：`--grid-tint-red/blue` `--grid-emphasis` `--grid-ring-last/hint` `--grid-piece-red/blue/black/white/neutral/shadow` `--grid-piece-white-edge`
+
+要用就 `var(--…)`，不用就写死自己的色。`--grid-mark-scale` 给手机缩放时的描边粗细。
+
+## 现有接法
+
+- 爆炸棋：`seat-red/blue` + `dots-1`…`dots-4` + `emphasis` + `last` → `board-cells.css`
+- 滑动色块：`tile-N` + `hint`（CSS 字符串由 `TILE_COLORS` 生成）
+- 五子棋：`disc-black/white` + `hint`/`last` + `seat-red/blue` → `board-cells.css`
+
+一格要混色、可点单颗，先问用户；那需要改壳允许内部 HTML，现在没有这扇门。

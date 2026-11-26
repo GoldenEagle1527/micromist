@@ -35,11 +35,4 @@ export {
   useSetPlayChrome,
 } from "./play-chrome";
 export { createGridBoard } from "./grid-board";
-export type {
-  CellAccent,
-  DotColor,
-  GridBoard,
-  GridBoardSource,
-  GridCellPaint,
-  StoneColor,
-} from "./grid-board";
+export type { GridBoard, GridBoardSource, GridCellPaint } from "./grid-board";

@@ -54,6 +54,14 @@ export const preview: GamePreview = (ctx) => {
           ],
         },
         {
+          id: "explosionDelayMs",
+          label: ex.explosionDelay,
+          type: "number",
+          value: 0,
+          min: 0,
+          max: 1000,
+        },
+        {
           id: "difficulty",
           label: ex.aiDifficulty,
           type: "select",

@@ -176,7 +176,7 @@ Optional, config host only, once, **before** the second seat is claimed. The off
 {"type":"set_config","payload":{"boardSize":9,"winMode":"steps","winParam":4,"hostColor":"red"}}
 ```
 
-`boardSize` is 9, 11, or 13. `hostColor` is `red` or `blue`. Defaults if you skip this: 9×9, `annihilation`, host red. `winMode` and `winParam` are defined in the "Win modes" section below.
+`boardSize` is 9, 11, or 13. `hostColor` is `red` or `blue`. Optional `explosionDelayMs` is an integer 0–1000 (milliseconds between chained explosions; default 0). Both clients in the room use this value. Defaults if you skip this: 9×9, `annihilation`, host red, explosion delay 0. `winMode` and `winParam` are defined in the "Win modes" section below.
 
 ## Win modes
 
