@@ -183,11 +183,11 @@
   overflow: hidden;
 }
 
-.game-shell-board-host canvas {
+.game-shell-board-host .grid-board {
   display: block;
 }
 
-.game-shell-board-host:not(.is-pan) canvas {
+.game-shell-board-host:not(.is-pan) .grid-board {
   max-width: 100%;
   max-height: 100%;
 }
@@ -208,7 +208,7 @@
   touch-action: none;
 }
 
-.grid-board-viewport.is-pan canvas {
+.grid-board-viewport.is-pan .grid-board {
   position: absolute;
   left: 0;
   top: 0;

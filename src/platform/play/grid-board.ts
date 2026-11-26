@@ -1,22 +1,28 @@
 /**
- * The one play board: explosive-chess checkerboard on canvas.
- * Games only change what sits in each cell (dots, tint, a stone, a fill).
+ * The one play board: a square CSS grid.
+ * Platform owns chrome (checkerboard, lines, hover, pan).
+ * Games inject CSS for `.grid-cell` and set `className` per cell.
+ *
+ * Custom properties on the board host (light/dark):
+ * --grid-bg --grid-line --grid-cell-light --grid-cell-dark
+ * --grid-tint-red --grid-tint-blue --grid-emphasis
+ * --grid-ring-last --grid-ring-hint
+ * --grid-hover-valid --grid-hover-invalid
+ * --grid-piece-red --grid-piece-blue --grid-piece-black --grid-piece-white
+ * --grid-piece-neutral --grid-piece-shadow --grid-piece-white-edge
+ * --grid-n --grid-cell-size --grid-mark-scale
  */
 
-export type CellAccent = "none" | "red" | "blue";
-export type DotColor = "red" | "blue" | "neutral";
-export type StoneColor = "black" | "white";
+import shadowCss from "./grid-board-shadow.css?raw";
 
 export type GridCellPaint = {
-  accent?: CellAccent;
-  fill?: string | null;
-  dots?: { count: number; color: DotColor };
-  stone?: StoneColor | null;
-  path?: boolean;
+  className?: string;
 };
 
 export type GridBoardSource = {
   size: number;
+  /** Injected into the board shadow tree. Selectors see `.grid-cell`. */
+  css?: string;
   paintCell: (row: number, col: number) => GridCellPaint;
   isHoverValid?: (row: number, col: number) => boolean;
 };
@@ -27,10 +33,9 @@ export type GridBoard = {
   pixelToCell: (px: number, py: number) => { row: number; col: number } | null;
   setHoverCell: (row: number | null, col: number | null) => void;
   clearHover: () => void;
-  setLastMove: (row: number | null, col: number | null) => void;
-  clearLastMove: () => void;
-  setExplosionHighlight: (cells: number[] | null) => void;
+  revealCell: (row: number, col: number) => void;
   destroy: () => void;
+  readonly surface: HTMLElement;
   readonly cellSize: number;
   readonly hover: { row: number; col: number } | null;
   /** Mobile UA: starts zoomed to a usable cell size; pinch and pan to see the rest. */
@@ -100,6 +105,7 @@ const DARK_COLORS: ThemeColors = {
   path: "rgba(129, 199, 132, 0.95)",
 };
 
+
 function detectDarkTheme(): boolean {
   const html = document.documentElement;
   const dataTheme = html.getAttribute("data-theme");
@@ -126,27 +132,6 @@ function detectDarkTheme(): boolean {
   return window.matchMedia("(prefers-color-scheme: dark)").matches;
 }
 
-function roundRect(
-  ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  w: number,
-  h: number,
-  r: number,
-): void {
-  ctx.beginPath();
-  ctx.moveTo(x + r, y);
-  ctx.lineTo(x + w - r, y);
-  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
-  ctx.lineTo(x + w, y + h - r);
-  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
-  ctx.lineTo(x + r, y + h);
-  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
-  ctx.lineTo(x, y + r);
-  ctx.quadraticCurveTo(x, y, x + r, y);
-  ctx.closePath();
-}
-
 function isMobileUA(): boolean {
   if (typeof navigator === "undefined") return false;
   const ua = navigator.userAgent;
@@ -164,65 +149,56 @@ function touchMid(a: Touch, b: Touch): { x: number; y: number } {
   return { x: (a.clientX + b.clientX) / 2, y: (a.clientY + b.clientY) / 2 };
 }
 
-function ensureViewport(canvas: HTMLCanvasElement): HTMLElement {
-  const parent = canvas.parentElement;
-  if (parent?.classList.contains("grid-board-viewport")) return parent;
+function extraClasses(raw: string | undefined): string {
+  if (!raw) return "";
+  return raw.split(/\s+/).filter(Boolean).join(" ");
+}
+
+function applyThemeVars(el: HTMLElement, colors: ThemeColors): void {
+  el.style.setProperty("--grid-bg", colors.background);
+  el.style.setProperty("--grid-line", colors.gridLine);
+  el.style.setProperty("--grid-cell-light", colors.cellLight);
+  el.style.setProperty("--grid-cell-dark", colors.cellDark);
+  el.style.setProperty("--grid-tint-red", colors.redCellBg);
+  el.style.setProperty("--grid-tint-blue", colors.blueCellBg);
+  el.style.setProperty("--grid-emphasis", colors.explosion);
+  el.style.setProperty("--grid-ring-last", colors.lastMove);
+  el.style.setProperty("--grid-ring-hint", colors.path);
+  el.style.setProperty("--grid-hover-valid", colors.hoverValid);
+  el.style.setProperty("--grid-hover-invalid", colors.hoverInvalid);
+  el.style.setProperty("--grid-piece-red", colors.red);
+  el.style.setProperty("--grid-piece-blue", colors.blue);
+  el.style.setProperty("--grid-piece-black", colors.black);
+  el.style.setProperty("--grid-piece-white", colors.white);
+  el.style.setProperty("--grid-piece-neutral", colors.empty);
+  el.style.setProperty("--grid-piece-shadow", colors.dotShadow);
+  el.style.setProperty("--grid-piece-white-edge", colors.whiteEdge);
+}
+
+export function createGridBoard(mount: HTMLElement, source: GridBoardSource): GridBoard {
   const viewport = document.createElement("div");
   viewport.className = "grid-board-viewport";
-  if (parent) parent.replaceChild(viewport, canvas);
-  viewport.append(canvas);
-  return viewport;
-}
+  const surface = document.createElement("div");
+  surface.className = "grid-board";
+  viewport.append(surface);
+  mount.append(viewport);
 
-function getDotPositions(
-  count: number,
-  cx: number,
-  cy: number,
-  spread: number,
-): { x: number; y: number }[] {
-  switch (count) {
-    case 1:
-      return [{ x: cx, y: cy }];
-    case 2:
-      return [
-        { x: cx - spread, y: cy + spread },
-        { x: cx + spread, y: cy - spread },
-      ];
-    case 3:
-      return [
-        { x: cx, y: cy - spread },
-        { x: cx - spread, y: cy + spread * 0.7 },
-        { x: cx + spread, y: cy + spread * 0.7 },
-      ];
-    default:
-      return [
-        { x: cx - spread, y: cy - spread },
-        { x: cx + spread, y: cy - spread },
-        { x: cx - spread, y: cy + spread },
-        { x: cx + spread, y: cy + spread },
-      ];
-  }
-}
+  const shadow = surface.attachShadow({ mode: "open" });
+  const platformStyle = document.createElement("style");
+  platformStyle.textContent = shadowCss;
+  const gameStyle = document.createElement("style");
+  gameStyle.textContent = source.css ?? "";
+  const cells = document.createElement("div");
+  cells.className = "grid-board-cells";
+  shadow.append(platformStyle, gameStyle, cells);
 
-export function createGridBoard(
-  canvas: HTMLCanvasElement,
-  source: GridBoardSource,
-): GridBoard {
-  const maybeCtx = canvas.getContext("2d");
-  if (!maybeCtx) {
-    throw new Error("2d context unavailable");
-  }
-  const ctx: CanvasRenderingContext2D = maybeCtx;
-  const viewport = ensureViewport(canvas);
   const host = viewport.parentElement;
   const panEnabled = isMobileUA();
 
   let cellSize = 32;
-  let canvasSize = 0;
+  let boardPx = 0;
   const padding = 2;
   let hoverCell: { row: number; col: number } | null = null;
-  let lastMoveCell: { row: number; col: number } | null = null;
-  let explosionHighlight: Set<number> | null = null;
   let cachedIsDark: boolean | null = null;
   let destroyed = false;
   let viewScale = 1;
@@ -239,7 +215,7 @@ export function createGridBoard(
   const TAP_SLOP = 12;
   let lastFitKey = "";
   let panAnimId = 0;
-  let rasterScale = 1;
+  let slots: HTMLElement[] = [];
 
   function boardSize(): number {
     return Math.max(1, source.size);
@@ -252,26 +228,20 @@ export function createGridBoard(
     return cachedIsDark;
   }
 
-  function getColors(): ThemeColors {
-    return isDark() ? DARK_COLORS : LIGHT_COLORS;
-  }
-
   function scaleForCell(px: number): number {
-    if (canvasSize <= 0) return 1;
-    return (px * boardSize()) / canvasSize;
+    if (boardPx <= 0) return 1;
+    return (px * boardSize()) / boardPx;
   }
 
   function maxViewScale(): number {
     return Math.min(8, Math.max(3, scaleForCell(MIN_CELL_PX)));
   }
 
-  /** On phone, show a slice of the board at a tappable cell size instead of fitting n×n. */
   function defaultViewScale(): number {
     if (!panEnabled) return 1;
     return Math.min(maxViewScale(), Math.max(1, scaleForCell(MIN_CELL_PX)));
   }
 
-  /** Last-move stroke matches desktop at the default phone zoom, then scales with the cells. */
   function markStrokeScale(): number {
     if (!panEnabled) return 1;
     return Math.max(cellSize, 1) / MIN_CELL_PX;
@@ -279,7 +249,7 @@ export function createGridBoard(
 
   function centerView(): void {
     const rect = viewport.getBoundingClientRect();
-    const scaled = canvasSize * viewScale;
+    const scaled = boardPx * viewScale;
     viewTx = (rect.width - scaled) / 2;
     viewTy = (rect.height - scaled) / 2;
   }
@@ -292,44 +262,28 @@ export function createGridBoard(
 
   function clampView(): void {
     const rect = viewport.getBoundingClientRect();
-    const scaled = canvasSize * viewScale;
+    const scaled = boardPx * viewScale;
     viewTx = clampAxis(viewTx, scaled, rect.width);
     viewTy = clampAxis(viewTy, scaled, rect.height);
   }
 
   function applyView(): void {
     if (!panEnabled) {
-      canvas.style.transform = "";
+      surface.style.transform = "";
       return;
     }
-    const bake = Math.max(rasterScale, 1);
-    canvas.style.transformOrigin = "0 0";
-    canvas.style.transform = `translate(${viewTx}px, ${viewTy}px) scale(${viewScale / bake})`;
+    surface.style.transformOrigin = "0 0";
+    surface.style.transform = `translate(${viewTx}px, ${viewTy}px) scale(${viewScale})`;
   }
 
-  /** Draw at the current zoom so CSS does not upscale a small bitmap. Returns true if the buffer was reallocated. */
-  function layoutCanvas(): boolean {
-    if (canvasSize < 1) return false;
-    const dpr = window.devicePixelRatio || 1;
-    const wanted = panEnabled ? viewScale : 1;
-    const maxDim = 8192;
-    const bake = Math.min(wanted, Math.max(1, maxDim / Math.max(canvasSize * dpr, 1)));
-    const pixel = Math.max(1, Math.round(canvasSize * bake * dpr));
-    const same =
-      canvas.width === pixel &&
-      canvas.height === pixel &&
-      Math.abs(rasterScale - bake) < 0.0005;
-    rasterScale = bake;
-    canvas.style.width = `${canvasSize * bake}px`;
-    canvas.style.height = `${canvasSize * bake}px`;
-    if (same) {
-      ctx.setTransform(dpr * bake, 0, 0, dpr * bake, 0, 0);
-      return false;
-    }
-    canvas.width = pixel;
-    canvas.height = pixel;
-    ctx.setTransform(dpr * bake, 0, 0, dpr * bake, 0, 0);
-    return true;
+  function applyLayoutVars(): void {
+    surface.style.setProperty("--grid-n", String(boardSize()));
+    surface.style.setProperty("--grid-cell-size", `${cellSize}px`);
+    surface.style.setProperty("--grid-mark-scale", String(markStrokeScale()));
+  }
+
+  function applyTheme(): void {
+    applyThemeVars(surface, isDark() ? DARK_COLORS : LIGHT_COLORS);
   }
 
   function cancelPanAnim(): void {
@@ -369,12 +323,11 @@ export function createGridBoard(
     panAnimId = requestAnimationFrame(tick);
   }
 
-  /** Pan just enough to bring a cell on-screen. No-op when the full board already fits. */
   function revealCell(row: number, col: number): void {
     if (!panEnabled || destroyed || viewScale <= 1.001) return;
     if (pinchStartDist > 0 || (dragging && gestureMoved)) return;
     const rect = viewport.getBoundingClientRect();
-    const scaled = canvasSize * viewScale;
+    const scaled = boardPx * viewScale;
     if (scaled <= rect.width + 0.5 && scaled <= rect.height + 0.5) return;
     const span = cellSize * viewScale;
     const inset = Math.max(
@@ -418,9 +371,46 @@ export function createGridBoard(
     applyView();
   }
 
+  function rebuildCells(n: number): void {
+    cells.replaceChildren();
+    slots = [];
+    for (let i = 0; i < n * n; i++) {
+      const root = document.createElement("div");
+      const hover = document.createElement("div");
+      hover.className = "grid-cell-hover";
+      root.append(hover);
+      cells.append(root);
+      slots.push(root);
+    }
+  }
+
+  function render(): void {
+    if (destroyed) return;
+    const n = boardSize();
+    if (slots.length !== n * n) rebuildCells(n);
+    for (let r = 0; r < n; r++) {
+      for (let c = 0; c < n; c++) {
+        const slot = slots[r * n + c];
+        if (!slot) continue;
+        const paint = source.paintCell(r, c);
+        const hovering = Boolean(hoverCell && hoverCell.row === r && hoverCell.col === c);
+        const valid = hovering ? (source.isHoverValid ? source.isHoverValid(r, c) : true) : null;
+        slot.className = [
+          "grid-cell",
+          (r + c) % 2 === 1 ? "is-dark" : "is-light",
+          hovering ? (valid ? "is-hover-valid" : "is-hover-invalid") : "",
+          extraClasses(paint.className),
+        ]
+          .filter(Boolean)
+          .join(" ");
+      }
+    }
+  }
+
   function resize(): void {
     if (destroyed) return;
     cachedIsDark = detectDarkTheme();
+    applyTheme();
     const wrapperRect = viewport.getBoundingClientRect();
     const availableWidth = wrapperRect.width - padding * 2;
     const availableHeight = wrapperRect.height - padding * 2;
@@ -428,7 +418,8 @@ export function createGridBoard(
     const available = Math.min(availableWidth, availableHeight);
     const n = boardSize();
     const fitKey = `${n}:${Math.round(available)}`;
-    if (fitKey === lastFitKey && canvasSize > 0) {
+    if (fitKey === lastFitKey && boardPx > 0) {
+      applyLayoutVars();
       render();
       return;
     }
@@ -436,175 +427,27 @@ export function createGridBoard(
     const nChanged = lastFitKey !== "" && !lastFitKey.startsWith(`${n}:`);
     lastFitKey = fitKey;
     cellSize = Math.max(Math.floor(available / n), 1);
-    canvasSize = cellSize * n;
+    boardPx = cellSize * n;
+    surface.style.width = `${boardPx}px`;
+    surface.style.height = `${boardPx}px`;
+    applyLayoutVars();
 
     if (panEnabled && (firstFit || nChanged)) {
       cancelPanAnim();
       viewScale = defaultViewScale();
       centerView();
     }
-    layoutCanvas();
     clampView();
     applyView();
     render();
   }
 
-  function render(): void {
-    if (destroyed) return;
-    const colors = getColors();
-    const n = boardSize();
-    ctx.clearRect(0, 0, canvasSize, canvasSize);
-    ctx.fillStyle = colors.background;
-    ctx.fillRect(0, 0, canvasSize, canvasSize);
-
-    for (let r = 0; r < n; r++) {
-      for (let c = 0; c < n; c++) {
-        drawCell(r, c, n, colors);
-      }
-    }
-
-    drawGridLines(n, colors);
-
-    if (hoverCell) {
-      drawHoverHighlight(hoverCell.row, hoverCell.col, colors);
-    }
-  }
-
-  function drawCell(row: number, col: number, n: number, colors: ThemeColors): void {
-    const x = col * cellSize;
-    const y = row * cellSize;
-    const idx = row * n + col;
-    const paint = source.paintCell(row, col);
-    const isLightCell = (row + col) % 2 === 0;
-    ctx.fillStyle = isLightCell ? colors.cellLight : colors.cellDark;
-    ctx.fillRect(x + 0.5, y + 0.5, cellSize - 1, cellSize - 1);
-
-    if (paint.accent === "red") {
-      ctx.fillStyle = colors.redCellBg;
-      ctx.fillRect(x + 0.5, y + 0.5, cellSize - 1, cellSize - 1);
-    } else if (paint.accent === "blue") {
-      ctx.fillStyle = colors.blueCellBg;
-      ctx.fillRect(x + 0.5, y + 0.5, cellSize - 1, cellSize - 1);
-    }
-
-    if (paint.fill) {
-      ctx.globalAlpha = 0.82;
-      ctx.fillStyle = paint.fill;
-      ctx.fillRect(x + 0.5, y + 0.5, cellSize - 1, cellSize - 1);
-      ctx.globalAlpha = 1;
-    }
-
-    if (explosionHighlight?.has(idx)) {
-      ctx.fillStyle = colors.explosion;
-      ctx.fillRect(x + 0.5, y + 0.5, cellSize - 1, cellSize - 1);
-    }
-
-    const isLast =
-      lastMoveCell && lastMoveCell.row === row && lastMoveCell.col === col && !paint.path;
-    if (paint.path || isLast) {
-      ctx.strokeStyle = paint.path ? colors.path : colors.lastMove;
-      const mark = markStrokeScale();
-      ctx.lineWidth = 2.5 * mark;
-      const inset = 2 * mark;
-      roundRect(ctx, x + inset, y + inset, cellSize - inset * 2, cellSize - inset * 2, 3 * mark);
-      ctx.stroke();
-    }
-
-    if (paint.dots && paint.dots.count > 0) {
-      drawDots(x, y, paint.dots.count, paint.dots.color, colors);
-    }
-
-    if (paint.stone) {
-      drawStone(x, y, paint.stone, colors);
-    }
-  }
-
-  function drawDots(
-    x: number,
-    y: number,
-    count: number,
-    color: DotColor,
-    colors: ThemeColors,
-  ): void {
-    const dotColor =
-      color === "red" ? colors.red : color === "blue" ? colors.blue : colors.empty;
-    const centerX = x + cellSize / 2;
-    const centerY = y + cellSize / 2;
-    const dotRadius = Math.max(cellSize * 0.12, 2);
-    const spread = cellSize * 0.25;
-    const positions = getDotPositions(count, centerX, centerY, spread);
-    const shadowOffset = Math.max(dotRadius * 0.15, 0.5);
-
-    for (const pos of positions) {
-      ctx.beginPath();
-      ctx.arc(pos.x, pos.y + shadowOffset, dotRadius, 0, Math.PI * 2);
-      ctx.fillStyle = colors.dotShadow;
-      ctx.fill();
-
-      ctx.beginPath();
-      ctx.arc(pos.x, pos.y, dotRadius, 0, Math.PI * 2);
-      ctx.fillStyle = dotColor;
-      ctx.fill();
-
-      ctx.beginPath();
-      ctx.arc(pos.x - dotRadius * 0.3, pos.y - dotRadius * 0.3, dotRadius * 0.35, 0, Math.PI * 2);
-      ctx.fillStyle = "rgba(255, 255, 255, 0.35)";
-      ctx.fill();
-    }
-  }
-
-  function drawStone(x: number, y: number, stone: StoneColor, colors: ThemeColors): void {
-    const cx = x + cellSize / 2;
-    const cy = y + cellSize / 2;
-    const radius = Math.max(cellSize * 0.22, 3);
-    ctx.beginPath();
-    ctx.arc(cx, cy + radius * 0.12, radius, 0, Math.PI * 2);
-    ctx.fillStyle = colors.dotShadow;
-    ctx.fill();
-    ctx.beginPath();
-    ctx.arc(cx, cy, radius, 0, Math.PI * 2);
-    ctx.fillStyle = stone === "black" ? colors.black : colors.white;
-    ctx.fill();
-    if (stone === "white") {
-      ctx.strokeStyle = colors.whiteEdge;
-      ctx.lineWidth = Math.max(1, cellSize * 0.03);
-      ctx.stroke();
-    }
-    ctx.beginPath();
-    ctx.arc(cx - radius * 0.28, cy - radius * 0.28, radius * 0.28, 0, Math.PI * 2);
-    ctx.fillStyle = "rgba(255, 255, 255, 0.28)";
-    ctx.fill();
-  }
-
-  function drawGridLines(n: number, colors: ThemeColors): void {
-    ctx.strokeStyle = colors.gridLine;
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    for (let i = 0; i <= n; i++) {
-      const pos = i * cellSize;
-      ctx.moveTo(pos, 0);
-      ctx.lineTo(pos, canvasSize);
-      ctx.moveTo(0, pos);
-      ctx.lineTo(canvasSize, pos);
-    }
-    ctx.stroke();
-  }
-
-  function drawHoverHighlight(row: number, col: number, colors: ThemeColors): void {
-    const x = col * cellSize;
-    const y = row * cellSize;
-    const isValid = source.isHoverValid ? source.isHoverValid(row, col) : true;
-    ctx.fillStyle = isValid ? colors.hoverValid : colors.hoverInvalid;
-    ctx.fillRect(x + 0.5, y + 0.5, cellSize - 1, cellSize - 1);
-  }
-
   function pixelToCell(px: number, py: number): { row: number; col: number } | null {
     const n = boardSize();
-    const rect = canvas.getBoundingClientRect();
-    const x = px - rect.left;
-    const y = py - rect.top;
-    const col = Math.floor(x / (rect.width / n));
-    const row = Math.floor(y / (rect.height / n));
+    const rect = surface.getBoundingClientRect();
+    if (rect.width < 1 || rect.height < 1) return null;
+    const col = Math.floor((px - rect.left) / (rect.width / n));
+    const row = Math.floor((py - rect.top) / (rect.height / n));
     if (row < 0 || row >= n || col < 0 || col >= n) return null;
     return { row, col };
   }
@@ -629,28 +472,14 @@ export function createGridBoard(
     }
   }
 
-  function setLastMove(row: number | null, col: number | null): void {
-    const next = row !== null && col !== null ? { row, col } : null;
-    const changed =
-      (lastMoveCell?.row ?? null) !== (next?.row ?? null) ||
-      (lastMoveCell?.col ?? null) !== (next?.col ?? null);
-    lastMoveCell = next;
-    if (changed && next) revealCell(next.row, next.col);
-  }
-
-  function clearLastMove(): void {
-    lastMoveCell = null;
-  }
-
-  function setExplosionHighlight(cells: number[] | null): void {
-    explosionHighlight = cells ? new Set(cells) : null;
-  }
-
   const onWindowResize = () => resize();
   window.addEventListener("resize", onWindowResize);
   const visualViewport = window.visualViewport;
   visualViewport?.addEventListener("resize", onWindowResize);
-  const themeObserver = new MutationObserver(() => resize());
+  const themeObserver = new MutationObserver(() => {
+    cachedIsDark = detectDarkTheme();
+    applyTheme();
+  });
   themeObserver.observe(document.documentElement, {
     attributes: true,
     attributeFilter: ["data-theme"],
@@ -732,7 +561,6 @@ export function createGridBoard(
     }
     dragging = false;
     pinchStartDist = 0;
-    if (layoutCanvas()) render();
     applyView();
   }
 
@@ -747,16 +575,16 @@ export function createGridBoard(
   viewport.addEventListener("touchmove", onTouchMove, touchOpts);
   viewport.addEventListener("touchend", onTouchEnd);
   viewport.addEventListener("touchcancel", onTouchEnd);
-  canvas.addEventListener("click", onClickCapture, true);
+  surface.addEventListener("click", onClickCapture, true);
 
+  applyTheme();
   requestAnimationFrame(() => resize());
 
   function destroy(): void {
     destroyed = true;
     cancelPanAnim();
-    lastMoveCell = null;
     hoverCell = null;
-    explosionHighlight = null;
+    slots = [];
     window.removeEventListener("resize", onWindowResize);
     visualViewport?.removeEventListener("resize", onWindowResize);
     themeObserver.disconnect();
@@ -765,9 +593,10 @@ export function createGridBoard(
     viewport.removeEventListener("touchmove", onTouchMove);
     viewport.removeEventListener("touchend", onTouchEnd);
     viewport.removeEventListener("touchcancel", onTouchEnd);
-    canvas.removeEventListener("click", onClickCapture, true);
+    surface.removeEventListener("click", onClickCapture, true);
     viewport.classList.remove("is-pan");
     host?.classList.remove("is-pan");
+    viewport.remove();
   }
 
   return {
@@ -776,10 +605,9 @@ export function createGridBoard(
     pixelToCell,
     setHoverCell,
     clearHover,
-    setLastMove,
-    clearLastMove,
-    setExplosionHighlight,
+    revealCell,
     destroy,
+    surface,
     get cellSize() {
       return cellSize;
     },
