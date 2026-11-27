@@ -1,0 +1,60 @@
+/* Isometric cube tiles. --tile is set per .tile-N from TILE_COLORS. */
+.grid-cell.tile {
+  --tile-lit: color-mix(in srgb, var(--tile) 68%, #fff);
+  --tile-shade: color-mix(in srgb, var(--tile) 70%, #1a120c);
+  --cube-m: max(2px, calc(var(--grid-cell-size, 32px) * 0.08));
+  --cube-d: max(5px, calc(var(--grid-cell-size, 32px) * 0.22));
+  --cube-front: calc(100% - var(--cube-m) * 2 - var(--cube-d));
+  background-image:
+    linear-gradient(
+      160deg,
+      color-mix(in srgb, var(--tile) 62%, #fff) 0%,
+      var(--tile) 36%,
+      color-mix(in srgb, var(--tile) 84%, #1a120c) 100%
+    ),
+    radial-gradient(ellipse 70% 30% at 46% 88%, rgba(0, 0, 0, 0.26), transparent 72%);
+  background-repeat: no-repeat;
+  background-size: var(--cube-front) var(--cube-front), 100% 100%;
+  background-position: var(--cube-m) calc(var(--cube-m) + var(--cube-d)), 0 0;
+}
+
+.grid-cell.tile::before,
+.grid-cell.tile::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.grid-cell.tile::before {
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.42) 0%, transparent 48%),
+    var(--tile-lit);
+  clip-path: polygon(
+    var(--cube-m) calc(var(--cube-m) + var(--cube-d) + 1px),
+    calc(var(--cube-m) + var(--cube-d)) var(--cube-m),
+    calc(100% - var(--cube-m)) var(--cube-m),
+    calc(100% - var(--cube-m) - var(--cube-d)) calc(var(--cube-m) + var(--cube-d) + 1px)
+  );
+}
+
+.grid-cell.tile::after {
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--tile-shade) 78%, #fff) 0%,
+    var(--tile-shade) 42%,
+    color-mix(in srgb, var(--tile-shade) 82%, #000) 100%
+  );
+  clip-path: polygon(
+    calc(100% - var(--cube-m) - var(--cube-d) - 1px) calc(var(--cube-m) + var(--cube-d)),
+    calc(100% - var(--cube-m)) var(--cube-m),
+    calc(100% - var(--cube-m)) calc(100% - var(--cube-m) - var(--cube-d)),
+    calc(100% - var(--cube-m) - var(--cube-d) - 1px) calc(100% - var(--cube-m))
+  );
+}
+
+.grid-cell.hint {
+  box-shadow: inset 0 0 0 calc(2.5px * var(--grid-mark-scale, 1)) var(--grid-ring-hint);
+  border-radius: calc(3px * var(--grid-mark-scale, 1));
+}

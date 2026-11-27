@@ -52,7 +52,7 @@ this.grid.surface.onclick = (e) => {
 ## 现有接法
 
 - 爆炸棋：`seat-red/blue` + `dots-1`…`dots-4` + `emphasis` + `last` → `board-cells.css`
-- 滑动色块：`tile-N` + `hint`（CSS 字符串由 `TILE_COLORS` 生成）
+- 滑动色块：`tile` + `tile-N` + `hint`（`--tile` 由 `TILE_COLORS` 生成，立方体在 `board-cells.css`）
 - 五子棋：`disc-black/white` + `hint`/`last` + `seat-red/blue` → `board-cells.css`
 
 一格要混色、可点单颗，先问用户；那需要改壳允许内部 HTML，现在没有这扇门。
