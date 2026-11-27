@@ -1,37 +1,17 @@
-/* Rounded cubes, still a top-down grid. Front face only — no isometric layout. */
+/* Flat rounded chips, inset so the cell keeps a breathing gap. */
 .grid-cell.tile {
-  --tile-shade: color-mix(in srgb, var(--tile) 62%, #1a120c);
-  --gap: max(2px, calc(var(--grid-cell-size, 32px) * 0.07));
-  --front: max(4px, calc(var(--grid-cell-size, 32px) * 0.2));
-  --round: max(3px, calc(var(--grid-cell-size, 32px) * 0.18));
+  --gap: max(3px, calc(var(--grid-cell-size, 32px) * 0.1));
+  --round: max(4px, calc(var(--grid-cell-size, 32px) * 0.18));
 }
 
-.grid-cell.tile::before,
 .grid-cell.tile::after {
   content: "";
   position: absolute;
+  inset: var(--gap);
   pointer-events: none;
   z-index: 1;
   border-radius: var(--round);
-}
-
-.grid-cell.tile::before {
-  inset: var(--gap);
-  background: linear-gradient(
-    180deg,
-    color-mix(in srgb, var(--tile) 48%, #fff) 0%,
-    var(--tile-shade) 22%,
-    color-mix(in srgb, var(--tile) 52%, #0a0806) 100%
-  );
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.22);
-}
-
-.grid-cell.tile::after {
-  top: var(--gap);
-  left: var(--gap);
-  right: var(--gap);
-  bottom: calc(var(--gap) + var(--front));
-  background: var(--tile);
+  background: color-mix(in srgb, var(--tile) 82%, transparent);
 }
 
 .grid-cell.hint {
