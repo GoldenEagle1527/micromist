@@ -1,57 +1,45 @@
-/* Isometric cube tiles. --tile is set per .tile-N from TILE_COLORS. */
+/* Top-down blocks: still axis-aligned squares, with a thin rim of thickness. */
 .grid-cell.tile {
-  --tile-lit: color-mix(in srgb, var(--tile) 68%, #fff);
-  --tile-shade: color-mix(in srgb, var(--tile) 70%, #1a120c);
-  --cube-m: max(2px, calc(var(--grid-cell-size, 32px) * 0.08));
-  --cube-d: max(5px, calc(var(--grid-cell-size, 32px) * 0.22));
-  --cube-front: calc(100% - var(--cube-m) * 2 - var(--cube-d));
-  background-image:
-    linear-gradient(
-      160deg,
-      color-mix(in srgb, var(--tile) 62%, #fff) 0%,
-      var(--tile) 36%,
-      color-mix(in srgb, var(--tile) 84%, #1a120c) 100%
-    ),
-    radial-gradient(ellipse 70% 30% at 46% 88%, rgba(0, 0, 0, 0.26), transparent 72%);
-  background-repeat: no-repeat;
-  background-size: var(--cube-front) var(--cube-front), 100% 100%;
-  background-position: var(--cube-m) calc(var(--cube-m) + var(--cube-d)), 0 0;
+  --tile-lit: color-mix(in srgb, var(--tile) 70%, #fff);
+  --tile-shade: color-mix(in srgb, var(--tile) 68%, #1a120c);
+  --gap: max(1px, calc(var(--grid-cell-size, 32px) * 0.03));
+  --thick: max(2px, calc(var(--grid-cell-size, 32px) * 0.07));
+  --edge: max(1px, calc(var(--grid-cell-size, 32px) * 0.04));
+  --round: max(1px, calc(var(--grid-cell-size, 32px) * 0.05));
 }
 
 .grid-cell.tile::before,
 .grid-cell.tile::after {
   content: "";
   position: absolute;
-  inset: 0;
   pointer-events: none;
-  z-index: 1;
+  border-radius: var(--round);
 }
 
 .grid-cell.tile::before {
-  background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.42) 0%, transparent 48%),
-    var(--tile-lit);
-  clip-path: polygon(
-    var(--cube-m) calc(var(--cube-m) + var(--cube-d) + 1px),
-    calc(var(--cube-m) + var(--cube-d)) var(--cube-m),
-    calc(100% - var(--cube-m)) var(--cube-m),
-    calc(100% - var(--cube-m) - var(--cube-d)) calc(var(--cube-m) + var(--cube-d) + 1px)
-  );
+  z-index: 1;
+  top: calc(var(--gap) + var(--thick));
+  left: calc(var(--gap) + var(--thick));
+  right: var(--gap);
+  bottom: var(--gap);
+  background: var(--tile-shade);
 }
 
 .grid-cell.tile::after {
+  z-index: 1;
+  top: var(--gap);
+  left: var(--gap);
+  right: calc(var(--gap) + var(--thick));
+  bottom: calc(var(--gap) + var(--thick));
   background: linear-gradient(
-    180deg,
-    color-mix(in srgb, var(--tile-shade) 78%, #fff) 0%,
-    var(--tile-shade) 42%,
-    color-mix(in srgb, var(--tile-shade) 82%, #000) 100%
+    165deg,
+    color-mix(in srgb, var(--tile) 80%, #fff) 0%,
+    var(--tile) 38%,
+    color-mix(in srgb, var(--tile) 90%, #1a120c) 100%
   );
-  clip-path: polygon(
-    calc(100% - var(--cube-m) - var(--cube-d) - 1px) calc(var(--cube-m) + var(--cube-d)),
-    calc(100% - var(--cube-m)) var(--cube-m),
-    calc(100% - var(--cube-m)) calc(100% - var(--cube-m) - var(--cube-d)),
-    calc(100% - var(--cube-m) - var(--cube-d) - 1px) calc(100% - var(--cube-m))
-  );
+  box-shadow:
+    inset var(--edge) var(--edge) 0 color-mix(in srgb, var(--tile-lit) 65%, transparent),
+    inset calc(var(--edge) * -1) calc(var(--edge) * -1) 0 color-mix(in srgb, var(--tile-shade) 50%, transparent);
 }
 
 .grid-cell.hint {
