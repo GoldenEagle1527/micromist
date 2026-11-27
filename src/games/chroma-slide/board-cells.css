@@ -1,6 +1,5 @@
 /* Rounded cubes, still a top-down grid. Front face only — no isometric layout. */
 .grid-cell.tile {
-  --tile-lit: color-mix(in srgb, var(--tile) 58%, #fff);
   --tile-shade: color-mix(in srgb, var(--tile) 62%, #1a120c);
   --gap: max(2px, calc(var(--grid-cell-size, 32px) * 0.07));
   --front: max(4px, calc(var(--grid-cell-size, 32px) * 0.2));
@@ -32,15 +31,7 @@
   left: var(--gap);
   right: var(--gap);
   bottom: calc(var(--gap) + var(--front));
-  background:
-    radial-gradient(ellipse 55% 42% at 50% 30%, rgba(255, 255, 255, 0.55) 0%, transparent 68%),
-    radial-gradient(
-      ellipse 90% 85% at 50% 40%,
-      var(--tile-lit) 0%,
-      var(--tile) 52%,
-      color-mix(in srgb, var(--tile) 78%, #1a120c) 100%
-    );
-  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.28);
+  background: var(--tile);
 }
 
 .grid-cell.hint {
