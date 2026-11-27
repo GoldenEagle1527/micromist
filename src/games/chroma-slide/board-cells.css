@@ -1,11 +1,10 @@
-/* Top-down blocks: still axis-aligned squares, with a thin rim of thickness. */
+/* Rounded cubes, still a top-down grid. Front face only — no isometric layout. */
 .grid-cell.tile {
-  --tile-lit: color-mix(in srgb, var(--tile) 70%, #fff);
-  --tile-shade: color-mix(in srgb, var(--tile) 68%, #1a120c);
-  --gap: max(1px, calc(var(--grid-cell-size, 32px) * 0.03));
-  --thick: max(2px, calc(var(--grid-cell-size, 32px) * 0.07));
-  --edge: max(1px, calc(var(--grid-cell-size, 32px) * 0.04));
-  --round: max(1px, calc(var(--grid-cell-size, 32px) * 0.05));
+  --tile-lit: color-mix(in srgb, var(--tile) 58%, #fff);
+  --tile-shade: color-mix(in srgb, var(--tile) 62%, #1a120c);
+  --gap: max(2px, calc(var(--grid-cell-size, 32px) * 0.07));
+  --front: max(4px, calc(var(--grid-cell-size, 32px) * 0.2));
+  --round: max(3px, calc(var(--grid-cell-size, 32px) * 0.18));
 }
 
 .grid-cell.tile::before,
@@ -13,33 +12,35 @@
   content: "";
   position: absolute;
   pointer-events: none;
+  z-index: 1;
   border-radius: var(--round);
 }
 
 .grid-cell.tile::before {
-  z-index: 1;
-  top: calc(var(--gap) + var(--thick));
-  left: calc(var(--gap) + var(--thick));
-  right: var(--gap);
-  bottom: var(--gap);
-  background: var(--tile-shade);
+  inset: var(--gap);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--tile) 48%, #fff) 0%,
+    var(--tile-shade) 22%,
+    color-mix(in srgb, var(--tile) 52%, #0a0806) 100%
+  );
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.22);
 }
 
 .grid-cell.tile::after {
-  z-index: 1;
   top: var(--gap);
   left: var(--gap);
-  right: calc(var(--gap) + var(--thick));
-  bottom: calc(var(--gap) + var(--thick));
-  background: linear-gradient(
-    165deg,
-    color-mix(in srgb, var(--tile) 80%, #fff) 0%,
-    var(--tile) 38%,
-    color-mix(in srgb, var(--tile) 90%, #1a120c) 100%
-  );
-  box-shadow:
-    inset var(--edge) var(--edge) 0 color-mix(in srgb, var(--tile-lit) 65%, transparent),
-    inset calc(var(--edge) * -1) calc(var(--edge) * -1) 0 color-mix(in srgb, var(--tile-shade) 50%, transparent);
+  right: var(--gap);
+  bottom: calc(var(--gap) + var(--front));
+  background:
+    radial-gradient(ellipse 55% 42% at 50% 30%, rgba(255, 255, 255, 0.55) 0%, transparent 68%),
+    radial-gradient(
+      ellipse 90% 85% at 50% 40%,
+      var(--tile-lit) 0%,
+      var(--tile) 52%,
+      color-mix(in srgb, var(--tile) 78%, #1a120c) 100%
+    );
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.28);
 }
 
 .grid-cell.hint {
