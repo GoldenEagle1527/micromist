@@ -1,0 +1,16 @@
+---
+description: 对局壳、catalog、新增游戏与本地进度。改 PlayPage、GameShell、catalog 或新游戏 session 时使用。
+globs: src/pages/**,src/platform/**,src/games/**,src/lib/game-store.ts
+alwaysApply: false
+---
+
+# 对局壳与新增游戏
+
+不要在 `PlayPage` 或 `GameShell` 里为某一款游戏写特殊分支。壳不按 slug 分支。
+
+- 新增游戏：在 `src/games/catalog.ts` 登记 `preview` / `loadPlay`，并在 `src/games/<slug>/play.ts` 实现 `GameSession`。
+- 菜单 / HUD / 房间 / 弹层走快照，棋盘只通过 `bindBoard(host)` 挂进去。棋盘只有一套：`src/platform/play/grid-board.ts` 的 `createGridBoard`。游戏注入 CSS + `className` 画格子，不要再做第二种棋盘，也不要给棋盘加绘制字段。细则见 `grid-board` 规则。
+- 首页是否出现由 `GameMeta.audience` 控制：`all`（默认）、`staging`（仅测试站和本地）、`prod`（仅正式站）。`listed: false` 会强制隐藏。仅先上测试站时设 `audience: "staging"`。
+- 单机进度用 `src/lib/game-store.ts` / `src/games/local-persist.ts`（IndexedDB 或现有封装）。禁止自建另一套存储。对手是联机时（`opponent === "online"` 或处于房间页）不要写本地进度。
+
+单机最低步骤：catalog 登记 → `GameSession` → `createGridBoard` → 中英文案 → 需要时设 `audience`。

@@ -1,0 +1,20 @@
+/* Flat rounded chips, inset so the cell keeps a breathing gap. */
+.grid-cell.tile {
+  --gap: max(3px, calc(var(--grid-cell-size, 32px) * 0.1));
+  --round: max(4px, calc(var(--grid-cell-size, 32px) * 0.18));
+}
+
+.grid-cell.tile::after {
+  content: "";
+  position: absolute;
+  inset: var(--gap);
+  pointer-events: none;
+  z-index: 1;
+  border-radius: var(--round);
+  background: color-mix(in srgb, var(--tile) 82%, transparent);
+}
+
+.grid-cell.hint {
+  box-shadow: inset 0 0 0 calc(2.5px * var(--grid-mark-scale, 1)) var(--grid-ring-hint);
+  border-radius: calc(3px * var(--grid-mark-scale, 1));
+}

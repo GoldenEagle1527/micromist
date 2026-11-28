@@ -7,6 +7,7 @@ import type {
   SessionContext,
 } from "../../platform/play";
 import { createGridBoard, type GridBoard, type GridCellPaint } from "../../platform/play/grid-board";
+import boardCss from "./board-cells.css?raw";
 import { clearLocalProgress, loadLocalProgress, saveLocalProgress } from "../local-persist";
 import {
   EMPTY,
@@ -107,16 +108,8 @@ function puzzleFromPublic(pub: ChromaPublicState): PuzzleState | null {
 }
 
 function chromaBoardCss(): string {
-  const tiles = TILE_COLORS.map(
-    (hex, i) =>
-      `.grid-cell.tile-${i}{background-image:linear-gradient(color-mix(in srgb, ${hex} 82%, transparent),color-mix(in srgb, ${hex} 82%, transparent))}`,
-  );
-  return `${tiles.join("\n")}
-.grid-cell.hint {
-  box-shadow: inset 0 0 0 calc(2.5px * var(--grid-mark-scale, 1)) var(--grid-ring-hint);
-  border-radius: calc(3px * var(--grid-mark-scale, 1));
-}
-`;
+  const tiles = TILE_COLORS.map((hex, i) => `.grid-cell.tile-${i}{--tile:${hex}}`);
+  return `${tiles.join("\n")}\n${boardCss}`;
 }
 
 function onSlideLine(puzzle: PuzzleState, hoverIndex: number, index: number): boolean {
@@ -471,7 +464,7 @@ class ChromaSession implements GameSession {
       hoverIndex != null && this.solving() && isLegalClick(puzzle, hoverIndex);
     const path = Boolean(legalHover && hoverIndex != null && onSlideLine(puzzle, hoverIndex, index));
     if (isEmpty) return { className: path ? "hint" : "" };
-    const classes = [`tile-${cell}`];
+    const classes = ["tile", `tile-${cell}`];
     if (path) classes.push("hint");
     return { className: classes.join(" ") };
   }

@@ -1,0 +1,15 @@
+---
+description: Agent 游玩入口、指南、官方客户端与结构化观测。改 /agent、agent-guide、agent-clients 或 agent-ws 文档时使用。
+globs: src/pages/AgentPage.tsx,worker/agent-guide.ts,worker/index.ts,public/agent-clients/**,docs/agent-ws*,shared/**/agent-*.ts,shared/agent/**
+alwaysApply: false
+---
+
+# Agent 游玩
+
+入口是首页卡片「跟 AI 玩」→ `/agent`，展示一段可复制文本。不要再在各游戏设置页里放复制提示。提示词只说明如何下载与使用，不限制、也不引导 AI 怎么选着。
+
+- 官方客户端一份：`/agent-clients/server.mjs` 与 `server.py`。先在 `127.0.0.1` 监听（默认 18780，占用则依次加一），`GET /games` 拉列表，问用户玩哪一款，再 `GET /games/<slug>` 拉规则，然后 `POST /session` 连房。底层仍是房间 WebSocket。
+- 游戏列表与规则的权威在站点：`GET /agent-guide`（`Accept: application/json` 给机器）和 `GET /agent-guide/<slug>`。协议正文在 `docs/agent-ws-*.md`（中英分文件）。
+- 盘面必须是结构化观测（含 `legalActions`），不要让 Agent 靠截图下棋。
+- 交给人类复制给 AI 的提示词与指南必须中英分版，随站点当前语言只出对应语言，不要中英混在同一段。指南由 Worker 提供，不能落到 SPA 壳（`/agent` 页只给人看提示词）。
+- 三款都进清单：爆炸棋、五子棋、滑动色块。五子棋不要给平台加 `black` / `white` 座位。
