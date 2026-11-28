@@ -1,0 +1,18 @@
+---
+description: 分支、提交、类型检查与部署。改代码、提交、推送或部署时必须遵守。
+alwaysApply: true
+---
+
+# 分支、提交与部署
+
+- 日常工作在 `staging`。不要把功能直接提交到 `main`，也不要从尚未合并的 `staging` 部署正式站。
+- 测试站与正式站是独立 Worker（`micromist-staging` / `micromist`）和独立 Durable Object 命名空间，房间互不相通。
+- 只有用户明确说「发版 / 生产 / 过审 / ship / LGTM / 通过」时，才把 `staging` merge 进 `main`、推送并 `npm run deploy`。仅仅说「部署」「上测试站」不等于发正式。
+- 不要把本机 Vite 当作给用户看的预览。改完后最多跑一次 `npm run check`（`tsc -b --pretty false`），然后 `git push origin staging` 并 `npm run deploy:staging`，交给用户在测试站验收。
+- **不要**每次都跑完整测试套件、回归或质量大扫描；这些只在用户明确要求时做。
+- 修功能或修 bug **之前**先打备份标签（例如 `backup-pre-<topic>`）。
+- 提交作者用 `GoldenEagle1527` / `goldeneagleking@qq.com`。说明用区域前缀：`shell:`、`platform:`，或游戏 slug（`explosive-chess:`、`chroma-slide:`、`gomoku:`）。壳和游戏尽量拆成两次提交。
+- 没有用户明确指令，不要改写 git 历史、不要 force-push。
+- TypeScript 开了 `erasableSyntaxOnly`，不要写 constructor parameter properties。
+- 本地需要 Node.js 20.19+（或 22.12+）。`npm run dev` 会连 React 和本地 Worker。部署需要已登录的 Wrangler。
+- 做优化：先分析、确认后再改。同一问题反复出现时从源头或最初算法统一修，不要继续打补丁。

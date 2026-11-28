@@ -1,0 +1,11 @@
+---
+description: 托管与存储边界。不要加 D1/KV/R2/Pages/账号库，也不要再绑一个 Durable Object。
+alwaysApply: true
+---
+
+# 栈与存储
+
+- 部署在 Cloudflare Workers Static Assets，不是 Pages。
+- 刻意不用：D1、KV、R2、自建账号或战绩库、Cloudflare Pages。
+- Workers Free 可用。Durable Object 必须走已有的 `new_sqlite_classes`。SQLite 只给房间抗休眠，不是用户数据库。
+- 可选联机只有一个 Durable Object `GameRoom`。不要为新游戏再加一个 Durable Object 绑定。

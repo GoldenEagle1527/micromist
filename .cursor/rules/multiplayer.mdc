@@ -1,0 +1,16 @@
+---
+description: 联机房间、座位、adapter 与分享链接。改 GameRoom、worker adapter、shared 棋规或 OnlineRoomClient 时使用。
+globs: worker/**,shared/**,src/multiplayer/**,src/games/**/online.ts
+alwaysApply: false
+---
+
+# 联机房间
+
+- 棋规若联机也要用，放在 `shared/<slug>/`，客户端用 `src/games/<slug>/engine.ts` 再导出。不要让 Worker 去 import `src/`。
+- adapter：`worker/games/<slug>/adapter.ts` + `register.ts`，并在 `worker/game-room.ts` 里 `import` 注册。不要为新游戏再加一个 Durable Object 绑定。
+- 客户端包一层 `OnlineRoomClient`（可参考 `src/games/gomoku/online.ts` 或爆炸棋的 `online.ts`）。服务端是权威状态，客户端不要做乐观更新。
+- 座位类型是平台级的 `red` / `blue` / `player` / `spectator`。五子棋不要给平台加 `black` / `white`；在适配器和 UI 里把 `red` 显示成黑棋、`blue` 显示成白棋。
+- 分享链接必须可打开对应游戏：`/play/<slug>?room=<slug>:<code>`。房间码不能省略游戏名，否则贴到别的游戏里会进错房。
+- 爆炸棋 / 五子棋：进房默认观战，`claim_seat` 入座，坐满开局。建房后规则冻结。
+- 联机过程不要写 local persist。
+- 若现有联机约定（座位、配置冻结、开始条件）无法表达新需求，先问用户。不要在共用壳里加某个游戏的特殊分支，也不要扩展平台座位枚举来迁就一个游戏的叫法。
